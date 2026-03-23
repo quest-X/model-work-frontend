@@ -44,6 +44,13 @@ export class PointRenderEngine extends BaseRenderEngine {
     public mouseDownHandler(data: EditorData): void {
         const isMouseOverImage: boolean = RenderEngineUtil.isMouseOverImage(data);
         const isMouseOverCanvas: boolean = RenderEngineUtil.isMouseOverCanvas(data);
+        const isInDragMode: boolean = GeneralSelector.getImageDragModeStatus();
+
+        // 只处理左键点击 (button === 0)，忽略中键和右键
+        const mouseEvent = data.event as MouseEvent;
+        if (mouseEvent && mouseEvent.button !== 0) {
+            return;
+        }
 
         if (isMouseOverCanvas) {
             const labelPoint: LabelPoint = this.getLabelPointUnderMouse(data.mousePositionOnViewPortContent, data);
@@ -57,10 +64,14 @@ export class PointRenderEngine extends BaseRenderEngine {
                     return;
                 } else {
                     store.dispatch(updateActiveLabelId(null));
-                    const pointOnImage: IPoint = RenderEngineUtil.transferPointFromViewPortContentToImage(data.mousePositionOnViewPortContent, data);
-                    this.addPointLabel(pointOnImage);
+                    // 只有在非拖拽模式下才允许创建新点
+                    if (!isInDragMode) {
+                        const pointOnImage: IPoint = RenderEngineUtil.transferPointFromViewPortContentToImage(data.mousePositionOnViewPortContent, data);
+                        this.addPointLabel(pointOnImage);
+                    }
                 }
-            } else if (isMouseOverImage) {
+            } else if (isMouseOverImage && !isInDragMode) {
+                // 只有在非拖拽模式下才允许创建新点
                 const pointOnImage: IPoint = RenderEngineUtil.transferPointFromViewPortContentToImage(data.mousePositionOnViewPortContent, data);
                 this.addPointLabel(pointOnImage);
             }
@@ -70,9 +81,11 @@ export class PointRenderEngine extends BaseRenderEngine {
     public mouseUpHandler(data: EditorData): void {
         if (this.isInProgress()) {
             const activeLabelPoint: LabelPoint = LabelsSelector.getActivePointLabel();
+            const imageData = LabelsSelector.getActiveImageData();
+            if (!activeLabelPoint || !imageData) return;
+
             const pointSnapped: IPoint = RectUtil.snapPointToRect(data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
             const pointOnImage: IPoint = RenderEngineUtil.transferPointFromViewPortContentToImage(pointSnapped, data);
-            const imageData = LabelsSelector.getActiveImageData();
 
             imageData.labelPoints = imageData.labelPoints.map((labelPoint: LabelPoint) => {
                 if (labelPoint.id === activeLabelPoint.id) {

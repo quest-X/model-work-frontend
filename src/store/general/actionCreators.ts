@@ -4,6 +4,7 @@ import {Action} from '../Actions';
 import {PopupWindowType} from '../../data/enums/PopupWindowType';
 import {CustomCursorStyle} from '../../data/enums/CustomCursorStyle';
 import {ContextType} from '../../data/enums/ContextType';
+import {Language} from '../../data/LanguageConfig';
 
 export function updateWindowSize(windowSize: ISize): GeneralActionTypes {
     return {
@@ -91,6 +92,15 @@ export function updatePerClassColorationStatus(enablePerClassColoration: boolean
         type: Action.UPDATE_ENABLE_PER_CLASS_COLORATION_STATUS,
         payload: {
             enablePerClassColoration,
+        },
+    };
+}
+
+export function updateLanguage(language: Language): GeneralActionTypes {
+    return {
+        type: Action.UPDATE_LANGUAGE,
+        payload: {
+            language,
         },
     };
 }

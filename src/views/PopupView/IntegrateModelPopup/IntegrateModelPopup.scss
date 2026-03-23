@@ -1,0 +1,100 @@
+@import '../../../settings/Settings';
+
+.integrate-model-popup-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  align-content: center;
+  padding: 30px;
+  gap: 20px;
+
+  .message {
+    color: $secondaryColor;
+    font-size: 13px;
+    font-weight: 400;
+    text-align: center;
+    line-height: 1.4;
+    margin-bottom: 10px;
+  }
+
+  .details {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    align-items: center;
+
+    .MuiTextField-root {
+      .MuiInputBase-root {
+        font-size: 13px !important;
+      }
+
+      .MuiInputLabel-root {
+        font-size: 13px !important;
+      }
+
+      input::placeholder {
+        font-size: 12px !important;
+      }
+    }
+  }
+
+  .loader {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+  }
+
+  .test-connection-button {
+    margin-top: 15px;
+    padding: 8px 16px;
+    background-color: $darkThemeThirdColor;
+    color: $secondaryColor;
+    border: 1px solid $darkThemeSecondColor;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.3s ease;
+
+    &:hover {
+      background-color: $primaryColor;
+      color: $darkThemeFirstColor;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      background-color: $darkThemeSecondColor;
+    }
+  }
+
+  .success-message {
+    color: #4caf50;
+    font-size: 14px;
+    text-align: center;
+    margin-top: 10px;
+  }
+
+  .error-message {
+    color: #f44336;
+    font-size: 14px;
+    text-align: center;
+    margin-top: 10px;
+  }
+}
+
+// 响应式设计
+@media (max-width: 768px) {
+  .integrate-model-popup-content {
+    padding: 20px;
+    
+    .details {
+      .MuiTextField-root {
+        width: 100% !important;
+        min-width: 240px;
+      }
+    }
+  }
+}

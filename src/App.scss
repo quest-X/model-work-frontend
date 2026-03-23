@@ -11,3 +11,86 @@
 	--button-text-color: #{$darkThemeSecondColor};
 	--hue-value: 120deg;
 }
+
+.App.restore-prompt {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	height: 100vh;
+	background-color: #1a1a1a;
+	
+	.restore-dialog {
+		background: #2d2d2d;
+		border-radius: 12px;
+		padding: 30px;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+		border: 1px solid #404040;
+		max-width: 400px;
+		text-align: center;
+		
+		h2 {
+			color: #ffffff;
+			margin-bottom: 16px;
+			font-size: 20px;
+			font-weight: 600;
+		}
+		
+		p {
+			color: #cccccc;
+			margin-bottom: 12px;
+			line-height: 1.5;
+		}
+		
+		.restore-buttons {
+			display: flex;
+			gap: 12px;
+			margin-top: 20px;
+			
+			button {
+				flex: 1;
+				padding: 10px 16px;
+				border: none;
+				border-radius: 6px;
+				font-size: 14px;
+				font-weight: 500;
+				cursor: pointer;
+				transition: all 0.2s ease;
+				
+				&.btn-danger {
+					background: #dc3545;
+					color: white;
+					
+					&:hover {
+						background: #c82333;
+					}
+				}
+				
+				&.btn-success {
+					background: #28a745;
+					color: white;
+					
+					&:hover {
+						background: #218838;
+					}
+				}
+			}
+		}
+	}
+}
+
+.App.loading {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	height: 100vh;
+	background-color: #1a1a1a;
+	
+	.loading-indicator {
+		text-align: center;
+		
+		p {
+			color: #cccccc;
+			font-size: 16px;
+		}
+	}
+}

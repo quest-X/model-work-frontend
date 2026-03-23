@@ -1,7 +1,15 @@
 import React from 'react';
 import './FeatureInProgress.scss';
+import {connect} from 'react-redux';
+import {AppState} from '../../../store';
+import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
-export const FeatureInProgress: React.FC = () => {
+interface IProps {
+    language: Language;
+}
+
+const FeatureInProgress: React.FC<IProps> = ({ language }) => {
+    const currentTexts = LanguageConfig[language];
     return(
         <div
             className="FeatureInProgress"
@@ -11,7 +19,13 @@ export const FeatureInProgress: React.FC = () => {
                 alt={"take_off"}
                 src={"ico/take-off.png"}
             />
-            <p className="extraBold">new feature <br/> coming soon...</p>
+            <p className="extraBold">{currentTexts.featureInProgress.newFeature} <br/> {currentTexts.featureInProgress.comingSoon}</p>
         </div>
     )
 };
+
+const mapStateToProps = (state: AppState) => ({
+    language: state.general.language
+});
+
+export default connect(mapStateToProps)(FeatureInProgress);

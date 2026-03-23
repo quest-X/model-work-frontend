@@ -28,8 +28,7 @@ export default ({ mode }: UserConfig): UserConfigExport => {
             ai: ['@tensorflow/tfjs',
               '@tensorflow/tfjs-backend-cpu',
               '@tensorflow/tfjs-backend-webgl',
-              '@tensorflow/tfjs-core',
-              '@tensorflow/tfjs-node'],
+              '@tensorflow/tfjs-core'],
             models: [
               '@tensorflow-models/coco-ssd',
               '@tensorflow-models/posenet',
@@ -45,6 +44,11 @@ export default ({ mode }: UserConfig): UserConfigExport => {
       logOverride: { 'this-is-undefined-in-esm': 'silent' }
     },
     css: {
+      preprocessorOptions: {
+        scss: {
+          silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin'],
+        },
+      },
       modules: {
         generateScopedName: mode === 'development' ? '[name]__[local]___[hash:base64:5]' : '[hash:base64:8]',
         scopeBehaviour: 'local',

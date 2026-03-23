@@ -15,6 +15,7 @@ import EmptyLabelList from '../EmptyLabelList/EmptyLabelList';
 import {LabelActions} from '../../../../logic/actions/LabelActions';
 import {findLast} from 'lodash';
 import {LabelStatus} from '../../../../data/enums/LabelStatus';
+import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
 
 interface IProps {
     size: ISize;
@@ -25,6 +26,7 @@ interface IProps {
     updateActiveLabelNameIdAction: (activeLabelId: string) => any;
     labelNames: LabelName[];
     updateActiveLabelIdAction: (activeLabelId: string) => any;
+    language: Language;
 }
 
 const PointLabelsList: React.FC<IProps> = (
@@ -36,28 +38,36 @@ const PointLabelsList: React.FC<IProps> = (
         updateActiveLabelNameIdAction,
         activeLabelId,
         highlightedLabelId,
-        updateActiveLabelIdAction
+        updateActiveLabelIdAction,
+        language
     }
 ) => {
+    const currentTexts = LanguageConfig[language];
     const labelInputFieldHeight = 40;
     const listStyle: React.CSSProperties = {
-        width: size.width,
-        height: size.height
+        width: size?.width || 0,
+        height: size?.height || 0
     };
     const listStyleContent: React.CSSProperties = {
-        width: size.width,
-        height: imageData.labelPoints.length * labelInputFieldHeight
+        width: size?.width || 0,
+        height: (imageData?.labelPoints?.length || 0) * labelInputFieldHeight
     };
 
     const deletePointLabelById = (labelPointId: string) => {
-        LabelActions.deletePointLabelById(imageData.id, labelPointId);
+        if (imageData?.id) {
+            LabelActions.deletePointLabelById(imageData.id, labelPointId);
+        }
     };
 
     const togglePointLabelVisibilityById = (labelPointId: string) => {
-        LabelActions.toggleLabelVisibilityById(imageData.id, labelPointId);
+        if (imageData?.id) {
+            LabelActions.toggleLabelVisibilityById(imageData.id, labelPointId);
+        }
     };
 
     const updatePointLabel = (labelPointId: string, labelNameId: string) => {
+        if (!imageData?.id || !imageData?.labelPoints) return;
+        
         const newImageData = {
             ...imageData,
             labelPoints: imageData.labelPoints.map((labelPoint: LabelPoint) => {
@@ -79,25 +89,27 @@ const PointLabelsList: React.FC<IProps> = (
     };
 
     const getChildren = () => {
+        if (!imageData?.labelPoints) return [];
+        
         return imageData.labelPoints
             .filter((labelPoint: LabelPoint) => labelPoint.status === LabelStatus.ACCEPTED)
             .map((labelPoint: LabelPoint) => {
-            return <LabelInputField
-                size={{
-                    width: size.width,
-                    height: labelInputFieldHeight
-                }}
-                isActive={labelPoint.id === activeLabelId}
-                isHighlighted={labelPoint.id === highlightedLabelId}
-                isVisible={labelPoint.isVisible}
-                id={labelPoint.id}
-                key={labelPoint.id}
-                onDelete={deletePointLabelById}
-                value={labelPoint.labelId !== null ? findLast(labelNames, {id: labelPoint.labelId}) : null}
-                options={labelNames}
-                onSelectLabel={updatePointLabel}
-                toggleLabelVisibility={togglePointLabelVisibilityById}
-            />
+                return <LabelInputField
+                    size={{
+                        width: size?.width || 0,
+                        height: labelInputFieldHeight
+                    }}
+                    isActive={labelPoint.id === activeLabelId}
+                    isHighlighted={labelPoint.id === highlightedLabelId}
+                    isVisible={labelPoint.isVisible}
+                    id={labelPoint.id}
+                    key={labelPoint.id}
+                    onDelete={deletePointLabelById}
+                    value={labelPoint.labelId !== null ? findLast(labelNames, {id: labelPoint.labelId}) : null}
+                    options={labelNames}
+                    onSelectLabel={updatePointLabel}
+                    toggleLabelVisibility={togglePointLabelVisibilityById}
+                />
         });
     };
 
@@ -107,10 +119,10 @@ const PointLabelsList: React.FC<IProps> = (
             style={listStyle}
             onClickCapture={onClickHandler}
         >
-            {imageData.labelPoints.filter((labelPoint: LabelPoint) => labelPoint.status === LabelStatus.ACCEPTED).length === 0 ?
+            {(!imageData?.labelPoints || imageData.labelPoints.filter((labelPoint: LabelPoint) => labelPoint.status === LabelStatus.ACCEPTED).length === 0) ?
                 <EmptyLabelList
-                    labelBefore={'mark your first point'}
-                    labelAfter={'no labels created for this image yet'}
+                    labelBefore={currentTexts.markFirstPoint}
+                    labelAfter={currentTexts.noLabelsCreated}
                 /> :
                 <Scrollbars>
                     <div
@@ -134,7 +146,8 @@ const mapDispatchToProps = {
 const mapStateToProps = (state: AppState) => ({
     activeLabelId: state.labels.activeLabelId,
     highlightedLabelId: state.labels.highlightedLabelId,
-    labelNames : state.labels.labels
+    labelNames : state.labels.labels,
+    language: state.general.language
 });
 
 export default connect(

@@ -22,6 +22,7 @@ interface IProps {
     isChecked?: boolean;
     onClick?: () => any;
     isSelected?: boolean;
+    isMultiSelected?: boolean;
     updateImageDataById: (id: string, newImageData: ImageData) => any;
 }
 
@@ -62,9 +63,15 @@ class ImagePreview extends React.Component<IProps, IState> {
     shouldComponentUpdate(nextProps: Readonly<IProps>, nextState: Readonly<IState>, nextContext: any): boolean {
         return (
             this.props.imageData.id !== nextProps.imageData.id ||
+            this.props.imageData.isSelected !== nextProps.imageData.isSelected ||
+            this.props.imageData.isVisitedByYOLOObjectDetector !== nextProps.imageData.isVisitedByYOLOObjectDetector ||
+            this.props.imageData.isVisitedBySSDObjectDetector !== nextProps.imageData.isVisitedBySSDObjectDetector ||
+            this.props.imageData.isVisitedByPoseDetector !== nextProps.imageData.isVisitedByPoseDetector ||
+            this.props.imageData.isVisitedByRoboflowAPI !== nextProps.imageData.isVisitedByRoboflowAPI ||
             this.state.image !== nextState.image ||
             this.props.isSelected !== nextProps.isSelected ||
-            this.props.isChecked !== nextProps.isChecked
+            this.props.isChecked !== nextProps.isChecked ||
+            this.props.isMultiSelected !== nextProps.isMultiSelected
         )
     }
 
@@ -124,6 +131,14 @@ class ImagePreview extends React.Component<IProps, IState> {
 
     private handleLoadImageError = () => { };
 
+    private isAIProcessedImage = (): boolean => {
+        const { imageData } = this.props;
+        return imageData.isVisitedByYOLOObjectDetector ||
+               imageData.isVisitedBySSDObjectDetector ||
+               imageData.isVisitedByPoseDetector ||
+               imageData.isVisitedByRoboflowAPI;
+    };
+
     private getClassName = () => {
         return classNames(
             "ImagePreview",
@@ -166,6 +181,13 @@ class ImagePreview extends React.Component<IProps, IState> {
                                 src={"ico/ok.png"}
                                 alt={"checkbox"}
                             />}
+                            {this.props.isMultiSelected && (
+                                <div className={
+                                    this.isAIProcessedImage() ? "AIProcessedIndicator" : "MultiSelectIndicator"
+                                }>
+                                    ✓
+                                </div>
+                            )}
                         </div>,
                         <div
                             className="Background"

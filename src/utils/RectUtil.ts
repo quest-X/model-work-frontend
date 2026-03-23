@@ -22,6 +22,33 @@ export class RectUtil {
         );
     }
 
+    // 计算两个矩形的重叠度（IOU - Intersection over Union）
+    public static calculateIOU(rect1: IRect, rect2: IRect): number {
+        if (!rect1 || !rect2) return 0;
+        
+        // 计算交集矩形
+        const intersectionX1 = Math.max(rect1.x, rect2.x);
+        const intersectionY1 = Math.max(rect1.y, rect2.y);
+        const intersectionX2 = Math.min(rect1.x + rect1.width, rect2.x + rect2.width);
+        const intersectionY2 = Math.min(rect1.y + rect1.height, rect2.y + rect2.height);
+        
+        // 如果没有交集，返回0
+        if (intersectionX1 >= intersectionX2 || intersectionY1 >= intersectionY2) {
+            return 0;
+        }
+        
+        // 计算交集面积
+        const intersectionArea = (intersectionX2 - intersectionX1) * (intersectionY2 - intersectionY1);
+        
+        // 计算并集面积
+        const rect1Area = rect1.width * rect1.height;
+        const rect2Area = rect2.width * rect2.height;
+        const unionArea = rect1Area + rect2Area - intersectionArea;
+        
+        // 返回IOU值
+        return intersectionArea / unionArea;
+    }
+
     public static isPointInside(rect: IRect, point: IPoint): boolean {
         if (!rect || !point) return null;
         return (
@@ -98,6 +125,10 @@ export class RectUtil {
                 rect.x += delta.x;
                 rect.width -= delta.x;
                 rect.height += delta.y;
+                break;
+            case Direction.CENTER:
+                rect.x += delta.x;
+                rect.y += delta.y;
                 break;
         }
 

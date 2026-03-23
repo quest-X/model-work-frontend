@@ -123,5 +123,45 @@
     .DropDownMenuWrapper {
       align-self: stretch;
     }
+
+    .ActionsDropdownContainer {
+      position: relative;
+    }
+
+    .actions-button,
+    .upload-images-button,
+    .language-toggle-button {
+      color: white;
+      box-shadow: none;
+      padding: 8px 12px;
+      font-size: 14px;
+      height: 32px;
+      line-height: 1;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      
+      &:hover {
+        color: black;
+        background-color: white;
+      }
+    }
+
+    .actions-button {
+      margin-left: 6px;
+      margin-right: 6px;
+      min-width: 50px;
+    }
+
+    .upload-images-button {
+      margin-left: 5px;
+      margin-right: 5px;
+      min-width: 80px;
+    }
+
+    .language-toggle-button {
+      min-width: 60px;
+    }
   }
 }

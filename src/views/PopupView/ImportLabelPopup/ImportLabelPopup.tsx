@@ -3,8 +3,8 @@ import './ImportLabelPopup.scss';
 import { LabelType } from '../../../data/enums/LabelType';
 import { PopupActions } from '../../../logic/actions/PopupActions';
 import GenericLabelTypePopup from '../GenericLabelTypePopup/GenericLabelTypePopup';
-import { ImportFormatData } from '../../../data/ImportFormatData';
-import { FeatureInProgress } from '../../EditorView/FeatureInProgress/FeatureInProgress';
+import { getImportFormatData } from '../../../data/ImportFormatData';
+import FeatureInProgress from '../../EditorView/FeatureInProgress/FeatureInProgress';
 import { AppState } from '../../../store';
 import { connect } from 'react-redux';
 import { useDropzone } from 'react-dropzone';
@@ -19,12 +19,14 @@ import { NotificationsDataMap } from '../../../data/info/NotificationsData';
 import { DocumentParsingError } from '../../../logic/import/voc/VOCImporter';
 import { Notification } from '../../../data/enums/Notification';
 import {LabelNamesNotUniqueError} from '../../../logic/import/yolo/YOLOErrors';
+import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 interface IProps {
     activeLabelType: LabelType,
     updateImageDataAction: (imageData: ImageData[]) => any,
     updateLabelNamesAction: (labels: LabelName[]) => any,
     updateActiveLabelTypeAction: (activeLabelType: LabelType) => any;
+    language: Language;
 }
 
 const ImportLabelPopup: React.FC<IProps> = (
@@ -32,10 +34,12 @@ const ImportLabelPopup: React.FC<IProps> = (
         activeLabelType,
         updateImageDataAction,
         updateLabelNamesAction,
-        updateActiveLabelTypeAction
+        updateActiveLabelTypeAction,
+        language
     }) => {
+    const currentTexts = LanguageConfig[language];
     const resolveFormatType = (labelType: LabelType): AnnotationFormatType => {
-        const possibleImportFormats = ImportFormatData[labelType];
+        const possibleImportFormats = getImportFormatData(language)[labelType];
         return possibleImportFormats.length === 1 ? possibleImportFormats[0].type : null;
     };
 
@@ -116,9 +120,9 @@ const ImportLabelPopup: React.FC<IProps> = (
                     alt={'upload'}
                     src={'ico/box-opened.png'}
                 />
-                <p className='extraBold'>Annotation import was unsuccessful</p>
+                <p className='extraBold'>{currentTexts.popups.importAnnotations.importError}</p>
                 {annotationsLoadedError.message}
-                <p className='extraBold'>Try again</p>
+                <p className='extraBold'>{currentTexts.popups.importAnnotations.tryAgain}</p>
             </>;
         } else if (loadedImageData.length !== 0 && loadedLabelNames.length !== 0) {
             return <>
@@ -127,9 +131,8 @@ const ImportLabelPopup: React.FC<IProps> = (
                     alt={'uploaded'}
                     src={'ico/box-closed.png'}
                 />
-                <p className='extraBold'>Annotation ready for import</p>
-                After import you will lose
-                all your current annotations
+                <p className='extraBold'>{currentTexts.popups.importAnnotations.importReady}</p>
+                {currentTexts.popups.importAnnotations.importWarning}
             </>;
         } else {
             return <>
@@ -139,9 +142,9 @@ const ImportLabelPopup: React.FC<IProps> = (
                     alt={'upload'}
                     src={'ico/box-opened.png'}
                 />
-                <p className='extraBold'>{`Drop ${formatType} annotations`}</p>
-                <p>or</p>
-                <p className='extraBold'>Click here to select them</p>
+                <p className='extraBold'>{currentTexts.popups.importAnnotations.dropZoneMessage}</p>
+                <p>{currentTexts.or}</p>
+                <p className='extraBold'>{currentTexts.popups.importAnnotations.dropZoneActive}</p>
             </>;
         }
     };
@@ -170,19 +173,19 @@ const ImportLabelPopup: React.FC<IProps> = (
     };
 
     const renderInternalContent = (type: LabelType) => {
-        if (!formatType && ImportFormatData[type].length !== 0) {
+        if (!formatType && getImportFormatData(language)[type].length !== 0) {
             return <>
                 <div className='Message'>
-                    Select file format you would like to use to import labels.
+                    {currentTexts.popups.importAnnotations.selectFileFormat}
                 </div>,
                 <div className='Options'>
-                    {getOptions(ImportFormatData[type])}
+                    {getOptions(getImportFormatData(language)[type])}
                 </div>
             </>;
         }
-        const importFormatData = ImportFormatData[type];
+        const importFormatData = getImportFormatData(language)[type];
         return importFormatData.length === 0 ?
-            <FeatureInProgress /> :
+            <FeatureInProgress language={language} /> :
             <div {...getRootProps({ className: 'DropZone' })}>
                 {getDropZoneContent()}
             </div>;
@@ -191,13 +194,13 @@ const ImportLabelPopup: React.FC<IProps> = (
     return (
         <GenericLabelTypePopup
             activeLabelType={labelType}
-            title={`Import ${labelType.toLowerCase()} annotations`}
+            title={currentTexts.popups.importAnnotations.title}
             onLabelTypeChange={onLabelTypeChange}
-            acceptLabel={'Import'}
+            acceptLabel={currentTexts.popups.importAnnotations.acceptButton}
             onAccept={onAccept}
-            skipAcceptButton={ImportFormatData[labelType].length === 0}
+            skipAcceptButton={getImportFormatData(language)[labelType].length === 0}
             disableAcceptButton={loadedImageData.length === 0 || loadedLabelNames.length === 0 || !!annotationsLoadedError}
-            rejectLabel={'Cancel'}
+            rejectLabel={currentTexts.popups.importAnnotations.rejectButton}
             onReject={onReject}
             renderInternalContent={renderInternalContent}
         />
@@ -212,6 +215,7 @@ const mapDispatchToProps = {
 
 const mapStateToProps = (state: AppState) => ({
     activeLabelType: state.labels.activeLabelType,
+    language: state.general.language
 });
 
 export default connect(

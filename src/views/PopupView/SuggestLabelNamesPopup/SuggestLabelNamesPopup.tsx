@@ -13,6 +13,7 @@ import {LabelsSelector} from '../../../store/selectors/LabelsSelector';
 import { v4 as uuidv4 } from 'uuid';
 import {ArrayUtil} from '../../../utils/ArrayUtil';
 import {Settings} from '../../../settings/Settings';
+import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 interface SelectableName {
     name: string;
@@ -23,14 +24,17 @@ interface IProps {
     updateLabelNames: (labels: LabelName[]) => any,
     updateSuggestedLabelList: (labelList: string[]) => any;
     updateRejectedSuggestedLabelList: (labelList: string[]) => any;
+    language: Language;
 }
 
 const SuggestLabelNamesPopup: React.FC<IProps> = (
     {
         updateLabelNames,
         updateSuggestedLabelList,
-        updateRejectedSuggestedLabelList
+        updateRejectedSuggestedLabelList,
+        language
     }) => {
+    const currentTexts = LanguageConfig[language];
 
     const mapNamesToSelectableNames = (names: string[]): SelectableName[] => {
         return names.map((name: string) => {
@@ -186,11 +190,11 @@ const SuggestLabelNamesPopup: React.FC<IProps> = (
 
     return(
         <GenericYesNoPopup
-            title={'New classes found'}
+            title={currentTexts.popups.suggestLabels.title}
             renderContent={renderContent}
-            acceptLabel={'Accept'}
+            acceptLabel={currentTexts.popups.suggestLabels.acceptButton}
             onAccept={onAccept}
-            rejectLabel={'Reject'}
+            rejectLabel={currentTexts.popups.suggestLabels.rejectButton}
             onReject={onReject}
         />
     );
@@ -202,7 +206,9 @@ const mapDispatchToProps = {
     updateRejectedSuggestedLabelList
 };
 
-const mapStateToProps = (state: AppState) => ({});
+const mapStateToProps = (state: AppState) => ({
+    language: state.general.language
+});
 
 export default connect(
     mapStateToProps,

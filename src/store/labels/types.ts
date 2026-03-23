@@ -27,10 +27,16 @@ export type LabelPoint = Annotation & {
 
 export type LabelPolygon = Annotation & {
     vertices: IPoint[];
+    isCreatedByAI: boolean;
+    status: LabelStatus;
+    suggestedLabel: string;
 }
 
 export type LabelLine = Annotation & {
     line: ILine;
+    isCreatedByAI: boolean;
+    status: LabelStatus;
+    suggestedLabel: string;
 }
 
 export type LabelName = {
@@ -49,6 +55,9 @@ export type ImageData = {
     labelPolygons: LabelPolygon[];
     labelNameIds: string[];
 
+    // Multi-selection support
+    isSelected?: boolean;
+
     // YOLO
     isVisitedByYOLOObjectDetector: boolean;
 
@@ -66,6 +75,7 @@ export type LabelsState = {
     activeImageIndex: number;
     activeLabelNameId: string;
     activeLabelType: LabelType;
+    activeLabelViewType: LabelType; // 新增：当前查看的标签视图类型
     activeLabelId: string | null;
     highlightedLabelId: string;
     imagesData: ImageData[];
@@ -108,6 +118,13 @@ interface UpdateActiveLabelType {
     }
 }
 
+interface UpdateActiveLabelViewType {
+    type: typeof Action.UPDATE_ACTIVE_LABEL_VIEW_TYPE;
+    payload: {
+        activeLabelViewType: LabelType;
+    }
+}
+
 interface UpdateImageDataById {
     type: typeof Action.UPDATE_IMAGE_DATA_BY_ID;
     payload: {
@@ -144,9 +161,32 @@ interface UpdateFirstLabelCreatedFlag {
     }
 }
 
+interface SelectAllImages {
+    type: typeof Action.SELECT_ALL_IMAGES;
+    payload: {
+        selectAll: boolean;
+    }
+}
+
+interface ToggleImageSelection {
+    type: typeof Action.TOGGLE_IMAGE_SELECTION;
+    payload: {
+        imageId: string;
+    }
+}
+
+interface SelectImageRange {
+    type: typeof Action.SELECT_IMAGE_RANGE;
+    payload: {
+        startIndex: number;
+        endIndex: number;
+    }
+}
+
 export type LabelsActionTypes = UpdateActiveImageIndex
     | UpdateActiveLabelNameId
     | UpdateActiveLabelType
+    | UpdateActiveLabelViewType
     | UpdateImageDataById
     | AddImageData
     | UpdateImageData
@@ -154,4 +194,7 @@ export type LabelsActionTypes = UpdateActiveImageIndex
     | UpdateActiveLabelId
     | UpdateHighlightedLabelId
     | UpdateFirstLabelCreatedFlag
+    | SelectAllImages
+    | ToggleImageSelection
+    | SelectImageRange
 

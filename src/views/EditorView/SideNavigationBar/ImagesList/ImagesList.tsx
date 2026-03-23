@@ -12,6 +12,8 @@ import {ContextType} from "../../../../data/enums/ContextType";
 import {ImageActions} from "../../../../logic/actions/ImageActions";
 import {EventType} from "../../../../data/enums/EventType";
 import {LabelStatus} from "../../../../data/enums/LabelStatus";
+import {toggleImageSelection, selectImageRange, selectAllImages} from "../../../../store/labels/actionCreators";
+import {store} from "../../../../index";
 
 interface IProps {
     activeImageIndex: number;
@@ -21,6 +23,9 @@ interface IProps {
 
 interface IState {
     size: ISize;
+    isCtrlPressed: boolean;
+    isShiftPressed: boolean;
+    lastClickedIndex: number | null;
 }
 
 class ImagesList extends React.Component<IProps, IState> {
@@ -31,16 +36,23 @@ class ImagesList extends React.Component<IProps, IState> {
 
         this.state = {
             size: null,
+            isCtrlPressed: false,
+            isShiftPressed: false,
+            lastClickedIndex: null,
         }
     }
 
     public componentDidMount(): void {
         this.updateListSize();
         window.addEventListener(EventType.RESIZE, this.updateListSize);
+        window.addEventListener(EventType.KEY_DOWN, this.handleKeyDown);
+        window.addEventListener(EventType.KEY_UP, this.handleKeyUp);
     }
 
     public componentWillUnmount(): void {
         window.removeEventListener(EventType.RESIZE, this.updateListSize);
+        window.removeEventListener(EventType.KEY_DOWN, this.handleKeyDown);
+        window.removeEventListener(EventType.KEY_UP, this.handleKeyUp);
     }
 
     private updateListSize = () => {
@@ -76,20 +88,106 @@ class ImagesList extends React.Component<IProps, IState> {
         }
     };
 
+    private handleKeyDown = (event: KeyboardEvent) => {
+        if (event.ctrlKey || event.metaKey) { // Support both Ctrl and Cmd (for Mac)
+            this.setState({ isCtrlPressed: true });
+            
+            // Handle Ctrl+A for select all
+            if (event.key === 'a' || event.key === 'A') {
+                event.preventDefault(); // Prevent browser's default select all
+                this.handleSelectAll();
+                return;
+            }
+        }
+        if (event.shiftKey) {
+            this.setState({ isShiftPressed: true });
+        }
+    };
+
+    private handleKeyUp = (event: KeyboardEvent) => {
+        if (!event.ctrlKey && !event.metaKey) {
+            this.setState({ isCtrlPressed: false });
+        }
+        if (!event.shiftKey) {
+            this.setState({ isShiftPressed: false });
+        }
+    };
+
     private onClickHandler = (index: number) => {
-        ImageActions.getImageByIndex(index)
+        const imageData = this.props.imagesData[index];
+        
+        if (this.state.isShiftPressed && this.state.lastClickedIndex !== null) {
+            // Shift+click: select range from last clicked to current
+            store.dispatch(selectImageRange(this.state.lastClickedIndex, index));
+            // Don't change active image during range selection
+        } else if (this.state.isCtrlPressed) {
+            // Ctrl+click: toggle selection without changing active image
+            store.dispatch(toggleImageSelection(imageData.id));
+            this.setState({ lastClickedIndex: index });
+        } else {
+            // Normal click: change active image and clear other selections
+            ImageActions.getImageByIndex(index);
+            // Clear all selections first, then select only the clicked image
+            this.props.imagesData.forEach((img, idx) => {
+                if (img.isSelected && idx !== index) {
+                    store.dispatch(toggleImageSelection(img.id));
+                }
+            });
+            if (!imageData.isSelected) {
+                store.dispatch(toggleImageSelection(imageData.id));
+            }
+            this.setState({ lastClickedIndex: index });
+        }
+    };
+
+    private handleSelectAll = () => {
+        // Check if all images are currently selected
+        const allSelected = this.props.imagesData.every(img => img.isSelected);
+        
+        // If all are selected, deselect all; otherwise select all
+        store.dispatch(selectAllImages(!allSelected));
+        
+        // Update last clicked index to the last image for potential Shift operations
+        if (!allSelected && this.props.imagesData.length > 0) {
+            this.setState({ lastClickedIndex: this.props.imagesData.length - 1 });
+        }
+    };
+
+    private isRangeSelection = (): boolean => {
+        // Check if there are consecutive selected images (range selection pattern)
+        const selectedIndices = this.props.imagesData
+            .map((img, index) => img.isSelected ? index : -1)
+            .filter(index => index !== -1)
+            .sort((a, b) => a - b);
+
+        if (selectedIndices.length < 2) return false;
+        
+        // If all images are selected, it's considered a "select all" operation, not range
+        const allSelected = selectedIndices.length === this.props.imagesData.length;
+        if (allSelected) return false;
+
+        // Check if indices are consecutive (range selection)
+        for (let i = 1; i < selectedIndices.length; i++) {
+            if (selectedIndices[i] !== selectedIndices[i - 1] + 1) {
+                return false;
+            }
+        }
+        return true;
     };
 
     private renderImagePreview = (index: number, isScrolling: boolean, isVisible: boolean, style: React.CSSProperties) => {
+        const imageData = this.props.imagesData[index];
+        
         return <ImagePreview
             key={index}
             style={style}
             size={{width: 150, height: 150}}
             isScrolling={isScrolling}
             isChecked={this.isImageChecked(index)}
-            imageData={this.props.imagesData[index]}
+            imageData={imageData}
             onClick={() => this.onClickHandler(index)}
             isSelected={this.props.activeImageIndex === index}
+            isMultiSelected={imageData.isSelected}
         />
     };
 

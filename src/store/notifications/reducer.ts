@@ -27,6 +27,16 @@ export function notificationsReducer(
                     .filter((message: INotification) => message.id !== action.payload.id)
             }
         }
+        case Action.UPDATE_NOTIFICATION_BY_ID: {
+            return {
+                ...state,
+                queue: state.queue.map((notification: INotification) =>
+                    notification.id === action.payload.id 
+                        ? action.payload.notification 
+                        : notification
+                )
+            }
+        }
         default:
             return state;
     }

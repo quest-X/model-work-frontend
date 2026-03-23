@@ -29,15 +29,17 @@ const TagLabelsList: React.FC<IProps> = (
     }) => {
     const labelInputFieldHeight = 40;
     const listStyle: React.CSSProperties = {
-        width: size.width,
-        height: size.height
+        width: size?.width || 0,
+        height: size?.height || 0
     };
     const listStyleContent: React.CSSProperties = {
-        width: size.width,
-        height: imageData.labelPolygons.length * labelInputFieldHeight
+        width: size?.width || 0,
+        height: (imageData?.labelPolygons?.length || 0) * labelInputFieldHeight
     };
 
     const onTagClick = (labelId: string)  => {
+        if (!imageData?.id || !imageData?.labelNameIds) return;
+        
         if (imageData.labelNameIds.includes(labelId)) {
             updateImageDataById(imageData.id, {
                 ...imageData,
@@ -55,7 +57,7 @@ const TagLabelsList: React.FC<IProps> = (
         return classNames(
             "TagItem",
             {
-                "active": imageData.labelNameIds.includes(labelId)
+                "active": imageData?.labelNameIds?.includes(labelId) || false
             }
         );
     };

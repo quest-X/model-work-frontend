@@ -85,6 +85,12 @@ export class ViewPortActions {
     public static calculateAbsoluteScrollPosition(relativePosition: IPoint): IPoint {
         const viewPortContentSize = ViewPortActions.calculateViewPortContentSize();
         const viewPortSize = EditorModel.viewPortSize;
+        
+        // 添加空值检查
+        if (!viewPortContentSize || !viewPortSize) {
+            return { x: 0, y: 0 };
+        }
+        
         return {
             x: relativePosition.x * (viewPortContentSize.width - viewPortSize.width),
             y: relativePosition.y * (viewPortContentSize.height - viewPortSize.height)
@@ -135,6 +141,9 @@ export class ViewPortActions {
 
     public static zoomIn() {
         if (EditorModel.viewPortActionsDisabled) return;
+        
+        // 检查是否有图像加载
+        if (!EditorModel.viewPortSize || !EditorModel.image) return;
 
         const currentZoom: number = GeneralSelector.getZoom();
         const currentRelativeScrollPosition: IPoint = ViewPortActions.getRelativeScrollPosition();
@@ -147,6 +156,9 @@ export class ViewPortActions {
 
     public static zoomOut() {
         if (EditorModel.viewPortActionsDisabled) return;
+        
+        // 检查是否有图像加载
+        if (!EditorModel.viewPortSize || !EditorModel.image) return;
 
         const currentZoom: number = GeneralSelector.getZoom();
         const currentRelativeScrollPosition: IPoint = ViewPortActions.getRelativeScrollPosition();
@@ -158,6 +170,9 @@ export class ViewPortActions {
     }
 
     public static setDefaultZoom() {
+        // 检查是否有图像加载
+        if (!EditorModel.viewPortSize || !EditorModel.image) return;
+        
         const currentRelativeScrollPosition: IPoint = ViewPortActions.getRelativeScrollPosition();
         ViewPortActions.setZoom(ViewPointSettings.MIN_ZOOM);
         ViewPortActions.resizeViewPortContent();
@@ -167,6 +182,9 @@ export class ViewPortActions {
     }
 
     public static setOneForOneZoom() {
+        // 检查是否有图像加载
+        if (!EditorModel.viewPortSize || !EditorModel.image || !EditorModel.defaultRenderImageRect) return;
+        
         const currentZoom: number = GeneralSelector.getZoom();
         const currentRelativeScrollPosition: IPoint = ViewPortActions.getRelativeScrollPosition();
         const nextRelativeScrollPosition = currentZoom === 1 ? {x: 0.5, y: 0.5} : currentRelativeScrollPosition;

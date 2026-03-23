@@ -1,7 +1,7 @@
 import React from "react";
 import './LabelsToolkit.scss';
 import {ImageData} from "../../../../store/labels/types";
-import {updateActiveLabelId, updateActiveLabelType, updateImageDataById} from "../../../../store/labels/actionCreators";
+import {updateActiveLabelId, updateActiveLabelType, updateActiveLabelViewType, updateImageDataById} from "../../../../store/labels/actionCreators";
 import {AppState} from "../../../../store";
 import {connect} from "react-redux";
 import {LabelType} from "../../../../data/enums/LabelType";
@@ -9,8 +9,10 @@ import {ProjectType} from "../../../../data/enums/ProjectType";
 import {ISize} from "../../../../interfaces/ISize";
 import classNames from "classnames";
 import {find} from "lodash";
-import {ILabelToolkit, LabelToolkitData} from "../../../../data/info/LabelToolkitData";
+import {ILabelToolkit, getLabelToolkitData} from "../../../../data/info/LabelToolkitData";
 import {Settings} from "../../../../settings/Settings";
+import {Language} from "../../../../data/LanguageConfig";
+import AllLabelsList from "../AllLabelsList/AllLabelsList";
 import RectLabelsList from "../RectLabelsList/RectLabelsList";
 import PointLabelsList from "../PointLabelsList/PointLabelsList";
 import PolygonLabelsList from "../PolygonLabelsList/PolygonLabelsList";
@@ -23,11 +25,14 @@ import TagLabelsList from "../TagLabelsList/TagLabelsList";
 interface IProps {
     activeImageIndex:number,
     activeLabelType: LabelType;
+    activeLabelViewType: LabelType;
     imagesData: ImageData[];
     projectType: ProjectType;
     updateImageDataById: (id: string, newImageData: ImageData) => any;
     updateActiveLabelType: (activeLabelType: LabelType) => any;
+    updateActiveLabelViewType: (activeLabelViewType: LabelType) => any;
     updateActiveLabelId: (highlightedLabelId: string) => any;
+    language: Language;
 }
 
 interface IState {
@@ -50,14 +55,14 @@ class LabelsToolkit extends React.Component<IProps, IState> {
                 LabelType.IMAGE_RECOGNITION
             ] :
             [
+                LabelType.ALL,
                 LabelType.RECT,
                 LabelType.POINT,
                 LabelType.LINE,
                 LabelType.POLYGON
             ];
 
-        const activeTab: LabelType = props.activeLabelType ? props.activeLabelType : this.tabs[0];
-        props.updateActiveLabelType(activeTab);
+        // 移除构造函数中的状态更新，避免渲染问题
     }
 
     public componentDidMount(): void {
@@ -83,16 +88,19 @@ class LabelsToolkit extends React.Component<IProps, IState> {
     };
 
     private headerClickHandler = (activeTab: LabelType) => {
+        // 实现工具与标签页的完全绑定：同时切换工具类型和视图类型
         this.props.updateActiveLabelType(activeTab);
+        this.props.updateActiveLabelViewType(activeTab);
         this.props.updateActiveLabelId(null);
     };
 
     private renderChildren = () => {
         const {size} = this.state;
-        const {activeImageIndex, imagesData, activeLabelType} = this.props;
+        const {activeImageIndex, imagesData, activeLabelViewType} = this.props;
         return this.tabs.reduce((children, labelType: LabelType, index: number) => {
-            const isActive: boolean = labelType === activeLabelType;
-            const tabData: ILabelToolkit = find(LabelToolkitData, {labelType});
+            const isActive: boolean = labelType === activeLabelViewType;
+            const labelToolkitData = getLabelToolkitData(this.props.language);
+            const tabData: ILabelToolkit = find(labelToolkitData, {labelType});
             const activeTabContentHeight: number = size.height - this.tabs.length * Settings.TOOLKIT_TAB_HEIGHT_PX;
             const getClassName = (baseClass: string) => classNames(
                 baseClass,
@@ -134,6 +142,13 @@ class LabelsToolkit extends React.Component<IProps, IState> {
                     className={getClassName("Content")}
                     style={{height: isActive ? activeTabContentHeight : 0}}
                 >
+                    {labelType === LabelType.ALL && <AllLabelsList
+                        size={{
+                            width: size.width - 20,
+                            height: activeTabContentHeight - 20
+                        }}
+                        imageData={imagesData[activeImageIndex]}
+                    />}
                     {labelType === LabelType.RECT && <RectLabelsList
                         size={{
                             width: size.width - 20,
@@ -192,14 +207,17 @@ class LabelsToolkit extends React.Component<IProps, IState> {
 const mapDispatchToProps = {
     updateImageDataById,
     updateActiveLabelType,
+    updateActiveLabelViewType,
     updateActiveLabelId
 };
 
 const mapStateToProps = (state: AppState) => ({
     activeImageIndex: state.labels.activeImageIndex,
     activeLabelType: state.labels.activeLabelType,
+    activeLabelViewType: state.labels.activeLabelViewType,
     imagesData: state.labels.imagesData,
     projectType: state.general.projectData.type,
+    language: state.general.language
 });
 
 export default connect(

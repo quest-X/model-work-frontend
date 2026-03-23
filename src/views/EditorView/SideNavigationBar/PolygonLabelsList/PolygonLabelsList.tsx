@@ -14,6 +14,7 @@ import LabelInputField from '../LabelInputField/LabelInputField';
 import EmptyLabelList from '../EmptyLabelList/EmptyLabelList';
 import {LabelActions} from '../../../../logic/actions/LabelActions';
 import {findLast} from 'lodash';
+import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
 
 interface IProps {
     size: ISize;
@@ -24,6 +25,7 @@ interface IProps {
     updateActiveLabelNameIdAction: (activeLabelId: string) => any;
     labelNames: LabelName[];
     updateActiveLabelIdAction: (activeLabelId: string) => any;
+    language: Language;
 }
 
 const PolygonLabelsList: React.FC<IProps> = (
@@ -35,28 +37,36 @@ const PolygonLabelsList: React.FC<IProps> = (
         updateActiveLabelNameIdAction,
         activeLabelId,
         highlightedLabelId,
-        updateActiveLabelIdAction
+        updateActiveLabelIdAction,
+        language
     }
 ) => {
+    const currentTexts = LanguageConfig[language];
     const labelInputFieldHeight = 40;
     const listStyle: React.CSSProperties = {
-        width: size.width,
-        height: size.height
+        width: size?.width || 0,
+        height: size?.height || 0
     };
     const listStyleContent: React.CSSProperties = {
-        width: size.width,
-        height: imageData.labelPolygons.length * labelInputFieldHeight
+        width: size?.width || 0,
+        height: (imageData?.labelPolygons?.length || 0) * labelInputFieldHeight
     };
 
     const deletePolygonLabelById = (labelPolygonId: string) => {
-        LabelActions.deletePolygonLabelById(imageData.id, labelPolygonId);
+        if (imageData?.id) {
+            LabelActions.deletePolygonLabelById(imageData.id, labelPolygonId);
+        }
     };
 
     const togglePolygonLabelVisibilityById = (labelPolygonId: string) => {
-        LabelActions.toggleLabelVisibilityById(imageData.id, labelPolygonId);
+        if (imageData?.id) {
+            LabelActions.toggleLabelVisibilityById(imageData.id, labelPolygonId);
+        }
     };
 
     const updatePolygonLabel = (labelPolygonId: string, labelNameId: string) => {
+        if (!imageData?.id || !imageData?.labelPolygons) return;
+        
         const newImageData = {
             ...imageData,
             labelPolygons: imageData.labelPolygons.map((currentLabel: LabelPolygon) => {
@@ -78,10 +88,12 @@ const PolygonLabelsList: React.FC<IProps> = (
     };
 
     const getChildren = () => {
+        if (!imageData?.labelPolygons) return [];
+        
         return imageData.labelPolygons.map((labelPolygon: LabelPolygon) => {
             return <LabelInputField
                 size={{
-                    width: size.width,
+                    width: size?.width || 0,
                     height: labelInputFieldHeight
                 }}
                 isActive={labelPolygon.id === activeLabelId}
@@ -104,10 +116,10 @@ const PolygonLabelsList: React.FC<IProps> = (
             style={listStyle}
             onClickCapture={onClickHandler}
         >
-            {imageData.labelPolygons.length === 0 ?
+            {(!imageData?.labelPolygons || imageData.labelPolygons.length === 0) ?
                 <EmptyLabelList
-                    labelBefore={'draw your first polygon'}
-                    labelAfter={'no labels created for this image yet'}
+                    labelBefore={currentTexts.drawFirstPolygon}
+                    labelAfter={currentTexts.noLabelsCreated}
                 /> :
                 <Scrollbars>
                     <div
@@ -131,7 +143,8 @@ const mapDispatchToProps = {
 const mapStateToProps = (state: AppState) => ({
     activeLabelId: state.labels.activeLabelId,
     highlightedLabelId: state.labels.highlightedLabelId,
-    labelNames : state.labels.labels
+    labelNames : state.labels.labels,
+    language: state.general.language
 });
 
 export default connect(

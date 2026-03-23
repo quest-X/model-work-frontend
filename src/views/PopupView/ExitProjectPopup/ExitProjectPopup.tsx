@@ -14,6 +14,7 @@ import { ImageData, LabelName } from "../../../store/labels/types";
 import { PopupActions } from "../../../logic/actions/PopupActions";
 import { ProjectData } from "../../../store/general/types";
 import { updateProjectData as storeUpdateProjectData } from "../../../store/general/actionCreators";
+import {Language, LanguageConfig} from "../../../data/LanguageConfig";
 
 interface IProps {
     updateActiveImageIndex: (activeImageIndex: number) => any;
@@ -22,6 +23,7 @@ interface IProps {
     updateImageData: (imageData: ImageData[]) => any;
     updateFirstLabelCreatedFlag: (firstLabelCreatedFlag: boolean) => any;
     updateProjectData: (projectData: ProjectData) => any;
+    language: Language;
 }
 
 const ExitProjectPopup: React.FC<IProps> = ({
@@ -30,15 +32,17 @@ const ExitProjectPopup: React.FC<IProps> = ({
     updateActiveImageIndex,
     updateImageData,
     updateFirstLabelCreatedFlag,
-    updateProjectData
+    updateProjectData,
+    language
 }: IProps) => {
+    const currentTexts = LanguageConfig[language];
 
 
     const renderContent = () => {
         return (
             <div className="ExitProjectPopupContent">
                 <div className="Message">
-                    Are you sure you want to leave the editor? You will permanently lose all your progress.
+                    {currentTexts.popups.exitProject.content}
                 </div>
             </div>
         );
@@ -47,7 +51,7 @@ const ExitProjectPopup: React.FC<IProps> = ({
     const onAccept = () => {
         updateActiveLabelNameId(null);
         updateLabelNames([]);
-        updateProjectData({ type: null, name: "my-project-name" });
+        updateProjectData({ type: null, name: "default-project" });
         updateActiveImageIndex(null);
         updateImageData([]);
         updateFirstLabelCreatedFlag(false);
@@ -60,11 +64,11 @@ const ExitProjectPopup: React.FC<IProps> = ({
 
     return (
         <GenericYesNoPopup
-            title={"Exit project"}
+            title={currentTexts.popups.exitProject.title}
             renderContent={renderContent}
-            acceptLabel={"Exit"}
+            acceptLabel={currentTexts.popups.exitProject.acceptButton}
             onAccept={onAccept}
-            rejectLabel={"Back"}
+            rejectLabel={currentTexts.popups.exitProject.rejectButton}
             onReject={onReject}
         />);
 };
@@ -78,7 +82,9 @@ const mapDispatchToProps = {
     updateFirstLabelCreatedFlag: storeUpdateFirstLabelCreatedFlag
 };
 
-const mapStateToProps = (state: AppState) => ({});
+const mapStateToProps = (state: AppState) => ({
+    language: state.general.language
+});
 
 export default connect(
     mapStateToProps,

@@ -12,18 +12,30 @@ import {PolygonUtil} from './PolygonUtil';
 
 export class RenderEngineUtil {
     public static calculateImageScale(data: EditorData): number {
+        if (!data.realImageSize || !data.viewPortContentImageRect) {
+            return 1; // 默认缩放比例
+        }
         return data.realImageSize.width / data.viewPortContentImageRect.width;
     }
 
     public static isMouseOverImage(data: EditorData): boolean {
+        if (!data.viewPortContentImageRect || !data.mousePositionOnViewPortContent) {
+            return false;
+        }
         return RectUtil.isPointInside(data.viewPortContentImageRect, data.mousePositionOnViewPortContent);
     }
 
     public static isMouseOverCanvas(data: EditorData): boolean {
+        if (!data.viewPortContentSize || !data.mousePositionOnViewPortContent) {
+            return false;
+        }
         return RectUtil.isPointInside({x: 0, y: 0, ...data.viewPortContentSize}, data.mousePositionOnViewPortContent);
     }
 
     public static transferPointFromImageToViewPortContent(point: IPoint, data: EditorData): IPoint {
+        if (!data.viewPortContentImageRect || !data.realImageSize) {
+            return point; // 如果没有图像数据，返回原始point
+        }
         const scale = RenderEngineUtil.calculateImageScale(data);
         return PointUtil.add(PointUtil.multiply(point, 1/scale), data.viewPortContentImageRect);
     }
@@ -40,6 +52,9 @@ export class RenderEngineUtil {
     }
 
     public static transferPointFromViewPortContentToImage(point: IPoint, data: EditorData): IPoint {
+        if (!data.viewPortContentImageRect || !data.realImageSize) {
+            return point; // 如果没有图像数据，返回原始point
+        }
         const scale = RenderEngineUtil.calculateImageScale(data);
         return PointUtil.multiply(PointUtil.subtract(point, data.viewPortContentImageRect), scale);
     }
@@ -56,11 +71,17 @@ export class RenderEngineUtil {
     }
 
     public static transferRectFromViewPortContentToImage(rect: IRect, data: EditorData): IRect {
+        if (!data.viewPortContentImageRect || !data.realImageSize) {
+            return rect; // 如果没有图像数据，返回原始rect
+        }
         const scale = RenderEngineUtil.calculateImageScale(data);
         return RectUtil.translate(RectUtil.scaleRect(rect, 1/scale), data.viewPortContentImageRect);
     }
 
     public static transferRectFromImageToViewPortContent(rect: IRect, data: EditorData): IRect {
+        if (!data.viewPortContentImageRect || !data.realImageSize) {
+            return rect; // 如果没有图像数据，返回原始rect
+        }
         const scale = RenderEngineUtil.calculateImageScale(data);
         const translation: IPoint = {
             x: - data.viewPortContentImageRect.x,

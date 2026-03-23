@@ -5,8 +5,9 @@ import {AppState} from '../../../store';
 import {connect} from 'react-redux';
 import {ImageButton} from '../../Common/ImageButton/ImageButton';
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
-import {ILabelToolkit, LabelToolkitData} from '../../../data/info/LabelToolkitData';
+import {ILabelToolkit, getLabelToolkitData} from '../../../data/info/LabelToolkitData';
 import {ProjectType} from '../../../data/enums/ProjectType';
+import {Language} from '../../../data/LanguageConfig';
 
 interface IProps {
     title: string,
@@ -20,6 +21,7 @@ interface IProps {
     rejectLabel: string;
     onReject: (labelType: LabelType) => any;
     renderInternalContent: (labelType: LabelType) => any;
+    language: Language;
 }
 
 const GenericLabelTypePopup: React.FC<IProps> = (
@@ -34,13 +36,15 @@ const GenericLabelTypePopup: React.FC<IProps> = (
         disableAcceptButton,
         rejectLabel,
         onReject,
-        renderInternalContent
+        renderInternalContent,
+        language
     }) => {
 
     const [labelType, setLabelType] = useState(activeLabelType);
 
     const getSidebarButtons = () => {
-        return LabelToolkitData
+        const labelToolkitData = getLabelToolkitData(language);
+        return labelToolkitData
             .filter((label: ILabelToolkit) => label.projectType === projectType)
             .map((label: ILabelToolkit) => {
                 return <ImageButton
@@ -86,7 +90,8 @@ const GenericLabelTypePopup: React.FC<IProps> = (
 const mapDispatchToProps = {};
 
 const mapStateToProps = (state: AppState) => ({
-    projectType: state.general.projectData.type
+    projectType: state.general.projectData.type,
+    language: state.general.language
 });
 
 export default connect(

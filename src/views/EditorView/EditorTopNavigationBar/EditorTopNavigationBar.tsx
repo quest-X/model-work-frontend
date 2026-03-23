@@ -1,6 +1,6 @@
 import { ContextType } from '../../../data/enums/ContextType';
 import './EditorTopNavigationBar.scss';
-import React from 'react';
+import React, { useEffect, useMemo, useCallback } from 'react';
 import classNames from 'classnames';
 import { AppState } from '../../../store';
 import { connect } from 'react-redux';
@@ -12,9 +12,24 @@ import { ViewPortActions } from '../../../logic/actions/ViewPortActions';
 import { LabelsSelector } from '../../../store/selectors/LabelsSelector';
 import { LabelType } from '../../../data/enums/LabelType';
 import { AISelector } from '../../../store/selectors/AISelector';
+import { updateActiveLabelType, updateActiveLabelViewType } from '../../../store/labels/actionCreators';
 import { ISize } from '../../../interfaces/ISize';
 import { AIActions } from '../../../logic/actions/AIActions';
 import { Fade, styled, Tooltip, tooltipClasses, TooltipProps } from '@mui/material';
+import {Language, LanguageConfig} from '../../../data/LanguageConfig';
+import {EditorModel} from '../../../staticModels/EditorModel';
+import { ImageUtil } from '../../../utils/ImageUtil';
+import InferenceToggle from '../InferenceToggle/InferenceToggle';
+import { SegmentationAPIDetector } from '../../../ai/SegmentationAPIDetector';
+import { updateSegmentationResults, updateFullImageInferenceStatus, toggleImageAILabelsVisibility, addInferenceHistory, updateRetrievalModeStatus } from '../../../store/ai/actionCreators';
+import { AISegmentationActions } from '../../../logic/actions/AISegmentationActions';
+import { AIDetectionActions } from '../../../logic/actions/AIDetectionActions';
+import { AIRetrievalActions } from '../../../logic/actions/AIRetrievalActions';
+import { DetectionAPIDetector } from '../../../ai/DetectionAPIDetector';
+import { RetrievalAPIDetector } from '../../../ai/RetrievalAPIDetector';
+import { AIStateStorageManager } from '../../../utils/AIStateStorageManager';
+import { AIModelsSelector } from '../../../store/selectors/AIModelsSelector';
+import { EditorActions } from '../../../logic/actions/EditorActions';
 const BUTTON_SIZE: ISize = { width: 30, height: 30 };
 const BUTTON_PADDING: number = 10;
 
@@ -38,7 +53,8 @@ const getButtonWithTooltip = (
     imageAlt: string,
     isActive: boolean,
     href?: string,
-    onClick?: () => any
+    onClick?: () => any,
+    isDisabled?: boolean
 ): React.ReactElement => {
     return <StyledTooltip
         key={key}
@@ -55,8 +71,9 @@ const getButtonWithTooltip = (
                 image={imageSrc}
                 imageAlt={imageAlt}
                 href={href}
-                onClick={onClick}
+                onClick={isDisabled ? undefined : onClick}
                 isActive={isActive}
+                isDisabled={isDisabled}
             />
         </div>
     </StyledTooltip>;
@@ -66,20 +83,85 @@ interface IProps {
     activeContext: ContextType;
     updateImageDragModeStatusAction: (imageDragMode: boolean) => any;
     updateCrossHairVisibleStatusAction: (crossHairVisible: boolean) => any;
+    updateSegmentationResults: (results: any[]) => any;
+    updateFullImageInferenceStatus: (isInProgress: boolean) => any;
+    toggleImageAILabelsVisibility: (imageId: string) => any;
+    addInferenceHistory: (imageId: string, detectedCount: number, success?: boolean) => any;
+    updateRetrievalModeStatus: (isEnabled: boolean) => any;
     imageDragMode: boolean;
     crossHairVisible: boolean;
+    isFullImageInferenceInProgress: boolean;
+    imageAIStates: Map<string, { aiLabelsVisible: boolean; segmentationLabelsVisible: boolean; inferenceHistory: Array<any> }>;
     activeLabelType: LabelType;
+    language: Language;
+    isAIDisabled: boolean;
+    activeImageIndex: number;
+    aiModels: any;
+    isRetrievalModeEnabled: boolean;
+    updateActiveLabelType: (activeLabelType: LabelType) => any;
+    updateActiveLabelViewType: (activeLabelViewType: LabelType) => any;
 }
 
-const EditorTopNavigationBar: React.FC<IProps> = (
+const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     {
         activeContext,
         updateImageDragModeStatusAction,
         updateCrossHairVisibleStatusAction,
+        updateSegmentationResults,
+        updateFullImageInferenceStatus,
+        toggleImageAILabelsVisibility,
+        addInferenceHistory,
         imageDragMode,
         crossHairVisible,
-        activeLabelType
+        isFullImageInferenceInProgress,
+        imageAIStates,
+        activeLabelType,
+        language,
+        isAIDisabled,
+        activeImageIndex,
+        aiModels,
+        isRetrievalModeEnabled,
+        updateActiveLabelType,
+        updateActiveLabelViewType,
+        updateRetrievalModeStatus
     }) => {
+    const currentTexts = useMemo(() => LanguageConfig[language], [language]);
+    
+    // 缓存的辅助函数：根据模型类型获取可用的AI模型
+    const getModelByType = useCallback((modelType: 'detection' | 'segmentation' | 'retrieval') => {
+        // 从AI模型管理状态中获取指定类型的模型
+        const modelOfType = AIModelsSelector.getActiveModelByType(aiModels, modelType);
+        if (modelOfType) {
+            console.log(`🤖 找到${modelType === 'detection' ? '检测' : modelType === 'segmentation' ? '分割' : '检索'}模型:`, modelOfType.name);
+            return modelOfType;
+        } else {
+            console.log(`⚠️ 未找到${modelType === 'detection' ? '检测' : modelType === 'segmentation' ? '分割' : '检索'}类型的模型`);
+            // 对于检索模型，如果没有找到用户配置的模型，返回null而不是默认API
+            if (modelType === 'retrieval') {
+                return null;
+            }
+            // 对于检测和分割，暂时返回默认的分割API检测器
+            return SegmentationAPIDetector;
+        }
+    }, [aiModels]);
+    
+    // 缓存的辅助函数：检查是否有可用的检测模型（只检查用户接入的模型）
+    const hasDetectionModel = useMemo(() => {
+        return AIModelsSelector.hasModelsOfType(aiModels, 'detection');
+    }, [aiModels]);
+    
+    // 缓存的辅助函数：检查是否有可用的检索模型（只检查用户接入的模型）
+    const hasRetrievalModel = useMemo(() => {
+        return AIModelsSelector.hasModelsOfType(aiModels, 'retrieval');
+    }, [aiModels]);
+    
+    // 辅助函数：检查图片是否真的有AI生成的标签
+    const hasAILabels = (imageData: any): boolean => {
+        if (!imageData || !imageData.labelRects) return false;
+        return imageData.labelRects.some((rect: any) => rect.isCreatedByAI);
+    };
+    
+    // 新的设计不需要复杂的状态同步，因为状态完全基于用户操作和分割历史
     const getClassName = () => {
         return classNames(
             'EditorTopNavigationBar',
@@ -89,23 +171,238 @@ const EditorTopNavigationBar: React.FC<IProps> = (
         );
     };
 
-    const imageDragOnClick = () => {
-        if (imageDragMode) {
-            updateImageDragModeStatusAction(!imageDragMode);
+    const imageDragOnClick = useCallback(() => {
+        // 切换标签拖拽模式
+        updateImageDragModeStatusAction(!imageDragMode);
+        // 如果开启拖拽模式，自动关闭十字光标
+        if (!imageDragMode && crossHairVisible) {
+            updateCrossHairVisibleStatusAction(false);
         }
-        else if (GeneralSelector.getZoom() !== ViewPointSettings.MIN_ZOOM) {
-            updateImageDragModeStatusAction(!imageDragMode);
-        }
-    };
+    }, [imageDragMode, crossHairVisible, updateImageDragModeStatusAction, updateCrossHairVisibleStatusAction]);
 
-    const crossHairOnClick = () => {
+    const crossHairOnClick = useCallback(() => {
+        // 切换十字光标
         updateCrossHairVisibleStatusAction(!crossHairVisible);
+        // 如果开启十字光标，自动关闭拖拽模式
+        if (!crossHairVisible && imageDragMode) {
+            updateImageDragModeStatusAction(false);
+        }
+    }, [crossHairVisible, imageDragMode, updateCrossHairVisibleStatusAction, updateImageDragModeStatusAction]);
+
+    // 缓存的目标检测调用函数
+    const fullImageDetectionOnClick = useCallback(() => {
+        const activeImageData = LabelsSelector.getActiveImageData();
+        
+        if (!activeImageData) {
+            console.error('❌ 没有活动图像数据');
+            return;
+        }
+
+        if (isFullImageInferenceInProgress) {
+            console.log('🔄 检测正在进行中，忽略点击');
+            return;
+        }
+
+        const imageAIState = imageAIStates.get(activeImageData.id) || { 
+            aiLabelsVisible: false, 
+            inferenceHistory: [] 
+        };
+
+        // 检查当前图片是否有AI标签（预计算避免重复检查）
+        const hasAILabels = activeImageData.labelRects.some((rect: any) => rect.isCreatedByAI);
+        
+        // 如果点击时要显示标签（从闭眼到睁眼）
+        if (!imageAIState.aiLabelsVisible) {
+            if (!hasAILabels) {
+                // 检查是否有可用的检测模型
+                const detectionModel = getModelByType('detection');
+                if (detectionModel === null) {
+                    if (!DetectionAPIDetector.isEnabled()) return;
+                } else {
+                    const aiModel = detectionModel as any;
+                    if (!aiModel.url) return;
+                    // 将 Redux 里存的 URL 同步给 DetectionAPIDetector
+                    DetectionAPIDetector.setConfig({ url: aiModel.url, enabled: true });
+                }
+
+                // 设置检测状态为进行中
+                updateFullImageInferenceStatus(true);
+
+                // 使用微任务调用检测，避免阻塞主线程
+                queueMicrotask(() => {
+                    AIDetectionActions.detectObjects(activeImageData);
+                });
+            } else {
+                // 直接切换显示状态，立即响应
+                toggleImageAILabelsVisibility(activeImageData.id);
+                // 立即触发canvas重绘，确保与标签页同步
+                queueMicrotask(() => {
+                    EditorActions.fullRender();
+                });
+            }
+        } else {
+            // 隐藏标签，立即响应
+            toggleImageAILabelsVisibility(activeImageData.id);
+            // 立即触发canvas重绘，确保与标签页同步
+            queueMicrotask(() => {
+                EditorActions.fullRender();
+            });
+        }
+    }, [imageAIStates, isFullImageInferenceInProgress, getModelByType, updateFullImageInferenceStatus, toggleImageAILabelsVisibility]);
+
+    // 缓存的检索模式切换函数
+    const toggleRetrievalModeOnClick = useCallback(() => {
+        console.log('🔍 === 检索模式切换按钮被点击 ===');
+        console.log('🔍 当前检索模式状态:', isRetrievalModeEnabled);
+        
+        // 检查是否有可用的检索模型
+        if (!hasRetrievalModel) {
+            console.error('🔍 ❌ 没有可用的检索模型，无法启用检索模式');
+            return;
+        }
+
+        // 获取用户配置的检索模型
+        const retrievalModel = getModelByType('retrieval');
+        if (!retrievalModel) {
+            console.error('🔍 ❌ 没有找到配置的检索模型');
+            return;
+        }
+
+        // 检查模型是否有URL配置
+        const modelUrl = (retrievalModel as any).url;
+        if (!modelUrl) {
+            console.error('🔍 ❌ 检索模型URL未配置');
+            return;
+        }
+
+        // 切换检索模式状态
+        const newMode = !isRetrievalModeEnabled;
+        updateRetrievalModeStatus(newMode);
+        
+        if (newMode) {
+            console.log('🔍 ✅ 检索模式已启用 - 现在拉标注框时会自动触发检索');
+            console.log('🔍 将使用检索模型:', (retrievalModel as any).name || 'Unnamed Model');
+            console.log('🔍 检索模型URL:', modelUrl);
+        } else {
+            console.log('🔍 ❌ 检索模式已禁用 - 回到正常分割模式');
+        }
+    }, [hasRetrievalModel, isRetrievalModeEnabled, getModelByType, updateRetrievalModeStatus]);
+
+    // 标注工具点击处理 - 统一的处理函数
+    const onToolClick = useCallback((toolType: LabelType) => {
+        // 同时切换工具类型和视图类型，实现工具与标签页的完全绑定
+        updateActiveLabelType(toolType);
+        updateActiveLabelViewType(toolType);
+    }, [updateActiveLabelType, updateActiveLabelViewType]);
+
+    // 目标分割调用函数（原来的fullImageInferenceOnClick）
+    const fullImageSegmentationOnClick = () => {
+        const activeImageData = LabelsSelector.getActiveImageData();
+        
+        if (!activeImageData) {
+            console.error('❌ 没有活动图像数据');
+            return;
+        }
+
+        const imageAIState = imageAIStates.get(activeImageData.id) || { 
+            aiLabelsVisible: false, 
+            inferenceHistory: [] 
+        };
+
+        // 检查当前图片有多少AI标签
+        const currentAILabelCount = hasAILabels(activeImageData) ? 
+            activeImageData.labelRects.filter((rect: any) => rect.isCreatedByAI).length : 0;
+
+        // 如果点击时要显示标签（从闭眼到睁眼）
+        if (!imageAIState.aiLabelsVisible) {
+            console.log('👁️ 尝试显示AI标签...', {
+                imageId: activeImageData.id,
+                currentAILabelCount,
+                imageAIState,
+                hasAILabels: hasAILabels(activeImageData)
+            });
+            
+            // 检查是否需要重新分割
+            const shouldInfer = AIStateStorageManager.shouldTriggerInference(activeImageData.id, currentAILabelCount);
+            
+            if (shouldInfer) {
+                console.log(`🧠 需要重新分割！当前AI标签数量(${currentAILabelCount}) < 历史最高记录(${AIStateStorageManager.getMaxDetectedCount(activeImageData.id)})`);
+                
+                // 检查AI分割是否被用户禁用
+                if (isAIDisabled) {
+                    console.log('🚫 AI分割已被用户禁用，无法执行分割');
+                    return;
+                }
+
+                if (isFullImageInferenceInProgress) {
+                    console.log('🔄 整图分割正在进行中，忽略点击');
+                    return;
+                }
+
+                // 检查分割模型可用性
+                const segmentationModel = getModelByType('segmentation');
+                if (segmentationModel === SegmentationAPIDetector) {
+                    if (!SegmentationAPIDetector.isEnabled()) {
+                        console.error('❌ 默认分割API未启用');
+                        return;
+                    }
+                } else {
+                    // 使用用户接入的AI模型
+                    const aiModel = segmentationModel as any;
+                    if (!aiModel.url) {
+                        console.error('❌ 分割模型URL未配置');
+                        return;
+                    }
+                }
+
+                console.log('🔍 开始智能分割...');
+
+                // 获取整个图像的边界框
+                const realImageSize = EditorModel.image ? ImageUtil.getSize(EditorModel.image) : { width: 1000, height: 1000 };
+                const imageRect = {
+                    x: 0,
+                    y: 0,
+                    width: realImageSize.width,
+                    height: realImageSize.height
+                };
+
+                // 设置分割状态为进行中
+                updateFullImageInferenceStatus(true);
+                
+                // 调用分割（需要根据模型类型选择调用方式）
+                if (segmentationModel === SegmentationAPIDetector) {
+                    AISegmentationActions.segmentBbox(activeImageData, imageRect);
+                } else {
+                    // TODO: 调用用户自定义的AI模型接口
+                    console.log('🚀 使用自定义分割模型:', segmentationModel);
+                    AISegmentationActions.segmentBbox(activeImageData, imageRect);
+                }
+            } else {
+                console.log('✅ 无需重新分割，直接显示现有AI标签');
+                // 直接切换显示状态，立即生效
+                toggleImageAILabelsVisibility(activeImageData.id);
+                
+                // 立即触发canvas重绘，确保与标签页同步
+                queueMicrotask(() => {
+                    EditorActions.fullRender();
+                });
+            }
+        } else {
+            // 如果是隐藏标签（从睁眼到闭眼）
+            console.log('👁️‍🗨️ 隐藏AI标签');
+            toggleImageAILabelsVisibility(activeImageData.id);
+            
+            // 立即触发canvas重绘，确保与标签页同步
+            queueMicrotask(() => {
+                EditorActions.fullRender();
+            });
+        }
     };
 
     const withAI = (
-        (activeLabelType === LabelType.RECT && AISelector.isAISSDObjectDetectorModelLoaded()) ||
-        (activeLabelType === LabelType.RECT && AISelector.isAIYOLOObjectDetectorModelLoaded()) ||
-        (activeLabelType === LabelType.RECT && AISelector.isRoboflowAPIModelLoaded()) ||
+        ((activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isAISSDObjectDetectorModelLoaded()) ||
+        ((activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isAIYOLOObjectDetectorModelLoaded()) ||
+        ((activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isRoboflowAPIModelLoaded()) ||
         (activeLabelType === LabelType.POINT && AISelector.isAIPoseDetectorModelLoaded())
     )
 
@@ -115,7 +412,7 @@ const EditorTopNavigationBar: React.FC<IProps> = (
                 {
                     getButtonWithTooltip(
                         'zoom-in',
-                        'zoom in',
+                        currentTexts.editorTopNavBar.zoomIn,
                         'ico/zoom-in.png',
                         'zoom-in',
                         false,
@@ -126,7 +423,7 @@ const EditorTopNavigationBar: React.FC<IProps> = (
                 {
                     getButtonWithTooltip(
                         'zoom-out',
-                        'zoom out',
+                        currentTexts.editorTopNavBar.zoomOut,
                         'ico/zoom-out.png',
                         'zoom-out',
                         false,
@@ -137,7 +434,7 @@ const EditorTopNavigationBar: React.FC<IProps> = (
                 {
                     getButtonWithTooltip(
                         'zoom-fit',
-                        'fit image to available space',
+                        currentTexts.editorTopNavBar.fitImage,
                         'ico/zoom-fit.png',
                         'zoom-fit',
                         false,
@@ -148,7 +445,7 @@ const EditorTopNavigationBar: React.FC<IProps> = (
                 {
                     getButtonWithTooltip(
                         'zoom-max',
-                        'maximum allowed image zoom',
+                        currentTexts.editorTopNavBar.maxZoom,
                         'ico/zoom-max.png',
                         'zoom-max',
                         false,
@@ -160,10 +457,10 @@ const EditorTopNavigationBar: React.FC<IProps> = (
             <div className='ButtonWrapper'>
                 {
                     getButtonWithTooltip(
-                        'image-drag-mode',
-                        imageDragMode ? 'turn-off image drag mode' : 'turn-on image drag mode - works only when image is zoomed',
+                        'label-drag-mode',
+                        imageDragMode ? currentTexts.editorTopNavBar.imageDragModeOn : currentTexts.editorTopNavBar.imageDragModeOff,
                         'ico/hand.png',
-                        'image-drag-mode',
+                        'label-drag-mode',
                         imageDragMode,
                         undefined,
                         imageDragOnClick
@@ -172,7 +469,7 @@ const EditorTopNavigationBar: React.FC<IProps> = (
                 {
                     getButtonWithTooltip(
                         'cursor-cross-hair',
-                        crossHairVisible ? 'turn-off cursor cross-hair' : 'turn-on cursor cross-hair',
+                        crossHairVisible ? currentTexts.editorTopNavBar.crossHairOn : currentTexts.editorTopNavBar.crossHairOff,
                         'ico/cross-hair.png',
                         'cross-hair',
                         crossHairVisible,
@@ -181,11 +478,185 @@ const EditorTopNavigationBar: React.FC<IProps> = (
                     )
                 }
             </div>
+            <div className='ButtonWrapper'>
+                {
+                    getButtonWithTooltip(
+                        'tool-all',
+                        currentTexts.labelTypes?.all || '全部标签',
+                        'ico/all.png',
+                        'tool-all',
+                        activeLabelType === LabelType.ALL,
+                        undefined,
+                        () => onToolClick(LabelType.ALL)
+                    )
+                }
+                {
+                    getButtonWithTooltip(
+                        'tool-rect',
+                        currentTexts.labelTypes?.rect || '矩形框',
+                        'ico/rectangle.png',
+                        'tool-rect',
+                        activeLabelType === LabelType.RECT,
+                        undefined,
+                        () => onToolClick(LabelType.RECT)
+                    )
+                }
+                {
+                    getButtonWithTooltip(
+                        'tool-point',
+                        currentTexts.labelTypes?.point || '点',
+                        'ico/point.png',
+                        'tool-point',
+                        activeLabelType === LabelType.POINT,
+                        undefined,
+                        () => onToolClick(LabelType.POINT)
+                    )
+                }
+                {
+                    getButtonWithTooltip(
+                        'tool-line',
+                        currentTexts.labelTypes?.line || '线条',
+                        'ico/line.png',
+                        'tool-line',
+                        activeLabelType === LabelType.LINE,
+                        undefined,
+                        () => onToolClick(LabelType.LINE)
+                    )
+                }
+                {
+                    getButtonWithTooltip(
+                        'tool-polygon',
+                        currentTexts.labelTypes?.polygon || '多边形',
+                        'ico/polygon.png',
+                        'tool-polygon',
+                        activeLabelType === LabelType.POLYGON,
+                        undefined,
+                        () => onToolClick(LabelType.POLYGON)
+                    )
+                }
+            </div>
+            <div className='ButtonWrapper'>
+{useMemo(() => {
+                    const activeImageData = LabelsSelector.getActiveImageData();
+                    const detectionAvailable = hasDetectionModel;
+                    
+                    // 检测按钮状态完全独立，不依赖分割功能
+                    let buttonText, buttonIcon, isActive, isDisabled;
+                    
+                    if (!detectionAvailable) {
+                        // 没有检测模型时
+                        buttonText = currentTexts.editorTopNavBar.cannotDetect;
+                        buttonIcon = 'ico/eye-slash.png';
+                        isActive = false;
+                        isDisabled = true;
+                    } else if (isFullImageInferenceInProgress) {
+                        // 检测进行中
+                        buttonText = currentTexts.editorTopNavBar.detectionInProgress;
+                        buttonIcon = 'ico/eye.png';
+                        isActive = true;
+                        isDisabled = false;
+                    } else {
+                        // 检测可用时，检查当前图片是否有AI标签来决定按钮状态
+                        if (activeImageData) {
+                            const imageAIState = imageAIStates.get(activeImageData.id) || { 
+                                aiLabelsVisible: false,
+                                segmentationLabelsVisible: false,
+                                inferenceHistory: [] 
+                            };
+                            
+                            // 检查是否真的有检测产生的AI标签（排除分割标签）
+                            const hasActualDetectionLabels = activeImageData.labelRects?.some(rect => rect.isCreatedByAI) ||
+                                                            activeImageData.labelPoints?.some(point => point.isCreatedByAI) ||
+                                                            activeImageData.labelLines?.some(line => line.isCreatedByAI);
+                            // 注意：多边形标签主要由分割产生，所以不包含在检测标签检查中
+                            
+                            if (imageAIState.aiLabelsVisible && hasActualDetectionLabels) {
+                                // 当前显示检测标签，按钮为"关闭"状态
+                                buttonText = currentTexts.editorTopNavBar.disableDetection;
+                                buttonIcon = 'ico/eye.png';
+                                isActive = true;
+                            } else if (hasActualDetectionLabels && !imageAIState.aiLabelsVisible) {
+                                // 有检测标签但未显示，按钮为"开启"状态
+                                buttonText = currentTexts.editorTopNavBar.enableDetection;
+                                buttonIcon = 'ico/eye-off.png';
+                                isActive = false;
+                            } else {
+                                // 没有检测标签，按钮为"检测"状态
+                                buttonText = currentTexts.editorTopNavBar.enableDetection;
+                                buttonIcon = 'ico/eye-off.png';
+                                isActive = false;
+                            }
+                        } else {
+                            // 没有活动图片时
+                            buttonText = currentTexts.editorTopNavBar.enableDetection;
+                            buttonIcon = 'ico/eye-off.png';
+                            isActive = false;
+                        }
+                        isDisabled = false;
+                    }
+                    
+                    return getButtonWithTooltip(
+                        'full-image-detection',
+                        buttonText,
+                        buttonIcon,
+                        'full-image-detection',
+                        isActive,
+                        undefined,
+                        isDisabled ? undefined : fullImageDetectionOnClick,
+                        isDisabled
+                    );
+                }, [hasDetectionModel, isFullImageInferenceInProgress, imageAIStates, activeImageIndex, currentTexts, fullImageDetectionOnClick])}
+            </div>
+            <div className='ButtonWrapper'>
+{useMemo(() => {
+                    const retrievalAvailable = hasRetrievalModel;
+                    
+                    // 检索模式切换按钮状态
+                    let buttonText, buttonIcon, isActive, isDisabled;
+                    
+                    if (!retrievalAvailable) {
+                        // 没有检索模型时
+                        buttonText = '无检索模型';
+                        buttonIcon = 'ico/retrieve.png';
+                        isActive = false;
+                        isDisabled = true;
+                    } else if (isFullImageInferenceInProgress) {
+                        // 检索进行中
+                        buttonText = '检索中...';
+                        buttonIcon = 'ico/retrieve.png';
+                        isActive = true;
+                        isDisabled = true; // 检索进行中时禁用按钮
+                    } else if (isRetrievalModeEnabled) {
+                        // 检索模式已启用
+                        buttonText = '检索模式：开启';
+                        buttonIcon = 'ico/retrieve.png';
+                        isActive = true;
+                        isDisabled = false;
+                    } else {
+                        // 检索模式未启用
+                        buttonText = '检索模式：关闭';
+                        buttonIcon = 'ico/retrieve.png';
+                        isActive = false;
+                        isDisabled = false;
+                    }
+                    
+                    return getButtonWithTooltip(
+                        'toggle-retrieval-mode',
+                        buttonText,
+                        buttonIcon,
+                        'toggle-retrieval-mode',
+                        isActive,
+                        undefined,
+                        isDisabled ? undefined : toggleRetrievalModeOnClick,
+                        isDisabled
+                    );
+                }, [hasRetrievalModel, isRetrievalModeEnabled, isFullImageInferenceInProgress, toggleRetrievalModeOnClick])}
+            </div>
             {withAI && <div className='ButtonWrapper'>
                     {
                         getButtonWithTooltip(
                             'accept-all',
-                            'accept all proposed detections',
+                            currentTexts.editorTopNavBar.acceptAllDetections,
                             'ico/accept-all.png',
                             'accept-all',
                             false,
@@ -196,7 +667,7 @@ const EditorTopNavigationBar: React.FC<IProps> = (
                     {
                         getButtonWithTooltip(
                             'reject-all',
-                            'reject all proposed detections',
+                            currentTexts.editorTopNavBar.rejectAllDetections,
                             'ico/reject-all.png',
                             'reject-all',
                             false,
@@ -205,20 +676,35 @@ const EditorTopNavigationBar: React.FC<IProps> = (
                         )
                     }
                 </div>}
+            <InferenceToggle />
         </div>
     );
-};
+});
 
 const mapDispatchToProps = {
     updateImageDragModeStatusAction: updateImageDragModeStatus,
-    updateCrossHairVisibleStatusAction: updateCrossHairVisibleStatus
+    updateCrossHairVisibleStatusAction: updateCrossHairVisibleStatus,
+    updateSegmentationResults,
+    updateFullImageInferenceStatus,
+    toggleImageAILabelsVisibility,
+    addInferenceHistory,
+    updateRetrievalModeStatus,
+    updateActiveLabelType,
+    updateActiveLabelViewType
 };
 
 const mapStateToProps = (state: AppState) => ({
     activeContext: state.general.activeContext,
     imageDragMode: state.general.imageDragMode,
     crossHairVisible: state.general.crossHairVisible,
-    activeLabelType: state.labels.activeLabelType
+    isFullImageInferenceInProgress: state.ai.isFullImageInferenceInProgress,
+    imageAIStates: state.ai.imageAIStates,
+    activeLabelType: state.labels.activeLabelType,
+    language: state.general.language,
+    isAIDisabled: state.ai.isAIDisabled,
+    activeImageIndex: state.labels.activeImageIndex,
+    aiModels: state,
+    isRetrievalModeEnabled: state.ai.isRetrievalModeEnabled
 });
 
 export default connect(

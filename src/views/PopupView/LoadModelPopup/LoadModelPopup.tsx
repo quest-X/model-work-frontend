@@ -13,6 +13,7 @@ import {AppState} from '../../../store';
 import {connect} from 'react-redux';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {GeneralActionTypes} from '../../../store/general/types';
+import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 interface SelectableModel {
     model: AIModel,
@@ -20,31 +21,36 @@ interface SelectableModel {
     flag: boolean
 }
 
-const models: SelectableModel[] = [
-    {
-        model: AIModel.YOLO_V5_OBJECT_DETECTION,
-        name: 'YOLOv5 - object detection using rectangles',
-        flag: false
-    },
-    {
-        model: AIModel.SSD_OBJECT_DETECTION,
-        name: 'COCO SSD - object detection using rectangles',
-        flag: false
-    },
-    {
-        model: AIModel.POSE_DETECTION,
-        name: 'POSE-NET - pose estimation using points',
-        flag: false
-    }
-];
+const getModels = (language: Language): SelectableModel[] => {
+    const texts = LanguageConfig[language];
+    return [
+        {
+            model: AIModel.YOLO_V5_OBJECT_DETECTION,
+            name: texts.popups.loadModel.models.yolov5,
+            flag: false
+        },
+        {
+            model: AIModel.SSD_OBJECT_DETECTION,
+            name: texts.popups.loadModel.models.ssd,
+            flag: false
+        },
+        {
+            model: AIModel.POSE_DETECTION,
+            name: texts.popups.loadModel.models.posenet,
+            flag: false
+        }
+    ];
+};
 
 interface IProps {
     updateActivePopupType: (activePopupType: PopupWindowType) => GeneralActionTypes;
+    language: Language;
 }
 
-const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType }) => {
+const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) => {
+    const currentTexts = LanguageConfig[language];
     const [modelIsLoadingStatus, setModelIsLoadingStatus] = useState(false);
-    const [selectedModelToLoad, updateSelectedModelToLoad] = useState(models);
+    const [selectedModelToLoad, updateSelectedModelToLoad] = useState(getModels(language));
 
     const extractSelectedModel = (): AIModel => {
         const model: SelectableModel = findLast(selectedModelToLoad, { flag: true });
@@ -120,9 +126,7 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType }) => {
     const renderContent = () => {
         return <div className='LoadModelPopupContent'>
             <div className='Message'>
-                Speed up your annotation process using AI. Don't worry, your photos are still safe. To take care of
-                your privacy, we decided not to send your images to the server, but instead bring AI to you. Make sure
-                that you have a fast and stable connection - it may take a while to load the model.
+                {currentTexts.popups.loadModel.welcomeMessage}
             </div>
             <div className='Companion'>
                 {modelIsLoadingStatus ?
@@ -141,12 +145,12 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType }) => {
 
     return (
         <GenericYesNoPopup
-            title={'Say hello to AI'}
+            title={currentTexts.popups.loadModel.title}
             renderContent={renderContent}
-            acceptLabel={'Use model!'}
+            acceptLabel={currentTexts.popups.loadModel.acceptButton}
             onAccept={onAccept}
             disableAcceptButton={modelIsLoadingStatus || !extractSelectedModel()}
-            rejectLabel={"I'm going on my own"}
+            rejectLabel={currentTexts.popups.loadModel.rejectButton}
             onReject={onReject}
             disableRejectButton={modelIsLoadingStatus}
         />
@@ -157,7 +161,9 @@ const mapDispatchToProps = {
     updateActivePopupType: storeUpdateActivePopupType
 };
 
-const mapStateToProps = (state: AppState) => ({});
+const mapStateToProps = (state: AppState) => ({
+    language: state.general.language
+});
 
 export default connect(
     mapStateToProps,

@@ -10,15 +10,18 @@ import { PopupActions } from '../../../logic/actions/PopupActions';
 import { LineLabelsExporter } from '../../../logic/export/LineLabelExport';
 import { TagLabelsExporter } from '../../../logic/export/TagLabelsExport';
 import GenericLabelTypePopup from '../GenericLabelTypePopup/GenericLabelTypePopup';
-import { ExportFormatData } from '../../../data/ExportFormatData';
+import { getExportFormatData } from '../../../data/ExportFormatData';
 import { AppState } from '../../../store';
 import { connect } from 'react-redux';
+import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 interface IProps {
     activeLabelType: LabelType,
+    language: Language;
 }
 
-const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType }) => {
+const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
+    const currentTexts = LanguageConfig[language];
     const [labelType, setLabelType] = useState(activeLabelType);
     const [exportFormatType, setExportFormatType] = useState(null);
 
@@ -77,10 +80,10 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType }) => {
     const renderInternalContent = (type: LabelType) => {
         return <>
             <div className='Message'>
-                Select label type and the file format you would like to use to export labels.
+                {currentTexts.popups.exportAnnotations.selectFormat}
             </div>,
             <div className='Options'>
-                {getOptions(ExportFormatData[type])}
+                {getOptions(getExportFormatData(language)[type])}
             </div>
         </>;
     };
@@ -93,12 +96,12 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType }) => {
     return (
         <GenericLabelTypePopup
             activeLabelType={labelType}
-            title={`Export ${labelType.toLowerCase()} annotations`}
+            title={currentTexts.popups.exportAnnotations.title}
             onLabelTypeChange={onLabelTypeChange}
-            acceptLabel={'Export'}
+            acceptLabel={currentTexts.popups.exportAnnotations.acceptButton}
             onAccept={onAccept}
             disableAcceptButton={!exportFormatType}
-            rejectLabel={'Cancel'}
+            rejectLabel={currentTexts.popups.exportAnnotations.rejectButton}
             onReject={onReject}
             renderInternalContent={renderInternalContent}
         />
@@ -109,6 +112,7 @@ const mapDispatchToProps = {};
 
 const mapStateToProps = (state: AppState) => ({
     activeLabelType: state.labels.activeLabelType,
+    language: state.general.language
 });
 
 export default connect(

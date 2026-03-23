@@ -19,3 +19,13 @@ export function deleteNotificationById(id: string): NotificationsActionType {
         },
     };
 }
+
+export function updateNotificationById(id: string, notification: INotification): NotificationsActionType {
+    return {
+        type: Action.UPDATE_NOTIFICATION_BY_ID,
+        payload: {
+            id,
+            notification,
+        },
+    };
+}

@@ -1,10 +1,12 @@
 import {LabelsActionTypes, LabelsState, ImageData} from './types';
 import {Action} from '../Actions';
+import {LabelType} from '../../data/enums/LabelType';
 
 const initialState: LabelsState = {
     activeImageIndex: null,
     activeLabelNameId: null,
-    activeLabelType: null,
+    activeLabelType: LabelType.ALL, // 默认使用全部标签工具
+    activeLabelViewType: LabelType.ALL, // 默认显示全部标签视图
     activeLabelId: null,
     highlightedLabelId: null,
     imagesData: [],
@@ -47,6 +49,12 @@ export function labelsReducer(
                 activeLabelType: action.payload.activeLabelType
             }
         }
+        case Action.UPDATE_ACTIVE_LABEL_VIEW_TYPE: {
+            return {
+                ...state,
+                activeLabelViewType: action.payload.activeLabelViewType
+            }
+        }
         case Action.UPDATE_IMAGE_DATA_BY_ID: {
             return {
                 ...state,
@@ -77,6 +85,38 @@ export function labelsReducer(
             return {
                 ...state,
                 firstLabelCreatedFlag: action.payload.firstLabelCreatedFlag
+            }
+        }
+        case Action.SELECT_ALL_IMAGES: {
+            return {
+                ...state,
+                imagesData: state.imagesData.map((imageData: ImageData) => ({
+                    ...imageData,
+                    isSelected: action.payload.selectAll
+                }))
+            }
+        }
+        case Action.TOGGLE_IMAGE_SELECTION: {
+            return {
+                ...state,
+                imagesData: state.imagesData.map((imageData: ImageData) =>
+                    imageData.id === action.payload.imageId
+                        ? { ...imageData, isSelected: !imageData.isSelected }
+                        : imageData
+                )
+            }
+        }
+        case Action.SELECT_IMAGE_RANGE: {
+            const { startIndex, endIndex } = action.payload;
+            const minIndex = Math.min(startIndex, endIndex);
+            const maxIndex = Math.max(startIndex, endIndex);
+            
+            return {
+                ...state,
+                imagesData: state.imagesData.map((imageData: ImageData, index: number) => ({
+                    ...imageData,
+                    isSelected: index >= minIndex && index <= maxIndex
+                }))
             }
         }
         default:

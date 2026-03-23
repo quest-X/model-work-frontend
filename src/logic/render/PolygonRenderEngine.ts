@@ -38,6 +38,8 @@ export class PolygonRenderEngine extends BaseRenderEngine {
     private resizeAnchorIndex: number = null;
     private suggestedAnchorPositionOnCanvas: IPoint = null;
     private suggestedAnchorIndexInPolygon: number = null;
+    private movePolygonId: string = null;
+    private startMovePolygonPoint: IPoint = null;
 
     public constructor(canvas: HTMLCanvasElement) {
         super(canvas);
@@ -68,6 +70,14 @@ export class PolygonRenderEngine extends BaseRenderEngine {
 
     public mouseDownHandler(data: EditorData): void {
         const isMouseOverCanvas: boolean = RenderEngineUtil.isMouseOverCanvas(data);
+        const isInDragMode: boolean = GeneralSelector.getImageDragModeStatus();
+        
+        // 只处理左键点击 (button === 0)，忽略中键和右键
+        const mouseEvent = data.event as MouseEvent;
+        if (mouseEvent && mouseEvent.button !== 0) {
+            return;
+        }
+        
         if (isMouseOverCanvas) {
             if (this.isCreationInProgress()) {
                 const isMouseOverStartAnchor: boolean = this.isMouseOverAnchor(
@@ -95,12 +105,19 @@ export class PolygonRenderEngine extends BaseRenderEngine {
                         this.startExistingLabelResize(data, polygonUnderMouse.id, anchorIndex);
                     } else {
                         store.dispatch(updateActiveLabelId(polygonUnderMouse.id));
-                        const isMouseOverNewAnchor: boolean = this.isMouseOverAnchor(data.mousePositionOnViewPortContent, this.suggestedAnchorPositionOnCanvas);
-                        if (isMouseOverNewAnchor) {
-                            this.addSuggestedAnchorToPolygonLabel(data);
+                        if (isInDragMode) {
+                            // 拖拽模式：开始移动整个多边形
+                            this.startExistingLabelMove(data, polygonUnderMouse.id);
+                        } else {
+                            // 非拖拽模式：检查是否在新锚点上
+                            const isMouseOverNewAnchor: boolean = this.isMouseOverAnchor(data.mousePositionOnViewPortContent, this.suggestedAnchorPositionOnCanvas);
+                            if (isMouseOverNewAnchor) {
+                                this.addSuggestedAnchorToPolygonLabel(data);
+                            }
                         }
                     }
-                } else {
+                } else if (!isInDragMode) {
+                    // 只有在非拖拽模式下才允许创建新多边形
                     this.updateActivelyCreatedLabel(data);
                 }
             }
@@ -110,6 +127,8 @@ export class PolygonRenderEngine extends BaseRenderEngine {
     public mouseUpHandler(data: EditorData): void {
         if (this.isResizeInProgress())
             this.endExistingLabelResize(data);
+        if (this.isMoveInProgress())
+            this.endExistingLabelMove(data);
     }
 
     public mouseMoveHandler(data: EditorData): void {
@@ -143,6 +162,11 @@ export class PolygonRenderEngine extends BaseRenderEngine {
                     }
                 }
             }
+            
+            // 处理多边形移动
+            if (this.isMoveInProgress()) {
+                this.updateExistingLabelMove(data);
+            }
         }
     }
 
@@ -162,7 +186,8 @@ export class PolygonRenderEngine extends BaseRenderEngine {
     }
 
     private updateCursorStyle(data: EditorData) {
-        if (!!this.canvas && !!data.mousePositionOnViewPortContent && !GeneralSelector.getImageDragModeStatus()) {
+        if (!!this.canvas && !!data.mousePositionOnViewPortContent) {
+            const isInDragMode: boolean = GeneralSelector.getImageDragModeStatus();
             const isMouseOverCanvas: boolean = RenderEngineUtil.isMouseOverCanvas(data);
             if (isMouseOverCanvas) {
                 if (this.isCreationInProgress()) {
@@ -174,11 +199,18 @@ export class PolygonRenderEngine extends BaseRenderEngine {
                 } else {
                     const anchorUnderMouse: IPoint = this.getAnchorUnderMouse(data);
                     const isMouseOverNewAnchor: boolean = this.isMouseOverAnchor(data.mousePositionOnViewPortContent, this.suggestedAnchorPositionOnCanvas);
-                    if (!!isMouseOverNewAnchor) {
-                        store.dispatch(updateCustomCursorStyle(CustomCursorStyle.ADD));
+                    const polygonUnderMouse: LabelPolygon = this.getPolygonUnderMouse(data);
+                    
+                    if (this.isMoveInProgress()) {
+                        store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
                     } else if (this.isResizeInProgress()) {
                         store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
-                    } else if (!!anchorUnderMouse) {
+                    } else if (!!isMouseOverNewAnchor && !isInDragMode) {
+                        store.dispatch(updateCustomCursorStyle(CustomCursorStyle.ADD));
+                    } else if (!!anchorUnderMouse && !isInDragMode) {
+                        store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
+                    } else if (!!polygonUnderMouse && isInDragMode) {
+                        // 拖拽模式下，鼠标在多边形上显示移动光标
                         store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
                     } else {
                         RenderEngineUtil.wrapDefaultCursorStyleInCancel(data);
@@ -195,9 +227,13 @@ export class PolygonRenderEngine extends BaseRenderEngine {
         const standardizedPoints: IPoint[] = this.activePath.map((point: IPoint) => RenderEngineUtil.setPointBetweenPixels(point));
         const path = standardizedPoints.concat(data.mousePositionOnViewPortContent);
         const lines: ILine[] = PolygonUtil.getEdges(path, false);
-        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(null, true)
+        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(null, true, false)
         const anchorColor: string = BaseRenderEngine.resolveLabelAnchorColor(true)
-        DrawUtil.drawPolygonWithFill(this.canvas, path, DrawUtil.hexToRGB(lineColor, 0.2));
+        
+        // 只有当有足够的顶点时才绘制多边形填充
+        if (path.length >= 3) {
+            DrawUtil.drawPolygonWithFill(this.canvas, path, DrawUtil.hexToRGB(lineColor, 0.2));
+        }
         lines.forEach((line: ILine) => {
             DrawUtil.drawLine(this.canvas, line.start, line.end, lineColor, RenderEngineSettings.LINE_THICKNESS);
         });
@@ -213,7 +249,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
             const polygonOnCanvas: IPoint[] = activeLabelPolygon.vertices.map((point: IPoint, index: number) => {
                 return index === this.resizeAnchorIndex ? snappedMousePosition : RenderEngineUtil.transferPointFromImageToViewPortContent(point, data);
             });
-            this.drawPolygon(activeLabelPolygon.labelId, polygonOnCanvas, true);
+            this.drawPolygon(activeLabelPolygon.labelId, polygonOnCanvas, true, activeLabelPolygon.isCreatedByAI);
         }
     }
 
@@ -226,19 +262,22 @@ export class PolygonRenderEngine extends BaseRenderEngine {
                 const isActive: boolean = labelPolygon.id === activeLabelId || labelPolygon.id === highlightedLabelId;
                 const pathOnCanvas: IPoint[] = RenderEngineUtil.transferPolygonFromImageToViewPortContent(labelPolygon.vertices, data);
                 if (!(labelPolygon.id === activeLabelId && this.isResizeInProgress())) {
-                    this.drawPolygon(labelPolygon.labelId, pathOnCanvas, isActive);
+                    this.drawPolygon(labelPolygon.labelId, pathOnCanvas, isActive, labelPolygon.isCreatedByAI);
                 }
             }
         });
     }
 
-    private drawPolygon(labelId: string | null, polygon: IPoint[], isActive: boolean) {
-        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelId, true)
+    private drawPolygon(labelId: string | null, polygon: IPoint[], isActive: boolean, isCreatedByAI: boolean = false) {
+        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelId, true, isCreatedByAI)
         const anchorColor: string = BaseRenderEngine.resolveLabelAnchorColor(true)
         const standardizedPoints: IPoint[] = polygon.map((point: IPoint) => RenderEngineUtil.setPointBetweenPixels(point));
-        if (isActive) {
+        
+        // 始终绘制实心填充，与矩形框保持一致
+        if (standardizedPoints.length >= 3) {
             DrawUtil.drawPolygonWithFill(this.canvas, standardizedPoints, DrawUtil.hexToRGB(lineColor, 0.2));
         }
+        
         DrawUtil.drawPolygon(this.canvas, standardizedPoints, lineColor, RenderEngineSettings.LINE_THICKNESS);
         if (isActive) {
             standardizedPoints.forEach((point: IPoint) => {
@@ -326,6 +365,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
     private applyResizeToPolygonLabel(data: EditorData) {
         const imageData: ImageData = LabelsSelector.getActiveImageData();
         const activeLabel: LabelPolygon = LabelsSelector.getActivePolygonLabel();
+        if (!imageData || !activeLabel) return;
         imageData.labelPolygons = imageData.labelPolygons.map((polygon: LabelPolygon) => {
             if (polygon.id !== activeLabel.id) {
                 return polygon
@@ -388,7 +428,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
     // =================================================================================================================
 
     public isInProgress(): boolean {
-        return this.isCreationInProgress() || this.isResizeInProgress();
+        return this.isCreationInProgress() || this.isResizeInProgress() || this.isMoveInProgress();
     }
 
     private isCreationInProgress(): boolean {
@@ -399,8 +439,58 @@ export class PolygonRenderEngine extends BaseRenderEngine {
         return this.resizeAnchorIndex !== null;
     }
 
+    // =================================================================================================================
+    // MOVE
+    // =================================================================================================================
+
+    private isMoveInProgress(): boolean {
+        return this.movePolygonId !== null;
+    }
+
+    private startExistingLabelMove(data: EditorData, labelId: string): void {
+        this.movePolygonId = labelId;
+        this.startMovePolygonPoint = data.mousePositionOnViewPortContent;
+        store.dispatch(updateActiveLabelId(labelId));
+    }
+
+    private updateExistingLabelMove(data: EditorData): void {
+        const activeLabelPolygon: LabelPolygon = LabelsSelector.getActivePolygonLabel();
+        if (!!activeLabelPolygon && !!this.startMovePolygonPoint) {
+            const mousePositionSnapped: IPoint = RectUtil.snapPointToRect(data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
+            const moveDelta: IPoint = {
+                x: mousePositionSnapped.x - this.startMovePolygonPoint.x,
+                y: mousePositionSnapped.y - this.startMovePolygonPoint.y
+            };
+
+            // 将移动增量转换为图像坐标系
+            const imageDelta: IPoint = RenderEngineUtil.transferPointFromViewPortContentToImage(moveDelta, data);
+            
+            // 计算新的顶点位置
+            const newVertices: IPoint[] = activeLabelPolygon.vertices.map((vertex: IPoint) => ({
+                x: vertex.x + imageDelta.x,
+                y: vertex.y + imageDelta.y
+            }));
+
+            // 更新多边形位置
+            const imageData: ImageData = LabelsSelector.getActiveImageData();
+            const newImageData: ImageData = {
+                ...imageData,
+                labelPolygons: imageData.labelPolygons.map((labelPolygon: LabelPolygon) =>
+                    labelPolygon.id === this.movePolygonId ? { ...labelPolygon, vertices: newVertices } : labelPolygon
+                )
+            };
+            store.dispatch(updateImageDataById(imageData.id, newImageData));
+            this.startMovePolygonPoint = mousePositionSnapped;
+        }
+    }
+
+    private endExistingLabelMove(data: EditorData): void {
+        this.movePolygonId = null;
+        this.startMovePolygonPoint = null;
+    }
+
     private isMouseOverAnchor(mouse: IPoint, anchor: IPoint): boolean {
-        if (!mouse || !anchor) return null;
+        if (!mouse || !anchor) return false;
         return RectUtil.isPointInside(RectUtil.getRectWithCenterAndSize(anchor, RenderEngineSettings.anchorSize), mouse);
     }
 

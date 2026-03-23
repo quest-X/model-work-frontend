@@ -1,0 +1,165 @@
+@import '../../../settings/Settings';
+
+// Override the popup width for keyboard shortcuts
+.KeyboardShortcutsPopup .GenericYesNoPopup {
+  max-width: 750px !important;
+  width: 100% !important;
+}
+
+.KeyboardShortcutsContent {
+  .ShortcutsTable {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid $darkThemeForthColor;
+    border-radius: 5px;
+    min-width: 680px;
+    width: 100%;
+    
+    // 原生滚动条样式，符合应用主题
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    &::-webkit-scrollbar-track {
+      background: $darkThemeSecondColor;
+      border-radius: 4px;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background: $darkThemeThirdColor;
+      border-radius: 4px;
+      transition: background-color 0.2s;
+      
+      &:hover {
+        background: #5c5c5c;
+      }
+      
+      &:active {
+        background: #6c6c6c;
+      }
+    }
+    
+    &::-webkit-scrollbar-corner {
+      background: $darkThemeSecondColor;
+    }
+    
+    // Firefox 滚动条样式
+    scrollbar-width: thin;
+    scrollbar-color: $darkThemeThirdColor $darkThemeSecondColor;
+    
+    .TableHeader {
+      display: flex;
+      background-color: $darkThemeSecondColor;
+      border-bottom: 2px solid $darkThemeForthColor;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      
+      .HeaderCell {
+        padding: 12px 15px;
+        font-weight: bold;
+        color: white;
+        border-right: 1px solid $darkThemeForthColor;
+        
+        &.functionality {
+          flex: 2.5;
+          min-width: 280px;
+        }
+        
+        &.context {
+          flex: 1;
+          min-width: 100px;
+        }
+        
+        &.shortcut {
+          flex: 2;
+          min-width: 180px;
+        }
+        
+        &:last-child {
+          border-right: none;
+        }
+      }
+    }
+    
+    .TableBody {
+      .TableRow {
+        display: flex;
+        border-bottom: 1px solid $darkThemeForthColor;
+        transition: background-color 0.2s;
+        
+        &:hover {
+          background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        &:last-child {
+          border-bottom: none;
+        }
+        
+        .Cell {
+          padding: 10px 15px;
+          color: white;
+          border-right: 1px solid $darkThemeForthColor;
+          
+          &.functionality {
+            flex: 2.5;
+            min-width: 280px;
+          }
+          
+          &.context {
+            flex: 1;
+            min-width: 100px;
+            font-weight: 500;
+          }
+          
+          &.shortcut {
+            flex: 2;
+            min-width: 180px;
+            
+            kbd {
+              background-color: $darkThemeThirdColor;
+              color: white;
+              padding: 4px 8px;
+              border-radius: 3px;
+              font-size: 12px;
+              font-family: 'Courier New', monospace;
+              border: 1px solid $darkThemeForthColor;
+              box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+            }
+          }
+          
+          &:last-child {
+            border-right: none;
+          }
+        }
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .KeyboardShortcutsPopup .GenericYesNoPopup {
+    width: 95% !important;
+    max-width: none !important;
+  }
+
+  .KeyboardShortcutsContent {
+    .ShortcutsTable {
+      min-width: auto;
+      
+      .TableHeader, .TableBody .TableRow {
+        flex-direction: column;
+        
+        .HeaderCell, .Cell {
+          border-right: none;
+          border-bottom: 1px solid $darkThemeForthColor;
+          min-width: auto;
+          
+          &:last-child {
+            border-bottom: none;
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,17 +1,20 @@
 import React, {useState} from 'react';
 import classNames from 'classnames'
 import './DropDownMenu.scss';
-import {DropDownMenuData, DropDownMenuNode} from '../../../../data/info/DropDownMenuData';
+import {getDropDownMenuData, DropDownMenuNode} from '../../../../data/info/DropDownMenuData';
 import {EventType} from '../../../../data/enums/EventType';
 import {updatePreventCustomCursorStatus} from '../../../../store/general/actionCreators';
 import {AppState} from '../../../../store';
 import {connect} from 'react-redux';
+import {Language} from '../../../../data/LanguageConfig';
 
 interface IProps {
     updatePreventCustomCursorStatusAction: (preventCustomCursor: boolean) => any;
+    language: Language;
+    isVisible?: boolean;
 }
 
-const DropDownMenu: React.FC<IProps> = ({updatePreventCustomCursorStatusAction}) => {
+const DropDownMenu: React.FC<IProps> = ({updatePreventCustomCursorStatusAction, language, isVisible = true}) => {
     const topAnchor = 35;
 
     const [activeTabIdx, setActiveTabIdx] = useState(null);
@@ -69,7 +72,8 @@ const DropDownMenu: React.FC<IProps> = ({updatePreventCustomCursorStatusAction})
     }
 
     const getDropDownContent = () => {
-        return DropDownMenuData.map((data: DropDownMenuNode, index: number) => getDropDownTab(data, index))
+        const menuData = getDropDownMenuData(language);
+        return menuData.map((data: DropDownMenuNode, index: number) => getDropDownTab(data, index))
     }
 
     const wrapOnClick = (onClick?: () => void, disabled?: boolean): () => void => {
@@ -126,11 +130,29 @@ const DropDownMenu: React.FC<IProps> = ({updatePreventCustomCursorStatusAction})
         }
     }
 
+    if (!isVisible) return null;
+
     return(<div className='DropDownMenuWrapper'>
-        <>
-            {getDropDownContent()}
-            {getDropDownWindow(DropDownMenuData[activeTabIdx])}
-        </>
+        <div className='DropDownMenuContent' style={{
+            position: 'absolute',
+            top: 35,
+            left: 0,
+            height: 40 * 5 + 10 // 5个菜单项
+        }}>
+            {getDropDownMenuData(language)[0].children.map((element, index) => {
+                return <div className='DropDownMenuContentOption active'
+                    onClick={() => {
+                        if (element.onClick) element.onClick();
+                        // 关闭下拉菜单的逻辑需要在父组件处理
+                    }}
+                    key={index}
+                >
+                    <div className='Marker'/>
+                    <img src={element.imageSrc} alt={element.imageAlt}/>
+                    {element.name}
+                </div>
+            })}
+        </div>
     </div>)
 }
 
@@ -138,7 +160,9 @@ const mapDispatchToProps = {
     updatePreventCustomCursorStatusAction: updatePreventCustomCursorStatus,
 };
 
-const mapStateToProps = (state: AppState) => ({});
+const mapStateToProps = (state: AppState) => ({
+    language: state.general.language
+});
 
 export default connect(
     mapStateToProps,

@@ -1,4 +1,5 @@
 import {Action} from '../Actions';
+import {SegmentationResult, SegmentationAPIConfig} from '../../ai/SegmentationAPIDetector';
 
 export type RoboflowAPIDetails = {
     status: boolean,
@@ -23,6 +24,31 @@ export type AIState = {
     suggestedLabelList: string[];
     rejectedSuggestedLabelList: string[];
     isAIDisabled: boolean;
+
+    // SEGMENTATION API
+    segmentationResults: SegmentationResult[];
+    segmentationAPIConfig: SegmentationAPIConfig;
+    
+    // FULL IMAGE INFERENCE STATE
+    isFullImageInferenceInProgress: boolean;
+    
+    // RETRIEVAL MODE STATE
+    isRetrievalModeEnabled: boolean;
+    
+    // RETRIEVAL SEGMENTATION CONFIG
+    enableRetrievalSegmentation: boolean;
+    
+    // AI LABELS VISIBILITY STATE - 每张图片独立
+    imageAIStates: Map<string, {
+        aiLabelsVisible: boolean; // 检测标签是否显示（默认false闭眼）
+        segmentationLabelsVisible: boolean; // 分割标签是否显示（独立控制）
+        inferenceHistory: Array<{
+            timestamp: number;    // 推理时间戳
+            detectedCount: number; // 检测到的对象数量
+            success: boolean;     // 推理是否成功
+            type: 'detection' | 'segmentation' | 'retrieval'; // 推理类型
+        }>;
+    }>;
 }
 
 interface UpdateSuggestedLabelList {
@@ -74,6 +100,59 @@ interface UpdateRoboflowAPIDetails {
     }
 }
 
+interface UpdateSegmentationResults {
+    type: typeof Action.UPDATE_SEGMENTATION_RESULTS;
+    payload: {
+        segmentationResults: SegmentationResult[];
+    }
+}
+
+interface UpdateSegmentationAPIConfig {
+    type: typeof Action.UPDATE_SEGMENTATION_API_CONFIG;
+    payload: {
+        segmentationAPIConfig: SegmentationAPIConfig;
+    }
+}
+
+interface UpdateFullImageInferenceStatus {
+    type: typeof Action.UPDATE_FULL_IMAGE_INFERENCE_STATUS;
+    payload: {
+        isFullImageInferenceInProgress: boolean;
+    }
+}
+
+interface UpdateRetrievalModeStatus {
+    type: typeof Action.UPDATE_RETRIEVAL_MODE_STATUS;
+    payload: {
+        isRetrievalModeEnabled: boolean;
+    }
+}
+
+interface UpdateRetrievalSegmentationStatus {
+    type: typeof Action.UPDATE_RETRIEVAL_SEGMENTATION_STATUS;
+    payload: {
+        enableRetrievalSegmentation: boolean;
+    }
+}
+
+interface ToggleImageAILabelsVisibility {
+    type: typeof Action.TOGGLE_IMAGE_AI_LABELS_VISIBILITY;
+    payload: {
+        imageId: string;
+    }
+}
+
+interface AddInferenceHistory {
+    type: typeof Action.ADD_INFERENCE_HISTORY;
+    payload: {
+        imageId: string;
+        timestamp: number;
+        detectedCount: number;
+        success: boolean;
+        type: 'detection' | 'segmentation';
+    }
+}
+
 export type AIActionTypes = UpdateSuggestedLabelList
     | UpdateRejectedSuggestedLabelList
     | UpdateSSDObjectDetectorStatus
@@ -81,3 +160,10 @@ export type AIActionTypes = UpdateSuggestedLabelList
     | UpdatePoseDetectorStatus
     | UpdateDisabledAIFlag
     | UpdateRoboflowAPIDetails
+    | UpdateSegmentationResults
+    | UpdateSegmentationAPIConfig
+    | UpdateFullImageInferenceStatus
+    | UpdateRetrievalModeStatus
+    | UpdateRetrievalSegmentationStatus
+    | ToggleImageAILabelsVisibility
+    | AddInferenceHistory

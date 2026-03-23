@@ -18,6 +18,6 @@ export const InferenceServerDataMap: Record<InferenceServerType, IInferenceServe
         name: 'Make Sense Inference Server',
         imageSrc: 'ico/make-sense-ico-transparent.png',
         imageAlt: 'make-sense-inference-server',
-        isDisabled: true
+        isDisabled: false
     }
 }

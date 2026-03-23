@@ -15,6 +15,7 @@ import EmptyLabelList from '../EmptyLabelList/EmptyLabelList';
 import {LabelActions} from '../../../../logic/actions/LabelActions';
 import {LabelStatus} from '../../../../data/enums/LabelStatus';
 import {findLast} from 'lodash';
+import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
 
 interface IProps {
     size: ISize;
@@ -25,6 +26,7 @@ interface IProps {
     updateActiveLabelNameIdAction: (activeLabelId: string) => any;
     labelNames: LabelName[];
     updateActiveLabelIdAction: (activeLabelId: string) => any;
+    language: Language;
 }
 
 const RectLabelsList: React.FC<IProps> = (
@@ -36,28 +38,36 @@ const RectLabelsList: React.FC<IProps> = (
         updateActiveLabelNameIdAction,
         activeLabelId,
         highlightedLabelId,
-        updateActiveLabelIdAction
+        updateActiveLabelIdAction,
+        language
     }
 ) => {
+    const currentTexts = LanguageConfig[language];
     const labelInputFieldHeight = 40;
     const listStyle: React.CSSProperties = {
-        width: size.width,
-        height: size.height
+        width: size?.width || 0,
+        height: size?.height || 0
     };
     const listStyleContent: React.CSSProperties = {
-        width: size.width,
-        height: imageData.labelRects.length * labelInputFieldHeight
+        width: size?.width || 0,
+        height: (imageData?.labelRects?.length || 0) * labelInputFieldHeight
     };
 
     const deleteRectLabelById = (labelRectId: string) => {
-        LabelActions.deleteRectLabelById(imageData.id, labelRectId);
+        if (imageData?.id) {
+            LabelActions.deleteRectLabelById(imageData.id, labelRectId);
+        }
     };
 
     const toggleRectLabelVisibilityById = (labelRectId: string) => {
-        LabelActions.toggleLabelVisibilityById(imageData.id, labelRectId);
+        if (imageData?.id) {
+            LabelActions.toggleLabelVisibilityById(imageData.id, labelRectId);
+        }
     };
 
     const updateRectLabel = (labelRectId: string, labelNameId: string) => {
+        if (!imageData?.id || !imageData?.labelRects) return;
+        
         const newImageData = {
             ...imageData,
             labelRects: imageData.labelRects
@@ -82,12 +92,14 @@ const RectLabelsList: React.FC<IProps> = (
     };
 
     const getChildren = () => {
+        if (!imageData?.labelRects) return [];
+        
         return imageData.labelRects
             .filter((labelRect: LabelRect) => labelRect.status === LabelStatus.ACCEPTED)
             .map((labelRect: LabelRect) => {
                 return <LabelInputField
                     size={{
-                        width: size.width,
+                        width: size?.width || 0,
                         height: labelInputFieldHeight
                     }}
                     isActive={labelRect.id === activeLabelId}
@@ -110,10 +122,10 @@ const RectLabelsList: React.FC<IProps> = (
             style={listStyle}
             onClickCapture={onClickHandler}
         >
-            {imageData.labelRects.filter((labelRect: LabelRect) => labelRect.status === LabelStatus.ACCEPTED).length === 0 ?
+            {(!imageData?.labelRects || imageData.labelRects.filter((labelRect: LabelRect) => labelRect.status === LabelStatus.ACCEPTED).length === 0) ?
                 <EmptyLabelList
-                    labelBefore={'draw your first bounding box'}
-                    labelAfter={'no labels created for this image yet'}
+                    labelBefore={currentTexts.drawFirstBoundingBox}
+                    labelAfter={currentTexts.noLabelsCreated}
                 /> :
                 <Scrollbars>
                     <div
@@ -137,7 +149,8 @@ const mapDispatchToProps = {
 const mapStateToProps = (state: AppState) => ({
     activeLabelId: state.labels.activeLabelId,
     highlightedLabelId: state.labels.highlightedLabelId,
-    labelNames : state.labels.labels
+    labelNames : state.labels.labels,
+    language: state.general.language
 });
 
 export default connect(

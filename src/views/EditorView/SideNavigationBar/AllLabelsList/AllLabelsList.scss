@@ -1,0 +1,19 @@
+@import '../../../../settings/Settings.scss';
+
+.AllLabelsList {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: center;
+    align-content: center;
+
+    .AllLabelsListContent {
+        display: flex;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        align-items: center;
+        align-content: flex-start;
+    }
+}

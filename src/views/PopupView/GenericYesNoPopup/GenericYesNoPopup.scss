@@ -2,7 +2,7 @@
 
 .GenericYesNoPopup {
   max-height: 600px;
-  max-width: 500px;
+  max-width: 800px;
   width: 50%;
   border-radius: 5px;
   user-select: none;
@@ -42,6 +42,10 @@
     justify-content: center;
     align-items: center;
     align-content: center;
+
+    div {
+      color: white;
+    }
   }
 
   .Footer {
@@ -73,16 +77,29 @@
         color: var(--leading-color);
       }
 
+      &.accept, &.reject {
+        background-color: #ffffff;
+        color: #000000;
+        box-shadow: #ffffff 0 0 0 2px inset;
+        
+        &:hover {
+          background-color: transparent;
+          color: var(--leading-color);
+          box-shadow: var(--leading-color) 0 0 0 2px inset;
+        }
+      }
+
       &.disabled {
         box-shadow: $darkThemeThirdColor 0 0 0 2px inset;
         background-color: $darkThemeThirdColor;
         cursor: default;
-        opacity: 0.6;
+        opacity: 1.0; // 提高不透明度，让文字更清楚
+        color: rgba(255, 255, 255, 0.7); // 明确设置禁用状态的文字颜色
 
         &:hover {
           box-shadow: $darkThemeThirdColor 0 0 0 2px inset;
           background-color: $darkThemeThirdColor;
-          color: white;
+          color: rgba(255, 255, 255, 0.7); // 悬停时保持一致的文字颜色
         }
       }
     }

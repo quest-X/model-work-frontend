@@ -48,13 +48,21 @@ export class LineRenderEngine extends BaseRenderEngine {
         const isMouseOverCanvas: boolean = RenderEngineUtil.isMouseOverCanvas(data);
         const anchorTypeUnderMouse = this.getAnchorTypeUnderMouse(data);
         const labelLineUnderMouse: LabelLine = this.getLineUnderMouse(data);
+        const isInDragMode: boolean = GeneralSelector.getImageDragModeStatus();
+
+        // 只处理左键点击 (button === 0)，忽略中键和右键
+        const mouseEvent = data.event as MouseEvent;
+        if (mouseEvent && mouseEvent.button !== 0) {
+            return;
+        }
 
         if (isMouseOverCanvas) {
             if (!!anchorTypeUnderMouse && !this.isResizeInProgress()) {
                 this.startExistingLabelUpdate(labelLineUnderMouse.id, anchorTypeUnderMouse)
             } else if (labelLineUnderMouse !== null) {
                 store.dispatch(updateActiveLabelId(labelLineUnderMouse.id));
-            } else if (!this.isInProgress() && isMouseOverImage) {
+            } else if (!this.isInProgress() && isMouseOverImage && !isInDragMode) {
+                // 只有在非拖拽模式下才允许创建新线条
                 this.startNewLabelCreation(data)
             } else if (this.isInProgress()) {
                 this.finishNewLabelCreation(data);
@@ -104,7 +112,7 @@ export class LineRenderEngine extends BaseRenderEngine {
                 const isActive: boolean = labelLine.id === activeLabelId || labelLine.id === highlightedLabelId;
                 const lineOnCanvas = RenderEngineUtil.transferLineFromImageToViewPortContent(labelLine.line, data)
                 if (!(labelLine.id === activeLabelId && this.isResizeInProgress())) {
-                    this.drawLine(labelLine.labelId, lineOnCanvas, isActive)
+                    this.drawLine(labelLine.labelId, lineOnCanvas, isActive, labelLine.isCreatedByAI)
                 }
             }
         });
@@ -112,9 +120,33 @@ export class LineRenderEngine extends BaseRenderEngine {
 
     private drawActivelyCreatedLabel(data: EditorData) {
         if (this.isInProgress()) {
-            const line = {start: this.lineCreationStartPoint, end: data.mousePositionOnViewPortContent}
-            DrawUtil.drawLine(this.canvas, line.start, line.end, RenderEngineSettings.lineActiveColor, RenderEngineSettings.LINE_THICKNESS);
+            const originalLine = {start: this.lineCreationStartPoint, end: data.mousePositionOnViewPortContent}
+            
+            // 应用磁性吸附
+            const snapResult = LineUtil.snapLineToAxis(originalLine);
+            const lineToRender = snapResult.snappedLine;
+            
+            // 根据吸附状态选择颜色和样式
+            if (snapResult.isSnapped) {
+                // 吸附状态：使用橙色虚线
+                DrawUtil.drawDashedLine(
+                    this.canvas, 
+                    lineToRender.start, 
+                    lineToRender.end, 
+                    RenderEngineSettings.LINE_SNAP_COLOR, 
+                    RenderEngineSettings.LINE_THICKNESS,
+                    RenderEngineSettings.LINE_SNAP_DASH_PATTERN
+                );
+            } else {
+                // 正常状态：使用绿色实线
+                DrawUtil.drawLine(this.canvas, lineToRender.start, lineToRender.end, RenderEngineSettings.lineActiveColor, RenderEngineSettings.LINE_THICKNESS);
+            }
+            
             DrawUtil.drawCircleWithFill(this.canvas, this.lineCreationStartPoint, Settings.RESIZE_HANDLE_DIMENSION_PX/2, RenderEngineSettings.defaultAnchorColor)
+            
+            // 实时显示线条长度（使用吸附后的线条）
+            const colorToUse = snapResult.isSnapped ? RenderEngineSettings.LINE_SNAP_COLOR : RenderEngineSettings.lineActiveColor;
+            this.drawLengthLabel(lineToRender, colorToUse);
         }
     }
 
@@ -124,11 +156,44 @@ export class LineRenderEngine extends BaseRenderEngine {
             const snappedMousePosition: IPoint =
                 RectUtil.snapPointToRect(data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
             const lineOnCanvas = RenderEngineUtil.transferLineFromImageToViewPortContent(activeLabelLine.line, data)
-            const lineToDraw = {
+            const originalLineToDraw = {
                 start: this.lineUpdateAnchorType === LineAnchorType.START ? snappedMousePosition : lineOnCanvas.start,
                 end: this.lineUpdateAnchorType === LineAnchorType.END ? snappedMousePosition : lineOnCanvas.end
             }
-            this.drawLine(activeLabelLine.labelId, lineToDraw, true)
+            
+            // 应用磁性吸附
+            const snapResult = LineUtil.snapLineToAxis(originalLineToDraw);
+            const finalLineToDraw = snapResult.snappedLine;
+            
+            // 根据吸附状态绘制不同样式的线条
+            if (snapResult.isSnapped) {
+                // 吸附状态：使用橙色虚线
+                DrawUtil.drawDashedLine(
+                    this.canvas, 
+                    finalLineToDraw.start, 
+                    finalLineToDraw.end, 
+                    RenderEngineSettings.LINE_SNAP_COLOR, 
+                    RenderEngineSettings.LINE_THICKNESS,
+                    RenderEngineSettings.LINE_SNAP_DASH_PATTERN
+                );
+                
+                // 绘制锚点
+                const anchorColor = BaseRenderEngine.resolveLabelAnchorColor(true);
+                LineUtil
+                    .getPoints(finalLineToDraw)
+                    .forEach((point: IPoint) => DrawUtil.drawCircleWithFill(this.canvas, point,
+                        Settings.RESIZE_HANDLE_DIMENSION_PX/2, anchorColor));
+                
+                // 显示长度信息
+                this.drawLengthLabel(finalLineToDraw, RenderEngineSettings.LINE_SNAP_COLOR);
+            } else {
+                // 正常状态：使用常规绘制
+                this.drawLine(activeLabelLine.labelId, finalLineToDraw, true, activeLabelLine.isCreatedByAI)
+                
+                // 调整大小时也显示实时长度
+                const lineColor = BaseRenderEngine.resolveLabelLineColor(activeLabelLine.labelId, true, activeLabelLine.isCreatedByAI);
+                this.drawLengthLabel(finalLineToDraw, lineColor);
+            }
         }
     }
 
@@ -151,21 +216,66 @@ export class LineRenderEngine extends BaseRenderEngine {
         }
     }
 
-    private drawLine(labelId: string, line: ILine, isActive: boolean) {
-        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelId, isActive)
+    private drawLine(labelId: string, line: ILine, isActive: boolean, isCreatedByAI: boolean = false) {
+        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelId, isActive, isCreatedByAI)
         const anchorColor = BaseRenderEngine.resolveLabelAnchorColor(isActive)
         const standardizedLine: ILine = {
             start: RenderEngineUtil.setPointBetweenPixels(line.start),
             end: RenderEngineUtil.setPointBetweenPixels(line.end)
         }
         DrawUtil.drawLine(this.canvas, standardizedLine.start, standardizedLine.end, lineColor, RenderEngineSettings.LINE_THICKNESS);
+        
+        // 显示长度标签（激活状态或正在调整大小时）
         if (isActive) {
-
             LineUtil
                 .getPoints(line)
                 .forEach((point: IPoint) => DrawUtil.drawCircleWithFill(this.canvas, point,
-                    Settings.RESIZE_HANDLE_DIMENSION_PX/2, anchorColor))
+                    Settings.RESIZE_HANDLE_DIMENSION_PX/2, anchorColor));
+            
+            // 显示长度信息
+            this.drawLengthLabel(standardizedLine, lineColor);
         }
+    }
+
+    /**
+     * 绘制线条长度标签
+     * @param line 线条对象
+     * @param color 文本颜色
+     */
+    private drawLengthLabel(line: ILine, color: string) {
+        const length = LineUtil.getPixelLength(line);
+        
+        // 只有当线条长度大于最小阈值时才显示长度
+        if (length < 10) {
+            return;
+        }
+        
+        const lengthText = LineUtil.formatLengthText(length);
+        const labelPosition = LineUtil.getLengthLabelPosition(line, 20);
+        
+        // 绘制半透明背景
+        const textMetrics = this.canvas.getContext('2d');
+        textMetrics.font = '12px Arial';
+        const textWidth = textMetrics.measureText(lengthText).width;
+        const padding = 4;
+        
+        DrawUtil.drawRectWithFill(this.canvas, {
+            x: labelPosition.x - textWidth/2 - padding,
+            y: labelPosition.y - 8 - padding,
+            width: textWidth + 2 * padding,
+            height: 16 + 2 * padding
+        }, 'rgba(0, 0, 0, 0.7)');
+        
+        // 绘制长度文本
+        DrawUtil.drawText(
+            this.canvas,
+            lengthText,
+            12,
+            labelPosition,
+            color,
+            false,
+            'center'
+        );
     }
 
     // =================================================================================================================
@@ -193,8 +303,13 @@ export class LineRenderEngine extends BaseRenderEngine {
         const mousePositionOnCanvasSnapped: IPoint = RectUtil.snapPointToRect(
             data.mousePositionOnViewPortContent, data.viewPortContentImageRect
         );
-        const lineOnCanvas = {start: this.lineCreationStartPoint, end: mousePositionOnCanvasSnapped}
-        const lineOnImage = RenderEngineUtil.transferLineFromViewPortContentToImage(lineOnCanvas, data);
+        const originalLineOnCanvas = {start: this.lineCreationStartPoint, end: mousePositionOnCanvasSnapped}
+        
+        // 应用磁性吸附
+        const snapResult = LineUtil.snapLineToAxis(originalLineOnCanvas);
+        const finalLineOnCanvas = snapResult.snappedLine;
+        
+        const lineOnImage = RenderEngineUtil.transferLineFromViewPortContentToImage(finalLineOnCanvas, data);
         const activeLabelId = LabelsSelector.getActiveLabelNameId();
         const imageData: ImageData = LabelsSelector.getActiveImageData();
         const labelLine: LabelLine = {
@@ -235,21 +350,31 @@ export class LineRenderEngine extends BaseRenderEngine {
     private applyUpdateToLineLabel(data: EditorData) {
         const imageData: ImageData = LabelsSelector.getActiveImageData();
         const activeLabel: LabelLine = LabelsSelector.getActiveLineLabel();
+        if (!imageData || !activeLabel) return;
         imageData.labelLines = imageData.labelLines.map((lineLabel: LabelLine) => {
             if (lineLabel.id !== activeLabel.id) {
                 return lineLabel
             } else {
                 const snappedMousePosition: IPoint =
                     RectUtil.snapPointToRect(data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
-                const mousePositionOnImage = RenderEngineUtil.transferPointFromViewPortContentToImage(
-                    snappedMousePosition, data
-                );
+                
+                // 构建调整后的线条（在画布坐标系）
+                const lineOnCanvas = RenderEngineUtil.transferLineFromImageToViewPortContent(lineLabel.line, data);
+                const originalUpdatedLine = {
+                    start: this.lineUpdateAnchorType === LineAnchorType.START ? snappedMousePosition : lineOnCanvas.start,
+                    end: this.lineUpdateAnchorType === LineAnchorType.END ? snappedMousePosition : lineOnCanvas.end
+                };
+                
+                // 应用磁性吸附
+                const snapResult = LineUtil.snapLineToAxis(originalUpdatedLine);
+                const finalUpdatedLine = snapResult.snappedLine;
+                
+                // 转换回图像坐标系
+                const finalLineOnImage = RenderEngineUtil.transferLineFromViewPortContentToImage(finalUpdatedLine, data);
+                
                 return {
                     ...lineLabel,
-                    line: {
-                        start: this.lineUpdateAnchorType === LineAnchorType.START ? mousePositionOnImage : lineLabel.line.start,
-                        end: this.lineUpdateAnchorType === LineAnchorType.END ? mousePositionOnImage : lineLabel.line.end
-                    }
+                    line: finalLineOnImage
                 }
             }
         });

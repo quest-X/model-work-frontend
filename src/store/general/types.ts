@@ -4,6 +4,7 @@ import {PopupWindowType} from '../../data/enums/PopupWindowType';
 import {CustomCursorStyle} from '../../data/enums/CustomCursorStyle';
 import {ContextType} from '../../data/enums/ContextType';
 import {ProjectType} from '../../data/enums/ProjectType';
+import {Language} from '../../data/LanguageConfig';
 
 export type ProjectData = {
     type: ProjectType;
@@ -21,6 +22,7 @@ export type GeneralState = {
     activeContext: ContextType;
     projectData: ProjectData;
     zoom: number;
+    language: Language;
 }
 
 interface UpdateProjectData {
@@ -93,6 +95,13 @@ interface UpdatePerClassColoration {
     }
 }
 
+interface UpdateLanguage {
+    type: typeof Action.UPDATE_LANGUAGE,
+    payload: {
+        language: Language;
+    }
+}
+
 export type GeneralActionTypes = UpdateProjectData
     | UpdateWindowSize
     | UpdateActivePopupType
@@ -103,3 +112,4 @@ export type GeneralActionTypes = UpdateProjectData
     | UpdateCrossHairVisibleStatus
     | UpdateZoom
     | UpdatePerClassColoration
+    | UpdateLanguage

@@ -23,6 +23,20 @@ export class DrawUtil {
         ctx.restore();
     }
 
+    public static drawDashedLine(canvas:HTMLCanvasElement, startPoint:IPoint, endPoint:IPoint, color = '#111111', thickness = 1, dashPattern: number[] = [5, 3]): void {
+        const ctx:CanvasRenderingContext2D = canvas.getContext('2d');
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = thickness;
+        ctx.lineCap = 'round';
+        ctx.setLineDash(dashPattern);
+        ctx.beginPath();
+        ctx.moveTo(startPoint.x, startPoint.y);
+        ctx.lineTo(endPoint.x + 1, endPoint.y + 1);
+        ctx.stroke();
+        ctx.restore();
+    }
+
     public static drawRect(canvas:HTMLCanvasElement, rect:IRect, color = '#fff', thickness = 1): void {
         const ctx:CanvasRenderingContext2D = canvas.getContext('2d');
         ctx.save();
@@ -95,12 +109,29 @@ export class DrawUtil {
     }
 
     public static drawPolygonWithFill(canvas:HTMLCanvasElement, anchors: IPoint[], color = '#fff'): void {
+        // 添加数据验证
+        if (!anchors || anchors.length < 3) {
+            console.warn('DrawUtil.drawPolygonWithFill: 无效的anchors数据', anchors);
+            return;
+        }
+
+        // 验证第一个点
+        if (!anchors[0] || typeof anchors[0].x !== 'number' || typeof anchors[0].y !== 'number') {
+            console.warn('DrawUtil.drawPolygonWithFill: 第一个锚点无效', anchors[0]);
+            return;
+        }
+
         const ctx:CanvasRenderingContext2D = canvas.getContext('2d');
         ctx.save();
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.moveTo(anchors[0].x, anchors[0].y);
         for (let i = 1; i < anchors.length; i ++) {
+            // 验证每个点
+            if (!anchors[i] || typeof anchors[i].x !== 'number' || typeof anchors[i].y !== 'number') {
+                console.warn(`DrawUtil.drawPolygonWithFill: 锚点${i}无效`, anchors[i]);
+                continue; // 跳过无效点
+            }
             ctx.lineTo(anchors[i].x, anchors[i].y);
         }
         ctx.closePath();
@@ -114,7 +145,7 @@ export class DrawUtil {
         ctx.fillStyle = color;
         ctx.textAlign = align as CanvasTextAlign;
         ctx.textBaseline='middle';
-        ctx.font = (bold ? 'bold ' : '') + textSize + 'px Arial';
+        ctx.font = (bold ? 'bold ' : '') + textSize + 'px "Saira Semi Condensed", Arial, sans-serif';
         ctx.fillText(text, anchorPoint.x, anchorPoint.y);
         ctx.restore();
     }

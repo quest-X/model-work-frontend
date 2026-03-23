@@ -6,6 +6,7 @@ import {GeneralSelector} from '../../store/selectors/GeneralSelector';
 import {RenderEngineSettings} from '../../settings/RenderEngineSettings';
 import {LabelName} from '../../store/labels/types';
 import {LabelsSelector} from '../../store/selectors/LabelsSelector';
+import {AISelector} from '../../store/selectors/AISelector';
 
 export abstract class BaseRenderEngine {
     protected readonly canvas: HTMLCanvasElement;
@@ -41,18 +42,29 @@ export abstract class BaseRenderEngine {
 
     abstract isInProgress(): boolean;
 
-    protected static resolveLabelLineColor(labelId: string, isActive: boolean): string {
+    protected static resolveLabelLineColor(labelId: string, isActive: boolean, isCreatedByAI?: boolean): string {
         const perClassColor: boolean = GeneralSelector.getEnablePerClassColorationStatus();
-        if (perClassColor) {
-            const labelName: LabelName | null = LabelsSelector.getLabelNameById(labelId);
-            return labelName ? labelName.color : RenderEngineSettings.DEFAULT_LINE_COLOR;
-        } else {
-            return isActive ? RenderEngineSettings.ACTIVE_LINE_COLOR : RenderEngineSettings.INACTIVE_LINE_COLOR;
+        
+        // 如果明确是手动创建的标注框，始终使用白色
+        if (isCreatedByAI === false) {
+            return '#ffffff'; // 手动标注框始终使用白色，无论活跃状态
         }
+        
+        // 只有AI创建的标注框才使用按类别着色
+        if (isCreatedByAI === true && perClassColor && labelId) {
+            const labelName: LabelName | null = LabelsSelector.getLabelNameById(labelId);
+            if (labelName && labelName.color) {
+                return labelName.color;
+            }
+        }
+        
+        // 默认情况（临时预览框等），使用默认白色
+        return '#ffffff'; // 临时预览框也使用白色
     }
 
     protected static resolveLabelAnchorColor(isActive: boolean): string {
         const perClassColor: boolean = GeneralSelector.getEnablePerClassColorationStatus();
+        
         if (perClassColor) {
             return RenderEngineSettings.DEFAULT_ANCHOR_COLOR;
         } else {

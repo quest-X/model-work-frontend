@@ -22,6 +22,7 @@ import { NotificationUtil } from '../../../utils/NotificationUtil';
 import { NotificationsDataMap } from '../../../data/info/NotificationsData';
 import { Notification } from '../../../data/enums/Notification';
 import { StyledTextField } from '../../Common/StyledTextField/StyledTextField';
+import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 interface IProps {
     updateActivePopupTypeAction: (activePopupType: PopupWindowType) => any;
@@ -31,6 +32,7 @@ interface IProps {
     isUpdate: boolean;
     projectType: ProjectType;
     enablePerClassColoration: boolean;
+    language: Language;
 }
 
 const InsertLabelNamesPopup: React.FC<IProps> = (
@@ -41,8 +43,10 @@ const InsertLabelNamesPopup: React.FC<IProps> = (
         submitNewNotificationAction,
         isUpdate,
         projectType,
-        enablePerClassColoration
+        enablePerClassColoration,
+        language
     }) => {
+    const currentTexts = LanguageConfig[language];
     const [labelNames, setLabelNames] = useState(LabelsSelector.getLabelNames());
 
     const validateEmptyLabelNames = (): boolean => {
@@ -124,7 +128,7 @@ const InsertLabelNamesPopup: React.FC<IProps> = (
                 autoFocus={true}
                 type={'text'}
                 margin={'dense'}
-                label={'Insert label'}
+                label={currentTexts.popups.insertLabelNames.insertLabel}
                 onKeyUp={onKeyUpCallback}
                 value={labelName.name}
                 onChange={onChangeCallback}
@@ -202,10 +206,8 @@ const InsertLabelNamesPopup: React.FC<IProps> = (
                 <div className='Message'>
                     {
                         isUpdate ?
-                            'You can now edit the label names you use to describe the objects in the photos. Use the ' +
-                            '+ button to add a new empty text field.' :
-                            'Before you start, you can create a list of labels you plan to assign to objects in your ' +
-                            'project. You can also choose to skip that part for now and define label names as you go.'
+                            currentTexts.popups.insertLabelNames.messageUpdate :
+                            currentTexts.popups.insertLabelNames.messageCreate
                     }
                 </div>
                 <div className='LabelsContainer'>
@@ -225,7 +227,7 @@ const InsertLabelNamesPopup: React.FC<IProps> = (
                                 alt={'upload'}
                                 src={'ico/type-writer.png'}
                             />
-                            <p className='extraBold'>Your label list is empty</p>
+                            <p className='extraBold'>{currentTexts.popups.insertLabelNames.emptyListMessage}</p>
                         </div>}
                 </div>
             </div>
@@ -234,11 +236,11 @@ const InsertLabelNamesPopup: React.FC<IProps> = (
 
     return (
         <GenericYesNoPopup
-            title={isUpdate ? 'Edit labels' : 'Create labels'}
+            title={isUpdate ? currentTexts.popups.insertLabelNames.titleUpdate : currentTexts.popups.insertLabelNames.titleCreate}
             renderContent={renderContent}
-            acceptLabel={isUpdate ? 'Accept' : 'Start project'}
+            acceptLabel={isUpdate ? currentTexts.popups.insertLabelNames.acceptButton : currentTexts.popups.insertLabelNames.acceptButton}
             onAccept={isUpdate ? safeOnUpdateAcceptCallback : safeOnCreateAcceptCallback}
-            rejectLabel={isUpdate ? 'Cancel' : 'Load labels from file'}
+            rejectLabel={isUpdate ? currentTexts.popups.insertLabelNames.rejectButton : currentTexts.popups.insertLabelNames.loadFromFile}
             onReject={isUpdate ? onUpdateRejectCallback : onCreateRejectCallback}
         />);
 };
@@ -252,7 +254,8 @@ const mapDispatchToProps = {
 
 const mapStateToProps = (state: AppState) => ({
     projectType: state.general.projectData.type,
-    enablePerClassColoration: state.general.enablePerClassColoration
+    enablePerClassColoration: state.general.enablePerClassColoration,
+    language: state.general.language
 });
 
 export default connect(

@@ -2,6 +2,8 @@ import {GeneralActionTypes, GeneralState} from './types';
 import {Action} from '../Actions';
 import {CustomCursorStyle} from '../../data/enums/CustomCursorStyle';
 import {ViewPointSettings} from '../../settings/ViewPointSettings';
+import {ProjectType} from '../../data/enums/ProjectType';
+import {Language} from '../../data/LanguageConfig';
 
 const initialState: GeneralState = {
     windowSize: null,
@@ -10,13 +12,14 @@ const initialState: GeneralState = {
     activeContext: null,
     preventCustomCursor: false,
     imageDragMode: false,
-    crossHairVisible: true,
+    crossHairVisible: false,
     enablePerClassColoration: true,
     projectData: {
-        type: null,
-        name: 'my-project-name',
+        type: ProjectType.OBJECT_DETECTION, // 默认设置为目标检测项目
+        name: 'default-project',
     },
-    zoom: ViewPointSettings.MIN_ZOOM
+    zoom: ViewPointSettings.MIN_ZOOM,
+    language: Language.CHINESE // 默认中文
 };
 
 export function generalReducer(
@@ -82,6 +85,12 @@ export function generalReducer(
             return {
                 ...state,
                 enablePerClassColoration: action.payload.enablePerClassColoration
+            }
+        }
+        case Action.UPDATE_LANGUAGE: {
+            return {
+                ...state,
+                language: action.payload.language
             }
         }
         default:

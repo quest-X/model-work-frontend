@@ -47,6 +47,15 @@ export function updateActiveLabelType(activeLabelType: LabelType): LabelsActionT
     };
 }
 
+export function updateActiveLabelViewType(activeLabelViewType: LabelType): LabelsActionTypes {
+    return {
+        type: Action.UPDATE_ACTIVE_LABEL_VIEW_TYPE,
+        payload: {
+            activeLabelViewType,
+        },
+    };
+}
+
 export function updateImageDataById(id: string, newImageData: ImageData): LabelsActionTypes {
     return {
         type: Action.UPDATE_IMAGE_DATA_BY_ID,
@@ -89,6 +98,34 @@ export function updateFirstLabelCreatedFlag(firstLabelCreatedFlag: boolean): Lab
         type: Action.UPDATE_FIRST_LABEL_CREATED_FLAG,
         payload: {
             firstLabelCreatedFlag
+        }
+    }
+}
+
+export function selectAllImages(selectAll: boolean): LabelsActionTypes {
+    return {
+        type: Action.SELECT_ALL_IMAGES,
+        payload: {
+            selectAll
+        }
+    }
+}
+
+export function toggleImageSelection(imageId: string): LabelsActionTypes {
+    return {
+        type: Action.TOGGLE_IMAGE_SELECTION,
+        payload: {
+            imageId
+        }
+    }
+}
+
+export function selectImageRange(startIndex: number, endIndex: number): LabelsActionTypes {
+    return {
+        type: Action.SELECT_IMAGE_RANGE,
+        payload: {
+            startIndex,
+            endIndex
         }
     }
 }

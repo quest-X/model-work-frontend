@@ -20,6 +20,7 @@ import {GeneralSelector} from "../../store/selectors/GeneralSelector";
 import {ViewPortHelper} from "../helpers/ViewPortHelper";
 import {CustomCursorStyle} from "../../data/enums/CustomCursorStyle";
 import {LineRenderEngine} from "../render/LineRenderEngine";
+import {AllLabelsRenderEngine} from "../render/AllLabelsRenderEngine";
 
 export class EditorActions {
 
@@ -30,6 +31,10 @@ export class EditorActions {
     public static mountSupportRenderingEngine(activeLabelType: LabelType) {
         switch (activeLabelType) {
             case LabelType.RECT:
+                EditorModel.supportRenderingEngine = new RectRenderEngine(EditorModel.canvas);
+                break;
+            case LabelType.ALL:
+                // ALL 工具使用矩形框的绘制功能
                 EditorModel.supportRenderingEngine = new RectRenderEngine(EditorModel.canvas);
                 break;
             case LabelType.POINT:
@@ -87,10 +92,19 @@ export class EditorActions {
     // =================================================================================================================
 
     public static getEditorData(event?: Event): EditorData {
+        // 安全获取 activeKeyCombo，避免循环依赖初始化问题
+        let activeKeyCombo: string[] = [];
+        try {
+            activeKeyCombo = ContextManager.getActiveCombo() || [];
+        } catch (error) {
+            // 如果 ContextManager 还没有初始化，使用空数组
+            activeKeyCombo = [];
+        }
+
         return {
             mousePositionOnViewPortContent: EditorModel.mousePositionOnViewPortContent,
             viewPortContentSize: CanvasUtil.getSize(EditorModel.canvas),
-            activeKeyCombo: ContextManager.getActiveCombo(),
+            activeKeyCombo: activeKeyCombo,
             event: event,
             zoom: GeneralSelector.getZoom(),
             viewPortSize: EditorModel.viewPortSize,

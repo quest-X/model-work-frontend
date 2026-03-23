@@ -42,7 +42,9 @@ interface IProps {
 }
 
 interface IState {
-    viewPortSize: ISize
+    viewPortSize: ISize;
+    isMiddleMouseDragging: boolean;
+    lastMiddleMousePosition: IPoint | null;
 }
 
 class Editor extends React.Component<IProps, IState> {
@@ -54,6 +56,8 @@ class Editor extends React.Component<IProps, IState> {
                 width: 0,
                 height: 0
             },
+            isMiddleMouseDragging: false,
+            lastMiddleMousePosition: null
         };
     }
 
@@ -67,6 +71,7 @@ class Editor extends React.Component<IProps, IState> {
         const {imageData, activeLabelType} = this.props;
 
         ContextManager.switchCtx(ContextType.EDITOR);
+        // 初始化时使用当前的绘制工具类型
         EditorActions.mountRenderEnginesAndHelpers(activeLabelType);
         ImageLoadManager.addAndRun(this.loadImage(imageData));
         ViewPortActions.resizeCanvas(this.props.size);
@@ -82,6 +87,7 @@ class Editor extends React.Component<IProps, IState> {
         prevProps.imageData.id !== imageData.id && ImageLoadManager.addAndRun(this.loadImage(imageData));
 
         if (prevProps.activeLabelType !== activeLabelType) {
+            // 绘制工具改变时，始终切换渲染引擎到对应的工具类型
             EditorActions.swapSupportRenderingEngine(activeLabelType);
             AIActions.detect(imageData.id, ImageRepository.getById(imageData.id));
         }
@@ -98,6 +104,11 @@ class Editor extends React.Component<IProps, IState> {
         window.addEventListener(EventType.MOUSE_UP, this.update);
         EditorModel.canvas.addEventListener(EventType.MOUSE_DOWN, this.update);
         EditorModel.canvas.addEventListener(EventType.MOUSE_WHEEL, this.handleZoom);
+        
+        // 中键拖拽事件监听器
+        EditorModel.canvas.addEventListener(EventType.MOUSE_DOWN, this.handleMiddleMouseDown);
+        window.addEventListener(EventType.MOUSE_MOVE, this.handleMiddleMouseMove);
+        window.addEventListener(EventType.MOUSE_UP, this.handleMiddleMouseUp);
     }
 
     private unmountEventListeners() {
@@ -105,6 +116,11 @@ class Editor extends React.Component<IProps, IState> {
         window.removeEventListener(EventType.MOUSE_UP, this.update);
         EditorModel.canvas.removeEventListener(EventType.MOUSE_DOWN, this.update);
         EditorModel.canvas.removeEventListener(EventType.MOUSE_WHEEL, this.handleZoom);
+        
+        // 移除中键拖拽事件监听器
+        EditorModel.canvas.removeEventListener(EventType.MOUSE_DOWN, this.handleMiddleMouseDown);
+        window.removeEventListener(EventType.MOUSE_MOVE, this.handleMiddleMouseMove);
+        window.removeEventListener(EventType.MOUSE_UP, this.handleMiddleMouseUp);
     }
 
     // =================================================================================================================
@@ -156,32 +172,85 @@ class Editor extends React.Component<IProps, IState> {
         EditorModel.mousePositionOnViewPortContent = CanvasUtil.getMousePositionOnCanvasFromEvent(event, EditorModel.canvas);
         EditorModel.primaryRenderingEngine.update(editorData);
 
-        if (this.props.imageDragMode) {
-            EditorModel.viewPortHelper.update(editorData);
-        } else {
-            EditorModel.supportRenderingEngine && EditorModel.supportRenderingEngine.update(editorData);
-        }
+        // 现在imageDragMode表示标签拖拽模式，而不是图像拖拽模式
+        // 总是更新supportRenderingEngine来处理标签交互
+        EditorModel.supportRenderingEngine && EditorModel.supportRenderingEngine.update(editorData);
+        
+        // 不再基于imageDragMode来控制viewPortHelper，因为现在用中键拖拽来平移图像
+        // EditorModel.viewPortHelper.update(editorData); // 移除图像拖拽功能
 
         !this.props.activePopupType && EditorActions.updateMousePositionIndicator(event);
         EditorActions.fullRender();
     };
 
     private handleZoom = (event: WheelEvent) => {
-        if (event.ctrlKey || (PlatformModel.isMac && event.metaKey)) {
-            const scrollSign: number = Math.sign(event.deltaY);
-            if ((PlatformModel.isMac && scrollSign === -1) || (!PlatformModel.isMac && scrollSign === 1)) {
-                ViewPortActions.zoomOut();
-            }
-            else if ((PlatformModel.isMac && scrollSign === 1) || (!PlatformModel.isMac && scrollSign === -1)) {
-                ViewPortActions.zoomIn();
-            }
+        // 阻止默认的滚动行为
+        event.preventDefault();
+        
+        const scrollSign: number = Math.sign(event.deltaY);
+        if (scrollSign > 0) {
+            // 向下滚动 - 缩小
+            ViewPortActions.zoomOut();
+        } else if (scrollSign < 0) {
+            // 向上滚动 - 放大
+            ViewPortActions.zoomIn();
         }
+        
         EditorModel.mousePositionOnViewPortContent = CanvasUtil.getMousePositionOnCanvasFromEvent(event, EditorModel.canvas);
+    };
+
+    private handleMiddleMouseDown = (event: MouseEvent) => {
+        // 只处理中键（button = 1）
+        if (event.button === 1) {
+            event.preventDefault();
+            this.setState({
+                isMiddleMouseDragging: true,
+                lastMiddleMousePosition: { x: event.clientX, y: event.clientY }
+            });
+            // 设置拖拽光标
+            document.body.style.cursor = 'grabbing';
+        }
+    };
+
+    private handleMiddleMouseMove = (event: MouseEvent) => {
+        if (this.state.isMiddleMouseDragging && this.state.lastMiddleMousePosition) {
+            event.preventDefault();
+            
+            // 计算鼠标移动的距离
+            const deltaX = event.clientX - this.state.lastMiddleMousePosition.x;
+            const deltaY = event.clientY - this.state.lastMiddleMousePosition.y;
+            
+            // 获取当前滚动位置并应用偏移
+            if (EditorModel.viewPortScrollbars) {
+                const currentScrollLeft = EditorModel.viewPortScrollbars.getScrollLeft();
+                const currentScrollTop = EditorModel.viewPortScrollbars.getScrollTop();
+                
+                EditorModel.viewPortScrollbars.scrollLeft(currentScrollLeft - deltaX);
+                EditorModel.viewPortScrollbars.scrollTop(currentScrollTop - deltaY);
+            }
+            
+            // 更新最后的鼠标位置
+            this.setState({
+                lastMiddleMousePosition: { x: event.clientX, y: event.clientY }
+            });
+        }
+    };
+
+    private handleMiddleMouseUp = (event: MouseEvent) => {
+        if (event.button === 1 && this.state.isMiddleMouseDragging) {
+            event.preventDefault();
+            this.setState({
+                isMiddleMouseDragging: false,
+                lastMiddleMousePosition: null
+            });
+            // 恢复默认光标
+            document.body.style.cursor = '';
+        }
     };
 
     private getOptionsPanels = () => {
         const editorData: EditorData = EditorActions.getEditorData();
-        if (this.props.activeLabelType === LabelType.RECT) {
+        if (this.props.activeLabelType === LabelType.RECT || this.props.activeLabelType === LabelType.ALL) {
             return this.props.imageData.labelRects
                 .filter((labelRect: LabelRect) => labelRect.isCreatedByAI && labelRect.status !== LabelStatus.ACCEPTED)
                 .map((labelRect: LabelRect) => {
@@ -243,6 +312,12 @@ class Editor extends React.Component<IProps, IState> {
                             ref={ref => EditorModel.canvas = ref}
                             draggable={false}
                             onContextMenu={(event: React.MouseEvent<HTMLCanvasElement>) => event.preventDefault()}
+                            onMouseDown={(event: React.MouseEvent<HTMLCanvasElement>) => {
+                                // 阻止中键的默认行为（如打开新标签页）
+                                if (event.button === 1) {
+                                    event.preventDefault();
+                                }
+                            }}
                         />
                         {this.getOptionsPanels()}
                     </div>

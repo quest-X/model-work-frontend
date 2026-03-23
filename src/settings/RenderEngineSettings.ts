@@ -29,4 +29,13 @@ export class RenderEngineSettings {
     public static readonly DEFAULT_LINE_COLOR: string = '#ffffff';
     public static readonly ACTIVE_LINE_COLOR: string = Settings.PRIMARY_COLOR;
     public static readonly INACTIVE_LINE_COLOR: string = '#ffffff';
+    
+    // Inference mode colors
+    public static readonly INFERENCE_ACTIVE_LINE_COLOR: string = '#41E391';
+    public static readonly INFERENCE_INACTIVE_LINE_COLOR: string = '#41E391';
+    public static readonly INFERENCE_ANCHOR_COLOR: string = '#41E391';
+    
+    // Line snapping colors
+    public static readonly LINE_SNAP_COLOR: string = '#2af598'; // 绿色表示吸附状态
+    public static readonly LINE_SNAP_DASH_PATTERN: number[] = [8, 4]; // 虚线样式
 }

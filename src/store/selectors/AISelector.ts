@@ -1,5 +1,6 @@
 import {store} from '../..';
 import { RoboflowAPIDetails } from '../ai/types';
+import { SegmentationResult, SegmentationAPIConfig } from '../../ai/SegmentationAPIDetector';
 
 export class AISelector {
     public static getSuggestedLabelList(): string[] {
@@ -35,5 +36,17 @@ export class AISelector {
 
     public static getRoboflowAPIDetails(): RoboflowAPIDetails {
         return store.getState().ai.roboflowAPIDetails
+    }
+
+    public static getSegmentationResults(): SegmentationResult[] {
+        return store.getState().ai.segmentationResults;
+    }
+
+    public static getSegmentationAPIConfig(): SegmentationAPIConfig {
+        return store.getState().ai.segmentationAPIConfig;
+    }
+
+    public static isSegmentationAPIEnabled(): boolean {
+        return store.getState().ai.segmentationAPIConfig.enabled;
     }
 }

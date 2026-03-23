@@ -65,6 +65,11 @@ export class Settings {
         '#ff37c7'
     ];
 
+    // 注释掉AI专用调色板，现在AI推理可以使用完整调色板（包括绿色）
+    // public static readonly AI_LABEL_COLORS_PALETTE = [
+    //     // 已弃用：手动标注框bug修复后，AI推理可以使用完整颜色调色板
+    // ];
+
     public static readonly CSV_SEPARATOR = ','
     public static readonly RECT_LABELS_EXPORT_CSV_COLUMN_NAMES = [
         'label_name',

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import './PopupView.scss';
 import { PopupWindowType } from '../../data/enums/PopupWindowType';
 import { AppState } from '../../store';
 import { connect } from 'react-redux';
+import { PopupActions } from '../../logic/actions/PopupActions';
 import LoadLabelsPopup from './LoadLabelNamesPopup/LoadLabelNamesPopup';
 import InsertLabelNamesPopup from './InsertLabelNamesPopup/InsertLabelNamesPopup';
 import ExitProjectPopup from './ExitProjectPopup/ExitProjectPopup';
@@ -15,12 +16,38 @@ import ExportLabelPopup from './ExportLabelsPopup/ExportLabelPopup';
 import LoadModelPopup from './LoadModelPopup/LoadModelPopup';
 import LoadYOLOv5ModelPopup from './LoadYOLOv5ModelPopup/LoadYOLOv5ModelPopup';
 import ConnectInferenceServerPopup from './ConnectInferenceServerPopup/ConnectInferenceServerPopup';
+import IntegrateModelPopup from './IntegrateModelPopup/IntegrateModelPopup';
+import ManageAIModelsPopup from './ManageAIModelsPopup/ManageAIModelsPopup';
+import KeyboardShortcutsPopup from './KeyboardShortcutsPopup/KeyboardShortcutsPopup';
 
 interface IProps {
     activePopupType: PopupWindowType;
 }
 
 const PopupView: React.FC<IProps> = ({ activePopupType }) => {
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && activePopupType) {
+                // Only handle if no other element has already handled the event
+                if (!event.defaultPrevented) {
+                    event.preventDefault();
+                    PopupActions.close();
+                }
+            }
+        };
+
+        // Add event listener when popup is active
+        if (activePopupType) {
+            // Use capture phase to ensure we handle the event early
+            window.addEventListener('keydown', handleKeyDown, true);
+        }
+
+        // Cleanup event listener
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown, true);
+        };
+    }, [activePopupType]);
 
     const selectPopup = () => {
         switch (activePopupType) {
@@ -48,8 +75,14 @@ const PopupView: React.FC<IProps> = ({ activePopupType }) => {
                 return <LoadYOLOv5ModelPopup />;
             case PopupWindowType.CONNECT_AI_MODEL_VIA_API:
                 return <ConnectInferenceServerPopup />;
+            case PopupWindowType.INTEGRATE_AI_MODEL:
+                return <IntegrateModelPopup />;
+            case PopupWindowType.MANAGE_AI_MODELS:
+                return <ManageAIModelsPopup />;
             case PopupWindowType.SUGGEST_LABEL_NAMES:
                 return <SuggestLabelNamesPopup />;
+            case PopupWindowType.KEYBOARD_SHORTCUTS:
+                return <KeyboardShortcutsPopup />;
             case PopupWindowType.LOADER:
                 return <ClipLoader
                     size={50}

@@ -1,9 +1,10 @@
-import {Annotation, LabelName, LabelPoint, LabelPolygon, LabelRect} from '../store/labels/types';
+import {Annotation, LabelName, LabelPoint, LabelPolygon, LabelRect, LabelLine} from '../store/labels/types';
 import { v4 as uuidv4 } from 'uuid';
 import {find} from 'lodash';
 import {IRect} from '../interfaces/IRect';
 import {LabelStatus} from '../data/enums/LabelStatus';
 import {IPoint} from '../interfaces/IPoint';
+import {ILine} from '../interfaces/ILine';
 import { sample } from 'lodash';
 import {Settings} from '../settings/Settings';
 
@@ -15,6 +16,11 @@ export class LabelUtil {
             color: sample(Settings.LABEL_COLORS_PALETTE)
         }
     }
+
+    // 已弃用：AI推理现在可以使用完整调色板
+    // public static createAILabelName(name: string): LabelName {
+    //     // 不再需要专用方法，AI推理使用 createLabelName() 即可
+    // }
 
     public static createLabelRect(labelId: string, rect: IRect): LabelRect {
         return {
@@ -33,7 +39,10 @@ export class LabelUtil {
             id: uuidv4(),
             labelId,
             vertices,
-            isVisible: true
+            isVisible: true,
+            isCreatedByAI: false,
+            status: LabelStatus.ACCEPTED,
+            suggestedLabel: null
         }
     }
 
@@ -42,6 +51,18 @@ export class LabelUtil {
             id: uuidv4(),
             labelId,
             point,
+            isVisible: true,
+            isCreatedByAI: false,
+            status: LabelStatus.ACCEPTED,
+            suggestedLabel: null
+        }
+    }
+
+    public static createLabelLine(labelId: string, line: ILine): LabelLine {
+        return {
+            id: uuidv4(),
+            labelId,
+            line,
             isVisible: true,
             isCreatedByAI: false,
             status: LabelStatus.ACCEPTED,

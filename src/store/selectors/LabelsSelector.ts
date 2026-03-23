@@ -91,4 +91,12 @@ export class LabelsSelector {
 
         return find(LabelsSelector.getActiveImageData().labelLines, {id: activeLabelId});
     }
+
+    public static getActiveLabelType(): LabelType | null {
+        return store.getState().labels.activeLabelType;
+    }
+
+    public static getActiveLabelViewType(): LabelType | null {
+        return store.getState().labels.activeLabelViewType;
+    }
 }

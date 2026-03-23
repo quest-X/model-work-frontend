@@ -17,6 +17,7 @@ import {PopupWindowType} from '../../../../data/enums/PopupWindowType';
 import {updateActivePopupType} from '../../../../store/general/actionCreators';
 import {truncate} from 'lodash';
 import { Settings } from '../../../../settings/Settings';
+import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
 
 interface IProps {
     size: ISize;
@@ -32,6 +33,7 @@ interface IProps {
     updateActiveLabelId: (highlightedLabelId: string) => any;
     updateActivePopupType: (activePopupType: PopupWindowType) => any;
     toggleLabelVisibility?: (labelNameId: string) => any;
+    language: Language;
 }
 
 interface IState {
@@ -193,7 +195,7 @@ class LabelInputField extends React.Component<IProps, IState> {
                                  ref={ref => this.dropdownLabel = ref}
                                  onClick={this.openDropdown}
                             >
-                                {value ? truncate(value.name, {length: Settings.MAX_DROPDOWN_OPTION_LENGTH}) : 'Select label'}
+                                {value ? truncate(value.name, {length: Settings.MAX_DROPDOWN_OPTION_LENGTH}) : LanguageConfig[this.props.language].selectLabel}
                             </div>
                             {this.state.isOpen && <div
                                 className='Dropdown'
@@ -233,7 +235,9 @@ const mapDispatchToProps = {
     updateActivePopupType
 };
 
-const mapStateToProps = (state: AppState) => ({});
+const mapStateToProps = (state: AppState) => ({
+    language: state.general.language
+});
 
 export default connect(
     mapStateToProps,

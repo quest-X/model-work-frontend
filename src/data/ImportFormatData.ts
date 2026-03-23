@@ -1,31 +1,39 @@
 import {LabelType} from './enums/LabelType';
 import {ILabelFormatData} from '../interfaces/ILabelFormatData';
 import {AnnotationFormatType} from './enums/AnnotationFormatType';
+import {Language, LanguageConfig} from './LanguageConfig';
 
 export type ImportFormatDataMap = Record<LabelType, ILabelFormatData[]>
 
-export const ImportFormatData: ImportFormatDataMap = {
-    [LabelType.RECT]: [
-        {
-            type: AnnotationFormatType.COCO,
-            label: 'Single file in COCO JSON format.'
-        },
-        {
-            type: AnnotationFormatType.YOLO,
-            label: 'Multiple files in YOLO format along with labels names definition - labels.txt file.'
-        },
-        {
-            type: AnnotationFormatType.VOC,
-            label: 'Multiple files in VOC XML format.'
-        }
-    ],
-    [LabelType.POINT]: [],
-    [LabelType.LINE]: [],
-    [LabelType.POLYGON]: [
-        {
-            type: AnnotationFormatType.COCO,
-            label: 'Single file in COCO JSON format.'
-        }
-    ],
-    [LabelType.IMAGE_RECOGNITION]: []
-}
+export const getImportFormatData = (language: Language): ImportFormatDataMap => {
+    const texts = LanguageConfig[language];
+    
+    return {
+        [LabelType.RECT]: [
+            {
+                type: AnnotationFormatType.COCO,
+                label: texts.formats.import.cocoRect
+            },
+            {
+                type: AnnotationFormatType.YOLO,
+                label: texts.formats.import.yoloRect
+            },
+            {
+                type: AnnotationFormatType.VOC,
+                label: texts.formats.import.vocRect
+            }
+        ],
+        [LabelType.POINT]: [],
+        [LabelType.LINE]: [],
+        [LabelType.POLYGON]: [
+            {
+                type: AnnotationFormatType.COCO,
+                label: texts.formats.import.cocoPolygon
+            }
+        ],
+        [LabelType.IMAGE_RECOGNITION]: []
+    };
+};
+
+// 保持向后兼容性，默认使用英文
+export const ImportFormatData: ImportFormatDataMap = getImportFormatData(Language.ENGLISH);
