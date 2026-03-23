@@ -21,12 +21,10 @@ import {EditorModel} from '../../../staticModels/EditorModel';
 import { ImageUtil } from '../../../utils/ImageUtil';
 import InferenceToggle from '../InferenceToggle/InferenceToggle';
 import { SegmentationAPIDetector } from '../../../ai/SegmentationAPIDetector';
-import { updateSegmentationResults, updateFullImageInferenceStatus, toggleImageAILabelsVisibility, addInferenceHistory, updateRetrievalModeStatus } from '../../../store/ai/actionCreators';
+import { updateSegmentationResults, updateFullImageInferenceStatus, toggleImageAILabelsVisibility, addInferenceHistory } from '../../../store/ai/actionCreators';
 import { AISegmentationActions } from '../../../logic/actions/AISegmentationActions';
 import { AIDetectionActions } from '../../../logic/actions/AIDetectionActions';
-import { AIRetrievalActions } from '../../../logic/actions/AIRetrievalActions';
 import { DetectionAPIDetector } from '../../../ai/DetectionAPIDetector';
-import { RetrievalAPIDetector } from '../../../ai/RetrievalAPIDetector';
 import { AIStateStorageManager } from '../../../utils/AIStateStorageManager';
 import { AIModelsSelector } from '../../../store/selectors/AIModelsSelector';
 import { EditorActions } from '../../../logic/actions/EditorActions';
@@ -87,7 +85,6 @@ interface IProps {
     updateFullImageInferenceStatus: (isInProgress: boolean) => any;
     toggleImageAILabelsVisibility: (imageId: string) => any;
     addInferenceHistory: (imageId: string, detectedCount: number, success?: boolean) => any;
-    updateRetrievalModeStatus: (isEnabled: boolean) => any;
     imageDragMode: boolean;
     crossHairVisible: boolean;
     isFullImageInferenceInProgress: boolean;
@@ -97,7 +94,6 @@ interface IProps {
     isAIDisabled: boolean;
     activeImageIndex: number;
     aiModels: any;
-    isRetrievalModeEnabled: boolean;
     updateActiveLabelType: (activeLabelType: LabelType) => any;
     updateActiveLabelViewType: (activeLabelViewType: LabelType) => any;
 }
@@ -120,26 +116,20 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         isAIDisabled,
         activeImageIndex,
         aiModels,
-        isRetrievalModeEnabled,
         updateActiveLabelType,
         updateActiveLabelViewType,
-        updateRetrievalModeStatus
     }) => {
     const currentTexts = useMemo(() => LanguageConfig[language], [language]);
     
     // 缓存的辅助函数：根据模型类型获取可用的AI模型
-    const getModelByType = useCallback((modelType: 'detection' | 'segmentation' | 'retrieval') => {
+    const getModelByType = useCallback((modelType: 'detection' | 'segmentation') => {
         // 从AI模型管理状态中获取指定类型的模型
         const modelOfType = AIModelsSelector.getActiveModelByType(aiModels, modelType);
         if (modelOfType) {
-            console.log(`🤖 找到${modelType === 'detection' ? '检测' : modelType === 'segmentation' ? '分割' : '检索'}模型:`, modelOfType.name);
+            console.log(`🤖 找到${modelType === 'detection' ? '检测' : '分割'}模型:`, modelOfType.name);
             return modelOfType;
         } else {
-            console.log(`⚠️ 未找到${modelType === 'detection' ? '检测' : modelType === 'segmentation' ? '分割' : '检索'}类型的模型`);
-            // 对于检索模型，如果没有找到用户配置的模型，返回null而不是默认API
-            if (modelType === 'retrieval') {
-                return null;
-            }
+            console.log(`⚠️ 未找到${modelType === 'detection' ? '检测' : '分割'}类型的模型`);
             // 对于检测和分割，暂时返回默认的分割API检测器
             return SegmentationAPIDetector;
         }
@@ -148,11 +138,6 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     // 缓存的辅助函数：检查是否有可用的检测模型（只检查用户接入的模型）
     const hasDetectionModel = useMemo(() => {
         return AIModelsSelector.hasModelsOfType(aiModels, 'detection');
-    }, [aiModels]);
-    
-    // 缓存的辅助函数：检查是否有可用的检索模型（只检查用户接入的模型）
-    const hasRetrievalModel = useMemo(() => {
-        return AIModelsSelector.hasModelsOfType(aiModels, 'retrieval');
     }, [aiModels]);
     
     // 辅助函数：检查图片是否真的有AI生成的标签
@@ -249,44 +234,6 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
             });
         }
     }, [imageAIStates, isFullImageInferenceInProgress, getModelByType, updateFullImageInferenceStatus, toggleImageAILabelsVisibility]);
-
-    // 缓存的检索模式切换函数
-    const toggleRetrievalModeOnClick = useCallback(() => {
-        console.log('🔍 === 检索模式切换按钮被点击 ===');
-        console.log('🔍 当前检索模式状态:', isRetrievalModeEnabled);
-        
-        // 检查是否有可用的检索模型
-        if (!hasRetrievalModel) {
-            console.error('🔍 ❌ 没有可用的检索模型，无法启用检索模式');
-            return;
-        }
-
-        // 获取用户配置的检索模型
-        const retrievalModel = getModelByType('retrieval');
-        if (!retrievalModel) {
-            console.error('🔍 ❌ 没有找到配置的检索模型');
-            return;
-        }
-
-        // 检查模型是否有URL配置
-        const modelUrl = (retrievalModel as any).url;
-        if (!modelUrl) {
-            console.error('🔍 ❌ 检索模型URL未配置');
-            return;
-        }
-
-        // 切换检索模式状态
-        const newMode = !isRetrievalModeEnabled;
-        updateRetrievalModeStatus(newMode);
-        
-        if (newMode) {
-            console.log('🔍 ✅ 检索模式已启用 - 现在拉标注框时会自动触发检索');
-            console.log('🔍 将使用检索模型:', (retrievalModel as any).name || 'Unnamed Model');
-            console.log('🔍 检索模型URL:', modelUrl);
-        } else {
-            console.log('🔍 ❌ 检索模式已禁用 - 回到正常分割模式');
-        }
-    }, [hasRetrievalModel, isRetrievalModeEnabled, getModelByType, updateRetrievalModeStatus]);
 
     // 标注工具点击处理 - 统一的处理函数
     const onToolClick = useCallback((toolType: LabelType) => {
@@ -607,51 +554,6 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                     );
                 }, [hasDetectionModel, isFullImageInferenceInProgress, imageAIStates, activeImageIndex, currentTexts, fullImageDetectionOnClick])}
             </div>
-            <div className='ButtonWrapper'>
-{useMemo(() => {
-                    const retrievalAvailable = hasRetrievalModel;
-                    
-                    // 检索模式切换按钮状态
-                    let buttonText, buttonIcon, isActive, isDisabled;
-                    
-                    if (!retrievalAvailable) {
-                        // 没有检索模型时
-                        buttonText = '无检索模型';
-                        buttonIcon = 'ico/retrieve.png';
-                        isActive = false;
-                        isDisabled = true;
-                    } else if (isFullImageInferenceInProgress) {
-                        // 检索进行中
-                        buttonText = '检索中...';
-                        buttonIcon = 'ico/retrieve.png';
-                        isActive = true;
-                        isDisabled = true; // 检索进行中时禁用按钮
-                    } else if (isRetrievalModeEnabled) {
-                        // 检索模式已启用
-                        buttonText = '检索模式：开启';
-                        buttonIcon = 'ico/retrieve.png';
-                        isActive = true;
-                        isDisabled = false;
-                    } else {
-                        // 检索模式未启用
-                        buttonText = '检索模式：关闭';
-                        buttonIcon = 'ico/retrieve.png';
-                        isActive = false;
-                        isDisabled = false;
-                    }
-                    
-                    return getButtonWithTooltip(
-                        'toggle-retrieval-mode',
-                        buttonText,
-                        buttonIcon,
-                        'toggle-retrieval-mode',
-                        isActive,
-                        undefined,
-                        isDisabled ? undefined : toggleRetrievalModeOnClick,
-                        isDisabled
-                    );
-                }, [hasRetrievalModel, isRetrievalModeEnabled, isFullImageInferenceInProgress, toggleRetrievalModeOnClick])}
-            </div>
             {withAI && <div className='ButtonWrapper'>
                     {
                         getButtonWithTooltip(
@@ -688,7 +590,6 @@ const mapDispatchToProps = {
     updateFullImageInferenceStatus,
     toggleImageAILabelsVisibility,
     addInferenceHistory,
-    updateRetrievalModeStatus,
     updateActiveLabelType,
     updateActiveLabelViewType
 };
@@ -703,8 +604,7 @@ const mapStateToProps = (state: AppState) => ({
     language: state.general.language,
     isAIDisabled: state.ai.isAIDisabled,
     activeImageIndex: state.labels.activeImageIndex,
-    aiModels: state,
-    isRetrievalModeEnabled: state.ai.isRetrievalModeEnabled
+    aiModels: state
 });
 
 export default connect(

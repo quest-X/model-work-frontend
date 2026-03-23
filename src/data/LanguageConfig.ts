@@ -169,7 +169,6 @@ export interface LanguageTexts {
             modelApiKey: string;
             taskTypeDetection: string;
             taskTypeSegmentation: string;
-            taskTypeRetrieval: string;
             customAIMessage: string;
         };
         integrateModel: {
@@ -183,7 +182,6 @@ export interface LanguageTexts {
             integrationMessage: string;
             taskTypeDetection: string;
             taskTypeSegmentation: string;
-            taskTypeRetrieval: string;
         };
     };
     
@@ -366,7 +364,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 description: '在服务器上运行标注模型'
             },
             integrateAIModel: {
-                name: '接入AI模型',
+                name: '管理模型',
                 description: '集成外部AI模型服务'
             }
         },
@@ -462,7 +460,6 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 modelApiKey: '模型接口密钥',
                 taskTypeDetection: '目标检测',
                 taskTypeSegmentation: '目标分割',
-                taskTypeRetrieval: '目标检索',
                 customAIMessage: '配置您的AI模型服务连接信息'
             },
             integrateModel: {
@@ -475,8 +472,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 testConnection: '测试连接',
                 integrationMessage: '配置您要接入的外部AI模型服务的详细信息。模型地址和模型类型是必填项，模型密钥为可选项。',
                 taskTypeDetection: '目标检测',
-                taskTypeSegmentation: '目标分割',
-                taskTypeRetrieval: '目标检索'
+                taskTypeSegmentation: '目标分割'
             }
         },
         
@@ -547,7 +543,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         },
         
         // Common
-        makeSense: 'Make Sense',
+        makeSense: 'OpenSight Platform',
         ok: '确定',
         cancel: '取消',
         delete: '删除',
@@ -753,7 +749,6 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 modelApiKey: 'Model API Key',
                 taskTypeDetection: 'Object Detection',
                 taskTypeSegmentation: 'Object Segmentation',
-                taskTypeRetrieval: 'Object Retrieval',
                 customAIMessage: 'Configure your AI model service connection'
             },
             integrateModel: {
@@ -766,8 +761,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 testConnection: 'Test Connection',
                 integrationMessage: 'Configure the details of the external AI model service you want to integrate. Model URL and model type are required, model key is optional.',
                 taskTypeDetection: 'Object Detection',
-                taskTypeSegmentation: 'Object Segmentation',
-                taskTypeRetrieval: 'Object Retrieval'
+                taskTypeSegmentation: 'Object Segmentation'
             }
         },
         
@@ -838,7 +832,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         },
         
         // Common
-        makeSense: 'Make Sense',
+        makeSense: 'OpenSight Platform',
         ok: 'OK',
         cancel: 'Cancel',
         delete: 'Delete',

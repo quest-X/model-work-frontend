@@ -92,24 +92,6 @@ export function updateFullImageInferenceStatus(isFullImageInferenceInProgress: b
     }
 }
 
-export function updateRetrievalModeStatus(isRetrievalModeEnabled: boolean): AIActionTypes {
-    return {
-        type: Action.UPDATE_RETRIEVAL_MODE_STATUS,
-        payload: {
-            isRetrievalModeEnabled
-        }
-    }
-}
-
-export function updateRetrievalSegmentationStatus(enableRetrievalSegmentation: boolean): AIActionTypes {
-    return {
-        type: Action.UPDATE_RETRIEVAL_SEGMENTATION_STATUS,
-        payload: {
-            enableRetrievalSegmentation
-        }
-    }
-}
-
 export function toggleImageAILabelsVisibility(imageId: string): AIActionTypes {
     return {
         type: Action.TOGGLE_IMAGE_AI_LABELS_VISIBILITY,
@@ -119,7 +101,7 @@ export function toggleImageAILabelsVisibility(imageId: string): AIActionTypes {
     }
 }
 
-export function addInferenceHistory(imageId: string, detectedCount: number, success: boolean = true, type: 'detection' | 'segmentation' | 'retrieval' = 'detection'): AIActionTypes {
+export function addInferenceHistory(imageId: string, detectedCount: number, success: boolean = true, type: 'detection' | 'segmentation' = 'detection'): AIActionTypes {
     return {
         type: Action.ADD_INFERENCE_HISTORY,
         payload: {

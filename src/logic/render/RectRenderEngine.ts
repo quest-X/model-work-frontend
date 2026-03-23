@@ -26,7 +26,6 @@ import {GeneralSelector} from '../../store/selectors/GeneralSelector';
 import {LabelStatus} from '../../data/enums/LabelStatus';
 import {LabelUtil} from '../../utils/LabelUtil';
 import {AISegmentationActions} from '../actions/AISegmentationActions';
-import {AIRetrievalActions} from '../actions/AIRetrievalActions';
 import {AISelector} from '../../store/selectors/AISelector';
 import {SegmentationResult} from '../../ai/SegmentationAPIDetector';
 import {Settings} from '../../settings/Settings';
@@ -473,40 +472,15 @@ export class RectRenderEngine extends BaseRenderEngine {
         store.dispatch(updateFirstLabelCreatedFlag(true));
         store.dispatch(updateActiveLabelId(labelRect.id));
         
-        // 检查AI推理状态和检索模式
+        // 检查AI推理状态
         const aiState = store.getState().ai;
         const isAIDisabled = aiState.isAIDisabled;
         const isSegmentationAPIEnabled = aiState.segmentationAPIConfig.enabled;
-        const isRetrievalModeEnabled = aiState.isRetrievalModeEnabled;
-        
-        console.log('🔍 标注框创建完成 - 检索模式:', isRetrievalModeEnabled, 'AI启用:', !isAIDisabled);
-        
+
         if (!isAIDisabled && isSegmentationAPIEnabled) {
-            if (isRetrievalModeEnabled) {
-                console.log('🔍 ✅ 检索模式：矩形标注完成，触发图像检索:', rect);
-                // 转换rect为bbox格式 [x1, y1, x2, y2] - 转换为整数坐标
-                const queryBbox: [number, number, number, number] = [
-                    Math.round(rect.x),
-                    Math.round(rect.y), 
-                    Math.round(rect.x + rect.width),
-                    Math.round(rect.y + rect.height)
-                ];
-                console.log('🔍 查询bbox (整数坐标):', queryBbox);
-                
-                // 先删除刚创建的临时标注框，因为检索会在其他图像上创建新的标注框
-                const updatedImageData = {
-                    ...imageData,
-                    labelRects: imageData.labelRects.filter(r => r.id !== labelRect.id)
-                };
-                store.dispatch(updateImageDataById(imageData.id, updatedImageData));
-                
-                // 触发检索
-                AIRetrievalActions.retrieveImages(imageData, queryBbox);
-            } else {
-                console.log('✅ 正常模式：矩形标注完成，触发AI推理分割:', rect);
-                // 传递矩形框ID，以便分割完成后删除临时框
-                AISegmentationActions.segmentBbox(imageData, rect, labelRect.id);
-            }
+            console.log('✅ 矩形标注完成，触发AI推理分割:', rect);
+            // 传递矩形框ID，以便分割完成后删除临时框
+            AISegmentationActions.segmentBbox(imageData, rect, labelRect.id);
         } else {
             console.log('🚫 跳过AI推理 - AI禁用状态:', isAIDisabled, '分割API启用:', isSegmentationAPIEnabled);
         }

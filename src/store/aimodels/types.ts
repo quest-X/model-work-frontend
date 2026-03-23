@@ -2,7 +2,7 @@ export interface AIModel {
     id: string;
     name: string;
     url: string;
-    modelType: 'detection' | 'segmentation' | 'retrieval';
+    modelType: 'detection' | 'segmentation';
     apiKey?: string;
     description?: string;
     createdAt: Date;

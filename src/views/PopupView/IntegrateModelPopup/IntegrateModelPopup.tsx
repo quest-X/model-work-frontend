@@ -75,7 +75,7 @@ const IntegrateModelPopup: React.FC<IProps> = (
                 id: uuidv4(),
                 name: `AI Model ${new Date().toLocaleDateString()}`, // 默认名称
                 url: modelUrl,
-                modelType: modelType as 'detection' | 'segmentation' | 'retrieval',
+                modelType: modelType as 'detection' | 'segmentation',
                 apiKey: apiKey.trim() || undefined,
                 description: undefined,
                 createdAt: new Date(),
@@ -259,9 +259,6 @@ const IntegrateModelPopup: React.FC<IProps> = (
                                 </MenuItem>
                                 <MenuItem value="segmentation">
                                     {currentTexts.popups.integrateModel.taskTypeSegmentation}
-                                </MenuItem>
-                                <MenuItem value="retrieval">
-                                    {currentTexts.popups.integrateModel.taskTypeRetrieval}
                                 </MenuItem>
                             </Select>
                         </FormControl>

@@ -32,12 +32,6 @@ export type AIState = {
     // FULL IMAGE INFERENCE STATE
     isFullImageInferenceInProgress: boolean;
     
-    // RETRIEVAL MODE STATE
-    isRetrievalModeEnabled: boolean;
-    
-    // RETRIEVAL SEGMENTATION CONFIG
-    enableRetrievalSegmentation: boolean;
-    
     // AI LABELS VISIBILITY STATE - 每张图片独立
     imageAIStates: Map<string, {
         aiLabelsVisible: boolean; // 检测标签是否显示（默认false闭眼）
@@ -46,7 +40,7 @@ export type AIState = {
             timestamp: number;    // 推理时间戳
             detectedCount: number; // 检测到的对象数量
             success: boolean;     // 推理是否成功
-            type: 'detection' | 'segmentation' | 'retrieval'; // 推理类型
+            type: 'detection' | 'segmentation'; // 推理类型
         }>;
     }>;
 }
@@ -121,20 +115,6 @@ interface UpdateFullImageInferenceStatus {
     }
 }
 
-interface UpdateRetrievalModeStatus {
-    type: typeof Action.UPDATE_RETRIEVAL_MODE_STATUS;
-    payload: {
-        isRetrievalModeEnabled: boolean;
-    }
-}
-
-interface UpdateRetrievalSegmentationStatus {
-    type: typeof Action.UPDATE_RETRIEVAL_SEGMENTATION_STATUS;
-    payload: {
-        enableRetrievalSegmentation: boolean;
-    }
-}
-
 interface ToggleImageAILabelsVisibility {
     type: typeof Action.TOGGLE_IMAGE_AI_LABELS_VISIBILITY;
     payload: {
@@ -163,7 +143,5 @@ export type AIActionTypes = UpdateSuggestedLabelList
     | UpdateSegmentationResults
     | UpdateSegmentationAPIConfig
     | UpdateFullImageInferenceStatus
-    | UpdateRetrievalModeStatus
-    | UpdateRetrievalSegmentationStatus
     | ToggleImageAILabelsVisibility
     | AddInferenceHistory

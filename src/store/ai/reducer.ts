@@ -57,8 +57,6 @@ const initialState: AIState = {
         enabled: true
     },
     isFullImageInferenceInProgress: false,
-    isRetrievalModeEnabled: false,
-    enableRetrievalSegmentation: true, // 默认启用检索后分割
     imageAIStates: storedAIState
 };
 
@@ -127,18 +125,6 @@ export function aiReducer(
                 isFullImageInferenceInProgress: action.payload.isFullImageInferenceInProgress
             }
         }
-        case Action.UPDATE_RETRIEVAL_MODE_STATUS: {
-            return {
-                ...state,
-                isRetrievalModeEnabled: action.payload.isRetrievalModeEnabled
-            }
-        }
-        case Action.UPDATE_RETRIEVAL_SEGMENTATION_STATUS: {
-            return {
-                ...state,
-                enableRetrievalSegmentation: action.payload.enableRetrievalSegmentation
-            }
-        }
         case Action.TOGGLE_IMAGE_AI_LABELS_VISIBILITY: {
             const { imageId } = action.payload;
             const currentState = state.imageAIStates.get(imageId) || { 
@@ -195,9 +181,6 @@ export function aiReducer(
             } else if (type === 'segmentation' && success && detectedCount > 0) {
                 // 分割成功时，只影响分割标签可见性
                 newState_inner.segmentationLabelsVisible = true;
-            } else if (type === 'retrieval' && success && detectedCount > 0) {
-                // 检索成功时，也影响检测标签可见性（因为检索结果显示为标注框）
-                newState_inner.aiLabelsVisible = true;
             }
             
             newImageAIStates.set(imageId, newState_inner);
