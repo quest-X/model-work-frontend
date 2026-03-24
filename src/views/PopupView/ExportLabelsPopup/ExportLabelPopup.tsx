@@ -5,7 +5,6 @@ import { RectLabelsExporter } from '../../../logic/export/RectLabelsExporter';
 import { LabelType } from '../../../data/enums/LabelType';
 import { ILabelFormatData } from '../../../interfaces/ILabelFormatData';
 import { PointLabelsExporter } from '../../../logic/export/PointLabelsExport';
-import { PolygonLabelsExporter } from '../../../logic/export/polygon/PolygonLabelsExporter';
 import { PopupActions } from '../../../logic/actions/PopupActions';
 import { LineLabelsExporter } from '../../../logic/export/LineLabelExport';
 import { TagLabelsExporter } from '../../../logic/export/TagLabelsExport';
@@ -35,9 +34,6 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
                 break;
             case LabelType.LINE:
                 LineLabelsExporter.export(exportFormatType);
-                break;
-            case LabelType.POLYGON:
-                PolygonLabelsExporter.export(exportFormatType);
                 break;
             case LabelType.IMAGE_RECOGNITION:
                 TagLabelsExporter.export(exportFormatType);

@@ -3,7 +3,6 @@ import { LocalStorageManager } from '../utils/LocalStorageManager';
 import { IndexedDBManager, StoredProjectData } from '../utils/IndexedDBManager';
 import { updateLanguage, updateZoom, updateImageDragModeStatus, updateCrossHairVisibleStatus } from '../store/general/actionCreators';
 import { updateActiveImageIndex, updateActiveLabelType, updateLabelNames, updateImageDataById, addImageData, updateImageData } from '../store/labels/actionCreators';
-import { updateSegmentationResults } from '../store/ai/actionCreators';
 import { ImageData, LabelName } from '../store/labels/types';
 import { ImageRepository } from '../logic/imageRepository/ImageRepository';
 import { LabelType } from '../data/enums/LabelType';
@@ -80,12 +79,6 @@ export class ProjectRestoreService {
             
             // 替换图像数据（不是追加）
             store.dispatch(updateImageData(restoredImages));
-            
-            // 恢复AI推理结果
-            if (storedProject.segmentationResults && storedProject.segmentationResults.length > 0) {
-                store.dispatch(updateSegmentationResults(storedProject.segmentationResults));
-                console.log('推理结果已恢复:', storedProject.segmentationResults.length, '个结果');
-            }
             
             // 图像会由ImagePreview组件自动加载，无需手动恢复到ImageRepository
             console.log('图像数据已添加到Redux，ImagePreview将自动加载图像');

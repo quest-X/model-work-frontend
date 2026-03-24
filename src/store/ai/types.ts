@@ -1,5 +1,4 @@
 import {Action} from '../Actions';
-import {SegmentationResult, SegmentationAPIConfig} from '../../ai/SegmentationAPIDetector';
 
 export type RoboflowAPIDetails = {
     status: boolean,
@@ -25,22 +24,17 @@ export type AIState = {
     rejectedSuggestedLabelList: string[];
     isAIDisabled: boolean;
 
-    // SEGMENTATION API
-    segmentationResults: SegmentationResult[];
-    segmentationAPIConfig: SegmentationAPIConfig;
-    
     // FULL IMAGE INFERENCE STATE
     isFullImageInferenceInProgress: boolean;
     
     // AI LABELS VISIBILITY STATE - 每张图片独立
     imageAIStates: Map<string, {
         aiLabelsVisible: boolean; // 检测标签是否显示（默认false闭眼）
-        segmentationLabelsVisible: boolean; // 分割标签是否显示（独立控制）
         inferenceHistory: Array<{
             timestamp: number;    // 推理时间戳
             detectedCount: number; // 检测到的对象数量
             success: boolean;     // 推理是否成功
-            type: 'detection' | 'segmentation'; // 推理类型
+            type: 'detection'; // 推理类型
         }>;
     }>;
 }
@@ -94,20 +88,6 @@ interface UpdateRoboflowAPIDetails {
     }
 }
 
-interface UpdateSegmentationResults {
-    type: typeof Action.UPDATE_SEGMENTATION_RESULTS;
-    payload: {
-        segmentationResults: SegmentationResult[];
-    }
-}
-
-interface UpdateSegmentationAPIConfig {
-    type: typeof Action.UPDATE_SEGMENTATION_API_CONFIG;
-    payload: {
-        segmentationAPIConfig: SegmentationAPIConfig;
-    }
-}
-
 interface UpdateFullImageInferenceStatus {
     type: typeof Action.UPDATE_FULL_IMAGE_INFERENCE_STATUS;
     payload: {
@@ -129,7 +109,7 @@ interface AddInferenceHistory {
         timestamp: number;
         detectedCount: number;
         success: boolean;
-        type: 'detection' | 'segmentation';
+        type: 'detection';
     }
 }
 
@@ -140,8 +120,6 @@ export type AIActionTypes = UpdateSuggestedLabelList
     | UpdatePoseDetectorStatus
     | UpdateDisabledAIFlag
     | UpdateRoboflowAPIDetails
-    | UpdateSegmentationResults
-    | UpdateSegmentationAPIConfig
     | UpdateFullImageInferenceStatus
     | ToggleImageAILabelsVisibility
     | AddInferenceHistory

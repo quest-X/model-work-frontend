@@ -51,11 +51,6 @@ const initialState: AIState = {
         key: ''
     },
     isAIDisabled: true,
-    segmentationResults: [],
-    segmentationAPIConfig: {
-        url: 'http://192.168.10.205:8000/segment',
-        enabled: true
-    },
     isFullImageInferenceInProgress: false,
     imageAIStates: storedAIState
 };
@@ -107,18 +102,6 @@ export function aiReducer(
                 roboflowAPIDetails: action.payload.roboflowAPIDetails
             }
         }
-        case Action.UPDATE_SEGMENTATION_RESULTS: {
-            return {
-                ...state,
-                segmentationResults: action.payload.segmentationResults
-            }
-        }
-        case Action.UPDATE_SEGMENTATION_API_CONFIG: {
-            return {
-                ...state,
-                segmentationAPIConfig: action.payload.segmentationAPIConfig
-            }
-        }
         case Action.UPDATE_FULL_IMAGE_INFERENCE_STATUS: {
             return {
                 ...state,
@@ -127,10 +110,9 @@ export function aiReducer(
         }
         case Action.TOGGLE_IMAGE_AI_LABELS_VISIBILITY: {
             const { imageId } = action.payload;
-            const currentState = state.imageAIStates.get(imageId) || { 
+            const currentState = state.imageAIStates.get(imageId) || {
                 aiLabelsVisible: false,
-                segmentationLabelsVisible: false,
-                inferenceHistory: [] 
+                inferenceHistory: []
             };
             
             // 检查状态是否真的需要改变，避免不必要的更新
@@ -158,12 +140,11 @@ export function aiReducer(
         case Action.ADD_INFERENCE_HISTORY: {
             const { imageId, timestamp, detectedCount, success, type } = action.payload;
             const newImageAIStates = new Map(state.imageAIStates);
-            const currentState = newImageAIStates.get(imageId) || { 
+            const currentState = newImageAIStates.get(imageId) || {
                 aiLabelsVisible: false,
-                segmentationLabelsVisible: false,
-                inferenceHistory: [] 
+                inferenceHistory: []
             };
-            
+
             // 添加新的推理记录
             const newHistory = [...currentState.inferenceHistory, {
                 timestamp,
@@ -171,18 +152,13 @@ export function aiReducer(
                 success,
                 type
             }];
-            
-            // 根据推理类型分别控制对应的标签可见性
+
             const newState_inner = { ...currentState, inferenceHistory: newHistory };
-            
-            if (type === 'detection' && success && detectedCount > 0) {
-                // 检测成功时，只影响检测标签可见性
+
+            if (success && detectedCount > 0) {
                 newState_inner.aiLabelsVisible = true;
-            } else if (type === 'segmentation' && success && detectedCount > 0) {
-                // 分割成功时，只影响分割标签可见性
-                newState_inner.segmentationLabelsVisible = true;
             }
-            
+
             newImageAIStates.set(imageId, newState_inner);
             
             const newState = {

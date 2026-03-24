@@ -19,10 +19,7 @@ import { Fade, styled, Tooltip, tooltipClasses, TooltipProps } from '@mui/materi
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {EditorModel} from '../../../staticModels/EditorModel';
 import { ImageUtil } from '../../../utils/ImageUtil';
-import InferenceToggle from '../InferenceToggle/InferenceToggle';
-import { SegmentationAPIDetector } from '../../../ai/SegmentationAPIDetector';
-import { updateSegmentationResults, updateFullImageInferenceStatus, toggleImageAILabelsVisibility, addInferenceHistory } from '../../../store/ai/actionCreators';
-import { AISegmentationActions } from '../../../logic/actions/AISegmentationActions';
+import { updateFullImageInferenceStatus, toggleImageAILabelsVisibility, addInferenceHistory } from '../../../store/ai/actionCreators';
 import { AIDetectionActions } from '../../../logic/actions/AIDetectionActions';
 import { DetectionAPIDetector } from '../../../ai/DetectionAPIDetector';
 import { AIStateStorageManager } from '../../../utils/AIStateStorageManager';
@@ -81,7 +78,6 @@ interface IProps {
     activeContext: ContextType;
     updateImageDragModeStatusAction: (imageDragMode: boolean) => any;
     updateCrossHairVisibleStatusAction: (crossHairVisible: boolean) => any;
-    updateSegmentationResults: (results: any[]) => any;
     updateFullImageInferenceStatus: (isInProgress: boolean) => any;
     toggleImageAILabelsVisibility: (imageId: string) => any;
     addInferenceHistory: (imageId: string, detectedCount: number, success?: boolean) => any;
@@ -103,7 +99,6 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         activeContext,
         updateImageDragModeStatusAction,
         updateCrossHairVisibleStatusAction,
-        updateSegmentationResults,
         updateFullImageInferenceStatus,
         toggleImageAILabelsVisibility,
         addInferenceHistory,
@@ -123,16 +118,11 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     
     // 缓存的辅助函数：根据模型类型获取可用的AI模型
     const getModelByType = useCallback((modelType: 'detection' | 'segmentation') => {
-        // 从AI模型管理状态中获取指定类型的模型
         const modelOfType = AIModelsSelector.getActiveModelByType(aiModels, modelType);
         if (modelOfType) {
-            console.log(`🤖 找到${modelType === 'detection' ? '检测' : '分割'}模型:`, modelOfType.name);
             return modelOfType;
-        } else {
-            console.log(`⚠️ 未找到${modelType === 'detection' ? '检测' : '分割'}类型的模型`);
-            // 对于检测和分割，暂时返回默认的分割API检测器
-            return SegmentationAPIDetector;
         }
+        return null;
     }, [aiModels]);
     
     // 缓存的辅助函数：检查是否有可用的检测模型（只检查用户接入的模型）
@@ -242,109 +232,6 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         updateActiveLabelViewType(toolType);
     }, [updateActiveLabelType, updateActiveLabelViewType]);
 
-    // 目标分割调用函数（原来的fullImageInferenceOnClick）
-    const fullImageSegmentationOnClick = () => {
-        const activeImageData = LabelsSelector.getActiveImageData();
-        
-        if (!activeImageData) {
-            console.error('❌ 没有活动图像数据');
-            return;
-        }
-
-        const imageAIState = imageAIStates.get(activeImageData.id) || { 
-            aiLabelsVisible: false, 
-            inferenceHistory: [] 
-        };
-
-        // 检查当前图片有多少AI标签
-        const currentAILabelCount = hasAILabels(activeImageData) ? 
-            activeImageData.labelRects.filter((rect: any) => rect.isCreatedByAI).length : 0;
-
-        // 如果点击时要显示标签（从闭眼到睁眼）
-        if (!imageAIState.aiLabelsVisible) {
-            console.log('👁️ 尝试显示AI标签...', {
-                imageId: activeImageData.id,
-                currentAILabelCount,
-                imageAIState,
-                hasAILabels: hasAILabels(activeImageData)
-            });
-            
-            // 检查是否需要重新分割
-            const shouldInfer = AIStateStorageManager.shouldTriggerInference(activeImageData.id, currentAILabelCount);
-            
-            if (shouldInfer) {
-                console.log(`🧠 需要重新分割！当前AI标签数量(${currentAILabelCount}) < 历史最高记录(${AIStateStorageManager.getMaxDetectedCount(activeImageData.id)})`);
-                
-                // 检查AI分割是否被用户禁用
-                if (isAIDisabled) {
-                    console.log('🚫 AI分割已被用户禁用，无法执行分割');
-                    return;
-                }
-
-                if (isFullImageInferenceInProgress) {
-                    console.log('🔄 整图分割正在进行中，忽略点击');
-                    return;
-                }
-
-                // 检查分割模型可用性
-                const segmentationModel = getModelByType('segmentation');
-                if (segmentationModel === SegmentationAPIDetector) {
-                    if (!SegmentationAPIDetector.isEnabled()) {
-                        console.error('❌ 默认分割API未启用');
-                        return;
-                    }
-                } else {
-                    // 使用用户接入的AI模型
-                    const aiModel = segmentationModel as any;
-                    if (!aiModel.url) {
-                        console.error('❌ 分割模型URL未配置');
-                        return;
-                    }
-                }
-
-                console.log('🔍 开始智能分割...');
-
-                // 获取整个图像的边界框
-                const realImageSize = EditorModel.image ? ImageUtil.getSize(EditorModel.image) : { width: 1000, height: 1000 };
-                const imageRect = {
-                    x: 0,
-                    y: 0,
-                    width: realImageSize.width,
-                    height: realImageSize.height
-                };
-
-                // 设置分割状态为进行中
-                updateFullImageInferenceStatus(true);
-                
-                // 调用分割（需要根据模型类型选择调用方式）
-                if (segmentationModel === SegmentationAPIDetector) {
-                    AISegmentationActions.segmentBbox(activeImageData, imageRect);
-                } else {
-                    // TODO: 调用用户自定义的AI模型接口
-                    console.log('🚀 使用自定义分割模型:', segmentationModel);
-                    AISegmentationActions.segmentBbox(activeImageData, imageRect);
-                }
-            } else {
-                console.log('✅ 无需重新分割，直接显示现有AI标签');
-                // 直接切换显示状态，立即生效
-                toggleImageAILabelsVisibility(activeImageData.id);
-                
-                // 立即触发canvas重绘，确保与标签页同步
-                queueMicrotask(() => {
-                    EditorActions.fullRender();
-                });
-            }
-        } else {
-            // 如果是隐藏标签（从睁眼到闭眼）
-            console.log('👁️‍🗨️ 隐藏AI标签');
-            toggleImageAILabelsVisibility(activeImageData.id);
-            
-            // 立即触发canvas重绘，确保与标签页同步
-            queueMicrotask(() => {
-                EditorActions.fullRender();
-            });
-        }
-    };
 
     const withAI = (
         ((activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isAISSDObjectDetectorModelLoaded()) ||
@@ -470,6 +357,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         () => onToolClick(LabelType.LINE)
                     )
                 }
+                {/* Polygon tool hidden - segmentation not available
                 {
                     getButtonWithTooltip(
                         'tool-polygon',
@@ -481,6 +369,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         () => onToolClick(LabelType.POLYGON)
                     )
                 }
+                */}
             </div>
             <div className='ButtonWrapper'>
 {useMemo(() => {
@@ -578,7 +467,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         )
                     }
                 </div>}
-            <InferenceToggle />
+            {/* InferenceToggle hidden - segmentation not available */}
+            {/* <InferenceToggle /> */}
         </div>
     );
 });
@@ -586,7 +476,6 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 const mapDispatchToProps = {
     updateImageDragModeStatusAction: updateImageDragModeStatus,
     updateCrossHairVisibleStatusAction: updateCrossHairVisibleStatus,
-    updateSegmentationResults,
     updateFullImageInferenceStatus,
     toggleImageAILabelsVisibility,
     addInferenceHistory,

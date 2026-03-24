@@ -24,6 +24,19 @@
     align-content: center;
   }
 
+  .VersionWatermark {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%) rotate(180deg);
+    writing-mode: vertical-rl;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.3);
+    letter-spacing: 1px;
+    user-select: none;
+    white-space: nowrap;
+  }
+
   .EmptyProjectView {
     display: flex;
     flex-direction: column;

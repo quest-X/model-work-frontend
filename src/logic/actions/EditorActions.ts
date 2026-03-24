@@ -2,7 +2,6 @@ import {LabelType} from "../../data/enums/LabelType";
 import {EditorModel} from "../../staticModels/EditorModel";
 import {RectRenderEngine} from "../render/RectRenderEngine";
 import {PointRenderEngine} from "../render/PointRenderEngine";
-import {PolygonRenderEngine} from "../render/PolygonRenderEngine";
 import {IRect} from "../../interfaces/IRect";
 import {RectUtil} from "../../utils/RectUtil";
 import {EditorData} from "../../data/EditorData";
@@ -42,9 +41,6 @@ export class EditorActions {
                 break;
             case LabelType.LINE:
                 EditorModel.supportRenderingEngine = new LineRenderEngine(EditorModel.canvas);
-                break;
-            case LabelType.POLYGON:
-                EditorModel.supportRenderingEngine = new PolygonRenderEngine(EditorModel.canvas);
                 break;
             default:
                 EditorModel.supportRenderingEngine = null;

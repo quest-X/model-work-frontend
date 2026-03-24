@@ -8,7 +8,6 @@ import {PointUtil} from './PointUtil';
 import {IRect} from '../interfaces/IRect';
 import {ILine} from '../interfaces/ILine';
 import {LineUtil} from './LineUtil';
-import {PolygonUtil} from './PolygonUtil';
 
 export class RenderEngineUtil {
     public static calculateImageScale(data: EditorData): number {
@@ -149,8 +148,8 @@ export class RenderEngineUtil {
         for (const vertex of vertices) {
             if (RenderEngineUtil.isMouseOverAnchor(mouse, vertex, radius)) return true;
         }
-        const edges = PolygonUtil.getEdges(vertices)
-        for (const edge of edges) {
+        for (let i = 0; i < vertices.length; i++) {
+            const edge: ILine = { start: vertices[i], end: vertices[(i + 1) % vertices.length] };
             if (RenderEngineUtil.isMouseOverLine(mouse, edge, radius)) return true;
         }
         return false;

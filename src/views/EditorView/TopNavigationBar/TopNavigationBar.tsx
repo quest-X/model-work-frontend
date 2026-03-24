@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import './TopNavigationBar.scss';
 import StateBar from '../StateBar/StateBar';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
@@ -19,11 +19,34 @@ interface IProps {
     updateLanguageAction: (language: Language) => any;
     projectData: ProjectData;
     language: Language;
+    hasAIModels: boolean;
 }
 
 const TopNavigationBar: React.FC<IProps> = (props) => {
     const currentTexts = LanguageConfig[props.language];
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
+    const [canvasCenterX, setCanvasCenterX] = useState<number | null>(null);
+    const lastCenterRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        const el = document.querySelector('.EditorWrapper');
+        if (!el) return;
+
+        const updateCenter = () => {
+            const rect = el.getBoundingClientRect();
+            const center = Math.round(rect.left + rect.width / 2);
+            if (center !== lastCenterRef.current) {
+                lastCenterRef.current = center;
+                setCanvasCenterX(center);
+            }
+        };
+
+        const observer = new ResizeObserver(updateCenter);
+        observer.observe(el);
+        updateCenter();
+
+        return () => observer.disconnect();
+    }, []);
 
     const onFocus = (event: React.FocusEvent<HTMLInputElement>) => {
         event.target.setSelectionRange(0, event.target.value.length);
@@ -45,6 +68,11 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
     const showKeyboardShortcuts = () => props.updateActivePopupTypeAction(PopupWindowType.KEYBOARD_SHORTCUTS)
     
     const openLoadMoreImagesPopup = () => props.updateActivePopupTypeAction(PopupWindowType.IMPORT_IMAGES)
+
+    const openAIModelPopup = () => {
+        const popupType = props.hasAIModels ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.INTEGRATE_AI_MODEL;
+        props.updateActivePopupTypeAction(popupType);
+    }
 
     const toggleLanguage = () => {
         const newLanguage = props.language === Language.CHINESE ? Language.ENGLISH : Language.CHINESE;
@@ -77,7 +105,7 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
         <div className='TopNavigationBar'>
             <StateBar/>
             <div className='TopNavigationBarWrapper'>
-                <div className='NavigationBarGroupWrapper'>
+                <div className='NavigationBarGroupWrapper left'>
                     <div
                         className='Header'
                         onClick={showKeyboardShortcuts}
@@ -89,8 +117,6 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                         />
                         {currentTexts.makeSense}
                     </div>
-                </div>
-                <div className='NavigationBarGroupWrapper'>
                     <div className='ActionsDropdownContainer'>
                         <TextButton
                             label={currentTexts.actions.title}
@@ -100,12 +126,15 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                         {showActionsDropdown && <DropDownMenu isVisible={true}/>}
                     </div>
                     <TextButton
-                        label={currentTexts.uploadImages}
-                        onClick={openLoadMoreImagesPopup}
-                        externalClassName={'upload-images-button'}
+                        label={currentTexts.actions.integrateAIModel.name}
+                        onClick={openAIModelPopup}
+                        externalClassName={'ai-model-button'}
                     />
                 </div>
-                <div className='NavigationBarGroupWrapper middle'>
+                <div
+                    className='ProjectNameContainer'
+                    style={canvasCenterX != null ? { left: canvasCenterX, transform: 'translateX(-50%)' } : undefined}
+                >
                     <div className='ProjectName'>{currentTexts.projectName}</div>
                     <TextInput
                         isPassword={false}
@@ -114,7 +143,7 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                         onFocus={onFocus}
                     />
                 </div>
-                <div className='NavigationBarGroupWrapper'>
+                <div className='NavigationBarGroupWrapper right'>
                     <TextButton
                         label={currentTexts.languageToggle}
                         onClick={toggleLanguage}
@@ -134,7 +163,8 @@ const mapDispatchToProps = {
 
 const mapStateToProps = (state: AppState) => ({
     projectData: state.general.projectData,
-    language: state.general.language
+    language: state.general.language,
+    hasAIModels: !!(state.aimodels && state.aimodels.models.length > 0)
 });
 
 export default connect(

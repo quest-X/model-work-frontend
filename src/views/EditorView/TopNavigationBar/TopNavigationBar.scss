@@ -25,6 +25,7 @@
     justify-content: space-between;
     align-items: center;
     align-content: space-between;
+    position: relative;
 
     .NavigationBarGroupWrapper {
       margin: 4px 0;
@@ -36,14 +37,33 @@
       align-items: center;
       align-content: center;
 
-      &.middle {
-        flex: auto;
+
+      &.left {
+        flex: 1 1 0;
+        min-width: 0;
+        justify-content: flex-start;
       }
 
-      &:not(:last-child) {
-        padding-right: 10px;
-        margin-right: 10px;
-        border-right: solid 1px $darkThemeForthColor;
+      &.right {
+        flex: 1 1 0;
+        min-width: 0;
+        justify-content: flex-end;
+      }
+
+    }
+
+    .ProjectNameContainer {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 1;
+
+      > * {
+        pointer-events: auto;
       }
     }
 
@@ -130,6 +150,7 @@
 
     .actions-button,
     .upload-images-button,
+    .ai-model-button,
     .language-toggle-button {
       color: white;
       box-shadow: none;
@@ -155,6 +176,12 @@
     }
 
     .upload-images-button {
+      margin-left: 5px;
+      margin-right: 5px;
+      min-width: 80px;
+    }
+
+    .ai-model-button {
       margin-left: 5px;
       margin-right: 5px;
       min-width: 80px;

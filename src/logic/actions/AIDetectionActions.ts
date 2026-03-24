@@ -4,7 +4,7 @@ import {ImageData, LabelName, LabelRect} from "../../store/labels/types";
 import {LabelStatus} from "../../data/enums/LabelStatus";
 import {v4 as uuidv4} from "uuid";
 import {updateImageDataById, updateLabelNames} from "../../store/labels/actionCreators";
-import {updateFullImageInferenceStatus, addInferenceHistory, toggleImageAILabelsVisibility, updateSegmentationResults} from "../../store/ai/actionCreators";
+import {updateFullImageInferenceStatus, addInferenceHistory, toggleImageAILabelsVisibility} from "../../store/ai/actionCreators";
 import {submitNewNotification, deleteNotificationById, updateNotificationById} from "../../store/notifications/actionCreators";
 import {updatePerClassColorationStatus} from "../../store/general/actionCreators";
 import {NotificationUtil} from "../../utils/NotificationUtil";
@@ -110,22 +110,6 @@ export class AIDetectionActions {
                     
                     // 重置检测状态
                     store.dispatch(updateFullImageInferenceStatus(false));
-                    
-                    // 将检测结果同步到 segmentationResults，供结果面板显示
-                    const panelResults = results.map(r => ({
-                        info: r.info,
-                        class_id: r.info.id,
-                        class_name: r.info.name,
-                        confidence: r.info.confidence,
-                        bbox: {
-                            x1: r.bbox[0], y1: r.bbox[1],
-                            x2: r.bbox[2], y2: r.bbox[3],
-                            width: r.bbox[2] - r.bbox[0],
-                            height: r.bbox[3] - r.bbox[1],
-                        },
-                        mask: { mask_data: [], area: 0 },
-                    }));
-                    store.dispatch(updateSegmentationResults(panelResults as any));
 
                     // 添加检测历史记录（会自动设置aiLabelsVisible为true）
                     store.dispatch(addInferenceHistory(imageData.id, results.length, true, 'detection'));

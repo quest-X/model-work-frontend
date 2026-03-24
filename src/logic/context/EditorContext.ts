@@ -3,7 +3,6 @@ import {EditorModel} from "../../staticModels/EditorModel";
 import {LabelType} from "../../data/enums/LabelType";
 import {EditorData} from "../../data/EditorData";
 import {EditorActions} from "../actions/EditorActions";
-import {PolygonRenderEngine} from "../render/PolygonRenderEngine";
 import {BaseContext} from "./BaseContext";
 import {ImageActions} from "../actions/ImageActions";
 import {ViewPortActions} from "../actions/ViewPortActions";
@@ -17,10 +16,6 @@ export class EditorContext extends BaseContext {
         {
             keyCombo: ["Enter"],
             action: (event: KeyboardEvent) => {
-                if (EditorModel.supportRenderingEngine && EditorModel.supportRenderingEngine.labelType === LabelType.POLYGON) {
-                    const editorData: EditorData = EditorActions.getEditorData();
-                    (EditorModel.supportRenderingEngine as PolygonRenderEngine).addLabelAndFinishCreation(editorData);
-                }
                 EditorActions.fullRender();
             }
         },
@@ -29,9 +24,6 @@ export class EditorContext extends BaseContext {
             action: (event: KeyboardEvent) => {
                 if (EditorModel.supportRenderingEngine) {
                     switch (EditorModel.supportRenderingEngine.labelType) {
-                        case LabelType.POLYGON:
-                            (EditorModel.supportRenderingEngine as PolygonRenderEngine).cancelLabelCreation();
-                            break;
                         case LabelType.LINE:
                             (EditorModel.supportRenderingEngine as LineRenderEngine).cancelLabelCreation();
                             break;

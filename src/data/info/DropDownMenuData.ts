@@ -55,22 +55,6 @@ export const getDropDownMenuData = (language: Language): DropDownMenuNode[] => {
                     disabled: false,
                     onClick: () => store.dispatch(updateActivePopupType(PopupWindowType.EXPORT_ANNOTATIONS))
                 },
-                {
-                    name: texts.actions.integrateAIModel.name,
-                    description: texts.actions.integrateAIModel.description,
-                    imageSrc: 'ico/api.png',
-                    imageAlt: 'integrate-ai-model',
-                    disabled: false,
-                    onClick: () => {
-                        // 检查是否已经有接入的AI模型
-                        const currentState = store.getState();
-                        const hasAIModels = currentState.aimodels && currentState.aimodels.models.length > 0;
-                        
-                        // 如果已经有模型，直接进入管理页面；否则进入接入页面
-                        const popupType = hasAIModels ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.INTEGRATE_AI_MODEL;
-                        store.dispatch(updateActivePopupType(popupType));
-                    }
-                },
             ]
         }
         // Community 部分已移除

@@ -25,9 +25,6 @@ import {EditorActions} from '../actions/EditorActions';
 import {GeneralSelector} from '../../store/selectors/GeneralSelector';
 import {LabelStatus} from '../../data/enums/LabelStatus';
 import {LabelUtil} from '../../utils/LabelUtil';
-import {AISegmentationActions} from '../actions/AISegmentationActions';
-import {AISelector} from '../../store/selectors/AISelector';
-import {SegmentationResult} from '../../ai/SegmentationAPIDetector';
 import {Settings} from '../../settings/Settings';
 
 export class RectRenderEngine extends BaseRenderEngine {

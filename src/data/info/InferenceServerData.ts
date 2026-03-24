@@ -19,5 +19,11 @@ export const InferenceServerDataMap: Record<InferenceServerType, IInferenceServe
         imageSrc: 'ico/make-sense-ico-transparent.png',
         imageAlt: 'make-sense-inference-server',
         isDisabled: false
+    },
+    [InferenceServerType.LOCAL_YOLO]: {
+        name: 'Local YOLO Quick Test',
+        imageSrc: 'ico/robot.png',
+        imageAlt: 'local-yolo',
+        isDisabled: false
     }
 }

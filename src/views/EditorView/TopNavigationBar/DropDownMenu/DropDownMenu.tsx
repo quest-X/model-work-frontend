@@ -137,7 +137,7 @@ const DropDownMenu: React.FC<IProps> = ({updatePreventCustomCursorStatusAction, 
             position: 'absolute',
             top: 35,
             left: 0,
-            height: 40 * 5 + 10 // 5个菜单项
+            height: 40 * getDropDownMenuData(language)[0].children.length + 10
         }}>
             {getDropDownMenuData(language)[0].children.map((element, index) => {
                 return <div className='DropDownMenuContentOption active'

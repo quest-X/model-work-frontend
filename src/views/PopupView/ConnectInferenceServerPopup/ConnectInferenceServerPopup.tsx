@@ -24,7 +24,6 @@ import { ImageRepository } from '../../../logic/imageRepository/ImageRepository'
 import { ImageData } from '../../../store/labels/types';
 import { LabelsSelector } from '../../../store/selectors/LabelsSelector';
 import { DetectionAPIDetector } from '../../../ai/DetectionAPIDetector';
-import { SegmentationAPIDetector } from '../../../ai/SegmentationAPIDetector';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import { FormControl, InputLabel, Select, MenuItem, SelectChangeEvent } from '@mui/material';
 
@@ -57,6 +56,9 @@ const ConnectInferenceServerPopup: React.FC<IProps> = (
     const [modelTaskType, setModelTaskType] = useState('detection');
     const [modelApiKey, setModelApiKey] = useState('');
 
+    // local yolo
+    const [localYoloUrl, setLocalYoloUrl] = useState('http://localhost:8000');
+
     const wrapServerOnClick = (newServerType: InferenceServerType) => {
         return () => {
             if (!InferenceServerDataMap[newServerType].isDisabled) {
@@ -77,6 +79,8 @@ const ConnectInferenceServerPopup: React.FC<IProps> = (
                 return roboflowModel === '' || roboflowKey === '';
             case InferenceServerType.MAKESENSE:
                 return modelServiceUrl === '' || modelTaskType === '';
+            case InferenceServerType.LOCAL_YOLO:
+                return localYoloUrl === '';
             default:
                 return true;
         }
@@ -85,12 +89,18 @@ const ConnectInferenceServerPopup: React.FC<IProps> = (
     const onAccept = () => {
         if (disableAcceptButton()) return;
 
+        if (currentServerType === InferenceServerType.LOCAL_YOLO) {
+            DetectionAPIDetector.setConfig({ url: localYoloUrl, enabled: true });
+            PopupActions.close();
+            const activeImageData: ImageData = LabelsSelector.getActiveImageData();
+            AIDetectionActions.detectObjects(activeImageData);
+            return;
+        }
+
         if (currentServerType === InferenceServerType.MAKESENSE) {
             // 配置并触发自定义推理服务
             if (modelTaskType === 'detection') {
                 DetectionAPIDetector.setConfig({ url: modelServiceUrl, enabled: true });
-            } else {
-                SegmentationAPIDetector.setConfig({ url: modelServiceUrl, enabled: true });
             }
             PopupActions.close();
             const activeImageData: ImageData = LabelsSelector.getActiveImageData();
@@ -252,6 +262,29 @@ const ConnectInferenceServerPopup: React.FC<IProps> = (
         </>;
     }
 
+    const renderLocalYolo = () => {
+        return <>
+            <div className='message'>
+                {currentTexts.popups.connectServer.localYoloMessage}
+            </div>
+            <div className='details'>
+                <StyledTextField
+                    variant='standard'
+                    id={'local-yolo-url'}
+                    autoComplete={'off'}
+                    autoFocus={true}
+                    type={'text'}
+                    margin={'dense'}
+                    label={currentTexts.popups.connectServer.localYoloUrl}
+                    value={localYoloUrl}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLocalYoloUrl(e.target.value)}
+                    style={{ width: 280 }}
+                    InputLabelProps={{ shrink: true }}
+                />
+            </div>
+        </>;
+    }
+
     const renderContent = (): JSX.Element => {
         if (modelIsLoadingStatus) {
             return renderLoader()
@@ -261,6 +294,9 @@ const ConnectInferenceServerPopup: React.FC<IProps> = (
         }
         if (currentServerType === InferenceServerType.MAKESENSE) {
             return renderMakeSense();
+        }
+        if (currentServerType === InferenceServerType.LOCAL_YOLO) {
+            return renderLocalYolo();
         }
         return <div className='load-model-popup-content'/>
     };

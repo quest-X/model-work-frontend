@@ -170,6 +170,8 @@ export interface LanguageTexts {
             taskTypeDetection: string;
             taskTypeSegmentation: string;
             customAIMessage: string;
+            localYoloMessage: string;
+            localYoloUrl: string;
         };
         integrateModel: {
             title: string;
@@ -460,7 +462,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 modelApiKey: '模型接口密钥',
                 taskTypeDetection: '目标检测',
                 taskTypeSegmentation: '目标分割',
-                customAIMessage: '配置您的AI模型服务连接信息'
+                customAIMessage: '配置您的AI模型服务连接信息',
+                localYoloMessage: '连接本地 YOLO 推理服务（python detect_server.py）',
+                localYoloUrl: '服务地址'
             },
             integrateModel: {
                 title: '接入AI模型',
@@ -749,7 +753,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 modelApiKey: 'Model API Key',
                 taskTypeDetection: 'Object Detection',
                 taskTypeSegmentation: 'Object Segmentation',
-                customAIMessage: 'Configure your AI model service connection'
+                customAIMessage: 'Configure your AI model service connection',
+                localYoloMessage: 'Connect to local YOLO inference server (python detect_server.py)',
+                localYoloUrl: 'Server URL'
             },
             integrateModel: {
                 title: 'Integrate AI Model',

@@ -1,6 +1,5 @@
 import { Action } from '../Actions';
 import { AIActionTypes, RoboflowAPIDetails } from './types';
-import { SegmentationResult, SegmentationAPIConfig } from '../../ai/SegmentationAPIDetector';
 
 export function updateSuggestedLabelList(labelList: string[]): AIActionTypes {
     return {
@@ -65,24 +64,6 @@ export function updateRoboflowAPIDetails(roboflowAPIDetails: RoboflowAPIDetails)
     }
 }
 
-export function updateSegmentationResults(segmentationResults: SegmentationResult[]): AIActionTypes {
-    return {
-        type: Action.UPDATE_SEGMENTATION_RESULTS,
-        payload: {
-            segmentationResults
-        }
-    }
-}
-
-export function updateSegmentationAPIConfig(segmentationAPIConfig: SegmentationAPIConfig): AIActionTypes {
-    return {
-        type: Action.UPDATE_SEGMENTATION_API_CONFIG,
-        payload: {
-            segmentationAPIConfig
-        }
-    }
-}
-
 export function updateFullImageInferenceStatus(isFullImageInferenceInProgress: boolean): AIActionTypes {
     return {
         type: Action.UPDATE_FULL_IMAGE_INFERENCE_STATUS,
@@ -101,7 +82,7 @@ export function toggleImageAILabelsVisibility(imageId: string): AIActionTypes {
     }
 }
 
-export function addInferenceHistory(imageId: string, detectedCount: number, success: boolean = true, type: 'detection' | 'segmentation' = 'detection'): AIActionTypes {
+export function addInferenceHistory(imageId: string, detectedCount: number, success: boolean = true, type: 'detection' = 'detection'): AIActionTypes {
     return {
         type: Action.ADD_INFERENCE_HISTORY,
         payload: {
