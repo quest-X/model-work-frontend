@@ -3,17 +3,10 @@ import './LoadYOLOv5ModelPopup.scss'
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
 import {PopupActions} from '../../../logic/actions/PopupActions';
 import {ImageButton} from '../../Common/ImageButton/ImageButton';
-import {
-    ModelConfig,
-    YOLO_V5_M_COCO_MODEL_CONFIG,
-    YOLO_V5_N_COCO_MODEL_CONFIG,
-    YOLO_V5_S_COCO_MODEL_CONFIG
-} from 'yolov5js'
 import {AppState} from '../../../store';
 import {connect} from 'react-redux';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {GeneralActionTypes} from '../../../store/general/types';
-import {YOLOV5ObjectDetector} from '../../../ai/YOLOV5ObjectDetector';
 import {updateActivePopupType} from '../../../store/general/actionCreators';
 import {submitNewNotification} from '../../../store/notifications/actionCreators';
 import {INotification, NotificationsActionType} from '../../../store/notifications/types';
@@ -23,39 +16,25 @@ import {Notification} from '../../../data/enums/Notification';
 import {CSSHelper} from '../../../logic/helpers/CSSHelper';
 import {ClipLoader} from 'react-spinners';
 import {useDropzone} from 'react-dropzone';
-import {YOLOUtils} from '../../../logic/import/yolo/YOLOUtils';
-import {LabelName} from '../../../store/labels/types';
-import {LabelNamesNotUniqueError} from '../../../logic/import/yolo/YOLOErrors';
+import {DetectionAPIDetector} from '../../../ai/DetectionAPIDetector';
+import {AIDetectionActions} from '../../../logic/actions/AIDetectionActions';
+import {ImageData} from '../../../store/labels/types';
+import {LabelsSelector} from '../../../store/selectors/LabelsSelector';
+import {getSelectedModelFamily, getServerUrl} from '../LoadModelPopup/LoadModelPopup';
 
 enum ModelSource {
-    DOWNLOAD = 'DOWNLOAD',
-    UPLOAD = 'UPLOAD'
+    UPLOAD = 'UPLOAD',
+    OFFICIAL = 'OFFICIAL'
 }
 
-enum PretrainedModel {
-    YOLO_V5_N_COCO = 'YOLO_V5_N_COCO',
-    YOLO_V5_S_COCO = 'YOLO_V5_S_COCO',
-    YOLO_V5_M_COCO = 'YOLO_V5_M_COCO'
-}
+const VARIANT_LABELS: Record<string, string> = {
+    'n': 'Nano', 's': 'Small', 'm': 'Medium', 'l': 'Large', 'x': 'Extra Large',
+    't': 'Tiny', 'c': 'Compact', 'e': 'Extended'
+};
 
-interface IPretrainedModelSpecification {
-    config: ModelConfig,
-    name: string
-}
-
-const PretrainedModelDataMap: Record<PretrainedModel, IPretrainedModelSpecification> = {
-    [PretrainedModel.YOLO_V5_N_COCO]: {
-        config: YOLO_V5_N_COCO_MODEL_CONFIG,
-        name: 'YOLOv5n / COCO'
-    },
-    [PretrainedModel.YOLO_V5_S_COCO]: {
-        config: YOLO_V5_S_COCO_MODEL_CONFIG,
-        name: 'YOLOv5s / COCO'
-    },
-    [PretrainedModel.YOLO_V5_M_COCO]: {
-        config: YOLO_V5_M_COCO_MODEL_CONFIG,
-        name: 'YOLOv5m / COCO'
-    }
+function getVariantLabel(variant: string): string {
+    const suffix = variant.replace(/^.*?(\w)$/, '$1');
+    return VARIANT_LABELS[suffix] || suffix.toUpperCase();
 }
 
 interface IProps {
@@ -64,71 +43,90 @@ interface IProps {
 }
 
 const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, submitNewNotificationAction }) => {
+    const modelFamily = getSelectedModelFamily();
+    const serverUrl = getServerUrl();
+    const variants = modelFamily?.variants || [];
 
-    // BUSINESS LOGIC
-
-    const [modelSource, setModelSource] = useState(ModelSource.UPLOAD);
-    const [selectedPretrainedModel, setSelectedPretrainedModel] = useState(PretrainedModel.YOLO_V5_N_COCO);
+    const [modelSource, setModelSource] = useState(ModelSource.OFFICIAL);
+    const [selectedVariant, setSelectedVariant] = useState(variants[0] || '');
     const [isLoading, setIsLoading] = useState(false);
-    const [modelFiles, setModeFiles] = useState([]);
-    const [classNames, setClassNames] = useState([]);
+    const [modelFile, setModelFile] = useState<File | null>(null);
 
     const onDrop = (accepted: File[]) => {
-        const jsonFiles = accepted.filter((file: File) => file.name.endsWith('json'));
-        const binFiles = accepted.filter((file: File) => file.name.endsWith('bin'));
-        const txtFiles = accepted.filter((file: File) => file.name.endsWith('txt'));
-
-        if (txtFiles.length === 0) {
-            submitNewNotificationAction(NotificationUtil.createErrorNotification(
-                NotificationsDataMap[Notification.LABELS_FILE_UPLOAD_ERROR]))
+        const ptFiles = accepted.filter((f: File) => f.name.endsWith('.pt'));
+        if (ptFiles.length > 0) {
+            setModelFile(ptFiles[0]);
         }
+    };
 
-        if (jsonFiles.length === 1 && txtFiles.length === 1 && binFiles.length > 0) {
-            const onSuccess = (labels: LabelName[]) => {
-                setClassNames(labels)
-                setModeFiles([...jsonFiles, ...binFiles])
+    const {getRootProps, getInputProps} = useDropzone({onDrop});
+
+    const triggerDetection = () => {
+        const detectUrl = serverUrl.replace(/\/+$/, '') + '/detect';
+        DetectionAPIDetector.setConfig({ url: detectUrl, enabled: true });
+        PopupActions.close();
+        try {
+            const activeImageData: ImageData = LabelsSelector.getActiveImageData();
+            if (activeImageData) {
+                AIDetectionActions.detectObjects(activeImageData);
             }
-            const onFailure = (error) => {
-                if (error instanceof LabelNamesNotUniqueError) {
-                    submitNewNotificationAction(NotificationUtil
-                        .createErrorNotification(NotificationsDataMap[Notification.NON_UNIQUE_LABEL_NAMES_ERROR]));
+        } catch {
+            // No active image
+        }
+    };
+
+    const onAccept = async () => {
+        setIsLoading(true);
+
+        if (modelSource === ModelSource.OFFICIAL) {
+            // Call server to load official model
+            try {
+                const res = await fetch(`${serverUrl}/load-model`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: `${selectedVariant}.pt` })
+                });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.detail || res.statusText);
                 }
+                triggerDetection();
+            } catch (e) {
+                setIsLoading(false);
+                submitNewNotificationAction(NotificationUtil.createErrorNotification(
+                    NotificationsDataMap[Notification.MODEL_DOWNLOAD_ERROR]));
             }
-            YOLOUtils.loadLabelsList(txtFiles[0], onSuccess, onFailure)
-        }
-    }
-
-    const {acceptedFiles, getRootProps, getInputProps} = useDropzone({ onDrop });
-
-    const onAccept = () => {
-        const onSuccess = () => {
-            PopupActions.close();
-        }
-        const onFailure = () => {
-            setIsLoading(false)
-            const notification = modelSource === ModelSource.UPLOAD ?
-                Notification.MODEL_LOAD_ERROR : Notification.MODEL_DOWNLOAD_ERROR
-            submitNewNotificationAction(NotificationUtil.createErrorNotification(NotificationsDataMap[notification]
-            ))
-        }
-        setIsLoading(true)
-        if (modelSource === ModelSource.DOWNLOAD) {
-            YOLOV5ObjectDetector.loadModel(PretrainedModelDataMap[selectedPretrainedModel].config, onSuccess, onFailure)
         } else {
-            const config = { source: modelFiles, classNames: classNames.map((className: LabelName) => className.name) }
-            YOLOV5ObjectDetector.loadModel(config, onSuccess, onFailure)
+            // Upload custom .pt file
+            if (!modelFile) return;
+            const formData = new FormData();
+            formData.append('file', modelFile);
+            try {
+                const res = await fetch(`${serverUrl}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.detail || res.statusText);
+                }
+                triggerDetection();
+            } catch (e) {
+                setIsLoading(false);
+                submitNewNotificationAction(NotificationUtil.createErrorNotification(
+                    NotificationsDataMap[Notification.MODEL_LOAD_ERROR]));
+            }
         }
-    }
+    };
 
     const onReject = () => {
         updateActivePopupTypeAction(PopupWindowType.LOAD_AI_MODEL);
-    }
+    };
 
     const changeModelSource = (source: ModelSource) => {
-        setModelSource(source)
-        setModeFiles([])
-        setClassNames([])
-    }
+        setModelSource(source);
+        setModelFile(null);
+    };
 
     // RENDER
 
@@ -136,7 +134,7 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
         return(<div className='left-container'>
             <ImageButton
                 image={'ico/upload.png'}
-                imageAlt={'upload model weights'}
+                imageAlt={'upload custom model'}
                 buttonSize={{ width: 40, height: 40 }}
                 padding={15}
                 onClick={() => changeModelSource(ModelSource.UPLOAD)}
@@ -145,54 +143,42 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
             />
             <ImageButton
                 image={'ico/download.png'}
-                imageAlt={'download model weights'}
+                imageAlt={'official models'}
                 buttonSize={{ width: 40, height: 40 }}
                 padding={15}
-                onClick={() => changeModelSource(ModelSource.DOWNLOAD)}
+                onClick={() => changeModelSource(ModelSource.OFFICIAL)}
                 externalClassName={'monochrome'}
-                isActive={modelSource === ModelSource.DOWNLOAD}
+                isActive={modelSource === ModelSource.OFFICIAL}
             />
         </div>)
-    }
-
-    const getOptionsContent = () => {
-        return Object.entries(PretrainedModelDataMap).map(([key, value]) => {
-            return <div
-                className='options-item'
-                onClick={() => setSelectedPretrainedModel(key as PretrainedModel)}
-                key={key}
-            >
-                {key === selectedPretrainedModel ?
-                    <img
-                        draggable={false}
-                        src={'ico/checkbox-checked.png'}
-                        alt={'checked'}
-                    /> :
-                    <img
-                        draggable={false}
-                        src={'ico/checkbox-unchecked.png'}
-                        alt={'unchecked'}
-                    />}
-                {value.name}
-            </div>
-        })
-    }
+    };
 
     const renderOptions = () => {
         return(<div className='options'>
-            {getOptionsContent()}
+            {variants.map((variant) => (
+                <div
+                    className='options-item'
+                    onClick={() => setSelectedVariant(variant)}
+                    key={variant}
+                >
+                    <img
+                        draggable={false}
+                        src={variant === selectedVariant ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'}
+                        alt={variant === selectedVariant ? 'checked' : 'unchecked'}
+                    />
+                    {variant} ({getVariantLabel(variant)})
+                </div>
+            ))}
         </div>)
-    }
+    };
 
     const renderMessage = () => {
-        const uploadMessage: string = 'Drag and drop your own YOLOv5 model converted to tensorflow.js format and ' +
-            'speed up annotation process. Make sure to upload all required files: model.json, model shards as well ' +
-            'as .txt containing list of detected classes names.'
-        const downloadMessage: string = 'Use one of ours pretrained YOLOv5 models to speed up annotation process.'
+        const uploadMessage = `拖拽自定义 .pt 模型文件到下方区域，上传到推理服务器使用。`;
+        const officialMessage = `选择 ${modelFamily?.name || 'YOLO'} 官方预训练模型变体，服务器将自动下载并加载。`;
         return(<div className='message'>
-            {modelSource === ModelSource.DOWNLOAD ? downloadMessage : uploadMessage}
+            {modelSource === ModelSource.OFFICIAL ? officialMessage : uploadMessage}
         </div>)
-    }
+    };
 
     const renderLoader = () => {
         return(<div className='loader'>
@@ -202,45 +188,31 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                 loading={true}
             />
         </div>)
-    }
-
-    const getDropZoneContent = () => {
-        if (modelFiles.length === 0 && classNames.length === 0) {
-            return <>
-                <input {...getInputProps()} />
-                <img
-                    draggable={false}
-                    alt={'upload'}
-                    src={'ico/box-opened.png'}
-                />
-                <p className='extraBold'>Drop model files</p>
-                <p>or</p>
-                <p className='extraBold'>Click here to select them</p>
-            </>;
-        } else {
-            return <>
-                <input {...getInputProps()} />
-                <img
-                    draggable={false}
-                    alt={'uploaded'}
-                    src={'ico/box-closed.png'}
-                />
-                <p className='extraBold'>{modelFiles.length} model files</p>
-                <p className='extraBold'>{classNames.length} class names</p>
-            </>;
-        }
-
-    }
+    };
 
     const renderDropZone = () => {
+        const hasFile = modelFile !== null;
         return(<div {...getRootProps({ className: 'drop-zone' })}>
-            {getDropZoneContent()}
+            <input {...getInputProps()} />
+            <img
+                draggable={false}
+                alt={hasFile ? 'uploaded' : 'upload'}
+                src={hasFile ? 'ico/box-closed.png' : 'ico/box-opened.png'}
+            />
+            {hasFile ? <>
+                <p className='extraBold'>{modelFile.name}</p>
+                <p>{(modelFile.size / 1024 / 1024).toFixed(1)} MB</p>
+            </> : <>
+                <p className='extraBold'>拖拽 .pt 模型文件</p>
+                <p>或</p>
+                <p className='extraBold'>点击此处选择文件</p>
+            </>}
         </div>)
-    }
+    };
 
     const renderContent = () => {
-        const shouldRenderDropZone = !isLoading && modelSource === ModelSource.UPLOAD
-        const shouldRenderOptions = !isLoading && modelSource === ModelSource.DOWNLOAD
+        const shouldRenderDropZone = !isLoading && modelSource === ModelSource.UPLOAD;
+        const shouldRenderOptions = !isLoading && modelSource === ModelSource.OFFICIAL;
         return (<div className='load-yolo-v5-model-popup'>
             {renderMenu()}
             <div className='right-container'>
@@ -250,19 +222,22 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                 {shouldRenderDropZone && renderDropZone()}
             </div>
         </div>);
-    }
+    };
 
-    const disableAcceptButton = modelSource === ModelSource.UPLOAD &&
-        (modelFiles.length === 0 || classNames.length === 0)
+    const disableAcceptButton = isLoading ||
+        (modelSource === ModelSource.UPLOAD && !modelFile) ||
+        (modelSource === ModelSource.OFFICIAL && !selectedVariant);
+
+    const title = modelFamily ? `加载 ${modelFamily.name.split('/')[1]?.toUpperCase() || modelFamily.id} 模型` : '加载模型';
 
     return (
         <GenericYesNoPopup
-            title={'Load YOLOv5 model'}
+            title={title}
             renderContent={renderContent}
             disableAcceptButton={disableAcceptButton}
-            acceptLabel={'Use model!'}
+            acceptLabel={'使用模型'}
             onAccept={onAccept}
-            rejectLabel={'Back'}
+            rejectLabel={'返回'}
             onReject={onReject}
         />
     );

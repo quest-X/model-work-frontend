@@ -41,6 +41,7 @@ _iou_threshold: float = 0.45
 
 
 def load_model(model_path: str) -> None:
+    """加载本地 .pt 文件"""
     global _model, _model_name
     path = Path(model_path)
     if not path.exists():
@@ -48,6 +49,15 @@ def load_model(model_path: str) -> None:
     print(f"[OpenSight] 加载模型: {path.name} ...")
     _model = YOLO(str(path))
     _model_name = path.name
+    print(f"[OpenSight] 模型加载完成: {_model_name}")
+
+
+def load_model_by_name(name: str) -> None:
+    """按名称加载 ultralytics 模型（自动下载）"""
+    global _model, _model_name
+    print(f"[OpenSight] 加载模型: {name} ...")
+    _model = YOLO(name)
+    _model_name = name
     print(f"[OpenSight] 模型加载完成: {_model_name}")
 
 
@@ -107,6 +117,25 @@ async def detect(file: UploadFile = File(...)):
         "status": "success",
         "total": len(detections),
         "results": detections,
+    }
+
+
+from pydantic import BaseModel
+
+class LoadModelRequest(BaseModel):
+    model: str = "yolo11n.pt"
+
+@app.post("/load-model")
+async def load_model_endpoint(req: LoadModelRequest):
+    """按名称加载 ultralytics 官方模型（自动下载）"""
+    try:
+        load_model_by_name(req.model)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"模型加载失败: {e}")
+    return {
+        "status": "success",
+        "model": _model_name,
+        "message": f"模型 {_model_name} 已加载",
     }
 
 

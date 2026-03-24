@@ -19,19 +19,16 @@ export const NotificationsDataMap: ExportFormatDataMap = {
             ' data export when you complete your work. Make your names unique and try again.'
     },
     [Notification.MODEL_DOWNLOAD_ERROR]: {
-        header: 'Model could not be downloaded',
-        description: 'Looks like we ware unable to download tensorflow.js model from external server. Make sure that ' +
-            'you are connected to internet and try again.'
+        header: '模型加载失败',
+        description: '无法连接推理服务器或模型下载失败。请确认 detect_server.py 已启动，且服务地址正确。'
     },
     [Notification.MODEL_INFERENCE_ERROR]: {
-        header: 'Inference failed',
-        description: 'Looks like we were unable to run inference of your image. Please help us improve Make Sense ' +
-            'and let us know.'
+        header: '推理失败',
+        description: '无法对当前图片执行推理。请检查推理服务器是否正常运行，或更换模型后重试。'
     },
     [Notification.MODEL_LOAD_ERROR]: {
-        header: 'Model could not be loaded',
-        description: 'Looks like we ware unable to load your tensorflow.js model from uploaded files. Make sure that ' +
-            'you uploaded all model shard files. Please re-upload all model files once again.'
+        header: '模型上传失败',
+        description: '无法将 .pt 模型文件上传到推理服务器。请确认服务器已启动且文件格式正确。'
     },
     [Notification.LABELS_FILE_UPLOAD_ERROR]: {
         header: 'Labels file was not uploaded',

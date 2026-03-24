@@ -1,46 +1,36 @@
 import React, {useState} from 'react';
 import {PopupActions} from '../../../logic/actions/PopupActions';
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
-import {SSDObjectDetector} from '../../../ai/SSDObjectDetector';
 import './LoadModelPopup.scss'
-import {ClipLoader} from 'react-spinners';
-import {AIModel} from '../../../data/enums/AIModel';
-import {PoseDetector} from '../../../ai/PoseDetector';
-import {findLast} from 'lodash';
-import {CSSHelper} from '../../../logic/helpers/CSSHelper';
 import {updateActivePopupType as storeUpdateActivePopupType} from '../../../store/general/actionCreators';
 import {AppState} from '../../../store';
 import {connect} from 'react-redux';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {GeneralActionTypes} from '../../../store/general/types';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
+import {StyledTextField} from '../../Common/StyledTextField/StyledTextField';
 
-interface SelectableModel {
-    model: AIModel,
-    name: string,
-    flag: boolean
+export interface YOLOModelFamily {
+    id: string;
+    name: string;
+    variants: string[];
 }
 
-const getModels = (language: Language): SelectableModel[] => {
-    const texts = LanguageConfig[language];
-    return [
-        {
-            model: AIModel.YOLO_V5_OBJECT_DETECTION,
-            name: texts.popups.loadModel.models.yolov5,
-            flag: false
-        },
-        {
-            model: AIModel.SSD_OBJECT_DETECTION,
-            name: texts.popups.loadModel.models.ssd,
-            flag: false
-        },
-        {
-            model: AIModel.POSE_DETECTION,
-            name: texts.popups.loadModel.models.posenet,
-            flag: false
-        }
-    ];
-};
+export const YOLO_MODEL_FAMILIES: YOLOModelFamily[] = [
+    { id: 'yolo26', name: 'ultralytics/yolo26', variants: ['yolo26n', 'yolo26s', 'yolo26m', 'yolo26l', 'yolo26x'] },
+    { id: 'yolo12', name: 'ultralytics/yolo12', variants: ['yolo12n', 'yolo12s', 'yolo12m', 'yolo12l', 'yolo12x'] },
+    { id: 'yolo11', name: 'ultralytics/yolo11', variants: ['yolo11n', 'yolo11s', 'yolo11m', 'yolo11l', 'yolo11x'] },
+    { id: 'yolov10', name: 'ultralytics/yolov10', variants: ['yolov10n', 'yolov10s', 'yolov10m', 'yolov10l', 'yolov10x'] },
+    { id: 'yolov9', name: 'ultralytics/yolov9', variants: ['yolov9t', 'yolov9s', 'yolov9m', 'yolov9c', 'yolov9e'] },
+    { id: 'yolov8', name: 'ultralytics/yolov8', variants: ['yolov8n', 'yolov8s', 'yolov8m', 'yolov8l', 'yolov8x'] },
+];
+
+// Module-level state shared between LoadModelPopup and LoadYOLOModelPopup
+let _selectedModelFamily: YOLOModelFamily | null = null;
+let _serverUrl: string = 'http://localhost:8000';
+
+export const getSelectedModelFamily = (): YOLOModelFamily | null => _selectedModelFamily;
+export const getServerUrl = (): string => _serverUrl;
 
 interface IProps {
     updateActivePopupType: (activePopupType: PopupWindowType) => GeneralActionTypes;
@@ -49,78 +39,41 @@ interface IProps {
 
 const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) => {
     const currentTexts = LanguageConfig[language];
-    const [modelIsLoadingStatus, setModelIsLoadingStatus] = useState(false);
-    const [selectedModelToLoad, updateSelectedModelToLoad] = useState(getModels(language));
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [serverUrl, setServerUrl] = useState(_serverUrl);
 
-    const extractSelectedModel = (): AIModel => {
-        const model: SelectableModel = findLast(selectedModelToLoad, { flag: true });
-        if (!!model) {
-            return model.model
-        } else {
-            return null;
-        }
+    const onSelect = (id: string) => {
+        setSelectedId(selectedId === id ? null : id);
     };
 
     const onAccept = () => {
-        setModelIsLoadingStatus(true);
-        switch (extractSelectedModel()) {
-            case AIModel.POSE_DETECTION:
-                PoseDetector.loadModel(() => {
-                    PopupActions.close();
-                });
-                break;
-            case AIModel.SSD_OBJECT_DETECTION:
-                SSDObjectDetector.loadModel(() => {
-                    PopupActions.close();
-                });
-                break;
-            case AIModel.YOLO_V5_OBJECT_DETECTION:
-                updateActivePopupType(PopupWindowType.LOAD_YOLO_V5_MODEL);
-                break;
-        }
-    };
-
-    const onSelect = (selectedModel: AIModel) => {
-        const nextSelectedModelToLoad: SelectableModel[] = selectedModelToLoad.map((model: SelectableModel) => {
-            if (model.model === selectedModel)
-                return {
-                    ...model,
-                    flag: !model.flag
-                };
-            else
-                return {
-                    ...model,
-                    flag: false
-                };
-        });
-        updateSelectedModelToLoad(nextSelectedModelToLoad);
-    };
-
-    const getOptions = () => {
-        return selectedModelToLoad.map((entry: SelectableModel) => {
-            return <div
-                className='OptionsItem'
-                onClick={() => onSelect(entry.model)}
-                key={entry.model}
-            >
-                {entry.flag ?
-                    <img
-                        draggable={false}
-                        src={'ico/checkbox-checked.png'}
-                        alt={'checked'}
-                    /> :
-                    <img
-                        draggable={false}
-                        src={'ico/checkbox-unchecked.png'}
-                        alt={'unchecked'}
-                    />}
-                {entry.name}
-            </div>
-        })
+        const family = YOLO_MODEL_FAMILIES.find(f => f.id === selectedId);
+        if (!family) return;
+        _selectedModelFamily = family;
+        _serverUrl = serverUrl;
+        updateActivePopupType(PopupWindowType.LOAD_YOLO_V5_MODEL);
     };
 
     const onReject = () => {
         PopupActions.close();
+    };
+
+    const getOptions = () => {
+        return YOLO_MODEL_FAMILIES.map((family) => {
+            const isSelected = selectedId === family.id;
+            return <div
+                className='OptionsItem'
+                onClick={() => onSelect(family.id)}
+                key={family.id}
+            >
+                <img
+                    draggable={false}
+                    src={isSelected ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'}
+                    alt={isSelected ? 'checked' : 'unchecked'}
+                />
+                {family.name} - 检测模型
+            </div>
+        })
     };
 
     const renderContent = () => {
@@ -129,16 +82,23 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
                 {currentTexts.popups.loadModel.welcomeMessage}
             </div>
             <div className='Companion'>
-                {modelIsLoadingStatus ?
-                    <ClipLoader
-                        size={40}
-                        color={CSSHelper.getLeadingColor()}
-                        loading={true}
-                    /> :
-                    <div className='Options'>
-                        {getOptions()}
-                    </div>
-                }
+                <div className='Options'>
+                    {getOptions()}
+                </div>
+            </div>
+            <div className='ServerConfig'>
+                <StyledTextField
+                    variant='standard'
+                    id={'server-url'}
+                    autoComplete={'off'}
+                    type={'text'}
+                    margin={'dense'}
+                    label={'推理服务地址'}
+                    value={serverUrl}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setServerUrl(e.target.value)}
+                    style={{ width: 300 }}
+                    InputLabelProps={{ shrink: true }}
+                />
             </div>
         </div>
     };
@@ -149,10 +109,9 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
             renderContent={renderContent}
             acceptLabel={currentTexts.popups.loadModel.acceptButton}
             onAccept={onAccept}
-            disableAcceptButton={modelIsLoadingStatus || !extractSelectedModel()}
+            disableAcceptButton={!selectedId || serverUrl === ''}
             rejectLabel={currentTexts.popups.loadModel.rejectButton}
             onReject={onReject}
-            disableRejectButton={modelIsLoadingStatus}
         />
     );
 };
