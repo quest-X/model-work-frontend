@@ -43,11 +43,16 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
     const [serverUrl, setServerUrl] = useState(_serverUrl);
 
     const [availableModels, setAvailableModels] = useState<string[]>([]);
+    const [currentModelName, setCurrentModelName] = useState<string>('');
 
     useEffect(() => {
         fetch(`${serverUrl}/available-models`)
             .then(r => r.json())
             .then(data => { if (data.models) setAvailableModels(data.models); })
+            .catch(() => {});
+        fetch(`${serverUrl}/health`)
+            .then(r => r.json())
+            .then(data => { if (data.model && data.model !== 'none') setCurrentModelName(data.model); })
             .catch(() => {});
     }, [serverUrl]);
 
@@ -71,13 +76,20 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
         PopupActions.close();
     };
 
+    const isActiveFamily = (family: YOLOModelFamily): boolean => {
+        if (!currentModelName) return false;
+        const baseName = currentModelName.replace('.pt', '');
+        return family.variants.some(v => v === baseName);
+    };
+
     const getOptions = () => {
         return YOLO_MODEL_FAMILIES.map((family) => {
             const isSelected = selectedId === family.id;
             const downloaded = getDownloadedCount(family);
             const total = family.variants.length;
+            const isActive = isActiveFamily(family);
             return <div
-                className={`OptionsItem${downloaded > 0 ? ' has-models' : ''}`}
+                className={`OptionsItem${downloaded > 0 ? ' has-models' : ''}${isActive ? ' active-model' : ''}`}
                 onClick={() => onSelect(family.id)}
                 key={family.id}
             >
@@ -88,6 +100,7 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
                 />
                 {family.name} - 检测模型
                 {downloaded > 0 && <span className='model-count'> ({downloaded}/{total})</span>}
+                {isActive && <span className='active-badge'>✓ {currentModelName.replace('.pt', '')}</span>}
             </div>
         })
     };

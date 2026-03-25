@@ -54,10 +54,14 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
     const [loadState, setLoadState] = useState('');
     const [modelFile, setModelFile] = useState<File | null>(null);
     const [loadedModel, setLoadedModel] = useState<string>('');
+    const [downloadedModels, setDownloadedModels] = useState<string[]>([]);
 
     useEffect(() => {
         fetch(`${serverUrl}/health`).then(r => r.json())
             .then(data => { if (data.model) setLoadedModel(data.model.replace(/\.pt$/, '')); })
+            .catch(() => {});
+        fetch(`${serverUrl}/available-models`).then(r => r.json())
+            .then(data => { if (data.models) setDownloadedModels(data.models); })
             .catch(() => {});
     }, [serverUrl]);
 
@@ -194,10 +198,12 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
     const renderOptions = () => {
         return(<div className='options'>
             {variants.map((variant) => {
-                const isLoaded = loadedModel === variant;
+                const isActive = loadedModel === variant;
+                const isDownloaded = downloadedModels.includes(variant);
+                const classes = `options-item${isActive ? ' active' : isDownloaded ? ' downloaded' : ''}`;
                 return (
                     <div
-                        className={`options-item${isLoaded ? ' loaded' : ''}`}
+                        className={classes}
                         onClick={() => setSelectedVariant(variant)}
                         key={variant}
                     >
@@ -206,7 +212,9 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                             src={variant === selectedVariant ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'}
                             alt={variant === selectedVariant ? 'checked' : 'unchecked'}
                         />
-                        {variant} ({getVariantLabel(variant)}){isLoaded ? ' ✓' : ''}
+                        <span className='variant-name'>{variant} ({getVariantLabel(variant)})</span>
+                        {isActive && <span className='status-badge active-badge'>使用中</span>}
+                        {!isActive && isDownloaded && <span className='status-badge downloaded-badge'>已下载</span>}
                     </div>
                 );
             })}

@@ -192,6 +192,65 @@
         }
       }
 
+      .LocalModelsSection {
+        border-top: solid 1px $darkThemeFirstColor;
+
+        .SectionTitle {
+          color: white;
+          font-size: 13px;
+          font-weight: 600;
+          padding: 15px 20px 10px 20px;
+          border-bottom: solid 1px $darkThemeFirstColor;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+
+          .ManageLink {
+            font-size: 12px;
+            font-weight: 400;
+            color: $primaryColor;
+            cursor: pointer;
+            &:hover {
+              text-decoration: underline;
+            }
+          }
+        }
+
+        .LocalModelsList {
+          padding: 6px 0;
+
+          .LocalModelEntry {
+            display: flex;
+            align-items: center;
+            padding: 8px 20px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 13px;
+
+            &.has-models {
+              color: white;
+            }
+
+            .LocalModelName {
+              flex: 1;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .LocalModelStatus {
+              .downloaded {
+                color: $primaryColor;
+                font-weight: 600;
+                font-size: 12px;
+              }
+              .none {
+                color: rgba(255, 255, 255, 0.3);
+              }
+            }
+          }
+        }
+      }
+
       .ModelDetailsContainer {
         width: 50%;
         display: flex;

@@ -129,7 +129,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus}
             />
             <SelectAllButton />
-            <div className='VersionWatermark'>v1.0.0(S)</div>
+            <div className='VersionWatermark'>v1.0.1-Release</div>
         </>
     };
 

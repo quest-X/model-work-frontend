@@ -25,6 +25,7 @@ interface IProps {
 const TopNavigationBar: React.FC<IProps> = (props) => {
     const currentTexts = LanguageConfig[props.language];
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
+    const [showModelsDropdown, setShowModelsDropdown] = useState(false);
     const [canvasCenterX, setCanvasCenterX] = useState<number | null>(null);
     const lastCenterRef = useRef<number | null>(null);
 
@@ -69,10 +70,20 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
     
     const openLoadMoreImagesPopup = () => props.updateActivePopupTypeAction(PopupWindowType.IMPORT_IMAGES)
 
-    const openAIModelPopup = () => {
+    const toggleModelsDropdown = () => {
+        setShowModelsDropdown(!showModelsDropdown);
+    };
+
+    const openRemoteModelManager = () => {
+        setShowModelsDropdown(false);
         const popupType = props.hasAIModels ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.INTEGRATE_AI_MODEL;
         props.updateActivePopupTypeAction(popupType);
-    }
+    };
+
+    const openLocalModelManager = () => {
+        setShowModelsDropdown(false);
+        props.updateActivePopupTypeAction(PopupWindowType.LOAD_AI_MODEL);
+    };
 
     const toggleLanguage = () => {
         const newLanguage = props.language === Language.CHINESE ? Language.ENGLISH : Language.CHINESE;
@@ -101,6 +112,23 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
         };
     }, [showActionsDropdown]);
 
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as Element;
+            if (!target.closest('.ModelsDropdownContainer')) {
+                setShowModelsDropdown(false);
+            }
+        };
+
+        if (showModelsDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showModelsDropdown]);
+
     return (
         <div className='TopNavigationBar'>
             <StateBar/>
@@ -125,11 +153,29 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                         />
                         {showActionsDropdown && <DropDownMenu isVisible={true}/>}
                     </div>
-                    <TextButton
-                        label={currentTexts.actions.integrateAIModel.name}
-                        onClick={openAIModelPopup}
-                        externalClassName={'ai-model-button'}
-                    />
+                    <div className='ModelsDropdownContainer'>
+                        <TextButton
+                            label={currentTexts.actions.integrateAIModel.name}
+                            onClick={toggleModelsDropdown}
+                            externalClassName={'ai-model-button'}
+                        />
+                        {showModelsDropdown && (
+                            <div className='DropDownMenuContent ModelsDropdown'>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openRemoteModelManager}>
+                                    <div className='Marker'/>
+                                    <img src='ico/api.png' alt='remote-models'/>
+                                    {props.language === Language.CHINESE ? '远程模型' : 'Remote Models'}
+                                </div>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openLocalModelManager}>
+                                    <div className='Marker'/>
+                                    <img src='ico/ai.png' alt='local-models'/>
+                                    {props.language === Language.CHINESE ? '本地模型' : 'Local Models'}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
                 <div
                     className='ProjectNameContainer'

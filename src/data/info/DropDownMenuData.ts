@@ -55,14 +55,6 @@ export const getDropDownMenuData = (language: Language): DropDownMenuNode[] => {
                     disabled: false,
                     onClick: () => store.dispatch(updateActivePopupType(PopupWindowType.EXPORT_ANNOTATIONS))
                 },
-                {
-                    name: texts.actions.runAILocally.name,
-                    description: texts.actions.runAILocally.description,
-                    imageSrc: 'ico/ai.png',
-                    imageAlt: 'load-ai-model-in-browser',
-                    disabled: false,
-                    onClick: () => store.dispatch(updateActivePopupType(PopupWindowType.LOAD_AI_MODEL))
-                },
             ]
         }
         // Community 部分已移除

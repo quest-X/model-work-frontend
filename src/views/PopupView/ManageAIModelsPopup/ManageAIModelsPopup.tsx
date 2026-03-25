@@ -12,6 +12,7 @@ import { AIModel } from '../../../store/aimodels/types';
 import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { v4 as uuidv4 } from 'uuid';
 import { StyledTextField } from '../../Common/StyledTextField/StyledTextField';
+import { YOLO_MODEL_FAMILIES, getServerUrl } from '../LoadModelPopup/LoadModelPopup';
 
 interface IProps {
     updateActivePopupTypeAction: (activePopupType: PopupWindowType) => any;
@@ -88,6 +89,57 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
     const cancelEditing = () => {
         setIsEditing(false);
         setEditingModel(null);
+    };
+
+    // 本地模型状态
+    const [availableLocalModels, setAvailableLocalModels] = useState<string[]>([]);
+
+    useEffect(() => {
+        const serverUrl = getServerUrl();
+        fetch(`${serverUrl}/available-models`)
+            .then(r => r.json())
+            .then(data => { if (data.models) setAvailableLocalModels(data.models); })
+            .catch(() => {});
+    }, []);
+
+    const openLocalModelManager = () => {
+        updateActivePopupTypeAction(PopupWindowType.LOAD_AI_MODEL);
+    };
+
+    const getLocalDownloadedCount = (familyId: string): number => {
+        const family = YOLO_MODEL_FAMILIES.find(f => f.id === familyId);
+        if (!family) return 0;
+        return family.variants.filter(v => availableLocalModels.includes(v)).length;
+    };
+
+    const renderLocalModels = () => {
+        return (
+            <div className='LocalModelsSection'>
+                <div className='SectionTitle'>
+                    {language === Language.CHINESE ? '本地模型' : 'Local Models'}
+                    <span className='ManageLink' onClick={openLocalModelManager}>
+                        {language === Language.CHINESE ? '管理' : 'Manage'}
+                    </span>
+                </div>
+                <div className='LocalModelsList'>
+                    {YOLO_MODEL_FAMILIES.map(family => {
+                        const downloaded = getLocalDownloadedCount(family.id);
+                        return (
+                            <div key={family.id} className={`LocalModelEntry${downloaded > 0 ? ' has-models' : ''}`}>
+                                <div className='LocalModelName'>{family.name}</div>
+                                <div className='LocalModelStatus'>
+                                    {downloaded > 0 ? (
+                                        <span className='downloaded'>{downloaded}/{family.variants.length}</span>
+                                    ) : (
+                                        <span className='none'>—</span>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
     };
 
     const updateEditingField = (field: keyof AIModel, value: string) => {
@@ -279,11 +331,12 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                     <div className='ContentArea'>
                         <div className='ModelsListContainer'>
                             <div className='SectionTitle'>
-                                {language === Language.CHINESE ? '模型列表' : 'Model List'}
+                                {language === Language.CHINESE ? '远程模型' : 'Remote Models'}
                             </div>
                             <div className='ModelsContainer'>
                                 {renderModelList()}
                             </div>
+                            {renderLocalModels()}
                         </div>
                         <div className='ModelDetailsContainer'>
                             <div className='SectionTitle'>
