@@ -1,5 +1,29 @@
 import {Action} from '../Actions';
 
+// 推理结果格式（兼容检测和分割结果的统一格式）
+export interface SegmentationResult {
+    class_id: number;
+    class_name: string;
+    confidence: number;
+    info?: {
+        id: number;
+        name: string;
+        confidence: number;
+    };
+    bbox: {
+        x1: number;
+        y1: number;
+        x2: number;
+        y2: number;
+        width: number;
+        height: number;
+    };
+    mask: {
+        area: number;
+        mask_data?: [number, number][];
+    } | null;
+}
+
 export type RoboflowAPIDetails = {
     status: boolean,
     model: string,
@@ -26,6 +50,9 @@ export type AIState = {
 
     // FULL IMAGE INFERENCE STATE
     isFullImageInferenceInProgress: boolean;
+
+    // SEGMENTATION/DETECTION RESULTS
+    segmentationResults: SegmentationResult[];
     
     // AI LABELS VISIBILITY STATE - 每张图片独立
     imageAIStates: Map<string, {
@@ -113,6 +140,13 @@ interface AddInferenceHistory {
     }
 }
 
+interface UpdateSegmentationResults {
+    type: typeof Action.UPDATE_SEGMENTATION_RESULTS;
+    payload: {
+        segmentationResults: SegmentationResult[];
+    }
+}
+
 export type AIActionTypes = UpdateSuggestedLabelList
     | UpdateRejectedSuggestedLabelList
     | UpdateSSDObjectDetectorStatus
@@ -123,3 +157,4 @@ export type AIActionTypes = UpdateSuggestedLabelList
     | UpdateFullImageInferenceStatus
     | ToggleImageAILabelsVisibility
     | AddInferenceHistory
+    | UpdateSegmentationResults

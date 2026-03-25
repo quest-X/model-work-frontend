@@ -127,7 +127,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     
     // 缓存的辅助函数：检查是否有可用的检测模型（只检查用户接入的模型）
     const hasDetectionModel = useMemo(() => {
-        return AIModelsSelector.hasModelsOfType(aiModels, 'detection');
+        return AIModelsSelector.hasModelsOfType(aiModels, 'detection') || DetectionAPIDetector.isEnabled();
     }, [aiModels]);
     
     // 辅助函数：检查图片是否真的有AI生成的标签

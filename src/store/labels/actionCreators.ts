@@ -129,3 +129,10 @@ export function selectImageRange(startIndex: number, endIndex: number): LabelsAc
         }
     }
 }
+
+export function deleteImageById(id: string): LabelsActionTypes {
+    return {
+        type: Action.DELETE_IMAGE_BY_ID,
+        payload: { id }
+    }
+}

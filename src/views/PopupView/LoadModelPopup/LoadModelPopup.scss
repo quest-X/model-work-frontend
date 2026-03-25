@@ -46,6 +46,15 @@
         font-size: 15px;
         padding: 5px 0;
 
+        &.has-models {
+          color: #4caf50;
+        }
+
+        .model-count {
+          font-size: 13px;
+          opacity: 0.8;
+        }
+
         > img {
           max-width: 20px;
           max-height: 20px;

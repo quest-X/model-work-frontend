@@ -183,6 +183,13 @@ interface SelectImageRange {
     }
 }
 
+interface DeleteImageById {
+    type: typeof Action.DELETE_IMAGE_BY_ID;
+    payload: {
+        id: string;
+    }
+}
+
 export type LabelsActionTypes = UpdateActiveImageIndex
     | UpdateActiveLabelNameId
     | UpdateActiveLabelType
@@ -197,4 +204,5 @@ export type LabelsActionTypes = UpdateActiveImageIndex
     | SelectAllImages
     | ToggleImageSelection
     | SelectImageRange
+    | DeleteImageById
 

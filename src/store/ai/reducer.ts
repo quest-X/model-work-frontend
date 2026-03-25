@@ -52,6 +52,7 @@ const initialState: AIState = {
     },
     isAIDisabled: true,
     isFullImageInferenceInProgress: false,
+    segmentationResults: [],
     imageAIStates: storedAIState
 };
 
@@ -136,6 +137,12 @@ export function aiReducer(
             // 使用防抖保存，避免频繁IO操作
             debouncedSave(newState.imageAIStates);
             return newState;
+        }
+        case Action.UPDATE_SEGMENTATION_RESULTS: {
+            return {
+                ...state,
+                segmentationResults: action.payload.segmentationResults
+            }
         }
         case Action.ADD_INFERENCE_HISTORY: {
             const { imageId, timestamp, detectedCount, success, type } = action.payload;

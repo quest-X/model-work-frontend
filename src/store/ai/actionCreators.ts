@@ -1,5 +1,5 @@
 import { Action } from '../Actions';
-import { AIActionTypes, RoboflowAPIDetails } from './types';
+import { AIActionTypes, RoboflowAPIDetails, SegmentationResult } from './types';
 
 export function updateSuggestedLabelList(labelList: string[]): AIActionTypes {
     return {
@@ -78,6 +78,15 @@ export function toggleImageAILabelsVisibility(imageId: string): AIActionTypes {
         type: Action.TOGGLE_IMAGE_AI_LABELS_VISIBILITY,
         payload: {
             imageId
+        }
+    }
+}
+
+export function updateSegmentationResults(segmentationResults: SegmentationResult[]): AIActionTypes {
+    return {
+        type: Action.UPDATE_SEGMENTATION_RESULTS,
+        payload: {
+            segmentationResults
         }
     }
 }

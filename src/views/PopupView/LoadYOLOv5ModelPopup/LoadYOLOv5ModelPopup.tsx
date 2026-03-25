@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import './LoadYOLOv5ModelPopup.scss'
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
 import {PopupActions} from '../../../logic/actions/PopupActions';
@@ -50,7 +50,40 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
     const [modelSource, setModelSource] = useState(ModelSource.OFFICIAL);
     const [selectedVariant, setSelectedVariant] = useState(variants[0] || '');
     const [isLoading, setIsLoading] = useState(false);
+    const [loadProgress, setLoadProgress] = useState(0);
+    const [loadState, setLoadState] = useState('');
     const [modelFile, setModelFile] = useState<File | null>(null);
+    const [loadedModel, setLoadedModel] = useState<string>('');
+
+    useEffect(() => {
+        fetch(`${serverUrl}/health`).then(r => r.json())
+            .then(data => { if (data.model) setLoadedModel(data.model.replace(/\.pt$/, '')); })
+            .catch(() => {});
+    }, [serverUrl]);
+
+    const pollLoadStatus = (): Promise<void> => {
+        return new Promise((resolve, reject) => {
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch(`${serverUrl}/load-status`);
+                    const data = await res.json();
+                    setLoadProgress(data.progress || 0);
+                    setLoadState(data.state || '');
+                    if (data.state === 'ready') {
+                        clearInterval(interval);
+                        setLoadedModel(data.model?.replace(/\.pt$/, '') || '');
+                        resolve();
+                    } else if (data.state === 'error') {
+                        clearInterval(interval);
+                        reject(new Error(data.error || '加载失败'));
+                    }
+                } catch {
+                    clearInterval(interval);
+                    reject(new Error('无法连接服务器'));
+                }
+            }, 500);
+        });
+    };
 
     const onDrop = (accepted: File[]) => {
         const ptFiles = accepted.filter((f: File) => f.name.endsWith('.pt'));
@@ -77,9 +110,10 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
 
     const onAccept = async () => {
         setIsLoading(true);
+        setLoadProgress(0);
+        setLoadState('downloading');
 
         if (modelSource === ModelSource.OFFICIAL) {
-            // Call server to load official model
             try {
                 const res = await fetch(`${serverUrl}/load-model`, {
                     method: 'POST',
@@ -90,18 +124,20 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                     const data = await res.json().catch(() => ({}));
                     throw new Error(data.detail || res.statusText);
                 }
+                await pollLoadStatus();
                 triggerDetection();
             } catch (e) {
                 setIsLoading(false);
+                setLoadState('');
                 submitNewNotificationAction(NotificationUtil.createErrorNotification(
                     NotificationsDataMap[Notification.MODEL_DOWNLOAD_ERROR]));
             }
         } else {
-            // Upload custom .pt file
             if (!modelFile) return;
             const formData = new FormData();
             formData.append('file', modelFile);
             try {
+                setLoadProgress(30);
                 const res = await fetch(`${serverUrl}/upload`, {
                     method: 'POST',
                     body: formData
@@ -110,9 +146,11 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                     const data = await res.json().catch(() => ({}));
                     throw new Error(data.detail || res.statusText);
                 }
+                setLoadProgress(100);
                 triggerDetection();
             } catch (e) {
                 setIsLoading(false);
+                setLoadState('');
                 submitNewNotificationAction(NotificationUtil.createErrorNotification(
                     NotificationsDataMap[Notification.MODEL_LOAD_ERROR]));
             }
@@ -155,20 +193,23 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
 
     const renderOptions = () => {
         return(<div className='options'>
-            {variants.map((variant) => (
-                <div
-                    className='options-item'
-                    onClick={() => setSelectedVariant(variant)}
-                    key={variant}
-                >
-                    <img
-                        draggable={false}
-                        src={variant === selectedVariant ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'}
-                        alt={variant === selectedVariant ? 'checked' : 'unchecked'}
-                    />
-                    {variant} ({getVariantLabel(variant)})
-                </div>
-            ))}
+            {variants.map((variant) => {
+                const isLoaded = loadedModel === variant;
+                return (
+                    <div
+                        className={`options-item${isLoaded ? ' loaded' : ''}`}
+                        onClick={() => setSelectedVariant(variant)}
+                        key={variant}
+                    >
+                        <img
+                            draggable={false}
+                            src={variant === selectedVariant ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'}
+                            alt={variant === selectedVariant ? 'checked' : 'unchecked'}
+                        />
+                        {variant} ({getVariantLabel(variant)}){isLoaded ? ' ✓' : ''}
+                    </div>
+                );
+            })}
         </div>)
     };
 
@@ -180,6 +221,13 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
         </div>)
     };
 
+    const stateLabels: Record<string, string> = {
+        downloading: '正在下载模型...',
+        loading: '正在加载模型...',
+        ready: '加载完成',
+        error: '加载失败',
+    };
+
     const renderLoader = () => {
         return(<div className='loader'>
             <ClipLoader
@@ -187,6 +235,12 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                 color={CSSHelper.getLeadingColor()}
                 loading={true}
             />
+            <div className='progress-info'>
+                <p className='progress-text'>{stateLabels[loadState] || '准备中...'} {loadProgress}%</p>
+                <div className='progress-bar'>
+                    <div className='progress-fill' style={{ width: `${loadProgress}%` }} />
+                </div>
+            </div>
         </div>)
     };
 

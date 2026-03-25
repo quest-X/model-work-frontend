@@ -4,7 +4,7 @@ import {ImageData, LabelName, LabelRect} from "../../store/labels/types";
 import {LabelStatus} from "../../data/enums/LabelStatus";
 import {v4 as uuidv4} from "uuid";
 import {updateImageDataById, updateLabelNames} from "../../store/labels/actionCreators";
-import {updateFullImageInferenceStatus, addInferenceHistory, toggleImageAILabelsVisibility} from "../../store/ai/actionCreators";
+import {updateFullImageInferenceStatus, addInferenceHistory, toggleImageAILabelsVisibility, updateSegmentationResults} from "../../store/ai/actionCreators";
 import {submitNewNotification, deleteNotificationById, updateNotificationById} from "../../store/notifications/actionCreators";
 import {updatePerClassColorationStatus} from "../../store/general/actionCreators";
 import {NotificationUtil} from "../../utils/NotificationUtil";
@@ -73,9 +73,10 @@ export class AIDetectionActions {
                 
                     // 将检测结果转换为可编辑的标注框
                     this.convertDetectionResultsToLabelRects(imageData, results);
-                    
-                    // 发送事件通知UI切换到检测结果视图
-                    // 检测完成
+
+                    // 将检测结果同步到推理结果视图
+                    const segResults = DetectionAPIDetector.convertToSegmentationFormat(results);
+                    store.dispatch(updateSegmentationResults(segResults));
                     
                     // 批量更新通知，避免多次dispatch
                     queueMicrotask(() => {

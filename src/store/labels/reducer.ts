@@ -119,6 +119,22 @@ export function labelsReducer(
                 }))
             }
         }
+        case Action.DELETE_IMAGE_BY_ID: {
+            const { id } = action.payload;
+            const newImagesData = state.imagesData.filter((img: ImageData) => img.id !== id);
+            const deletedIndex = state.imagesData.findIndex((img: ImageData) => img.id === id);
+            let newActiveIndex = state.activeImageIndex;
+            if (newImagesData.length === 0) {
+                newActiveIndex = null;
+            } else if (deletedIndex <= state.activeImageIndex) {
+                newActiveIndex = Math.max(0, state.activeImageIndex - 1);
+            }
+            return {
+                ...state,
+                imagesData: newImagesData,
+                activeImageIndex: newActiveIndex
+            }
+        }
         default:
             return state;
     }

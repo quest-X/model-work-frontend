@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {PopupActions} from '../../../logic/actions/PopupActions';
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
 import './LoadModelPopup.scss'
@@ -42,6 +42,19 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [serverUrl, setServerUrl] = useState(_serverUrl);
 
+    const [availableModels, setAvailableModels] = useState<string[]>([]);
+
+    useEffect(() => {
+        fetch(`${serverUrl}/available-models`)
+            .then(r => r.json())
+            .then(data => { if (data.models) setAvailableModels(data.models); })
+            .catch(() => {});
+    }, [serverUrl]);
+
+    const getDownloadedCount = (family: YOLOModelFamily): number => {
+        return family.variants.filter(v => availableModels.includes(v)).length;
+    };
+
     const onSelect = (id: string) => {
         setSelectedId(selectedId === id ? null : id);
     };
@@ -61,8 +74,10 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
     const getOptions = () => {
         return YOLO_MODEL_FAMILIES.map((family) => {
             const isSelected = selectedId === family.id;
+            const downloaded = getDownloadedCount(family);
+            const total = family.variants.length;
             return <div
-                className='OptionsItem'
+                className={`OptionsItem${downloaded > 0 ? ' has-models' : ''}`}
                 onClick={() => onSelect(family.id)}
                 key={family.id}
             >
@@ -72,6 +87,7 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
                     alt={isSelected ? 'checked' : 'unchecked'}
                 />
                 {family.name} - 检测模型
+                {downloaded > 0 && <span className='model-count'> ({downloaded}/{total})</span>}
             </div>
         })
     };

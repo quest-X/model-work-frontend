@@ -7,7 +7,7 @@ import { IRect } from "../../../../interfaces/IRect";
 import { ISize } from "../../../../interfaces/ISize";
 import { ImageRepository } from "../../../../logic/imageRepository/ImageRepository";
 import { AppState } from "../../../../store";
-import { updateImageDataById } from "../../../../store/labels/actionCreators";
+import { updateImageDataById, deleteImageById } from "../../../../store/labels/actionCreators";
 import { ImageData } from "../../../../store/labels/types";
 import { FileUtil } from "../../../../utils/FileUtil";
 import { RectUtil } from "../../../../utils/RectUtil";
@@ -24,6 +24,7 @@ interface IProps {
     isSelected?: boolean;
     isMultiSelected?: boolean;
     updateImageDataById: (id: string, newImageData: ImageData) => any;
+    deleteImageById: (id: string) => any;
 }
 
 interface IState {
@@ -175,6 +176,15 @@ class ImagePreview extends React.Component<IProps, IState> {
                                 alt={this.state.image.alt}
                                 style={{ ...this.getStyle(), left: 0, top: 0 }}
                             />
+                            <div
+                                className="DeleteButton"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    this.props.deleteImageById(this.props.imageData.id);
+                                }}
+                            >
+                                ✕
+                            </div>
                             {isChecked && <img
                                 className="CheckBox"
                                 draggable={false}
@@ -205,7 +215,8 @@ class ImagePreview extends React.Component<IProps, IState> {
 }
 
 const mapDispatchToProps = {
-    updateImageDataById
+    updateImageDataById,
+    deleteImageById
 };
 
 const mapStateToProps = (state: AppState) => ({});

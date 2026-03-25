@@ -24,7 +24,10 @@ import {ImageDataUtil} from '../../../utils/ImageDataUtil';
 import {sortBy} from 'lodash';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import SelectAllButton from '../SelectAllButton/SelectAllButton';
+import InferenceResultsButton from '../InferenceResultsButton/InferenceResultsButton';
+import InferenceResultsView from '../InferenceResultsView/InferenceResultsView';
 import {AutoSaveService} from '../../../services/AutoSaveService';
+import {updateSegmentationResults} from '../../../store/ai/actionCreators';
 
 interface IProps {
     windowSize: ISize;
@@ -36,6 +39,7 @@ interface IProps {
     addImageDataAction: (imageData: ImageData[]) => any;
     updateActiveImageIndexAction: (activeImageIndex: number) => any;
     updateActivePopupTypeAction: (activePopupType: PopupWindowType) => any;
+    updateSegmentationResultsAction: (results: any[]) => any;
 }
 
 const EditorContainer: React.FC<IProps> = (
@@ -48,13 +52,20 @@ const EditorContainer: React.FC<IProps> = (
         language,
         addImageDataAction,
         updateActiveImageIndexAction,
-        updateActivePopupTypeAction
+        updateActivePopupTypeAction,
+        updateSegmentationResultsAction
     }) => {
     const [leftTabStatus, setLeftTabStatus] = useState(true);
     const [rightTabStatus, setRightTabStatus] = useState(true);
+    const [showInferenceResults, setShowInferenceResults] = useState<boolean>(false);
 
     const currentTexts = LanguageConfig[language];
 
+
+    // 切换图片时清空推理结果
+    useEffect(() => {
+        updateSegmentationResultsAction([]);
+    }, [activeImageIndex]);
 
     // Debounce auto-save on any label data change
     useEffect(() => {
@@ -129,10 +140,27 @@ const EditorContainer: React.FC<IProps> = (
     const rightSideBarButtonOnClick = () => {
         if (!rightTabStatus) {
             setRightTabStatus(true);
+            setShowInferenceResults(false);
             ContextManager.switchCtx(ContextType.RIGHT_NAVBAR);
-        } else if (rightTabStatus) {
+        } else if (rightTabStatus && !showInferenceResults) {
             setRightTabStatus(false);
             ContextManager.restoreCtx();
+        } else {
+            setShowInferenceResults(false);
+        }
+    };
+
+    const inferenceResultsButtonOnClick = () => {
+        if (!rightTabStatus) {
+            setRightTabStatus(true);
+            setShowInferenceResults(true);
+            ContextManager.switchCtx(ContextType.RIGHT_NAVBAR);
+        } else if (rightTabStatus && showInferenceResults) {
+            setRightTabStatus(false);
+            setShowInferenceResults(false);
+            ContextManager.restoreCtx();
+        } else {
+            setShowInferenceResults(true);
         }
     };
 
@@ -143,13 +171,17 @@ const EditorContainer: React.FC<IProps> = (
                 image={'/ico/tags.png'}
                 imageAlt={'labels'}
                 onClick={rightSideBarButtonOnClick}
-                isActive={rightTabStatus}
+                isActive={rightTabStatus && !showInferenceResults}
+            />
+            <InferenceResultsButton
+                onToggle={inferenceResultsButtonOnClick}
+                isActive={rightTabStatus && showInferenceResults}
             />
         </>
     };
 
     const rightSideBarRender = () => {
-        return <LabelsToolkit/>
+        return showInferenceResults ? <InferenceResultsView/> : <LabelsToolkit/>
     };
 
     return (
@@ -218,7 +250,8 @@ const EditorContainer: React.FC<IProps> = (
 const mapDispatchToProps = {
     addImageDataAction: addImageData,
     updateActiveImageIndexAction: updateActiveImageIndex,
-    updateActivePopupTypeAction: updateActivePopupType
+    updateActivePopupTypeAction: updateActivePopupType,
+    updateSegmentationResultsAction: updateSegmentationResults
 };
 
 const mapStateToProps = (state: AppState) => ({

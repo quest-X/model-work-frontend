@@ -35,7 +35,7 @@ export interface DetectionAPIResponse {
 
 export class DetectionAPIDetector {
     private static config: DetectionAPIConfig = {
-        url: 'http://192.168.10.205:8000/detect', // 默认检测API地址
+        url: 'http://localhost:8000/detect', // 默认检测API地址
         enabled: true
     };
 
@@ -89,7 +89,7 @@ export class DetectionAPIDetector {
                     headers: {
                         'Content-Type': 'multipart/form-data',
                     },
-                    timeout: 120000, // 120秒超时（首次加载模型较慢）
+                    timeout: 30000, // 30秒超时
                 }
             );
 

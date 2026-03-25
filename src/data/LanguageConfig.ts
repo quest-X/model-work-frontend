@@ -432,7 +432,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             loadModel: {
                 title: '加载AI模型',
                 selectModel: '选择要加载的模型：',
-                acceptButton: '加载',
+                acceptButton: '进入',
                 rejectButton: '取消',
                 models: {
                     yolov5: 'YOLOv5 - 使用矩形框进行目标检测',
@@ -723,7 +723,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             loadModel: {
                 title: 'Load AI Model',
                 selectModel: 'Select model to load:',
-                acceptButton: 'Load',
+                acceptButton: 'Enter',
                 rejectButton: 'Cancel',
                 models: {
                     yolov5: 'YOLOv5 - object detection using rectangles',
