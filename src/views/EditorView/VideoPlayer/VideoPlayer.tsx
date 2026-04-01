@@ -358,6 +358,19 @@ const VideoPlayer: React.FC<IProps> = ({
         hasEndedRef.current = true;
 
         const video = videoRef.current;
+
+        // 立即取消所有帧回调，避免残留回调干扰状态
+        if (video && videoFrameCallbackIdRef.current !== undefined) {
+            if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+                (video as any).cancelVideoFrameCallback(videoFrameCallbackIdRef.current);
+            }
+            videoFrameCallbackIdRef.current = undefined;
+        }
+        if (requestRef.current) {
+            cancelAnimationFrame(requestRef.current);
+            requestRef.current = undefined;
+        }
+
         setIsVideoEnded(true);
 
         // 通知父组件最终帧位置（确保时间轴指针到达末尾）

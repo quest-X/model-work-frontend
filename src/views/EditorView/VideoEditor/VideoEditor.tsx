@@ -580,6 +580,7 @@ const VideoEditor: React.FC<IProps> = ({
     // 处理播放/暂停
     const handlePlayPause = useCallback(async () => {
         if (!activeVideo) return;
+        // 如果当前不在播放（包括视频结束后），下次一定是播放
         const newPlayingStatus = !isPlaying;
         
         // 如果开始播放，先检查是否有足够的缓冲帧
@@ -755,9 +756,10 @@ const VideoEditor: React.FC<IProps> = ({
                             setIsPlaying(true);
                         }}
                         onPause={() => {
-                            // 移除日志输出
-                            // console.log('[3] VideoEditor: 收到 onPause 回调');
                             setIsPlaying(false);
+                            if (activeVideo) {
+                                updateVideoPlayingStatus(activeVideo.id, false);
+                            }
                         }}
                         isPlaying={isPlaying}
                         defaultMuted={isMuted}
