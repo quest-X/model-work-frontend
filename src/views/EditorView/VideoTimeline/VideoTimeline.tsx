@@ -134,7 +134,9 @@ const VideoTimeline: React.FC<IProps> = ({
         });
 
         // 绘制播放进度条
-        const currentX = (currentTime / duration) * width;
+        // 用帧位置比例计算，避免 currentTime/duration 精度问题导致末尾空白
+        const progress = frames > 0 ? currentFrame / (frames - 1) : 0;
+        const currentX = Math.min(progress * width, width);
         ctx.fillStyle = 'rgba(33, 150, 243, 0.3)';
         ctx.fillRect(0, 0, currentX, height - 30);
 

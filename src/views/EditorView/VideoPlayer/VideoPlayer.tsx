@@ -175,7 +175,7 @@ const VideoPlayer: React.FC<IProps> = ({
         const realFps = await detectFrameRate(video);
         setDetectedFps(realFps);
         
-        const totalFrames = Math.ceil(duration * realFps); // 使用 ceil 避免丢失最后几帧
+        const totalFrames = Math.floor(duration * realFps); // 使用 floor 确保不超过视频实际可播放帧数
         setIsVideoLoaded(true);
 
         if (onLoadedMetadata) {
@@ -375,7 +375,14 @@ const VideoPlayer: React.FC<IProps> = ({
         const video = videoRef.current;
         console.log('[2] 视频播放完毕');
         setIsVideoEnded(true);
-        
+
+        // 通知父组件最终帧位置（确保时间轴指针到达末尾）
+        if (video && onTimeUpdate) {
+            const finalFrame = Math.floor(videoDuration * detectedFps) - 1;
+            onTimeUpdate(videoDuration, finalFrame);
+            drawFrame();
+        }
+
         // 重置视频到开始位置，以便下次播放时从头开始
         if (video) {
             video.currentTime = 0;

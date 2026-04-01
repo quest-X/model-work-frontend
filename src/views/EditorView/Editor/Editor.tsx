@@ -76,6 +76,12 @@ class Editor extends React.Component<IProps, IState> {
         EditorActions.mountRenderEnginesAndHelpers(activeLabelType);
         ImageLoadManager.addAndRun(this.loadImage(imageData));
         ViewPortActions.resizeCanvas(this.props.size);
+
+        // 视频模式下隐藏光标和坐标指示器
+        if (VideoSelector.isVideoMode()) {
+            if (EditorModel.cursor) EditorModel.cursor.style.display = "none";
+            if (EditorModel.mousePositionIndicator) EditorModel.mousePositionIndicator.style.display = "none";
+        }
     }
 
     public componentWillUnmount(): void {
@@ -169,15 +175,17 @@ class Editor extends React.Component<IProps, IState> {
     };
 
     private update = (event: MouseEvent) => {
-        // 视频播放时完全跳过更新，避免光标显示
-        if (VideoSelector.isVideoPlaying()) {
+        // 视频模式下隐藏光标和坐标指示器
+        if (VideoSelector.isVideoMode()) {
             if (EditorModel.cursor) {
                 EditorModel.cursor.style.display = "none";
             }
             if (EditorModel.mousePositionIndicator) {
                 EditorModel.mousePositionIndicator.style.display = "none";
             }
-            return;
+            if (VideoSelector.isVideoPlaying()) {
+                return;
+            }
         }
 
         if (!EditorModel.cursor || !EditorModel.mousePositionIndicator) {

@@ -21,6 +21,8 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
         changes: [
             { zh: '修复视频模式画面叠加问题', en: 'Fixed video mode overlay issue' },
             { zh: '修复视频帧缩略图不加载的问题', en: 'Fixed video frame thumbnail loading' },
+            { zh: '修复视频模式光标指示器残留', en: 'Fixed cursor indicator in video mode' },
+            { zh: '修复时间轴末尾空白和刷新闪烁', en: 'Fixed timeline gap and flickering at end' },
             { zh: '优化拖拽上传视觉样式', en: 'Improved drag-and-drop upload visual style' },
             { zh: '优化视频帧率检测速度', en: 'Faster video frame rate detection' },
         ]
