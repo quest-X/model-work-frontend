@@ -24,6 +24,7 @@ import {addImageData, updateImageData, updateActiveImageIndex} from '../../../st
 import {updateActivePopupType} from '../../../store/general/actionCreators';
 import {addVideoData, updateVideoMode} from '../../../store/video/actionCreators';
 import {addQueueItems, setActiveQueueItem, updateQueueItem} from '../../../store/queue/actionCreators';
+import {QueueActions} from '../../../logic/actions/QueueActions';
 import {QueueItem, QueueItemType, QueueItemStatus} from '../../../store/queue/types';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {ImageDataUtil} from '../../../utils/ImageDataUtil';
@@ -84,6 +85,23 @@ const EditorContainer: React.FC<IProps> = (
     const [rightTabStatus, setRightTabStatus] = useState(true);
     const [showInferenceResults, setShowInferenceResults] = useState<boolean>(false);
     const [showQueueList, setShowQueueList] = useState<boolean>(false);
+    const [isWindowDragActive, setIsWindowDragActive] = useState(false);
+
+    // 监听 window 级别的拖拽，确保 canvas/Scrollbars 不会阻断 drop 事件
+    useEffect(() => {
+        let dragCounter = 0;
+        const onDragEnter = () => { dragCounter++; setIsWindowDragActive(true); };
+        const onDragLeave = () => { dragCounter--; if (dragCounter <= 0) { dragCounter = 0; setIsWindowDragActive(false); } };
+        const onDrop = () => { dragCounter = 0; setIsWindowDragActive(false); };
+        window.addEventListener('dragenter', onDragEnter);
+        window.addEventListener('dragleave', onDragLeave);
+        window.addEventListener('drop', onDrop);
+        return () => {
+            window.removeEventListener('dragenter', onDragEnter);
+            window.removeEventListener('dragleave', onDragLeave);
+            window.removeEventListener('drop', onDrop);
+        };
+    }, []);
     
     const currentTexts = LanguageConfig[language];
     
@@ -300,130 +318,10 @@ const EditorContainer: React.FC<IProps> = (
                 }
 
                 addQueueItemsAction(newQueueItems);
-                
-                // 检查当前是否有内容（视频或图片）
-                const hasContent = (isVideoMode && activeVideo) || (!isVideoMode && imagesData.length > 0);
-                
-                if (hasContent) {
-                    // 如果当前有内容，只添加到队列，不替换当前内容
-                    // 如果有视频文件，自动切换到最新的视频
-                    if (videoFiles.length > 0 && newQueueItems.length > 0) {
-                        // 找到最新的视频队列项（第一个，因为新添加的项在数组开头）
-                        const latestVideoItem = newQueueItems.find(item => item.type === QueueItemType.VIDEO);
-                        if (latestVideoItem) {
-                            // 保存当前文件的缓存
-                            const currentFileId = ImageRepository.getActiveFileId();
-                            if (currentFileId && imagesData.length > 0) {
-                                ImageRepository.saveFileCache(currentFileId, imagesData);
-                            }
-                            
-                            // 清空当前显示
-                            ImageRepository.clearCurrentDisplay();
-                            updateImageDataAction([]);
-                            updateActiveImageIndexAction(0);
-                            
-                            // 尝试恢复目标文件的缓存
-                            const cachedData = ImageRepository.restoreFileCache(latestVideoItem.id);
-                            
-                            setActiveQueueItemAction(latestVideoItem.id);
-                            updateQueueItemAction(latestVideoItem.id, { status: QueueItemStatus.PROCESSING });
-                            
-                            try {
-                                if (cachedData) {
-                                    // 有缓存：直接恢复
-                                    updateVideoModeAction(true);
-                                    const videoData: VideoData = {
-                                        id: latestVideoItem.id,
-                                        fileData: latestVideoItem.file!,
-                                        loadStatus: false,
-                                        duration: 0,
-                                        fps: 30,
-                                        totalFrames: 0,
-                                        videoSize: { width: 0, height: 0 },
-                                        currentFrame: 0,
-                                        currentTime: 0,
-                                        isPlaying: false,
-                                        frames: new Map()
-                                    };
-                                    addVideoDataAction(videoData);
-                                    updateImageDataAction(cachedData);
-                                    updateActiveImageIndexAction(0);
-                                    ImageRepository.setActiveFileId(latestVideoItem.id);
-                                } else {
-                                    // 无缓存：重新加载
-                                    const videoData: VideoData = {
-                                        id: latestVideoItem.id,
-                                        fileData: latestVideoItem.file!,
-                                        loadStatus: false,
-                                        duration: 0,
-                                        fps: 30,
-                                        totalFrames: 0,
-                                        videoSize: { width: 0, height: 0 },
-                                        currentFrame: 0,
-                                        currentTime: 0,
-                                        isPlaying: false,
-                                        frames: new Map()
-                                    };
-                                    updateVideoModeAction(true);
-                                    addVideoDataAction(videoData);
-                                    ImageRepository.setActiveFileId(latestVideoItem.id);
-                                }
-                                
-                                updateQueueItemAction(latestVideoItem.id, { status: QueueItemStatus.COMPLETED });
-                            } catch (error) {
-                                console.error('[EditorContainer] 加载视频失败:', error);
-                                updateQueueItemAction(latestVideoItem.id, { 
-                                    status: QueueItemStatus.ERROR, 
-                                    error: error instanceof Error ? error.message : '加载失败'
-                                });
-                            }
-                        }
-                    }
-                    // 如果只有图片文件，只添加到队列，不自动切换
-                } else {
-                    // 如果当前没有内容，使用原有逻辑（替换模式）
-                    if (videoFiles.length > 0) {
-                        // 视频模式：只处理第一个视频文件，清空图像数据
-                        updateImageDataAction([]);
-                        updateActiveImageIndexAction(0);
-                        
-                        const videoFile = videoFiles[0];
-                        const videoData: VideoData = {
-                            id: newQueueItems[0]?.id || uuidv4(),
-                            fileData: videoFile,
-                            loadStatus: false,
-                            duration: 0,
-                            fps: 30,
-                            totalFrames: 0,
-                            videoSize: { width: 0, height: 0 },
-                            currentFrame: 0,
-                            currentTime: 0,
-                            isPlaying: false,
-                            frames: new Map()
-                        };
-                        
-                        updateVideoModeAction(true);
-                        addVideoDataAction(videoData);
-                        
-                        // 设置活动队列项
-                        if (newQueueItems.length > 0) {
-                            setActiveQueueItemAction(newQueueItems[0].id);
-                            updateQueueItemAction(newQueueItems[0].id, { status: QueueItemStatus.COMPLETED });
-                            ImageRepository.setActiveFileId(newQueueItems[0].id);
-                        }
-                    } else if (imageFiles.length > 0) {
-                        // 图片模式：替换（不是添加）图像数据
-                        updateVideoModeAction(false);
-                        updateActiveImageIndexAction(0);
-                        updateImageDataAction(imageFiles.map((file: File) => ImageDataUtil.createImageDataFromFileData(file)));
-                        
-                        // 设置活动队列项
-                        if (newQueueItems.length > 0) {
-                            setActiveQueueItemAction(newQueueItems[0].id);
-                            updateQueueItemAction(newQueueItems[0].id, { status: QueueItemStatus.COMPLETED });
-                            ImageRepository.setActiveFileId(newQueueItems[0].id);
-                        }
-                    }
+
+                // 始终自动切换到新上传的第一个队列项
+                if (newQueueItems.length > 0) {
+                    await QueueActions.switchToQueueItem(newQueueItems[0], imagesData);
                 }
                 
                 // 上传后立即触发保存
@@ -592,6 +490,14 @@ const EditorContainer: React.FC<IProps> = (
                 key='editor-wrapper'
             >
                 <input {...getInputProps()} style={{ display: 'none' }} />
+                {/* 拖拽捕获层：当 canvas/Scrollbars 存在时确保 drop 事件能被 dropzone 接收 */}
+                {isWindowDragActive && (
+                    <div style={{
+                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                        zIndex: 500, pointerEvents: 'all',
+                        backgroundColor: isDragActive ? 'rgba(0, 120, 212, 0.08)' : 'transparent'
+                    }} />
+                )}
                 {projectType === ProjectType.OBJECT_DETECTION && <EditorTopNavigationBar
                     key='editor-top-navigation-bar'
                 />}

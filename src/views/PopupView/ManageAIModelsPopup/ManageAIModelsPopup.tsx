@@ -330,13 +330,13 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                     </div>
                     <div className='ContentArea'>
                         <div className='ModelsListContainer'>
+                            {renderLocalModels()}
                             <div className='SectionTitle'>
                                 {language === Language.CHINESE ? '远程模型' : 'Remote Models'}
                             </div>
                             <div className='ModelsContainer'>
                                 {renderModelList()}
                             </div>
-                            {renderLocalModels()}
                         </div>
                         <div className='ModelDetailsContainer'>
                             <div className='SectionTitle'>

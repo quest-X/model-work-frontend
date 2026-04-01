@@ -12,6 +12,7 @@ interface IProps {
     onLoadedMetadata?: (duration: number, frames: number, fps: number, videoSize: ISize) => void; // 视频加载完成回调
     onPlay?: () => void; // 播放回调
     onPause?: () => void; // 暂停回调
+    onPlayPause?: () => void; // 统一的播放/暂停切换回调
     isPlaying?: boolean; // 外部控制播放状态
     defaultMuted?: boolean; // 默认是否静音
     onFirstFrameDrawn?: (canvas: HTMLCanvasElement) => void; // 第一帧绘制完成回调
@@ -28,6 +29,7 @@ const VideoPlayer: React.FC<IProps> = ({
     onLoadedMetadata,
     onPlay,
     onPause,
+    onPlayPause,
     isPlaying = false,
     defaultMuted = true, // 默认静音
     onFirstFrameDrawn,
@@ -393,44 +395,29 @@ const VideoPlayer: React.FC<IProps> = ({
         }
     }, [onPause, onTimeUpdate, videoDuration, detectedFps, drawFrame]);
 
-    // 键盘快捷键 - 只在焦点在视频播放器上时响应
+    // 键盘快捷键 - 空格键播放/暂停
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const video = videoRef.current;
-            const focusableElement = focusableElementRef.current;
-            if (!video || !isVideoLoaded || !focusableElement) return;
-
-            // 只有当焦点在视频播放器容器上时才响应空格键
-            if (document.activeElement !== focusableElement) {
-                return;
-            }
+            if (!video || !isVideoLoaded) return;
 
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-                return; // 忽略输入框中的按键
+                return;
             }
 
             switch (e.key) {
                 case ' ':
                     e.preventDefault();
-                    e.stopPropagation(); // 阻止事件冒泡
-                    // 如果视频已经播放完毕，重新开始播放
-                    if (isVideoEnded) {
-                        console.log('[6] 重新开始播放视频');
-                        video.currentTime = 0;
-                        setIsVideoEnded(false);
-                        onPlay?.();
-                    } else if (isPlaying) {
-                        onPause?.();
-                    } else {
-                        onPlay?.();
-                    }
+                    e.stopPropagation();
+                    // 统一走 onPlayPause，和 Timeline 按钮一致
+                    onPlayPause?.();
                     break;
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isPlaying, isVideoLoaded, isVideoEnded, onPlay, onPause]);
+    }, [isVideoLoaded, onPlayPause]);
 
     // 设置播放速率为1.0（正常速度）
     useEffect(() => {

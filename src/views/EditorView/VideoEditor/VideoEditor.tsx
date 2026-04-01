@@ -753,8 +753,6 @@ const VideoEditor: React.FC<IProps> = ({
                         onLoadedMetadata={handleVideoMetadataLoaded}
                         onFirstFrameDrawn={handleFirstFrameDrawn}
                         onPlay={() => {
-                            // 移除日志输出
-                            // console.log('[2] VideoEditor: 收到 onPlay 回调');
                             setIsPlaying(true);
                         }}
                         onPause={() => {
@@ -763,6 +761,7 @@ const VideoEditor: React.FC<IProps> = ({
                                 updateVideoPlayingStatus(activeVideo.id, false);
                             }
                         }}
+                        onPlayPause={handlePlayPause}
                         isPlaying={isPlaying}
                         defaultMuted={isMuted}
                         processingProgress={processingProgress}

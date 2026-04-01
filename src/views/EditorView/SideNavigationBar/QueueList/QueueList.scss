@@ -3,4 +3,173 @@
     flex-direction: column;
     align-self: stretch;
     flex: 1;
+    overflow: hidden;
+
+    .queue-list-empty {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+        text-align: center;
+        gap: 8px;
+
+        img {
+            width: 48px;
+            height: 48px;
+            opacity: 0.25;
+            filter: invert(1);
+        }
+
+        p {
+            margin: 0;
+            font-size: 13px;
+            color: #5f6368;
+        }
+
+        .queue-list-empty-hint {
+            font-size: 11px;
+            opacity: 0.7;
+        }
+    }
+
+    .queue-list-scroll {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 4px 0;
+
+        &::-webkit-scrollbar {
+            width: 4px;
+        }
+        &::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        &::-webkit-scrollbar-thumb {
+            background: #3a3a3a;
+            border-radius: 2px;
+        }
+    }
+}
+
+.queue-item-card {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+    border-bottom: solid 1px #1e1e1e;
+    transition: background-color 0.15s ease;
+
+    &:hover {
+        background-color: #2a2a2a;
+
+        .card-delete-btn {
+            opacity: 1;
+        }
+    }
+
+    &.active {
+        background-color: rgba(0, 154, 255, 0.12);
+        border-left: 3px solid #009AFF;
+        padding-left: 7px;
+
+        .card-name {
+            color: #009AFF;
+        }
+    }
+
+    .card-thumbnail {
+        position: relative;
+        width: 48px;
+        height: 48px;
+        flex-shrink: 0;
+        background-color: #2a2a2a;
+        border-radius: 4px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            user-select: none;
+        }
+
+        .type-icon-fallback {
+            width: 24px;
+            height: 24px;
+            object-fit: contain;
+            opacity: 0.4;
+            filter: invert(1);
+        }
+
+        .type-badge {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            width: 14px;
+            height: 14px;
+            object-fit: contain;
+            filter: invert(1) brightness(0.7);
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 2px;
+            padding: 1px;
+        }
+    }
+
+    .card-info {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        .card-name {
+            font-size: 12px;
+            color: #c0c0c0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .card-status {
+            font-size: 11px;
+
+            &.status-pending    { color: #5f6368; }
+            &.status-processing { color: #FFA726; }
+            &.status-completed  { color: #66BB6A; }
+            &.status-error      { color: #EF5350; }
+        }
+    }
+
+    .card-delete-btn {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 18px;
+        height: 18px;
+        background-color: #e53935;
+        border: 2px solid white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+        z-index: 10;
+
+        &:hover {
+            background-color: #c62828;
+        }
+    }
 }
