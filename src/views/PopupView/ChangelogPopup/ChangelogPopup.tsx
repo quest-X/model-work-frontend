@@ -16,15 +16,22 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.1.5',
+        date: '2026-04-01',
+        changes: [
+            { zh: '修复视频模式光标指示器残留', en: 'Fixed cursor indicator in video mode' },
+            { zh: '修复时间轴末尾空白和刷新闪烁', en: 'Fixed timeline gap and flickering at end' },
+            { zh: '优化视频帧率检测（元数据快速读取）', en: 'Faster frame rate detection via metadata' },
+            { zh: '修复视频总帧数计算偏差', en: 'Fixed total frame count calculation' },
+        ]
+    },
+    {
         version: '1.1.4',
         date: '2026-04-01',
         changes: [
             { zh: '修复视频模式画面叠加问题', en: 'Fixed video mode overlay issue' },
             { zh: '修复视频帧缩略图不加载的问题', en: 'Fixed video frame thumbnail loading' },
-            { zh: '修复视频模式光标指示器残留', en: 'Fixed cursor indicator in video mode' },
-            { zh: '修复时间轴末尾空白和刷新闪烁', en: 'Fixed timeline gap and flickering at end' },
             { zh: '优化拖拽上传视觉样式', en: 'Improved drag-and-drop upload visual style' },
-            { zh: '优化视频帧率检测速度', en: 'Faster video frame rate detection' },
         ]
     },
     {
