@@ -12,18 +12,6 @@
   align-items: center;
   align-content: flex-start;
 
-  .EditorWrapper {
-    align-self: stretch;
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    flex-wrap: nowrap;
-    justify-content: center;
-    align-items: center;
-    align-content: center;
-  }
-
   .VersionWatermark {
     position: absolute;
     bottom: 10px;
@@ -35,6 +23,135 @@
     letter-spacing: 1px;
     user-select: none;
     white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: rgba(255, 255, 255, 0.6);
+    }
+  }
+
+  .EditorWrapper {
+    align-self: stretch;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: center;
+    align-content: center;
+    position: relative;
+    transition: background-color 0.3s ease;
+    
+    // 视频编辑器模式：占满整个容器，时间轴固定在底部
+    &.VideoMode {
+      justify-content: stretch;
+      align-items: stretch;
+    }
+    
+    // 拖拽时的视觉反馈：只改背景色，虚线边框在 EmptyProjectView 上
+    &.drag-active {
+      background-color: rgba(0, 120, 212, 0.05);
+    }
+    
+    > .VideoEditor {
+      height: 100%;
+      width: 100%;
+      align-self: stretch;
+    }
+  }
+  
+  // 拖拽上传提示覆盖层
+  .DragUploadOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    background-color: rgba(0, 120, 212, 0.05);
+    animation: fadeIn 0.2s ease-in-out;
+    
+    .DragUploadContent {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px;
+      background-color: rgba(0, 120, 212, 0.1);
+      border: 2px dashed rgba(0, 120, 212, 0.8);
+      border-radius: 12px;
+      backdrop-filter: blur(4px);
+      animation: scaleIn 0.3s ease-out;
+      
+      .DragUploadIcon {
+        font-size: 64px;
+        margin-bottom: 16px;
+        opacity: 0.9;
+        animation: bounce 2s ease-in-out infinite;
+      }
+      
+      .DragUploadText {
+        color: #0078d4;
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+      }
+      
+      .DragUploadHint {
+        color: rgba(0, 120, 212, 0.8);
+        font-size: 14px;
+        font-weight: 400;
+      }
+    }
+  }
+  
+  // 动画定义
+  @keyframes dragPulse {
+    0%, 100% {
+      opacity: 0.6;
+      border-width: 2px;
+    }
+    50% {
+      opacity: 1;
+      border-width: 3px;
+    }
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  
+  @keyframes scaleIn {
+    from {
+      transform: scale(0.9);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  
+  @keyframes bounce {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
   }
 
   .EmptyProjectView {
@@ -45,10 +162,17 @@
     height: 100%;
     width: 100%;
     background-color: #1a1a1a;
-    cursor: pointer;
+    position: relative;
+    transition: background-color 0.3s ease;
     
     .EmptyProjectContent {
-      display: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      z-index: 1;
+      transition: opacity 0.3s ease;
       
       img {
         width: 80px;
@@ -75,12 +199,16 @@
     }
 
     &.drag-active {
-      background-color: #0078d4;
-    }
-
-    &:hover:not(.drag-active) {
-      .EmptyProjectContent {
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
+      background-color: rgba(0, 120, 212, 0.08);
+      
+      &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border: 2px dashed rgba(0, 120, 212, 0.6);
+        z-index: 999;
+        pointer-events: none;
+        animation: dragPulse 1.5s ease-in-out infinite;
       }
     }
   }

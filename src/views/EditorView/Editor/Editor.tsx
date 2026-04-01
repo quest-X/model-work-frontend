@@ -28,6 +28,7 @@ import {RenderEngineUtil} from '../../../utils/RenderEngineUtil';
 import {LabelStatus} from '../../../data/enums/LabelStatus';
 import {isEqual} from 'lodash';
 import {AIActions} from '../../../logic/actions/AIActions';
+import {VideoSelector} from '../../../store/selectors/VideoSelector';
 
 interface IProps {
     size: ISize;
@@ -168,6 +169,21 @@ class Editor extends React.Component<IProps, IState> {
     };
 
     private update = (event: MouseEvent) => {
+        // 视频播放时完全跳过更新，避免光标显示
+        if (VideoSelector.isVideoPlaying()) {
+            if (EditorModel.cursor) {
+                EditorModel.cursor.style.display = "none";
+            }
+            if (EditorModel.mousePositionIndicator) {
+                EditorModel.mousePositionIndicator.style.display = "none";
+            }
+            return;
+        }
+
+        if (!EditorModel.cursor || !EditorModel.mousePositionIndicator) {
+            return;
+        }
+
         const editorData: EditorData = EditorActions.getEditorData(event);
         EditorModel.mousePositionOnViewPortContent = CanvasUtil.getMousePositionOnCanvasFromEvent(event, EditorModel.canvas);
         EditorModel.primaryRenderingEngine.update(editorData);

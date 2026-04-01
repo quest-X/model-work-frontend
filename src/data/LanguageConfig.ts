@@ -24,7 +24,12 @@ export interface LanguageTexts {
     labels: string;
     selectAll: string;
     inferenceResults: string;
-    
+    queue: string;
+    changelog: {
+        title: string;
+        close: string;
+    };
+
     // EmptyLabelList
     drawFirstBoundingBox: string;
     markFirstPoint: string;
@@ -303,7 +308,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         languageToggle: '中文',
         
         // EmptyProjectView
-        welcomeTitle: '欢迎使用 Make Sense',
+        welcomeTitle: '欢迎使用 OpenSight Platform',
         welcomeDescription: '请拖拽图像到此处或点击上传',
         dragActiveMessage: '释放文件以上传图像',
         uploadHints: {
@@ -317,7 +322,12 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         labels: '标签',
         selectAll: '选中全部',
         inferenceResults: '推理结果',
-        
+        queue: '队列',
+        changelog: {
+            title: '更新日志',
+            close: '关闭',
+        },
+
         // EmptyLabelList
         drawFirstBoundingBox: '绘制第一个边界框',
         markFirstPoint: '标记第一个点',
@@ -594,7 +604,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         languageToggle: 'English',
         
         // EmptyProjectView
-        welcomeTitle: 'Welcome to Make Sense',
+        welcomeTitle: 'Welcome to OpenSight Platform',
         welcomeDescription: 'Drag images here or click to upload',
         dragActiveMessage: 'Drop files to upload images',
         uploadHints: {
@@ -608,7 +618,12 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         labels: 'Labels',
         selectAll: 'Select All',
         inferenceResults: 'AI Results',
-        
+        queue: 'File Queue',
+        changelog: {
+            title: 'Changelog',
+            close: 'Close',
+        },
+
         // EmptyLabelList
         drawFirstBoundingBox: 'draw your first bounding box',
         markFirstPoint: 'mark your first point',

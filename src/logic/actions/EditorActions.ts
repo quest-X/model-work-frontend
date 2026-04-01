@@ -10,6 +10,8 @@ import React from "react";
 import {IPoint} from "../../interfaces/IPoint";
 import {DrawUtil} from "../../utils/DrawUtil";
 import {PrimaryEditorRenderEngine} from "../render/PrimaryEditorRenderEngine";
+import {VideoPrimaryRenderEngine} from "../render/VideoPrimaryRenderEngine";
+import {VideoSelector} from "../../store/selectors/VideoSelector";
 import {ContextManager} from "../context/ContextManager";
 import {PointUtil} from "../../utils/PointUtil";
 import {ViewPortActions} from "./ViewPortActions";
@@ -54,7 +56,11 @@ export class EditorActions {
 
     public static mountRenderEnginesAndHelpers(activeLabelType: LabelType) {
         EditorModel.viewPortHelper = new ViewPortHelper();
-        EditorModel.primaryRenderingEngine = new PrimaryEditorRenderEngine(EditorModel.canvas);
+        if (VideoSelector.isVideoMode()) {
+            EditorModel.primaryRenderingEngine = new VideoPrimaryRenderEngine(EditorModel.canvas);
+        } else {
+            EditorModel.primaryRenderingEngine = new PrimaryEditorRenderEngine(EditorModel.canvas);
+        }
         EditorActions.mountSupportRenderingEngine(activeLabelType);
     }
 

@@ -1,0 +1,134 @@
+.VideoEditor {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background-color: #1a1a1a;
+    overflow: hidden;
+    position: relative;
+    align-self: stretch; // 确保在父容器中完全拉伸
+
+    .NoVideoMessage {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #999;
+        font-size: 16px;
+    }
+
+    .ThumbnailGenerationOverlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.85);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+
+        .LoadingContent {
+            text-align: center;
+            color: #fff;
+            padding: 30px;
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+
+            .LoadingSpinner {
+                width: 50px;
+                height: 50px;
+                border: 5px solid rgba(255, 255, 255, 0.3);
+                border-top-color: #2196f3;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+                margin: 0 auto 20px;
+            }
+
+            p {
+                margin: 10px 0;
+                font-size: 16px;
+                color: #ddd;
+            }
+
+            .ProgressText {
+                font-size: 14px;
+                color: #2196f3;
+                font-weight: 600;
+                margin: 10px 0;
+            }
+        }
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .VideoAnnotationSection {
+        position: relative;
+        width: 100%;
+        background-color: #000;
+        border-bottom: 2px solid #333;
+        overflow: hidden;
+
+        .VideoPlayerLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none; // 让鼠标事件穿透到标注层
+        }
+
+        .AnnotationLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: auto;
+            
+            // 让标注层的背景透明，这样可以看到下面的视频
+            background-color: transparent;
+            
+            // 确保 Editor 组件能正确填充整个区域
+            display: flex;
+            flex-direction: column;
+            
+            // 修复 Editor 组件在绝对定位容器中的显示
+            > .Editor {
+                width: 100%;
+                height: 100%;
+            }
+
+            // ⭐ 视频播放时强制隐藏光标和坐标指示器
+            &.video-playing {
+                .Cursor {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                }
+
+                .MousePositionIndicator {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                }
+            }
+        }
+    }
+
+    .TimelineSection {
+        width: 100%;
+        background-color: #1e1e1e;
+        position: relative;
+    }
+}
+

@@ -41,7 +41,7 @@ export class ViewPortActions {
     }
 
     public static calculateViewPortContentSize(): ISize {
-        if (!!EditorModel.viewPortSize && !!EditorModel.image) {
+        if (!!EditorModel.viewPortSize && !!EditorModel.image && !!EditorModel.defaultRenderImageRect) {
             const defaultViewPortImageRect: IRect = EditorModel.defaultRenderImageRect;
             const scaledImageSize: ISize = SizeUtil
                 .scale(EditorModel.defaultRenderImageRect, GeneralSelector.getZoom());
@@ -55,7 +55,7 @@ export class ViewPortActions {
     }
 
     public static calculateViewPortContentImageRect(): IRect {
-        if (!!EditorModel.viewPortSize && !!EditorModel.image) {
+        if (!!EditorModel.viewPortSize && !!EditorModel.image && !!EditorModel.defaultRenderImageRect) {
             const defaultViewPortImageRect: IRect = EditorModel.defaultRenderImageRect;
             const viewPortContentSize: ISize = ViewPortActions.calculateViewPortContentSize();
             return {

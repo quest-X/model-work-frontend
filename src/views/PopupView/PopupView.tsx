@@ -19,6 +19,7 @@ import ConnectInferenceServerPopup from './ConnectInferenceServerPopup/ConnectIn
 import IntegrateModelPopup from './IntegrateModelPopup/IntegrateModelPopup';
 import ManageAIModelsPopup from './ManageAIModelsPopup/ManageAIModelsPopup';
 import KeyboardShortcutsPopup from './KeyboardShortcutsPopup/KeyboardShortcutsPopup';
+import ChangelogPopup from './ChangelogPopup/ChangelogPopup';
 
 interface IProps {
     activePopupType: PopupWindowType;
@@ -83,6 +84,8 @@ const PopupView: React.FC<IProps> = ({ activePopupType }) => {
                 return <SuggestLabelNamesPopup />;
             case PopupWindowType.KEYBOARD_SHORTCUTS:
                 return <KeyboardShortcutsPopup />;
+            case PopupWindowType.CHANGELOG:
+                return <ChangelogPopup />;
             case PopupWindowType.LOADER:
                 return <ClipLoader
                     size={50}
