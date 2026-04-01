@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.1.6',
+        date: '2026-04-01',
+        changes: [
+            { zh: '修复视频播放到底后需多次点击才能重播', en: 'Fixed replay requiring multiple clicks after video ends' },
+        ]
+    },
+    {
         version: '1.1.5',
         date: '2026-04-01',
         changes: [

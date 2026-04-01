@@ -253,34 +253,19 @@ const VideoPlayer: React.FC<IProps> = ({
         const playVideo = async (): Promise<void> => {
             if (isPlaying) {
                 try {
-                    // 如果视频已经结束，重置到开始位置
+                    // 重置视频结束状态
                     if (isVideoEnded) {
-                        // 重置到开始位置
-                        if (video.currentTime !== 0) {
-                            video.currentTime = 0;
-                            
-                            // 只有在需要跳转时才等待 seeked 事件
-                            if (video.seeking) {
-                                await new Promise<void>((resolve) => {
-                                    const handleSeeked = () => {
-                                        video.removeEventListener('seeked', handleSeeked);
-                                        resolve();
-                                    };
-                                    video.addEventListener('seeked', handleSeeked);
-                                    
-                                    // 添加超时保护，防止 seeked 事件永远不触发
-                                    setTimeout(() => {
-                                        video.removeEventListener('seeked', handleSeeked);
-                                        resolve();
-                                    }, 500);
-                                });
-                            }
-                        }
-                        
+                        video.currentTime = 0;
                         setIsVideoEnded(false);
-                    } else {
-                        // 重置视频结束状态
-                        setIsVideoEnded(false);
+                        // 等待 seek 完成
+                        await new Promise<void>((resolve) => {
+                            const onSeeked = () => {
+                                video.removeEventListener('seeked', onSeeked);
+                                resolve();
+                            };
+                            video.addEventListener('seeked', onSeeked);
+                            setTimeout(() => { video.removeEventListener('seeked', onSeeked); resolve(); }, 300);
+                        });
                     }
                     
                     // 存储 play() Promise
@@ -371,37 +356,27 @@ const VideoPlayer: React.FC<IProps> = ({
             return;
         }
         hasEndedRef.current = true;
-        
+
         const video = videoRef.current;
-        console.log('[2] 视频播放完毕');
         setIsVideoEnded(true);
 
         // 通知父组件最终帧位置（确保时间轴指针到达末尾）
         if (video && onTimeUpdate) {
             const finalFrame = Math.floor(videoDuration * detectedFps) - 1;
-            onTimeUpdate(videoDuration, finalFrame);
+            onTimeUpdate(videoDuration, Math.max(0, finalFrame));
             drawFrame();
         }
 
-        // 重置视频到开始位置，以便下次播放时从头开始
-        if (video) {
-            video.currentTime = 0;
-            console.log('[3] 视频已重置到开始位置');
-        }
-        
-        // 调用 onPause 回调，通知父组件停止播放
+        // 通知父组件停止播放
         if (onPause) {
-            console.log('[4] 调用 onPause 回调，通知父组件停止播放');
             onPause();
-        } else {
-            console.warn('[5] onPause 回调未定义');
         }
-        
-        // 在下一个事件循环中重置标志，允许下次播放完毕时再次触发
+
+        // 在下一个事件循环中重置标志
         setTimeout(() => {
             hasEndedRef.current = false;
         }, 100);
-    }, [onPause]);
+    }, [onPause, onTimeUpdate, videoDuration, detectedFps, drawFrame]);
 
     // 键盘快捷键 - 只在焦点在视频播放器上时响应
     useEffect(() => {
