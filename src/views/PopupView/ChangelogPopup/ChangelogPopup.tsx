@@ -20,6 +20,8 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
         date: '2026-04-01',
         changes: [
             { zh: '调整模型下拉菜单顺序：本地模型优先，远程模型其次', en: 'Reordered model dropdown: local models first, remote models second' },
+            { zh: '移除底部栏"刚刚保存"文字，悬停文件名可查看最后保存时间', en: 'Removed "Just saved" label; hover over filename to see last saved time' },
+            { zh: '修复底部栏文件名未居中（左右区域等宽对齐）', en: 'Fixed filename not centered in bottom bar (equal-width left/right sections)' },
         ]
     },
     {
