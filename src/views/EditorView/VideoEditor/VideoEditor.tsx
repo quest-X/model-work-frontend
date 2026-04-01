@@ -56,6 +56,7 @@ const VideoEditor: React.FC<IProps> = ({
     const tempVideoRef = React.useRef<HTMLVideoElement>(null);
     const thumbnailCanvasRef = React.useRef<HTMLCanvasElement>(null);
     const isGeneratingRef = React.useRef(false);
+    const generationIdRef = React.useRef(0); // cancellation token for thumbnail generation
 
     // 使用 ref 存储最新的 imagesData，避免在 useEffect 依赖中包含它
     const imagesDataRef = React.useRef<ImageData[]>(imagesData);
@@ -66,31 +67,29 @@ const VideoEditor: React.FC<IProps> = ({
     // 初始化视频URL
     useEffect(() => {
         if (activeVideo?.fileData) {
+            // 递增 generation ID，取消所有进行中的缩略图生成
+            generationIdRef.current++;
             const url = URL.createObjectURL(activeVideo.fileData);
             setVideoUrl(url);
             return () => {
-                // 清理时保存缓存（如果有数据的话）
-                // 使用 ref 获取最新的 imagesData，避免将其加入依赖数组
                 const currentImagesData = imagesDataRef.current;
                 if (activeVideo.id && currentImagesData.length > 0) {
-                    console.log(`[VideoEditor] 1. VideoEditor 卸载，保存文件 ${activeVideo.id.substring(0, 8)} 的缓存...`);
                     ImageRepository.saveFileCache(activeVideo.id, currentImagesData);
                 }
-                
+
                 URL.revokeObjectURL(url);
-                // 清理临时视频元素
+                generationIdRef.current++; // 取消清理时仍在运行的生成
                 if (tempVideoRef.current) {
                     tempVideoRef.current.src = '';
-                    tempVideoRef.current = null;
+                    (tempVideoRef as React.MutableRefObject<HTMLVideoElement | null>).current = null;
                 }
-                // 清理缩略图画布
                 if (thumbnailCanvasRef.current) {
-                    thumbnailCanvasRef.current = null;
+                    (thumbnailCanvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = null;
                 }
                 isGeneratingRef.current = false;
             };
         }
-        return undefined; // 确保所有代码路径都返回值
+        return undefined;
     }, [activeVideo?.fileData, activeVideo?.id]);
     
     // 确保视频加载后第一帧被选中（如果 activeImageIndex 为 null 或无效）
@@ -203,13 +202,10 @@ const VideoEditor: React.FC<IProps> = ({
         videoSize: ISize
     ) => {
         if (isGeneratingRef.current) return;
-        
-        // 如果视频正在播放，不生成缩略图以避免干扰
-        if (isPlaying) {
-            return;
-        }
-        
+        if (isPlaying) return;
+
         isGeneratingRef.current = true;
+        const currentGenerationId = generationIdRef.current;
         
         const thumbnailSize = 150;
         
@@ -247,7 +243,11 @@ const VideoEditor: React.FC<IProps> = ({
             
             for (let i = startFrame; i < actualEnd; i++) {
                 try {
-                    // 跳转到该帧的时间
+                    // 检查是否被取消（视频切换）
+                    if (generationIdRef.current !== currentGenerationId) {
+                        isGeneratingRef.current = false;
+                        return;
+                    }
                     const time = i / fps;
                     tempVideo.currentTime = time;
                     
@@ -321,9 +321,11 @@ const VideoEditor: React.FC<IProps> = ({
     // 处理第一帧绘制完成 - 生成缩略图版本用于显示（与其他帧保持一致）
     const handleFirstFrameDrawn = useCallback(
         (canvas: HTMLCanvasElement) => {
-            if (!activeVideo || imagesData.length === 0) return;
-            
-            const firstFrameImageData = imagesData[0];
+            // 使用 ref 获取最新的 imagesData，避免闭包过期
+            const currentImagesData = imagesDataRef.current;
+            if (!activeVideo || currentImagesData.length === 0) return;
+
+            const firstFrameImageData = currentImagesData[0];
             if (!firstFrameImageData) {
                 return;
             }
@@ -416,8 +418,9 @@ const VideoEditor: React.FC<IProps> = ({
             updateVideoMetadata(activeVideo.id, duration, fps, frames, videoSize);
             
             // ========== 检查是否已经有缓存的 imagesData ==========
-            // 只有当 imagesData 不为空、帧数匹配，且大部分帧已加载时，才认为缓存有效
-            if (imagesData.length > 0 && imagesData.length === frames) {
+            // 验证缓存属于当前视频（通过 activeFileId）且帧数匹配
+            const cachedFileId = ImageRepository.getActiveFileId();
+            if (imagesData.length > 0 && imagesData.length === frames && cachedFileId === activeVideo.id) {
                 const loadedCount = imagesData.filter(img => img.loadStatus).length;
                 const loadedPercentage = (loadedCount / frames) * 100;
                 
@@ -718,15 +721,14 @@ const VideoEditor: React.FC<IProps> = ({
         );
     }
 
-    // 获取已标注的帧列表
-    const annotatedFrames = imagesData
-        .filter(img => 
-            img.labelRects.length > 0 || 
-            img.labelPoints.length > 0 || 
-            img.labelPolygons.length > 0 || 
-            img.labelLines.length > 0
-        )
-        .map((_, index) => index);
+    // 获取已标注的帧列表（使用原始 index，不是过滤后的 index）
+    const annotatedFrames = imagesData.reduce<number[]>((acc, img, index) => {
+        if (img.labelRects.length > 0 || img.labelPoints.length > 0 ||
+            img.labelPolygons.length > 0 || img.labelLines.length > 0) {
+            acc.push(index);
+        }
+        return acc;
+    }, []);
 
     // 获取关键帧列表
     const keyframes = Array.from(activeVideo.frames.values())
@@ -773,7 +775,6 @@ const VideoEditor: React.FC<IProps> = ({
                         <Editor
                             size={canvasEditorSize}
                             imageData={currentImageData}
-                            key={`frame-${activeVideo.currentFrame}`}
                         />
                     )}
                 </div>

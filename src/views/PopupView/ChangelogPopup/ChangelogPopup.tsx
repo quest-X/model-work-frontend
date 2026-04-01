@@ -16,6 +16,20 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.2.0',
+        date: '2026-04-01',
+        changes: [
+            { zh: '修复视频缩略图 URL 内存泄漏', en: 'Fixed video thumbnail URL memory leak' },
+            { zh: '修复视频重播竞态条件', en: 'Fixed video replay race condition' },
+            { zh: '添加缩略图生成取消机制（切换视频时）', en: 'Added thumbnail generation cancellation on video switch' },
+            { zh: '修复播放时 Editor 每帧重新挂载导致卡顿', en: 'Fixed Editor remounting on every frame during playback' },
+            { zh: '修复切换视频时缓存误判', en: 'Fixed false cache hit when switching videos' },
+            { zh: '修复时间轴标注帧位置计算错误', en: 'Fixed annotated frame position calculation on timeline' },
+            { zh: '修复快速拖动时间轴时监听器泄漏', en: 'Fixed seek listener accumulation on rapid scrubbing' },
+            { zh: '修复图片预览 Redux 属性直接修改', en: 'Fixed direct prop mutation in ImagePreview' },
+        ]
+    },
+    {
         version: '1.1.6',
         date: '2026-04-01',
         changes: [

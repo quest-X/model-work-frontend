@@ -177,13 +177,14 @@ const EditorContainer: React.FC<IProps> = (
                 video.onloadedmetadata = () => {
                     video.currentTime = 0;
                 };
+                const videoUrl = URL.createObjectURL(file);
                 video.onseeked = () => {
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     const maxSize = 100;
                     let width = video.videoWidth;
                     let height = video.videoHeight;
-                    
+
                     if (width > height) {
                         if (width > maxSize) {
                             height *= maxSize / width;
@@ -195,13 +196,18 @@ const EditorContainer: React.FC<IProps> = (
                             height = maxSize;
                         }
                     }
-                    
+
                     canvas.width = width;
                     canvas.height = height;
                     ctx?.drawImage(video, 0, 0, width, height);
+                    URL.revokeObjectURL(videoUrl);
                     resolve(canvas.toDataURL());
                 };
-                video.src = URL.createObjectURL(file);
+                video.onerror = () => {
+                    URL.revokeObjectURL(videoUrl);
+                    resolve(undefined);
+                };
+                video.src = videoUrl;
             } else {
                 resolve(undefined);
             }
@@ -497,7 +503,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '160px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.1.6</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.2.0</div>
         </>
     };
 

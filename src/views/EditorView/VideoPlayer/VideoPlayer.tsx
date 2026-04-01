@@ -192,19 +192,25 @@ const VideoPlayer: React.FC<IProps> = ({
         }, 100);
     }, [detectFrameRate, onLoadedMetadata, drawFrame]);
 
-    // 跳转到指定时间
+    // 跳转到指定时间（保持至多一个 seeked 监听器）
+    const pendingSeekedRef = useRef<(() => void) | null>(null);
     const seekToTime = useCallback((time: number) => {
         const video = videoRef.current;
         if (!video) return;
 
+        // 移除之前未完成的 seeked 监听器
+        if (pendingSeekedRef.current) {
+            video.removeEventListener('seeked', pendingSeekedRef.current);
+        }
+
         video.currentTime = time;
-        
-        // 等待视频跳转完成后绘制帧
+
         const handleSeeked = () => {
             drawFrame();
-            video.removeEventListener('seeked', handleSeeked);
+            pendingSeekedRef.current = null;
         };
-        video.addEventListener('seeked', handleSeeked);
+        pendingSeekedRef.current = handleSeeked;
+        video.addEventListener('seeked', handleSeeked, { once: true });
     }, [drawFrame]);
 
     // 使用 requestVideoFrameCallback 实现精确的逐帧更新
@@ -257,6 +263,7 @@ const VideoPlayer: React.FC<IProps> = ({
                     if (isVideoEnded) {
                         video.currentTime = 0;
                         setIsVideoEnded(false);
+                        hasEndedRef.current = false;
                         // 等待 seek 完成
                         await new Promise<void>((resolve) => {
                             const onSeeked = () => {
@@ -384,11 +391,6 @@ const VideoPlayer: React.FC<IProps> = ({
         if (onPause) {
             onPause();
         }
-
-        // 在下一个事件循环中重置标志
-        setTimeout(() => {
-            hasEndedRef.current = false;
-        }, 100);
     }, [onPause, onTimeUpdate, videoDuration, detectedFps, drawFrame]);
 
     // 键盘快捷键 - 只在焦点在视频播放器上时响应
