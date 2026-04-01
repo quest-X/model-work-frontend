@@ -614,13 +614,7 @@ const VideoEditor: React.FC<IProps> = ({
         if (newPlayingStatus) {
             isGeneratingRef.current = false;
             frameSkipCountRef.current = 0;
-            // 重置 lastFrameRef，避免从最后一帧跳到第一帧时误判为跳帧
             lastFrameRef.current = -1;
-            // 播放时暂停自动保存，避免 IndexedDB 写入干扰播放流畅度
-            AutoSaveService.pauseAutoSave();
-        } else {
-            // 暂停时恢复自动保存，并立即保存当前状态
-            AutoSaveService.resumeAutoSave();
         }
     }, [activeVideo, isPlaying, updateVideoPlayingStatus, loadedThumbnailCount, totalFrameCount, imagesData]);
 

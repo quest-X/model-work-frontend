@@ -44,30 +44,6 @@ const EditorBottomNavigationBar: React.FC<IProps> = ({size, imageData, totalImag
         return (activeImageIndex + 1) + " / " + totalImageCount;
     };
 
-    const getLastSavedTimeText = () => {
-        if (lastSavedTime === 0) {
-            return language === Language.CHINESE ? '未保存' : 'Not saved';
-        }
-        
-        const now = Date.now();
-        const diffMs = now - lastSavedTime;
-        const diffMins = Math.floor(diffMs / (1000 * 60));
-        
-        if (diffMins < 1) {
-            return language === Language.CHINESE ? '刚刚保存' : 'Just saved';
-        }
-        if (diffMins < 60) {
-            return language === Language.CHINESE ? `${diffMins}分钟前` : `${diffMins}m ago`;
-        }
-        if (diffMins < 1440) {
-            const hours = Math.floor(diffMins / 60);
-            return language === Language.CHINESE ? `${hours}小时前` : `${hours}h ago`;
-        }
-        
-        const date = new Date(lastSavedTime);
-        return date.toLocaleString();
-    };
-
     const getDetailedSavedTimeTooltip = () => {
         if (lastSavedTime === 0) {
             return language === Language.CHINESE ? '项目尚未保存' : 'Project has not been saved yet';
@@ -106,31 +82,28 @@ const EditorBottomNavigationBar: React.FC<IProps> = ({size, imageData, totalImag
             
             <div className="CenterSection">
                 {size.width > minWidth ?
-                    <div className="CurrentImageName"> {imageData.fileData.name} </div> :
+                    <Tooltip
+                        title={getDetailedSavedTimeTooltip()}
+                        placement="top"
+                        arrow
+                        enterDelay={500}
+                    >
+                        <div className="CurrentImageName"> {imageData.fileData.name} </div>
+                    </Tooltip> :
                     <div className="CurrentImageCount"> {getImageCounter()} </div>
                 }
             </div>
-            
-            <Tooltip 
-                title={getDetailedSavedTimeTooltip()} 
-                placement="top"
-                arrow
-                enterDelay={500}
-            >
-                <div className="RightSection">
-                    <div className="LastSavedTime">
-                        {getLastSavedTimeText()}
-                    </div>
-                    <ImageButton
-                        image={"ico/right.png"}
-                        imageAlt={"next"}
-                        buttonSize={{width: 25, height: 25}}
-                        onClick={() => ImageActions.getNextImage()}
-                        isDisabled={activeImageIndex === totalImageCount - 1}
-                        externalClassName={"right"}
-                    />
-                </div>
-            </Tooltip>
+
+            <div className="RightSection">
+                <ImageButton
+                    image={"ico/right.png"}
+                    imageAlt={"next"}
+                    buttonSize={{width: 25, height: 25}}
+                    onClick={() => ImageActions.getNextImage()}
+                    isDisabled={activeImageIndex === totalImageCount - 1}
+                    externalClassName={"right"}
+                />
+            </div>
         </div>
     );
 };

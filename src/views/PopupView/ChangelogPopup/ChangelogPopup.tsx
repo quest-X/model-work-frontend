@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.2.1',
+        date: '2026-04-01',
+        changes: [
+            { zh: '调整模型下拉菜单顺序：本地模型优先，远程模型其次', en: 'Reordered model dropdown: local models first, remote models second' },
+        ]
+    },
+    {
         version: '1.2.0',
         date: '2026-04-01',
         changes: [

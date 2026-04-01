@@ -92,19 +92,7 @@
   .RightSection {
     display: flex;
     align-items: center;
-    gap: 12px;
     min-width: 120px;
     justify-content: flex-end;
-    
-    .LastSavedTime {
-      color: #cccccc;
-      font-size: 12px;
-      white-space: nowrap;
-      opacity: 0.8;
-      
-      &:hover {
-        opacity: 1;
-      }
-    }
   }
 }
