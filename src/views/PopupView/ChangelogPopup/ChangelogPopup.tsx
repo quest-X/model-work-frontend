@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.4.0',
+        date: '2026-04-02',
+        changes: [
+            { zh: '缩略图悬停显示红叉删除按钮', en: 'Show delete button on thumbnail hover' },
+            { zh: '统一蓝勾和红叉的大小', en: 'Unified size of selection indicator and delete button' },
+        ]
+    },
+    {
         version: '1.3.7',
         date: '2026-04-02',
         changes: [

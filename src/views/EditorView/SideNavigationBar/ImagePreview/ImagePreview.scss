@@ -43,17 +43,17 @@
     .MultiSelectIndicator {
       position: absolute;
       z-index: 1001;
-      width: 24px;
-      height: 24px;
-      top: -12px;
-      right: -12px;
+      width: 20px;
+      height: 20px;
+      top: -8px;
+      right: -8px;
       background-color: #009AFF;
       border: 2px solid white;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 12px;
+      font-size: 10px;
       color: white;
       font-weight: bold;
       box-shadow: 0 2px 4px rgba(0, 154, 255, 0.3);
@@ -131,6 +131,9 @@
     }
     .Background {
       transform: translate(2px, -2px);
+    }
+    .DeleteButton {
+      opacity: 1;
     }
   }
 }
