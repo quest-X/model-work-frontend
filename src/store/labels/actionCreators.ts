@@ -136,3 +136,10 @@ export function deleteImageById(id: string): LabelsActionTypes {
         payload: { id }
     }
 }
+
+export function deleteSelectedImages(): LabelsActionTypes {
+    return {
+        type: Action.DELETE_SELECTED_IMAGES,
+        payload: {}
+    }
+}

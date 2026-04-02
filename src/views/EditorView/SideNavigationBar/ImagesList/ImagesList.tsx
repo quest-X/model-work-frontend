@@ -175,9 +175,13 @@ class ImagesList extends React.Component<IProps, IState> {
         return true;
     };
 
+    private getFirstSelectedIndex = (): number => {
+        return this.props.imagesData.findIndex((img) => img.isSelected);
+    };
+
     private renderImagePreview = (index: number, isScrolling: boolean, isVisible: boolean, style: React.CSSProperties) => {
         const imageData = this.props.imagesData[index];
-        
+
         return <ImagePreview
             key={index}
             style={style}
@@ -188,6 +192,7 @@ class ImagesList extends React.Component<IProps, IState> {
             onClick={() => this.onClickHandler(index)}
             isSelected={this.props.activeImageIndex === index}
             isMultiSelected={imageData.isSelected}
+            isFirstSelected={imageData.isSelected && index === this.getFirstSelectedIndex()}
         />
     };
 

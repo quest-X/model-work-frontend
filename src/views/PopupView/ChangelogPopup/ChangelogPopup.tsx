@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.4.1',
+        date: '2026-04-02',
+        changes: [
+            { zh: 'Shift 多选后点击第一张红叉可批量删除所有选中图片', en: 'Click delete on first selected image to batch remove all selected images' },
+        ]
+    },
+    {
         version: '1.4.0',
         date: '2026-04-02',
         changes: [

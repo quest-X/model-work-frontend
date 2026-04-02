@@ -135,6 +135,26 @@ export function labelsReducer(
                 activeImageIndex: newActiveIndex
             }
         }
+        case Action.DELETE_SELECTED_IMAGES: {
+            const newImagesData = state.imagesData.filter((img: ImageData) => !img.isSelected);
+            let newActiveIndex = state.activeImageIndex;
+            if (newImagesData.length === 0) {
+                newActiveIndex = null;
+            } else {
+                const activeImage = state.imagesData[state.activeImageIndex];
+                if (activeImage?.isSelected) {
+                    newActiveIndex = Math.min(newImagesData.length - 1, Math.max(0, state.activeImageIndex));
+                } else {
+                    newActiveIndex = newImagesData.findIndex((img: ImageData) => img.id === activeImage?.id);
+                    if (newActiveIndex === -1) newActiveIndex = 0;
+                }
+            }
+            return {
+                ...state,
+                imagesData: newImagesData,
+                activeImageIndex: newActiveIndex
+            }
+        }
         default:
             return state;
     }
