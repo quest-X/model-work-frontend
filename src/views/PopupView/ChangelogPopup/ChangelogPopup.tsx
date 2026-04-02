@@ -16,6 +16,56 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.3.5',
+        date: '2026-04-02',
+        changes: [
+            { zh: '左右方向键直接切换上/下一张图片', en: 'ArrowLeft/ArrowRight keys now switch to previous/next image' },
+        ]
+    },
+    {
+        version: '1.3.4',
+        date: '2026-04-02',
+        changes: [
+            { zh: '修复项目名称输入框中无法使用方向键和删除键的问题', en: 'Fixed arrow keys and delete key not working inside project name input' },
+            { zh: '点击画布自动释放输入框焦点，恢复快捷键', en: 'Clicking canvas auto-blurs input, restoring keyboard shortcuts' },
+        ]
+    },
+    {
+        version: '1.3.3',
+        date: '2026-04-02',
+        changes: [
+            { zh: '项目名称在顶部导航栏居中显示', en: 'Project name is now centered in the top navigation bar' },
+            { zh: '修复项目名称下划线过长的问题', en: 'Fixed project name underline being wider than the text' },
+        ]
+    },
+    {
+        version: '1.3.2',
+        date: '2026-04-02',
+        changes: [
+            { zh: '修复点击画布后空格键触发上传而非播放/暂停的问题', en: 'Fixed Space key triggering upload instead of play/pause after clicking canvas' },
+            { zh: '欢迎页面支持点击上传文件', en: 'Welcome page now supports click to upload files' },
+        ]
+    },
+    {
+        version: '1.3.1',
+        date: '2026-04-01',
+        changes: [
+            { zh: '修复更新日志展开后窗口变大的问题（展开前锁定高度，改用滚动条）', en: 'Fixed changelog window growing after load more (lock height before expanding, use scrollbar instead)' },
+        ]
+    },
+    {
+        version: '1.3.0',
+        date: '2026-04-01',
+        changes: [
+            { zh: '实现文件队列 UI：缩略图列表、状态指示、点击切换文件', en: 'Implemented file queue UI: thumbnail list, status indicators, click to switch files' },
+            { zh: '上传新文件自动切换到新内容，无需手动操作', en: 'Auto-switch to newly uploaded content on drop' },
+            { zh: '修复拖拽上传在已有图片时被 canvas/Scrollbars 拦截的问题', en: 'Fixed drag-and-drop blocked by canvas/Scrollbars when images are loaded' },
+            { zh: '修复切换图集后缩略图转圈不加载的问题', en: 'Fixed thumbnails spinning indefinitely after switching image set' },
+            { zh: '修复切换图集后画布灰屏的问题（EditorModel.isLoading 未重置）', en: 'Fixed gray canvas after switching image set (EditorModel.isLoading not reset)' },
+            { zh: '修复图片加载失败时 isLoading 永久卡死', en: 'Fixed isLoading stuck on true when image load fails' },
+        ]
+    },
+    {
         version: '1.2.1',
         date: '2026-04-01',
         changes: [
@@ -118,7 +168,16 @@ const ChangelogPopup: React.FC<IProps> = ({language}) => {
     const currentTexts = LanguageConfig[language];
     const [status, setMountStatus] = useState(false);
     const [showAll, setShowAll] = useState(false);
+    const [lockedHeight, setLockedHeight] = useState<number | null>(null);
+    const bodyRef = React.useRef<HTMLDivElement>(null);
     const isZh = language === Language.CHINESE;
+
+    const handleLoadMore = () => {
+        if (bodyRef.current) {
+            setLockedHeight(bodyRef.current.offsetHeight);
+        }
+        setShowAll(true);
+    };
 
     useEffect(() => {
         if (!status) {
@@ -151,7 +210,7 @@ const ChangelogPopup: React.FC<IProps> = ({language}) => {
                     </div>
                 ))}
                 {hasMore && !showAll && (
-                    <div className="LoadMoreButton" onClick={() => setShowAll(true)}>
+                    <div className="LoadMoreButton" onClick={handleLoadMore}>
                         {isZh ? `加载更多日志 (${CHANGELOG_DATA.length - INITIAL_SHOW_COUNT})` : `Load more (${CHANGELOG_DATA.length - INITIAL_SHOW_COUNT})`}
                     </div>
                 )}
@@ -166,7 +225,11 @@ const ChangelogPopup: React.FC<IProps> = ({language}) => {
                     <span className="PanelTitle">{currentTexts.changelog.title}</span>
                     <div className="CloseButton" onClick={onClose}>✕</div>
                 </div>
-                <div className="PanelBody">
+                <div
+                    className="PanelBody"
+                    ref={bodyRef}
+                    style={lockedHeight ? { height: lockedHeight, overflowY: 'auto' } : undefined}
+                >
                     {renderContent()}
                 </div>
             </div>
