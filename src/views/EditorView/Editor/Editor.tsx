@@ -91,7 +91,10 @@ class Editor extends React.Component<IProps, IState> {
     public componentDidUpdate(prevProps: Readonly<IProps>, prevState: Readonly<{}>, snapshot?: any): void {
         const {imageData, activeLabelType} = this.props;
 
-        prevProps.imageData.id !== imageData.id && ImageLoadManager.addAndRun(this.loadImage(imageData));
+        if (prevProps.imageData.id !== imageData.id) {
+            EditorActions.setLoadingStatus(false);
+            ImageLoadManager.addAndRun(this.loadImage(imageData));
+        }
 
         if (prevProps.activeLabelType !== activeLabelType) {
             // 绘制工具改变时，始终切换渲染引擎到对应的工具类型
@@ -161,7 +164,9 @@ class Editor extends React.Component<IProps, IState> {
         this.updateModelAndRender()
     };
 
-    private handleLoadImageError = () => {};
+    private handleLoadImageError = () => {
+        EditorActions.setLoadingStatus(false);
+    };
 
     // =================================================================================================================
     // HELPER METHODS

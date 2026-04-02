@@ -6,6 +6,7 @@
   border-top: solid 1px $darkThemeFirstColor;
   background-color: $darkThemeSecondColor;
   user-select: none;
+  position: relative;
 
   display: flex;
   flex-direction: row;
@@ -83,10 +84,17 @@
   }
 
   .CenterSection {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 1;
+    pointer-events: none;
+
+    > * {
+      pointer-events: auto;
+    }
   }
 
   .RightSection {

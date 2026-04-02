@@ -28,7 +28,7 @@ const typeIconMap: Record<QueueItemType, string> = {
 const statusConfig: Record<QueueItemStatus, { className: string; label: string }> = {
     [QueueItemStatus.PENDING]:    { className: 'status-pending',    label: '待处理' },
     [QueueItemStatus.PROCESSING]: { className: 'status-processing', label: '加载中' },
-    [QueueItemStatus.COMPLETED]:  { className: 'status-completed',  label: '已完成' },
+    [QueueItemStatus.COMPLETED]:  { className: 'status-completed',  label: '已上传' },
     [QueueItemStatus.ERROR]:      { className: 'status-error',      label: '错误' },
 };
 

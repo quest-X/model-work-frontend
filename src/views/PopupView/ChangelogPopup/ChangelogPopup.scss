@@ -43,6 +43,17 @@
 
     .PanelBody {
         padding: 16px 24px 20px;
+
+        &::-webkit-scrollbar {
+            width: 4px;
+        }
+        &::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        &::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+        }
     }
 
     .ChangelogContent {
