@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.3.7',
+        date: '2026-04-02',
+        changes: [
+            { zh: '修复导航栏按钮 hover 白色背景溢出的问题', en: 'Fixed nav bar button hover background overflowing' },
+            { zh: '去除下拉菜单多余间距（顶部和底部）', en: 'Removed extra padding in dropdown menus (top and bottom)' },
+        ]
+    },
+    {
         version: '1.3.6',
         date: '2026-04-02',
         changes: [
