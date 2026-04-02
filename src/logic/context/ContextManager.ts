@@ -30,6 +30,12 @@ export class ContextManager {
             ContextManager.contextHistory.push(activeCtx);
             ContextManager.updateCtx(context);
         }
+
+        // 切换到非输入上下文时，释放输入框焦点，避免快捷键被拦截
+        const active = document.activeElement as HTMLElement;
+        if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+            active.blur();
+        }
     }
 
     private static updateCtx(context: ContextType): void {
@@ -51,10 +57,14 @@ export class ContextManager {
     }
 
     private static onDown(event: KeyboardEvent): void {
+        const target = event.target as HTMLElement;
+        const isTextInput = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+
         const keyCode: string = ContextManager.getKeyCodeFromEvent(event);
         if (!ContextManager.isInCombo(keyCode)) {
             ContextManager.addToCombo(keyCode);
         }
+        if (isTextInput) return;
         ContextManager.execute(event);
     }
 
