@@ -21,57 +21,38 @@
     flex: 1;
     height: calc(#{$topNavigationBarHeight} - #{$stateBarHeight});
     display: flex;
-    flex-wrap: nowrap;
-    justify-content: space-between;
     align-items: center;
-    align-content: space-between;
     position: relative;
 
     .NavigationBarGroupWrapper {
-      margin: 4px 0;
-
+      flex-shrink: 0;
       align-self: stretch;
       display: flex;
       flex-wrap: nowrap;
-      justify-content: center;
       align-items: center;
-      align-content: center;
-
-
-      &.left {
-        flex: 1 1 0;
-        min-width: 0;
-        justify-content: flex-start;
-      }
 
       &.right {
-        flex: 1 1 0;
-        min-width: 0;
-        justify-content: flex-end;
+        margin-left: auto;
       }
-
     }
 
     .ProjectNameContainer {
       position: absolute;
       top: 0;
       bottom: 0;
+      left: 0;
+      right: 0;
       display: flex;
       align-items: center;
+      justify-content: center;
       white-space: nowrap;
       pointer-events: none;
-      z-index: 1;
 
       > * {
         pointer-events: auto;
       }
     }
 
-    .ProjectName {
-      font-weight: 700;
-      margin-right: 10px;
-      user-select: none;
-    }
 
     .ImageButton {
       transition: transform 0.3s;
@@ -91,31 +72,44 @@
       }
     }
 
-    .TextInput {
-      max-width: 200px;
-      height: 25px;
+    .ProjectName {
+      font-weight: 700;
+      margin-right: 10px;
+      user-select: none;
+    }
 
-      &:hover {
-        background-color: rgba(0, 0, 0, 0.06);
+    .ProjectNameInputWrapper {
+      display: inline-grid;
+      min-width: 40px;
+
+      &::after,
+      input {
+        grid-area: 1 / 1;
+        font-size: 14px;
+        font-family: inherit;
+        font-weight: inherit;
+        letter-spacing: inherit;
+        padding: 0 2px;
+        white-space: pre;
       }
 
-      > input {
-        padding-top: 3.5px;
+      &::after {
+        content: attr(data-value) ' ';
+        visibility: hidden;
+      }
+
+      input {
+        min-width: 0;
+        border: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+        background: transparent;
+        color: white;
 
         &:focus {
           outline: none;
-          color: $secondaryColor; // fallback if new css variables are not supported by browser
           color: var(--leading-color);
-
-          ~ .Bar {
-            background-color: $secondaryColor; // fallback if new css variables are not supported by browser
-            background-color: var(--leading-color);
-          }
+          border-bottom-color: var(--leading-color);
         }
-      }
-
-      .Bar {
-        height: 0;
       }
     }
 

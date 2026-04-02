@@ -5,8 +5,6 @@ import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {AppState} from '../../../store';
 import {connect} from 'react-redux';
 import {updateActivePopupType, updateProjectData, updateLanguage} from '../../../store/general/actionCreators';
-import TextInput from '../../Common/TextInput/TextInput';
-import {ImageButton} from '../../Common/ImageButton/ImageButton';
 import {Settings} from '../../../settings/Settings';
 import {ProjectData} from '../../../store/general/types';
 import DropDownMenu from './DropDownMenu/DropDownMenu';
@@ -32,7 +30,6 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
     useEffect(() => {
         const el = document.querySelector('.EditorWrapper');
         if (!el) return;
-
         const updateCenter = () => {
             const rect = el.getBoundingClientRect();
             const center = Math.round(rect.left + rect.width / 2);
@@ -41,11 +38,9 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                 setCanvasCenterX(center);
             }
         };
-
         const observer = new ResizeObserver(updateCenter);
         observer.observe(el);
         updateCenter();
-
         return () => observer.disconnect();
     }, []);
 
@@ -182,12 +177,18 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                     style={canvasCenterX != null ? { left: canvasCenterX, transform: 'translateX(-50%)' } : undefined}
                 >
                     <div className='ProjectName'>{currentTexts.projectName}</div>
-                    <TextInput
-                        isPassword={false}
-                        value={props.projectData.name}
-                        onChange={onChange}
-                        onFocus={onFocus}
-                    />
+                    <div
+                        className='ProjectNameInputWrapper'
+                        data-value={props.projectData.name}
+                    >
+                        <input
+                            type='text'
+                            size={1}
+                            value={props.projectData.name}
+                            onChange={onChange}
+                            onFocus={onFocus}
+                        />
+                    </div>
                 </div>
                 <div className='NavigationBarGroupWrapper right'>
                     <TextButton
