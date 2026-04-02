@@ -242,8 +242,9 @@ const EditorContainer: React.FC<IProps> = (
     };
 
     // 拖拽上传功能 - 支持图片和视频（仅拖拽，不支持点击）
-    const {acceptedFiles, getRootProps, getInputProps, isDragActive} = useDropzone({
+    const {acceptedFiles, getRootProps, getInputProps, isDragActive, open: openFileDialog} = useDropzone({
         noClick: true, // 禁用点击上传，只支持拖拽
+        noKeyboard: true, // 禁用键盘触发上传，避免Space键冲突
         accept: {
             'image/*': ['.jpeg', '.png', '.jpg'],
             'video/*': ['.mp4', '.mov', '.avi', '.webm']
@@ -401,7 +402,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '160px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.2.1</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.3.5</div>
         </>
     };
 
@@ -523,7 +524,7 @@ const EditorContainer: React.FC<IProps> = (
                         />
                     </>
                 ) : (
-                    <div className={`EmptyProjectView ${isDragActive ? 'drag-active' : ''}`}>
+                    <div className={`EmptyProjectView ${isDragActive ? 'drag-active' : ''}`} onClick={openFileDialog} style={{cursor: 'pointer'}}>
                         <div className='EmptyProjectContent'>
                             <img
                                 draggable={false}
