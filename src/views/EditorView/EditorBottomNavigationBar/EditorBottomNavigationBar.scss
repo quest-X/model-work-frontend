@@ -51,17 +51,13 @@
   }
 
   .CurrentImageName {
-    min-width: 200px;
     padding: 0 20px;
     color: white;
     font-size: 14px;
-
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    justify-content: center;
-    align-items: center;
-    align-content: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
   }
 
   .CurrentImageCount {

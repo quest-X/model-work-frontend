@@ -23,6 +23,11 @@ const InferenceResultsButton: React.FC<IProps> = ({language, onToggle, isActive}
             onClick={handleClick}
             title={currentTexts.inferenceResults}
         >
+            <img
+                src="/ico/brain.png"
+                alt="AI"
+                className="ButtonIcon"
+            />
             <span>{currentTexts.inferenceResults}</span>
         </div>
     );

@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.3.6',
+        date: '2026-04-02',
+        changes: [
+            { zh: '推理结果按钮添加图标', en: 'Added icon to inference results button' },
+            { zh: '修复底部文件名换行问题', en: 'Fixed filename wrapping in bottom navigation bar' },
+        ]
+    },
+    {
         version: '1.3.5',
         date: '2026-04-02',
         changes: [
