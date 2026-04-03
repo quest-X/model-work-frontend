@@ -82,11 +82,22 @@ class ImagePreview extends React.Component<IProps, IState> {
     private loadImage = async (imageData: ImageData, isScrolling: boolean) => {
         if (imageData.loadStatus) {
             const image = ImageRepository.getById(imageData.id);
-            if (this.state.image !== image) {
+            if (image && this.state.image !== image) {
                 this.setState({ image });
+            }
+            // 如果 loadStatus 为 true 但 image 不在 repository（缓存丢失），尝试重新加载
+            if (!image && imageData.fileData && !imageData.fileData.type.startsWith('video/')) {
+                this.isLoading = true;
+                FileUtil.loadImage(imageData.fileData)
+                    .then((img: HTMLImageElement) => this.saveLoadedImage(img, imageData))
+                    .catch(() => this.handleLoadImageError());
             }
         }
         else if (!isScrolling || !this.isLoading) {
+            // 视频文件无法通过 FileUtil.loadImage 加载，跳过
+            if (imageData.fileData && imageData.fileData.type.startsWith('video/')) {
+                return;
+            }
             this.isLoading = true;
             const saveLoadedImagePartial = (image: HTMLImageElement) => this.saveLoadedImage(image, imageData);
             FileUtil.loadImage(imageData.fileData)

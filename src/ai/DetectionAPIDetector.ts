@@ -1,6 +1,7 @@
 import axios from 'axios';
 import {IRect} from '../interfaces/IRect';
 import {ImageData} from '../store/labels/types';
+import {ImageRepository} from '../logic/imageRepository/ImageRepository';
 
 export interface DetectionAPIConfig {
     url: string;
@@ -71,9 +72,30 @@ export class DetectionAPIDetector {
         try {
             // 准备form-data
             const formData = new FormData();
-            
-            // 添加图片文件
-            if (imageData.fileData) {
+
+            // 判断是否为视频文件（视频模式下 fileData 是整个视频文件，不能直接发送）
+            const isVideoFile = imageData.fileData && imageData.fileData.type.startsWith('video/');
+
+            if (isVideoFile) {
+                // 视频模式：从 ImageRepository 获取当前帧的 HTMLImageElement，转为 Blob 发送
+                const frameImage = ImageRepository.getById(imageData.id);
+                if (!frameImage) {
+                    throw new Error('Video frame image not available. Please wait for the frame to load.');
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = frameImage.naturalWidth || frameImage.width;
+                canvas.height = frameImage.naturalHeight || frameImage.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(frameImage, 0, 0);
+                const blob: Blob = await new Promise((resolve, reject) => {
+                    canvas.toBlob((b) => {
+                        if (b) resolve(b);
+                        else reject(new Error('Failed to capture video frame'));
+                    }, 'image/jpeg', 0.95);
+                });
+                formData.append('file', blob, 'video_frame.jpg');
+            } else if (imageData.fileData) {
+                // 图像模式：直接发送原始文件
                 formData.append('file', imageData.fileData, imageData.fileData.name || 'image.jpg');
             } else {
                 throw new Error('No image file data available');

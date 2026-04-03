@@ -76,8 +76,12 @@ const VideoEditor: React.FC<IProps> = ({
             setVideoUrl(url);
             return () => {
                 const currentImagesData = imagesDataRef.current;
+                // 仅在 repository 未被清空时保存缓存（避免覆盖 QueueActions 已保存的有效缓存）
                 if (activeVideo.id && currentImagesData.length > 0) {
-                    ImageRepository.saveFileCache(activeVideo.id, currentImagesData);
+                    const firstImg = currentImagesData[0];
+                    if (firstImg && ImageRepository.getById(firstImg.id)) {
+                        ImageRepository.saveFileCache(activeVideo.id, currentImagesData);
+                    }
                 }
 
                 URL.revokeObjectURL(url);

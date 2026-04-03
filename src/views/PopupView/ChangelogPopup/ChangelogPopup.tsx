@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.4.9',
+        date: '2026-04-03',
+        changes: [
+            { zh: '修复视频模式下目标检测 500 错误（从 canvas 截帧发送，而非发送原始视频文件）', en: 'Fix video mode detection 500 error (send canvas frame instead of raw video file)' },
+            { zh: '修复切换图像再切回视频时缩略图转圈圈问题（防止卸载时空缓存覆盖有效缓存）', en: 'Fix video thumbnails spinning on switch back (prevent empty cache overwriting valid cache on unmount)' },
+            { zh: '修复 ImagePreview 对视频文件的兼容（跳过无法加载的视频类型文件）', en: 'Fix ImagePreview compatibility with video files (skip unloadable video file types)' },
+        ]
+    },
+    {
         version: '1.4.8',
         date: '2026-04-03',
         changes: [
