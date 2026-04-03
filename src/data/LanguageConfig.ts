@@ -57,7 +57,7 @@ export interface LanguageTexts {
             name: string;
             description: string;
         };
-        importImages: {
+        uploadFiles: {
             name: string;
             description: string;
         };
@@ -95,12 +95,12 @@ export interface LanguageTexts {
     
     // Popup Windows
     popups: {
-        loadMoreImages: {
+        uploadFiles: {
             title: string;
-            addNewImages: string;
+            addNewFiles: string;
             clickToSelect: string;
-            oneImageLoaded: string;
-            multipleImagesLoaded: string;
+            oneFileLoaded: string;
+            multipleFilesLoaded: string;
             loadButton: string;
             cancelButton: string;
         };
@@ -439,9 +439,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 name: '编辑标签',
                 description: '修改标签列表'
             },
-            importImages: {
-                name: '导入图像',
-                description: '加载更多图像'
+            uploadFiles: {
+                name: '上传文件',
+                description: '上传图像或视频'
             },
             importAnnotations: {
                 name: '导入标注',
@@ -477,13 +477,13 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         
         // Popup Windows
         popups: {
-            loadMoreImages: {
-                title: '加载更多图像',
-                addNewImages: '添加新图像',
-                clickToSelect: '点击此处选择图像',
-                oneImageLoaded: '已加载 1 张新图像',
-                multipleImagesLoaded: '已加载 {count} 张新图像',
-                loadButton: '加载',
+            uploadFiles: {
+                title: '上传文件',
+                addNewFiles: '拖拽图像或视频到此处',
+                clickToSelect: '点击此处选择文件',
+                oneFileLoaded: '已加载 1 个文件',
+                multipleFilesLoaded: '已加载 {count} 个文件',
+                loadButton: '上传',
                 cancelButton: '取消'
             },
         insertLabelNames: {
@@ -819,9 +819,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 name: 'Edit Labels',
                 description: 'Modify labels list'
             },
-            importImages: {
-                name: 'Import Images',
-                description: 'Load more images'
+            uploadFiles: {
+                name: 'Upload Files',
+                description: 'Upload images or videos'
             },
             importAnnotations: {
                 name: 'Import Annotations',
@@ -857,13 +857,13 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         
         // Popup Windows
         popups: {
-            loadMoreImages: {
-                title: 'Load more images',
-                addNewImages: 'Add new images',
-                clickToSelect: 'Click here to select them',
-                oneImageLoaded: '1 new image loaded',
-                multipleImagesLoaded: '{count} new images loaded',
-                loadButton: 'Load',
+            uploadFiles: {
+                title: 'Upload Files',
+                addNewFiles: 'Drop images or videos here',
+                clickToSelect: 'Click here to select files',
+                oneFileLoaded: '1 file loaded',
+                multipleFilesLoaded: '{count} files loaded',
+                loadButton: 'Upload',
                 cancelButton: 'Cancel'
             },
         insertLabelNames: {

@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.4.8',
+        date: '2026-04-03',
+        changes: [
+            { zh: '「导入图像」改为「上传文件」，同时支持上传图像和视频（mp4/mov/avi/webm）', en: '"Import Images" renamed to "Upload Files", now supports both images and videos (mp4/mov/avi/webm)' },
+            { zh: '上传的视频文件自动添加到队列，图像直接加入当前项目', en: 'Uploaded videos are added to queue, images are added directly to current project' },
+        ]
+    },
+    {
         version: '1.4.7',
         date: '2026-04-03',
         changes: [

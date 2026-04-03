@@ -32,10 +32,10 @@ export const getDropDownMenuData = (language: Language): DropDownMenuNode[] => {
                     onClick: () => store.dispatch(updateActivePopupType(PopupWindowType.UPDATE_LABEL))
                 },
                 {
-                    name: texts.actions.importImages.name,
-                    description: texts.actions.importImages.description,
+                    name: texts.actions.uploadFiles.name,
+                    description: texts.actions.uploadFiles.description,
                     imageSrc: 'ico/camera.png',
-                    imageAlt: 'images',
+                    imageAlt: 'upload',
                     disabled: false,
                     onClick: () => store.dispatch(updateActivePopupType(PopupWindowType.IMPORT_IMAGES))
                 },
