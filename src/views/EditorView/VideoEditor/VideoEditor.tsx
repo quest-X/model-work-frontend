@@ -325,39 +325,44 @@ const VideoEditor: React.FC<IProps> = ({
             isGeneratingRef.current = false;
     };
 
-    // 处理第一帧绘制完成 - 生成缩略图版本用于显示（与其他帧保持一致）
+    // 处理第一帧绘制完成 - 生成缩略图 + 全分辨率图像
     const handleFirstFrameDrawn = useCallback(
         (canvas: HTMLCanvasElement) => {
-            // 使用 ref 获取最新的 imagesData，避免闭包过期
             const currentImagesData = imagesDataRef.current;
             if (!activeVideo || currentImagesData.length === 0) return;
 
             const firstFrameImageData = currentImagesData[0];
-            if (!firstFrameImageData) {
-                return;
-            }
-            
-            // 如果第一帧已经加载，只需要确保活动图像已设置
+            if (!firstFrameImageData) return;
+
+            // 生成全分辨率图像给 Editor 渲染引擎使用（坐标系必须匹配视频分辨率）
+            const setFullResImage = () => {
+                const fullCanvas = document.createElement('canvas');
+                fullCanvas.width = activeVideo.videoSize.width || canvas.width;
+                fullCanvas.height = activeVideo.videoSize.height || canvas.height;
+                const fullCtx = fullCanvas.getContext('2d');
+                fullCtx.drawImage(canvas, 0, 0, fullCanvas.width, fullCanvas.height);
+                const fullDataUrl = fullCanvas.toDataURL('image/jpeg', 0.9);
+                const fullImage = new Image();
+                fullImage.onload = () => {
+                    EditorActions.setActiveImage(fullImage);
+                };
+                fullImage.src = fullDataUrl;
+            };
+
             if (firstFrameImageData.loadStatus) {
-                const existingImage = ImageRepository.getById(firstFrameImageData.id);
-                if (existingImage) {
-                    EditorActions.setActiveImage(existingImage);
-                    console.log('[VideoEditor] 2. 第一帧图像已存在，已设置为活动图像');
-                }
+                // 已缓存，直接设置全分辨率图像
+                setFullResImage();
                 return;
             }
-            
-            console.log('[VideoEditor] 3. 从 VideoPlayer Canvas 中生成第一帧缩略图...');
-            
-            // 生成缩略图版本用于显示（与其他帧保持一致：150x150，JPEG格式，0.7质量）
+
+            // 生成缩略图给 ImagePreview 用（150x150）
             const thumbnailSize = 150;
             const thumbnailCanvas = document.createElement('canvas');
             thumbnailCanvas.width = thumbnailSize;
             thumbnailCanvas.height = thumbnailSize;
             const thumbnailCtx = thumbnailCanvas.getContext('2d');
-            
+
             if (thumbnailCtx && activeVideo.videoSize.width > 0 && activeVideo.videoSize.height > 0) {
-                // 计算缩放比例，保持宽高比
                 const scale = Math.min(
                     thumbnailSize / activeVideo.videoSize.width,
                     thumbnailSize / activeVideo.videoSize.height
@@ -366,51 +371,27 @@ const VideoEditor: React.FC<IProps> = ({
                 const scaledHeight = activeVideo.videoSize.height * scale;
                 const offsetX = (thumbnailSize - scaledWidth) / 2;
                 const offsetY = (thumbnailSize - scaledHeight) / 2;
-                
-                // 填充黑色背景
+
                 thumbnailCtx.fillStyle = '#000';
                 thumbnailCtx.fillRect(0, 0, thumbnailSize, thumbnailSize);
-                
-                // 在缩略图画布上绘制第一帧（从原始Canvas缩放）
-                thumbnailCtx.drawImage(
-                    canvas,
-                    offsetX,
-                    offsetY,
-                    scaledWidth,
-                    scaledHeight
-                );
-                
-                // 将缩略图转换为JPEG格式（与其他帧保持一致）
-                // 使用较低的质量 (0.5) 以加快生成速度
+                thumbnailCtx.drawImage(canvas, offsetX, offsetY, scaledWidth, scaledHeight);
+
                 const thumbnailDataUrl = thumbnailCanvas.toDataURL('image/jpeg', 0.5);
-                
-                // 创建缩略图图像对象
                 const thumbnailImage = new Image();
                 thumbnailImage.onload = () => {
-                    // 存储缩略图到 ImageRepository（用于显示）
-                    // 注意：Editor在视频模式下使用VideoPlayer的Canvas，不依赖ImageRepository
-                    // 所以这里存储缩略图用于ImagePreview显示是可以的
+                    // 缩略图存入 ImageRepository（给 ImagePreview 用）
                     ImageRepository.storeImage(firstFrameImageData.id, thumbnailImage);
-                    
-                    // 更新 ImageData 的 loadStatus
                     const updatedImageData = { ...firstFrameImageData, loadStatus: true };
                     updateImageDataById(updatedImageData.id, updatedImageData);
-                    
-                    // 设置第一帧为活动图像，这样 Editor 可以立即初始化
-                    // Editor会使用VideoPlayer的Canvas，不依赖这个缩略图
-                    EditorActions.setActiveImage(thumbnailImage);
-                    
-                    console.log('[VideoEditor] 4. 第一帧缩略图已生成并存储 - 与其他帧保持一致（150x150 JPEG）');
+                    // 全分辨率图像给 Editor 渲染引擎
+                    setFullResImage();
                 };
-                thumbnailImage.onerror = (error) => {
-                    console.error('[VideoEditor] 5. 加载第一帧缩略图失败:', error);
-                    // 即使失败也更新loadStatus，避免阻塞
+                thumbnailImage.onerror = () => {
                     const updatedImageData = { ...firstFrameImageData, loadStatus: true };
                     updateImageDataById(updatedImageData.id, updatedImageData);
                 };
                 thumbnailImage.src = thumbnailDataUrl;
             } else {
-                // 如果无法生成缩略图，至少更新loadStatus
                 const updatedImageData = { ...firstFrameImageData, loadStatus: true };
                 updateImageDataById(updatedImageData.id, updatedImageData);
             }

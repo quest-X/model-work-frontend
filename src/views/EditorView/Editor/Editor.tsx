@@ -148,9 +148,26 @@ class Editor extends React.Component<IProps, IState> {
 
     private loadImage = async (imageData: ImageData): Promise<any> => {
         if (imageData.loadStatus) {
-            EditorActions.setActiveImage(ImageRepository.getById(imageData.id));
-            AIActions.detect(imageData.id, ImageRepository.getById(imageData.id));
-            this.updateModelAndRender()
+            // 视频模式：从 video 元素全分辨率截帧，避免使用 150x150 缩略图
+            if (VideoSelector.isVideoMode() && EditorModel.videoElement && EditorModel.videoElement.readyState >= 2) {
+                const video = EditorModel.videoElement;
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                const fullImage = new Image();
+                fullImage.onload = () => {
+                    EditorActions.setActiveImage(fullImage);
+                    this.updateModelAndRender();
+                };
+                fullImage.src = dataUrl;
+            } else {
+                EditorActions.setActiveImage(ImageRepository.getById(imageData.id));
+                AIActions.detect(imageData.id, ImageRepository.getById(imageData.id));
+                this.updateModelAndRender();
+            }
         }
         else {
             if (!EditorModel.isLoading) {

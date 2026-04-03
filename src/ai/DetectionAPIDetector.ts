@@ -1,7 +1,7 @@
 import axios from 'axios';
 import {IRect} from '../interfaces/IRect';
 import {ImageData} from '../store/labels/types';
-import {ImageRepository} from '../logic/imageRepository/ImageRepository';
+import {EditorModel} from '../staticModels/EditorModel';
 
 export interface DetectionAPIConfig {
     url: string;
@@ -77,16 +77,16 @@ export class DetectionAPIDetector {
             const isVideoFile = imageData.fileData && imageData.fileData.type.startsWith('video/');
 
             if (isVideoFile) {
-                // 视频模式：从 ImageRepository 获取当前帧的 HTMLImageElement，转为 Blob 发送
-                const frameImage = ImageRepository.getById(imageData.id);
-                if (!frameImage) {
-                    throw new Error('Video frame image not available. Please wait for the frame to load.');
+                // 视频模式：从 video 元素全分辨率截取当前帧
+                const video = EditorModel.videoElement;
+                if (!video || video.readyState < 2) {
+                    throw new Error('Video not ready. Please wait for the video to load.');
                 }
                 const canvas = document.createElement('canvas');
-                canvas.width = frameImage.naturalWidth || frameImage.width;
-                canvas.height = frameImage.naturalHeight || frameImage.height;
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(frameImage, 0, 0);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const blob: Blob = await new Promise((resolve, reject) => {
                     canvas.toBlob((b) => {
                         if (b) resolve(b);

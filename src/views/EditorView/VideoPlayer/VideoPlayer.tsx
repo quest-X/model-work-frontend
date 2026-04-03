@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import './VideoPlayer.scss';
 import { ISize } from '../../../interfaces/ISize';
 import { Language, LanguageConfig } from '../../../data/LanguageConfig';
+import { EditorModel } from '../../../staticModels/EditorModel';
 
 interface IProps {
     language: Language;
@@ -183,6 +184,8 @@ const VideoPlayer: React.FC<IProps> = ({
         
         const totalFrames = Math.floor(duration * realFps); // 使用 floor 确保不超过视频实际可播放帧数
         setIsVideoLoaded(true);
+        // 将 video 元素暴露给 EditorModel，供检测等功能全分辨率截帧
+        EditorModel.videoElement = video;
 
         if (onLoadedMetadata) {
             onLoadedMetadata(duration, totalFrames, realFps, videoSizeData);

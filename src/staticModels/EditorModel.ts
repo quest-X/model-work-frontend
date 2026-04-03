@@ -19,6 +19,7 @@ export class EditorModel {
 
     public static viewPortHelper: ViewPortHelper;
 
+    public static videoElement: HTMLVideoElement;
     public static isLoading: boolean = false;
     public static viewPortActionsDisabled: boolean = false;
     public static mousePositionOnViewPortContent: IPoint;
