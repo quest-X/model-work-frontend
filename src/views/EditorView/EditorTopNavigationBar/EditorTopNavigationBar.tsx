@@ -10,6 +10,7 @@ import { ViewPointSettings } from '../../../settings/ViewPointSettings';
 import { ImageButton } from '../../Common/ImageButton/ImageButton';
 import { ViewPortActions } from '../../../logic/actions/ViewPortActions';
 import { LabelsSelector } from '../../../store/selectors/LabelsSelector';
+import { ImageData } from '../../../store/labels/types';
 import { LabelType } from '../../../data/enums/LabelType';
 import { AISelector } from '../../../store/selectors/AISelector';
 import { updateActiveLabelType, updateActiveLabelViewType } from '../../../store/labels/actionCreators';
@@ -89,6 +90,7 @@ interface IProps {
     language: Language;
     isAIDisabled: boolean;
     activeImageIndex: number;
+    imagesData: ImageData[];
     aiModels: any;
     updateActiveLabelType: (activeLabelType: LabelType) => any;
     updateActiveLabelViewType: (activeLabelViewType: LabelType) => any;
@@ -110,6 +112,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         language,
         isAIDisabled,
         activeImageIndex,
+        imagesData,
         aiModels,
         updateActiveLabelType,
         updateActiveLabelViewType,
@@ -164,66 +167,61 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         }
     }, [crossHairVisible, imageDragMode, updateCrossHairVisibleStatusAction, updateImageDragModeStatusAction]);
 
+    // 确保检测模型可用的辅助函数
+    const ensureDetectionModel = useCallback((): boolean => {
+        const detectionModel = getModelByType('detection');
+        if (detectionModel === null) {
+            return DetectionAPIDetector.isEnabled();
+        }
+        const aiModel = detectionModel as any;
+        if (!aiModel.url) return false;
+        DetectionAPIDetector.setConfig({ url: aiModel.url, enabled: true });
+        return true;
+    }, [getModelByType]);
+
     // 缓存的目标检测调用函数
     const fullImageDetectionOnClick = useCallback(() => {
         const activeImageData = LabelsSelector.getActiveImageData();
-        
-        if (!activeImageData) {
-            console.error('❌ 没有活动图像数据');
+
+        if (!activeImageData) return;
+        if (isFullImageInferenceInProgress) return;
+
+        // 检查是否有多选图像（选中数量 > 1）
+        const selectedImages = imagesData.filter((img: ImageData) => img.isSelected);
+        const isBatchMode = selectedImages.length > 1;
+
+        if (isBatchMode) {
+            // 批量模式：对所有选中的图像进行检测
+            if (!ensureDetectionModel()) return;
+            updateFullImageInferenceStatus(true);
+            AIDetectionActions.detectBatch(selectedImages);
             return;
         }
 
-        if (isFullImageInferenceInProgress) {
-            console.log('🔄 检测正在进行中，忽略点击');
-            return;
-        }
-
-        const imageAIState = imageAIStates.get(activeImageData.id) || { 
-            aiLabelsVisible: false, 
-            inferenceHistory: [] 
+        // 单张模式：原有逻辑
+        const imageAIState = imageAIStates.get(activeImageData.id) || {
+            aiLabelsVisible: false,
+            inferenceHistory: []
         };
 
-        // 检查当前图片是否有AI标签（预计算避免重复检查）
-        const hasAILabels = activeImageData.labelRects.some((rect: any) => rect.isCreatedByAI);
-        
-        // 如果点击时要显示标签（从闭眼到睁眼）
+        const currentHasAILabels = activeImageData.labelRects.some((rect: any) => rect.isCreatedByAI);
+
         if (!imageAIState.aiLabelsVisible) {
-            if (!hasAILabels) {
-                // 检查是否有可用的检测模型
-                const detectionModel = getModelByType('detection');
-                if (detectionModel === null) {
-                    if (!DetectionAPIDetector.isEnabled()) return;
-                } else {
-                    const aiModel = detectionModel as any;
-                    if (!aiModel.url) return;
-                    // 将 Redux 里存的 URL 同步给 DetectionAPIDetector
-                    DetectionAPIDetector.setConfig({ url: aiModel.url, enabled: true });
-                }
-
-                // 设置检测状态为进行中
+            if (!currentHasAILabels) {
+                if (!ensureDetectionModel()) return;
                 updateFullImageInferenceStatus(true);
-
-                // 使用微任务调用检测，避免阻塞主线程
                 queueMicrotask(() => {
                     AIDetectionActions.detectObjects(activeImageData);
                 });
             } else {
-                // 直接切换显示状态，立即响应
                 toggleImageAILabelsVisibility(activeImageData.id);
-                // 立即触发canvas重绘，确保与标签页同步
-                queueMicrotask(() => {
-                    EditorActions.fullRender();
-                });
+                queueMicrotask(() => { EditorActions.fullRender(); });
             }
         } else {
-            // 隐藏标签，立即响应
             toggleImageAILabelsVisibility(activeImageData.id);
-            // 立即触发canvas重绘，确保与标签页同步
-            queueMicrotask(() => {
-                EditorActions.fullRender();
-            });
+            queueMicrotask(() => { EditorActions.fullRender(); });
         }
-    }, [imageAIStates, isFullImageInferenceInProgress, getModelByType, updateFullImageInferenceStatus, toggleImageAILabelsVisibility]);
+    }, [imageAIStates, imagesData, isFullImageInferenceInProgress, ensureDetectionModel, updateFullImageInferenceStatus, toggleImageAILabelsVisibility]);
 
     // 标注工具点击处理 - 统一的处理函数
     const onToolClick = useCallback((toolType: LabelType) => {
@@ -493,6 +491,7 @@ const mapStateToProps = (state: AppState) => ({
     language: state.general.language,
     isAIDisabled: state.ai.isAIDisabled,
     activeImageIndex: state.labels.activeImageIndex,
+    imagesData: state.labels.imagesData,
     aiModels: state
 });
 

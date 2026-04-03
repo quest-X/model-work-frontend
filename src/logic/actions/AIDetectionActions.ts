@@ -150,6 +150,89 @@ export class AIDetectionActions {
     }
 
     /**
+     * 批量检测多张图像
+     * @param imagesToDetect 需要检测的图像列表
+     */
+    public static async detectBatch(imagesToDetect: ImageData[]): Promise<void> {
+        if (!DetectionAPIDetector.isEnabled() || imagesToDetect.length === 0) return;
+
+        const startTime = Date.now();
+        const language = store.getState().general.language;
+        const texts = LanguageConfig[language];
+        const total = imagesToDetect.length;
+        let totalObjects = 0;
+        let successCount = 0;
+        let failCount = 0;
+
+        // 创建批量进度通知
+        const progressNotification = NotificationUtil.createInferenceProgressNotification();
+        progressNotification.header = texts.notifications.batchDetectionProgress
+            .replace('{current}', '0').replace('{total}', String(total));
+        store.dispatch(submitNewNotification(progressNotification));
+
+        for (let i = 0; i < total; i++) {
+            const imageData = imagesToDetect[i];
+
+            // 跳过已有 AI 标签的图像
+            if (imageData.labelRects.some((r: LabelRect) => r.isCreatedByAI)) {
+                successCount++;
+                continue;
+            }
+
+            // 更新进度通知
+            const updatedNotification = {
+                ...progressNotification,
+                header: texts.notifications.batchDetectionProgress
+                    .replace('{current}', String(i + 1)).replace('{total}', String(total)),
+                description: imageData.fileData?.name || `Image ${i + 1}`
+            };
+            store.dispatch(updateNotificationById(progressNotification.id, updatedNotification));
+
+            // 逐张检测
+            try {
+                const results: DetectionResult[] = await new Promise((resolve, reject) => {
+                    DetectionAPIDetector.predict(
+                        imageData,
+                        (res) => resolve(res),
+                        (err) => reject(err)
+                    );
+                });
+
+                this.convertDetectionResultsToLabelRects(imageData, results);
+                store.dispatch(addInferenceHistory(imageData.id, results.length, true, 'detection'));
+                totalObjects += results.length;
+                successCount++;
+            } catch (error) {
+                store.dispatch(addInferenceHistory(imageData.id, 0, false, 'detection'));
+                failCount++;
+            }
+        }
+
+        // 删除进度通知，显示完成通知
+        store.dispatch(deleteNotificationById(progressNotification.id));
+        store.dispatch(updateFullImageInferenceStatus(false));
+
+        const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        const lang = store.getState().general.language;
+        const t = LanguageConfig[lang];
+        const successNotification = NotificationUtil.createSuccessNotification({
+            header: t.notifications.batchDetectionCompleted,
+            description: t.notifications.batchDetectionCompletedMessage
+                .replace('{total}', String(successCount))
+                .replace('{count}', String(totalObjects))
+                .replace('{time}', totalTime)
+        });
+        store.dispatch(submitNewNotification(successNotification));
+
+        // 确保按类别着色
+        if (!store.getState().general.enablePerClassColoration) {
+            store.dispatch(updatePerClassColorationStatus(true));
+        }
+
+        EditorActions.fullRender();
+    }
+
+    /**
      * 将检测结果转换为可编辑的标注框
      */
     private static convertDetectionResultsToLabelRects(imageData: ImageData, results: DetectionResult[]): void {

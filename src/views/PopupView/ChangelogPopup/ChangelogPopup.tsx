@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.5.1',
+        date: '2026-04-03',
+        changes: [
+            { zh: '支持批量目标检测：多选图像后点击检测按钮，对所有选中图像依次推理', en: 'Batch object detection: select multiple images then click detect to run inference on all selected' },
+            { zh: '已有AI标签的图像自动跳过，避免重复检测', en: 'Skip images with existing AI labels to avoid duplicate detection' },
+            { zh: '批量检测实时进度通知和完成汇总统计', en: 'Real-time batch detection progress notification and completion summary' },
+        ]
+    },
+    {
         version: '1.5.0',
         date: '2026-04-03',
         changes: [

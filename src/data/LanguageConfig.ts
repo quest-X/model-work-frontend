@@ -290,11 +290,14 @@ export interface LanguageTexts {
         annotationImportAssertionError: { header: string; description: string };
         unsupportedInferenceServer: { header: string; description: string };
         roboflowInferenceServerError: { header: string; description: string };
-        detectionCompleted: string; // "Detection completed"
-        detectionCompletedMessage: string; // "Detection completed: found {count} objects, took {time}s"
+        detectionCompleted: string;
+        detectionCompletedMessage: string;
         detectionFailed: string;
         detectionFailedMessage: string;
         detectionInProgress: string;
+        batchDetectionProgress: string;
+        batchDetectionCompleted: string;
+        batchDetectionCompletedMessage: string;
     };
 
     // AI Model Management
@@ -698,6 +701,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             detectionFailed: '目标检测失败',
             detectionFailedMessage: '检测过程中发生错误',
             detectionInProgress: '目标检测中...',
+            batchDetectionProgress: '批量检测中：{current}/{total}',
+            batchDetectionCompleted: '批量检测完成',
+            batchDetectionCompletedMessage: '共检测 {total} 张图像，发现 {count} 个对象，耗时 {time} 秒',
         },
 
         // AI Model Management
@@ -1078,6 +1084,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             detectionFailed: 'Detection failed',
             detectionFailedMessage: 'An error occurred during detection',
             detectionInProgress: 'Detecting objects...',
+            batchDetectionProgress: 'Batch detection: {current}/{total}',
+            batchDetectionCompleted: 'Batch detection completed',
+            batchDetectionCompletedMessage: 'Detected {total} images, found {count} objects, took {time}s',
         },
 
         // AI Model Management
