@@ -22,6 +22,7 @@ import {BaseRenderEngine} from './BaseRenderEngine';
 import {RenderEngineUtil} from '../../utils/RenderEngineUtil';
 import {LabelType} from '../../data/enums/LabelType';
 import {EditorActions} from '../actions/EditorActions';
+import {EditorModel} from '../../staticModels/EditorModel';
 import {GeneralSelector} from '../../store/selectors/GeneralSelector';
 import {LabelStatus} from '../../data/enums/LabelStatus';
 import {LabelUtil} from '../../utils/LabelUtil';
@@ -215,7 +216,8 @@ export class RectRenderEngine extends BaseRenderEngine {
         }
         
         const activeLabelId: string = LabelsSelector.getActiveLabelId();
-        const imageData: ImageData = LabelsSelector.getActiveImageData();
+        // 播放时直接使用预设的帧数据，绕过 Redux activeImageIndex 查找
+        const imageData: ImageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
         
         // 获取当前图片的AI标签显示状态（高性能缓存优化）
         let aiLabelsVisible = false;

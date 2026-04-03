@@ -87,6 +87,7 @@ const VideoEditor: React.FC<IProps> = ({
 
                 URL.revokeObjectURL(url);
                 EditorModel.videoFrameImage = null;
+                EditorModel.playbackImageData = null;
                 generationIdRef.current++; // 取消清理时仍在运行的生成
                 if (tempVideoRef.current) {
                     tempVideoRef.current.src = '';
@@ -618,8 +619,9 @@ const VideoEditor: React.FC<IProps> = ({
             frameSkipCountRef.current = 0;
             lastFrameRef.current = -1;
         } else {
-            // Pausing: sync sidebar index to the actual current frame immediately,
-            // since it was throttled (200ms) during playback and may be stale.
+            // 暂停：清除播放缓存，恢复 Redux selector 路径
+            EditorModel.playbackImageData = null;
+            // 同步侧边栏到当前帧
             if (activeVideo.currentFrame !== activeImageIndex) {
                 updateActiveImageIndex(activeVideo.currentFrame);
             }
@@ -635,7 +637,7 @@ const VideoEditor: React.FC<IProps> = ({
     const lastFrameRef = React.useRef<number>(-1);
     const frameSkipCountRef = React.useRef<number>(0);
     const lastUpdateTimeRef = React.useRef<number>(0); // 记录上次更新时间，用于节流
-    const lastSidebarUpdateRef = React.useRef<number>(0); // 侧边栏更新节流（独立于帧更新）
+    const lastSidebarUpdateRef = React.useRef<number>(0); // 侧边栏高亮节流
     const handleVideoTimeUpdate = useCallback(
         (time: number, frame: number) => {
             if (!activeVideo) return;
@@ -681,23 +683,23 @@ const VideoEditor: React.FC<IProps> = ({
             const shouldUpdate = frameChanged && timeSinceLastUpdate >= 33;
             
             if (shouldUpdate) {
-                // 同步更新，但频率已降低，不会过度阻塞回调
                 updateVideoCurrentFrame(activeVideo.id, frame, time);
                 lastUpdateTimeRef.current = now;
 
-                // 更新当前帧对应的图像索引（让左侧列表动态高亮）
-                // 侧边栏更新比标注渲染更昂贵（triggers ImagePreview re-renders），
-                // 所以在播放时节流到 ~5fps (200ms)，减少不必要的 React reconciliation。
+                // 核心设计：推理与渲染分离
+                // 直接从 imagesDataRef 按帧号读取预计算的标注数据，
+                // 设置到 EditorModel.playbackImageData，RectRenderEngine 直接读取。
+                // 完全绕过 Redux selector (activeImageIndex → getActiveImageData)，零开销。
+                const frameImageData = imagesDataRef.current[frame];
+                EditorModel.playbackImageData = frameImageData || null;
+
+                // 侧边栏高亮更新：节流到 ~5fps，不影响标注渲染
                 const sidebarTimeSince = now - lastSidebarUpdateRef.current;
                 if (frame !== activeImageIndex && (!isPlaying || sidebarTimeSince >= 200)) {
                     updateActiveImageIndex(frame);
                     lastSidebarUpdateRef.current = now;
                 }
 
-                // 关键优化：Redux dispatch 是同步的，store 已经更新。
-                // 直接调用 fullRender() 立即重绘标注画布，不等待 React 的
-                // reconciliation 周期（省去 ~10-20ms 延迟），让检测框与视频帧同步。
-                // Editor.componentDidUpdate 中会跳过播放期间的重复渲染。
                 EditorActions.fullRender();
             }
         },

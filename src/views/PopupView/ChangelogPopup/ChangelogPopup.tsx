@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.6.1',
+        date: '2026-04-04',
+        changes: [
+            { zh: '推理与渲染分离：播放时直接按帧号读取预计算标注数据，绕过 Redux selector，消除断片', en: 'Decouple inference from rendering: read pre-computed annotation data by frame index during playback, bypass Redux selector, eliminate gaps' },
+            { zh: '批量检测增加重试机制和帧就绪等待，确保每帧都能稳定检测', en: 'Batch detection with retry and frame readiness check for reliable per-frame detection' },
+            { zh: '视频 seek 增加超时保护和帧解码等待，避免批量检测挂起', en: 'Video seek with timeout protection and frame decode wait to prevent batch detection hangs' },
+        ]
+    },
+    {
         version: '1.6.0',
         date: '2026-04-03',
         changes: [
