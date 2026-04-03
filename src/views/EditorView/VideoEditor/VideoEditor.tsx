@@ -17,6 +17,7 @@ import { updateImageDataById, updateActiveImageIndex, addImageData, toggleImageS
 import { ImageDataUtil } from '../../../utils/ImageDataUtil';
 import { ImageRepository } from '../../../logic/imageRepository/ImageRepository';
 import { EditorActions } from '../../../logic/actions/EditorActions';
+import { EditorModel } from '../../../staticModels/EditorModel';
 import { AutoSaveService } from '../../../services/AutoSaveService';
 import { Language } from '../../../data/LanguageConfig';
 
@@ -85,6 +86,7 @@ const VideoEditor: React.FC<IProps> = ({
                 }
 
                 URL.revokeObjectURL(url);
+                EditorModel.videoFrameImage = null;
                 generationIdRef.current++; // 取消清理时仍在运行的生成
                 if (tempVideoRef.current) {
                     tempVideoRef.current.src = '';
@@ -111,23 +113,24 @@ const VideoEditor: React.FC<IProps> = ({
     }, [activeVideo, imagesData.length, activeImageIndex, updateActiveImageIndex, updateVideoCurrentFrame]);
 
     // 确保当前帧的图像被设置为活动图像
-    // 注意：在视频模式下，即使图像还没有加载到 ImageRepository，Editor 也可以工作
-    // 因为 VideoPrimaryRenderEngine 不依赖图像对象，而是直接在 VideoPlayer 的 Canvas 上标注
+    // 视频模式下优先使用 videoFrameImage（全分辨率，坐标映射准确）
     const lastFrameForImageRef = React.useRef<number>(-1);
     useEffect(() => {
         if (activeVideo && imagesData.length > 0) {
-            // 只在帧号变化时执行，避免播放时频繁执行
             if (activeVideo.currentFrame !== lastFrameForImageRef.current) {
                 lastFrameForImageRef.current = activeVideo.currentFrame;
-                
-                const currentImageData = imagesData[activeVideo.currentFrame];
-                if (currentImageData && currentImageData.id) {
-                    const image = ImageRepository.getById(currentImageData.id);
-                    if (image) {
-                        EditorActions.setActiveImage(image);
-                    } else {
-                        // 如果图像还没有加载，仍然设置活动图像（视频模式下可以工作）
-                        // Editor 会使用 VideoPlayer 的 Canvas 进行标注
+
+                // 视频模式：始终使用缓存的 videoFrameImage，避免用 150x150 缩略图
+                if (EditorModel.videoFrameImage) {
+                    EditorActions.setActiveImage(EditorModel.videoFrameImage);
+                } else {
+                    // 回退：videoFrameImage 还没生成时用 ImageRepository 的图像
+                    const currentImageData = imagesData[activeVideo.currentFrame];
+                    if (currentImageData && currentImageData.id) {
+                        const image = ImageRepository.getById(currentImageData.id);
+                        if (image) {
+                            EditorActions.setActiveImage(image);
+                        }
                     }
                 }
             }
@@ -335,15 +338,26 @@ const VideoEditor: React.FC<IProps> = ({
             if (!firstFrameImageData) return;
 
             // 生成全分辨率图像给 Editor 渲染引擎使用（坐标系必须匹配视频分辨率）
+            // 同时缓存到 EditorModel.videoFrameImage，播放时复用避免重复创建
             const setFullResImage = () => {
+                // 如果已有缓存且尺寸匹配，直接复用
+                const targetW = activeVideo.videoSize.width || canvas.width;
+                const targetH = activeVideo.videoSize.height || canvas.height;
+                if (EditorModel.videoFrameImage &&
+                    EditorModel.videoFrameImage.naturalWidth === targetW &&
+                    EditorModel.videoFrameImage.naturalHeight === targetH) {
+                    EditorActions.setActiveImage(EditorModel.videoFrameImage);
+                    return;
+                }
                 const fullCanvas = document.createElement('canvas');
-                fullCanvas.width = activeVideo.videoSize.width || canvas.width;
-                fullCanvas.height = activeVideo.videoSize.height || canvas.height;
+                fullCanvas.width = targetW;
+                fullCanvas.height = targetH;
                 const fullCtx = fullCanvas.getContext('2d');
                 fullCtx.drawImage(canvas, 0, 0, fullCanvas.width, fullCanvas.height);
                 const fullDataUrl = fullCanvas.toDataURL('image/jpeg', 0.9);
                 const fullImage = new Image();
                 fullImage.onload = () => {
+                    EditorModel.videoFrameImage = fullImage;
                     EditorActions.setActiveImage(fullImage);
                 };
                 fullImage.src = fullDataUrl;

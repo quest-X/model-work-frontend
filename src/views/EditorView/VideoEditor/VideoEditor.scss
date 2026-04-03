@@ -108,18 +108,13 @@
                 height: 100%;
             }
 
-            // ⭐ 视频播放时强制隐藏光标和坐标指示器
+            // 视频播放时禁用交互但保持标注可见
             &.video-playing {
-                .Cursor {
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                }
+                pointer-events: none;
 
+                .Cursor,
                 .MousePositionIndicator {
                     display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
                 }
             }
         }

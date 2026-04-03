@@ -20,6 +20,7 @@ export class EditorModel {
     public static viewPortHelper: ViewPortHelper;
 
     public static videoElement: HTMLVideoElement;
+    public static videoFrameImage: HTMLImageElement; // 持久化的视频尺寸图像，用于坐标映射
     public static isLoading: boolean = false;
     public static viewPortActionsDisabled: boolean = false;
     public static mousePositionOnViewPortContent: IPoint;
