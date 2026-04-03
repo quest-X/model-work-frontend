@@ -19,7 +19,7 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
         version: '1.5.0',
         date: '2026-04-03',
         changes: [
-            { zh: '🎬 视频模式完整支持目标检测：全分辨率截帧发送后端，检测结果与图片模式一致', en: '🎬 Full object detection support in video mode: full-resolution frame capture, results match image mode' },
+            { zh: '视频模式完整支持目标检测：全分辨率截帧发送后端，检测结果与图片模式一致', en: 'Full object detection support in video mode: full-resolution frame capture, results match image mode' },
             { zh: '修复视频模式检测框不渲染问题（Editor 使用全分辨率帧图像而非缩略图）', en: 'Fix detection boxes not rendering in video mode (Editor uses full-res frame instead of thumbnail)' },
             { zh: '切帧后检测框坐标正确对齐视频画面', en: 'Detection box coordinates correctly align with video frame after seeking' },
         ]
