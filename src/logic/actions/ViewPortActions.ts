@@ -14,6 +14,7 @@ import {DirectionUtil} from '../../utils/DirectionUtil';
 import {GeneralSelector} from '../../store/selectors/GeneralSelector';
 import {store} from '../../index';
 import {updateZoom} from '../../store/general/actionCreators';
+import {VideoSelector} from '../../store/selectors/VideoSelector';
 
 export class ViewPortActions {
     public static updateViewPortSize() {
@@ -27,9 +28,12 @@ export class ViewPortActions {
 
     public static updateDefaultViewPortImageRect() {
         if (!!EditorModel.viewPortSize && !!EditorModel.image) {
+            // In video mode, use zero margin so the annotation image rect matches
+            // the CSS object-fit:contain layout of the video canvas underneath.
+            const marginPx = VideoSelector.isVideoMode() ? 0 : ViewPointSettings.CANVAS_MIN_MARGIN_PX;
             const minMargin: IPoint = {
-                x: ViewPointSettings.CANVAS_MIN_MARGIN_PX,
-                y: ViewPointSettings.CANVAS_MIN_MARGIN_PX
+                x: marginPx,
+                y: marginPx
             };
             const realImageRect: IRect = {x: 0, y: 0, ...ImageUtil.getSize(EditorModel.image)};
             const viewPortWithMarginRect: IRect = {x: 0, y: 0, ...EditorModel.viewPortSize};

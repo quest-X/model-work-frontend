@@ -92,9 +92,10 @@ class Editor extends React.Component<IProps, IState> {
         const {imageData, activeLabelType} = this.props;
 
         if (prevProps.imageData.id !== imageData.id) {
-            // 视频播放中：videoFrameImage 已设置好，viewport 尺寸不变，只需重绘标注
+            // 视频播放中：画布已由 VideoEditor.handleVideoTimeUpdate 中的
+            // EditorActions.fullRender() 直接重绘，无需再次渲染。
+            // 跳过 loadImage 和 updateModelAndRender 以避免冗余开销。
             if (VideoSelector.isVideoPlaying() && EditorModel.videoFrameImage) {
-                EditorActions.fullRender();
                 return;
             }
             EditorActions.setLoadingStatus(false);

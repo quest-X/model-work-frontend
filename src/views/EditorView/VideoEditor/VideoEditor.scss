@@ -84,6 +84,9 @@
             height: 100%;
             z-index: 1;
             pointer-events: none; // 让鼠标事件穿透到标注层
+            // GPU compositing: promote to own layer to avoid repainting parent
+            will-change: contents;
+            transform: translateZ(0);
         }
 
         .AnnotationLayer {
@@ -94,14 +97,18 @@
             height: 100%;
             z-index: 2;
             pointer-events: auto;
-            
+
             // 让标注层的背景透明，这样可以看到下面的视频
             background-color: transparent;
-            
+            // GPU compositing: promote annotation layer to own compositor layer
+            // so canvas repaints don't trigger repaints on the video layer
+            will-change: contents;
+            transform: translateZ(0);
+
             // 确保 Editor 组件能正确填充整个区域
             display: flex;
             flex-direction: column;
-            
+
             // 修复 Editor 组件在绝对定位容器中的显示
             > .Editor {
                 width: 100%;

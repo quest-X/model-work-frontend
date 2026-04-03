@@ -230,7 +230,7 @@ const VideoPlayer: React.FC<IProps> = ({
 
         const currentTime = video.currentTime;
         const currentFrame = Math.floor(currentTime * detectedFps);
-        
+
         // 关键优化：先立即请求下一帧，避免延迟累积
         // 如果视频还在播放，继续请求下一帧（必须在执行耗时操作之前）
         if (!video.paused && !video.ended) {
@@ -241,12 +241,14 @@ const VideoPlayer: React.FC<IProps> = ({
                 requestRef.current = requestAnimationFrame(updateVideoFrame);
             }
         }
-        
-        // 然后执行耗时操作（Redux 更新、绘制）
+
+        // 然后执行耗时操作（Redux 更新）
         // 这些操作不会阻塞下一帧的请求
         onTimeUpdate(currentTime, currentFrame);
-        drawFrame();
-    }, [detectedFps, onTimeUpdate, drawFrame]);
+        // Skip canvas drawFrame() during playback: the <video> element is shown
+        // directly via CSS (display:block) so drawing to canvas is redundant overhead.
+        // drawFrame() is still called on pause, seek, and first frame.
+    }, [detectedFps, onTimeUpdate]);
 
     // 处理视频时间更新（仅用于暂停时的同步，播放时使用 requestVideoFrameCallback）
     const handleTimeUpdate = useCallback(() => {
@@ -319,7 +321,11 @@ const VideoPlayer: React.FC<IProps> = ({
                 if (!video.paused) {
                     video.pause();
                 }
-                
+
+                // Draw the current video frame to canvas before it becomes
+                // visible (since we swap from <video> to <canvas> on pause)
+                drawFrame();
+
                 // 取消逐帧更新循环
                 if (videoFrameCallbackIdRef.current !== undefined) {
                     if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
@@ -350,7 +356,7 @@ const VideoPlayer: React.FC<IProps> = ({
                 cancelAnimationFrame(requestRef.current);
             }
         };
-    }, [isPlaying, isVideoLoaded, isFpsDetecting, isVideoEnded, updateVideoFrame]);
+    }, [isPlaying, isVideoLoaded, isFpsDetecting, isVideoEnded, updateVideoFrame, drawFrame]);
 
     // 监听外部时间变化（仅在暂停时同步，避免播放时跳帧）
     useEffect(() => {
@@ -463,13 +469,21 @@ const VideoPlayer: React.FC<IProps> = ({
                 }}
                 aria-label={texts.video.playerAriaLabel}
             />
+            {/* During playback, show the <video> element directly to avoid
+                per-frame canvas drawImage() overhead. When paused, show the
+                canvas (which has the last seeked frame drawn on it). */}
             <video
                 ref={videoRef}
                 src={videoSrc}
                 onLoadedMetadata={handleLoadedMetadata}
                 onTimeUpdate={handleTimeUpdate}
                 onEnded={handleVideoEnded}
-                style={{ display: 'none' }}
+                style={{
+                    display: isPlaying ? 'block' : 'none',
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    objectFit: 'contain'
+                }}
                 preload="auto"
                 muted={defaultMuted}
             />
@@ -477,6 +491,7 @@ const VideoPlayer: React.FC<IProps> = ({
                 ref={canvasRef}
                 className="VideoCanvas"
                 style={{
+                    display: isPlaying ? 'none' : 'block',
                     maxWidth: '100%',
                     maxHeight: '100%',
                     objectFit: 'contain'

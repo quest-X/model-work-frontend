@@ -16,6 +16,19 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.6.0',
+        date: '2026-04-03',
+        changes: [
+            { zh: '视频播放时标注框实时同步渲染，无延迟', en: 'Annotation boxes render in real-time during video playback with zero delay' },
+            { zh: '修复视频模式检测框坐标偏移（视频模式取消 viewport 边距）', en: 'Fix detection box coordinate misalignment in video mode (remove viewport margin)' },
+            { zh: '修复批量检测时所有帧共用同一画面的问题（检测前自动 seek 到对应帧）', en: 'Fix batch detection using same frame for all images (auto-seek to correct frame before capture)' },
+            { zh: '批量检测增加重试机制和帧就绪等待，确保不断片', en: 'Batch detection with retry mechanism and frame readiness check to prevent gaps' },
+            { zh: '播放时跳过 canvas drawImage 开销，直接显示 video 元素', en: 'Skip canvas drawImage during playback, show video element directly' },
+            { zh: '侧边栏更新节流到 5fps，减少播放时 React 重渲染', en: 'Throttle sidebar updates to 5fps during playback to reduce React re-renders' },
+            { zh: 'GPU 合成优化：标注层和视频层提升为独立合成器层', en: 'GPU compositing: promote annotation and video layers to separate compositor layers' },
+        ]
+    },
+    {
         version: '1.5.1',
         date: '2026-04-03',
         changes: [

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { connect } from 'react-redux';
 import './VideoEditor.scss';
 import VideoPlayer from '../VideoPlayer/VideoPlayer';
@@ -612,13 +612,19 @@ const VideoEditor: React.FC<IProps> = ({
         setIsPlaying(newPlayingStatus);
         updateVideoPlayingStatus(activeVideo.id, newPlayingStatus);
         
-        // 如果开始播放，确保停止缩略图生成并重置跳帧计数器
         if (newPlayingStatus) {
+            // 如果开始播放，确保停止缩略图生成并重置跳帧计数器
             isGeneratingRef.current = false;
             frameSkipCountRef.current = 0;
             lastFrameRef.current = -1;
+        } else {
+            // Pausing: sync sidebar index to the actual current frame immediately,
+            // since it was throttled (200ms) during playback and may be stale.
+            if (activeVideo.currentFrame !== activeImageIndex) {
+                updateActiveImageIndex(activeVideo.currentFrame);
+            }
         }
-    }, [activeVideo, isPlaying, updateVideoPlayingStatus, loadedThumbnailCount, totalFrameCount, imagesData]);
+    }, [activeVideo, isPlaying, updateVideoPlayingStatus, loadedThumbnailCount, totalFrameCount, imagesData, activeImageIndex, updateActiveImageIndex]);
 
     // 处理静音切换
     const handleToggleMute = useCallback(() => {
@@ -629,6 +635,7 @@ const VideoEditor: React.FC<IProps> = ({
     const lastFrameRef = React.useRef<number>(-1);
     const frameSkipCountRef = React.useRef<number>(0);
     const lastUpdateTimeRef = React.useRef<number>(0); // 记录上次更新时间，用于节流
+    const lastSidebarUpdateRef = React.useRef<number>(0); // 侧边栏更新节流（独立于帧更新）
     const handleVideoTimeUpdate = useCallback(
         (time: number, frame: number) => {
             if (!activeVideo) return;
@@ -677,12 +684,21 @@ const VideoEditor: React.FC<IProps> = ({
                 // 同步更新，但频率已降低，不会过度阻塞回调
                 updateVideoCurrentFrame(activeVideo.id, frame, time);
                 lastUpdateTimeRef.current = now;
-                
-                // 更新当前帧对应的图像索引（播放时逐帧更新，让左侧列表动态高亮）
-                // 只在帧号变化时更新，避免不必要的更新
-                if (frame !== activeImageIndex) {
+
+                // 更新当前帧对应的图像索引（让左侧列表动态高亮）
+                // 侧边栏更新比标注渲染更昂贵（triggers ImagePreview re-renders），
+                // 所以在播放时节流到 ~5fps (200ms)，减少不必要的 React reconciliation。
+                const sidebarTimeSince = now - lastSidebarUpdateRef.current;
+                if (frame !== activeImageIndex && (!isPlaying || sidebarTimeSince >= 200)) {
                     updateActiveImageIndex(frame);
+                    lastSidebarUpdateRef.current = now;
                 }
+
+                // 关键优化：Redux dispatch 是同步的，store 已经更新。
+                // 直接调用 fullRender() 立即重绘标注画布，不等待 React 的
+                // reconciliation 周期（省去 ~10-20ms 延迟），让检测框与视频帧同步。
+                // Editor.componentDidUpdate 中会跳过播放期间的重复渲染。
+                EditorActions.fullRender();
             }
         },
         [activeVideo, activeImageIndex, updateVideoCurrentFrame, updateActiveImageIndex, isPlaying]
@@ -717,19 +733,25 @@ const VideoEditor: React.FC<IProps> = ({
         );
     }
 
-    // 获取已标注的帧列表（使用原始 index，不是过滤后的 index）
-    const annotatedFrames = imagesData.reduce<number[]>((acc, img, index) => {
-        if (img.labelRects.length > 0 || img.labelPoints.length > 0 ||
-            img.labelPolygons.length > 0 || img.labelLines.length > 0) {
-            acc.push(index);
-        }
-        return acc;
-    }, []);
+    // Memoize annotatedFrames: only recompute when imagesData reference changes,
+    // NOT on every render (which happens ~30fps during playback due to Redux updates).
+    // During playback, imagesData doesn't change (no new annotations), so this is free.
+    const annotatedFrames = useMemo(() => {
+        return imagesData.reduce<number[]>((acc, img, index) => {
+            if (img.labelRects.length > 0 || img.labelPoints.length > 0 ||
+                img.labelPolygons.length > 0 || img.labelLines.length > 0) {
+                acc.push(index);
+            }
+            return acc;
+        }, []);
+    }, [imagesData]);
 
-    // 获取关键帧列表
-    const keyframes = Array.from(activeVideo.frames.values())
-        .filter(frame => frame.isKeyframe)
-        .map(frame => frame.frameNumber);
+    // Memoize keyframes: only recompute when activeVideo.frames changes
+    const keyframes = useMemo(() => {
+        return Array.from(activeVideo.frames.values())
+            .filter(frame => frame.isKeyframe)
+            .map(frame => frame.frameNumber);
+    }, [activeVideo.frames]);
 
     const currentImageData = imagesData[activeVideo.currentFrame];
 

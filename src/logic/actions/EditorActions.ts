@@ -70,8 +70,10 @@ export class EditorActions {
 
     public static fullRender() {
         DrawUtil.clearCanvas(EditorModel.canvas);
-        EditorModel.primaryRenderingEngine.render(EditorActions.getEditorData());
-        EditorModel.supportRenderingEngine && EditorModel.supportRenderingEngine.render(EditorActions.getEditorData());
+        // Cache EditorData so it's computed once per render, not once per engine
+        const data = EditorActions.getEditorData();
+        EditorModel.primaryRenderingEngine.render(data);
+        EditorModel.supportRenderingEngine && EditorModel.supportRenderingEngine.render(data);
     }
 
     // =================================================================================================================

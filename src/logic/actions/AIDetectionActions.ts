@@ -14,6 +14,7 @@ import {IRect} from "../../interfaces/IRect";
 import {AISelector} from "../../store/selectors/AISelector";
 import {LanguageConfig} from "../../data/LanguageConfig";
 import {EditorActions} from "./EditorActions";
+import {EditorModel} from "../../staticModels/EditorModel";
 
 export class AIDetectionActions {
 
@@ -170,6 +171,13 @@ export class AIDetectionActions {
             .replace('{current}', '0').replace('{total}', String(total));
         store.dispatch(submitNewNotification(progressNotification));
 
+        // 视频模式：需要获取 fps 和 imagesData 来计算每帧的时间戳
+        const videoState = store.getState().video;
+        const isVideo = videoState.isVideoMode;
+        const allImagesData: ImageData[] = store.getState().labels.imagesData;
+        const activeVideo = isVideo ? videoState.activeVideo : null;
+        const fps = activeVideo?.fps || 30;
+
         for (let i = 0; i < total; i++) {
             const imageData = imagesToDetect[i];
 
@@ -177,6 +185,15 @@ export class AIDetectionActions {
             if (imageData.labelRects.some((r: LabelRect) => r.isCreatedByAI)) {
                 successCount++;
                 continue;
+            }
+
+            // 视频模式：seek 到对应帧再截图，否则所有帧都基于同一画面检测
+            if (isVideo && EditorModel.videoElement) {
+                const frameIndex = allImagesData.findIndex(img => img.id === imageData.id);
+                if (frameIndex >= 0) {
+                    const targetTime = frameIndex / fps;
+                    await this.seekVideoToTime(EditorModel.videoElement, targetTime);
+                }
             }
 
             // 更新进度通知
@@ -188,23 +205,35 @@ export class AIDetectionActions {
             };
             store.dispatch(updateNotificationById(progressNotification.id, updatedNotification));
 
-            // 逐张检测
-            try {
-                const results: DetectionResult[] = await new Promise((resolve, reject) => {
-                    DetectionAPIDetector.predict(
-                        imageData,
-                        (res) => resolve(res),
-                        (err) => reject(err)
-                    );
-                });
+            // 逐张检测（带重试，最多 2 次）
+            let detected = false;
+            for (let attempt = 0; attempt < 2 && !detected; attempt++) {
+                try {
+                    const results: DetectionResult[] = await new Promise((resolve, reject) => {
+                        DetectionAPIDetector.predict(
+                            imageData,
+                            (res) => resolve(res),
+                            (err) => reject(err)
+                        );
+                    });
 
-                this.convertDetectionResultsToLabelRects(imageData, results);
-                store.dispatch(addInferenceHistory(imageData.id, results.length, true, 'detection'));
-                totalObjects += results.length;
-                successCount++;
-            } catch (error) {
-                store.dispatch(addInferenceHistory(imageData.id, 0, false, 'detection'));
-                failCount++;
+                    this.convertDetectionResultsToLabelRects(imageData, results);
+                    store.dispatch(addInferenceHistory(imageData.id, results.length, true, 'detection'));
+                    totalObjects += results.length;
+                    successCount++;
+                    detected = true;
+                } catch (error) {
+                    if (attempt === 0 && isVideo && EditorModel.videoElement) {
+                        // 首次失败：可能是帧未就绪，重新 seek 并等待
+                        const frameIndex = allImagesData.findIndex(img => img.id === imageData.id);
+                        if (frameIndex >= 0) {
+                            await this.seekVideoToTime(EditorModel.videoElement, frameIndex / fps);
+                        }
+                    } else {
+                        store.dispatch(addInferenceHistory(imageData.id, 0, false, 'detection'));
+                        failCount++;
+                    }
+                }
             }
         }
 
@@ -383,5 +412,49 @@ export class AIDetectionActions {
             }
         }
         return false;
+    }
+
+    /**
+     * 将视频 seek 到指定时间，等待帧完全解码就绪
+     */
+    private static seekVideoToTime(video: HTMLVideoElement, time: number): Promise<void> {
+        return new Promise((resolve) => {
+            // 已经在目标时间点（精度 < 半帧）
+            if (Math.abs(video.currentTime - time) < 0.005 && video.readyState >= 2) {
+                resolve();
+                return;
+            }
+
+            let settled = false;
+            const settle = () => {
+                if (settled) return;
+                settled = true;
+                video.removeEventListener('seeked', onSeeked);
+                clearTimeout(timer);
+                // 等一小段时间确保帧解码完毕
+                if (video.readyState >= 2) {
+                    resolve();
+                } else {
+                    const onCanPlay = () => {
+                        video.removeEventListener('canplay', onCanPlay);
+                        resolve();
+                    };
+                    video.addEventListener('canplay', onCanPlay, { once: true });
+                    // 兜底超时
+                    setTimeout(() => {
+                        video.removeEventListener('canplay', onCanPlay);
+                        resolve();
+                    }, 500);
+                }
+            };
+
+            const onSeeked = () => settle();
+            video.addEventListener('seeked', onSeeked);
+
+            // 超时保护：3 秒内 seeked 必须触发，否则强制继续
+            const timer = setTimeout(() => settle(), 3000);
+
+            video.currentTime = time;
+        });
     }
 }

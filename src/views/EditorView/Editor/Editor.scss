@@ -21,6 +21,9 @@
       top: 0;
       left: 0;
       cursor: none;
+      // GPU compositing: promote annotation canvas to own compositor layer
+      // for faster repaints during video playback
+      will-change: contents;
 
       &:hover {
         cursor: none;
