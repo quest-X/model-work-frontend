@@ -54,39 +54,35 @@ export class RectRenderEngine extends BaseRenderEngine {
     public mouseDownHandler = (data: EditorData) => {
         const isMouseOverImage: boolean = RenderEngineUtil.isMouseOverImage(data);
         const isMouseOverCanvas: boolean = RenderEngineUtil.isMouseOverCanvas(data);
-        const isInLabelDragMode: boolean = GeneralSelector.getImageDragModeStatus(); // 现在表示标签拖拽模式
-        
+        const isInLabelDragMode: boolean = GeneralSelector.getImageDragModeStatus();
+
         // 只处理左键点击 (button === 0)，忽略中键和右键
         const mouseEvent = data.event as MouseEvent;
         if (mouseEvent && mouseEvent.button !== 0) {
             return;
         }
-        
+
         if (isMouseOverCanvas) {
             if (isInLabelDragMode) {
                 // 标签拖拽模式：优先检查锚点，然后检查整个矩形区域
-                // 先检查边缘锚点
                 const rectUnderMouseEdge: LabelRect = this.getRectUnderMouse(data);
                 if (!!rectUnderMouseEdge) {
                     const rect: IRect = this.calculateRectRelativeToActiveImage(rectUnderMouseEdge.rect, data);
                     const anchorUnderMouse: RectAnchor = this.getAnchorUnderMouseByRect(rect, data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
-                    
+
                     store.dispatch(updateActiveLabelId(rectUnderMouseEdge.id));
-                    
+
                     if (!!anchorUnderMouse && rectUnderMouseEdge.status === LabelStatus.ACCEPTED) {
-                        // 锚点优先级最高 - 调整大小
                         this.startRectResize(anchorUnderMouse);
                         return;
                     }
                 }
-                
-                // 如果没有锚点，检查整个矩形区域进行拖拽
+
                 const rectUnderMouseDrag: LabelRect = this.getRectUnderMouseForDrag(data);
                 if (!!rectUnderMouseDrag && rectUnderMouseDrag.status === LabelStatus.ACCEPTED) {
                     store.dispatch(updateActiveLabelId(rectUnderMouseDrag.id));
                     this.startRectMove(data.mousePositionOnViewPortContent, rectUnderMouseDrag.id);
                 } else {
-                    // 检查是否点击了多边形（在全部标签视图中）
                     const activeLabelViewType = LabelsSelector.getActiveLabelViewType();
                     if (activeLabelViewType === LabelType.ALL) {
                         const polygonUnderMouse = this.getPolygonUnderMouse(data);
@@ -97,15 +93,13 @@ export class RectRenderEngine extends BaseRenderEngine {
                     }
                 }
             } else {
-                // 普通模式：原有逻辑
+                // 普通模式：恢复 origin 逻辑
                 const rectUnderMouse: LabelRect = this.getRectUnderMouse(data);
                 if (!!rectUnderMouse) {
                     const rect: IRect = this.calculateRectRelativeToActiveImage(rectUnderMouse.rect, data);
                     const anchorUnderMouse: RectAnchor = this.getAnchorUnderMouseByRect(rect, data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
-                    
-                    store.dispatch(updateActiveLabelId(rectUnderMouse.id));
-                    
                     if (!!anchorUnderMouse && rectUnderMouse.status === LabelStatus.ACCEPTED) {
+                        store.dispatch(updateActiveLabelId(rectUnderMouse.id));
                         this.startRectResize(anchorUnderMouse);
                     } else {
                         if (!!LabelsSelector.getHighlightedLabelId())
@@ -146,56 +140,55 @@ export class RectRenderEngine extends BaseRenderEngine {
                 const scaledRect: IRect = RectUtil.scaleRect(resizeRect, scale);
 
                 const imageData = LabelsSelector.getActiveImageData();
-                if (imageData) {
-                    imageData.labelRects = imageData.labelRects.map((labelRect: LabelRect) => {
-                        if (labelRect.id === activeLabelRect.id) {
-                            return {
-                                ...labelRect,
-                                rect: scaledRect
-                            };
-                        }
-                        return labelRect;
-                    });
-                    store.dispatch(updateImageDataById(imageData.id, imageData));
-                }
+                imageData.labelRects = imageData.labelRects.map((labelRect: LabelRect) => {
+                    if (labelRect.id === activeLabelRect.id) {
+                        return {
+                            ...labelRect,
+                            rect: scaledRect
+                        };
+                    }
+                    return labelRect;
+                });
+                store.dispatch(updateImageDataById(imageData.id, imageData));
             }
 
             // 处理矩形框移动
-            if (!!this.startMoveRectPoint && !!this.moveRectId) {
+            if (!!this.startMoveRectPoint && !!this.moveRectId && !!data.mousePositionOnViewPortContent) {
                 const delta: IPoint = PointUtil.subtract(data.mousePositionOnViewPortContent, this.startMoveRectPoint);
                 const scale: number = RenderEngineUtil.calculateImageScale(data);
                 const deltaOnImage: IPoint = PointUtil.multiply(delta, scale);
 
                 const imageData = LabelsSelector.getActiveImageData();
-                if (!imageData) return;
-                const rectToMove = imageData.labelRects.find(rect => rect.id === this.moveRectId);
-                if (!!rectToMove) {
-                    const movedRect: IRect = RectUtil.translate(rectToMove.rect, deltaOnImage);
-                    imageData.labelRects = imageData.labelRects.map((labelRect: LabelRect) => {
-                        if (labelRect.id === this.moveRectId) {
-                            return {
-                                ...labelRect,
-                                rect: movedRect
-                            };
-                        }
-                        return labelRect;
-                    });
-                    store.dispatch(updateImageDataById(imageData.id, imageData));
+                if (imageData) {
+                    const rectToMove = imageData.labelRects.find(rect => rect.id === this.moveRectId);
+                    if (!!rectToMove) {
+                        const movedRect: IRect = RectUtil.translate(rectToMove.rect, deltaOnImage);
+                        imageData.labelRects = imageData.labelRects.map((labelRect: LabelRect) => {
+                            if (labelRect.id === this.moveRectId) {
+                                return {
+                                    ...labelRect,
+                                    rect: movedRect
+                                };
+                            }
+                            return labelRect;
+                        });
+                        store.dispatch(updateImageDataById(imageData.id, imageData));
+                    }
                 }
             }
         }
-        this.endRectTransformation()
+        this.endRectTransformation();
     };
 
     public mouseMoveHandler = (data: EditorData) => {
         if (!!data.viewPortContentImageRect && !!data.mousePositionOnViewPortContent) {
             const isOverImage: boolean = RenderEngineUtil.isMouseOverImage(data);
-            
+
             // 处理多边形移动
             if (this.isPolygonMoveInProgress()) {
                 this.updatePolygonMove(data);
             }
-            
+
             if (isOverImage && !this.startResizeRectAnchor) {
                 const labelRect: LabelRect = this.getRectUnderMouse(data);
                 if (!!labelRect && !this.isInProgress()) {
@@ -412,29 +405,14 @@ export class RectRenderEngine extends BaseRenderEngine {
     }
 
     private updateCursorStyle(data: EditorData) {
-        if (!!this.canvas && !!data.mousePositionOnViewPortContent) {
-            const isInLabelDragMode: boolean = GeneralSelector.getImageDragModeStatus();
+        if (!!this.canvas && !!data.mousePositionOnViewPortContent && !GeneralSelector.getImageDragModeStatus()) {
             const rectUnderMouse: LabelRect = this.getRectUnderMouse(data);
             const rectAnchorUnderMouse: RectAnchor = this.getAnchorUnderMouse(data);
-            
-            if (!!this.startResizeRectAnchor) {
-                // 正在调整大小
-                store.dispatch(updateCustomCursorStyle(CustomCursorStyle.RESIZE));
-            } else if (!!this.startMoveRectPoint) {
-                // 正在移动标签
-                store.dispatch(updateCustomCursorStyle(CustomCursorStyle.GRABBING));
-            } else if (!!rectAnchorUnderMouse && rectUnderMouse && rectUnderMouse.status === LabelStatus.ACCEPTED) {
-                // 悬停在锚点上
-                store.dispatch(updateCustomCursorStyle(CustomCursorStyle.RESIZE));
-            } else if (isInLabelDragMode) {
-                // 标签拖拽模式下检查整个矩形区域
-                const rectForDrag: LabelRect = this.getRectUnderMouseForDrag(data);
-                if (!!rectForDrag && rectForDrag.status === LabelStatus.ACCEPTED) {
-                    store.dispatch(updateCustomCursorStyle(CustomCursorStyle.GRAB));
-                } else {
-                    RenderEngineUtil.wrapDefaultCursorStyleInCancel(data);
-                }
-            } else if (RenderEngineUtil.isMouseOverCanvas(data)) {
+            if ((!!rectAnchorUnderMouse && rectUnderMouse && rectUnderMouse.status === LabelStatus.ACCEPTED) || !!this.startResizeRectAnchor) {
+                store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
+                return;
+            }
+            else if (RenderEngineUtil.isMouseOverCanvas(data)) {
                 if (!RenderEngineUtil.isMouseOverImage(data) && !!this.startCreateRectPoint)
                     store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
                 else
@@ -451,7 +429,7 @@ export class RectRenderEngine extends BaseRenderEngine {
     // =================================================================================================================
 
     public isInProgress(): boolean {
-        return !!this.startCreateRectPoint || !!this.startResizeRectAnchor || this.isPolygonMoveInProgress();
+        return !!this.startCreateRectPoint || !!this.startResizeRectAnchor || !!this.startMoveRectPoint || this.isPolygonMoveInProgress();
     }
 
     private calculateRectRelativeToActiveImage(rect: IRect, data: EditorData):IRect {
@@ -468,19 +446,6 @@ export class RectRenderEngine extends BaseRenderEngine {
         store.dispatch(updateImageDataById(imageData.id, imageData));
         store.dispatch(updateFirstLabelCreatedFlag(true));
         store.dispatch(updateActiveLabelId(labelRect.id));
-        
-        // 检查AI推理状态
-        const aiState = store.getState().ai;
-        const isAIDisabled = aiState.isAIDisabled;
-        const isSegmentationAPIEnabled = aiState.segmentationAPIConfig.enabled;
-
-        if (!isAIDisabled && isSegmentationAPIEnabled) {
-            console.log('✅ 矩形标注完成，触发AI推理分割:', rect);
-            // 传递矩形框ID，以便分割完成后删除临时框
-            AISegmentationActions.segmentBbox(imageData, rect, labelRect.id);
-        } else {
-            console.log('🚫 跳过AI推理 - AI禁用状态:', isAIDisabled, '分割API启用:', isSegmentationAPIEnabled);
-        }
     };
 
     private getRectUnderMouse(data: EditorData): LabelRect {

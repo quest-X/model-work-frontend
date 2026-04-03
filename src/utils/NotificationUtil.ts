@@ -49,9 +49,10 @@ export class NotificationUtil {
         
         return {
             id: uuidv4(),
-            type: NotificationType.INFERENCE, // 使用专用的推理通知类型
+            type: NotificationType.INFERENCE,
             header: texts.aiInference.inProgress,
-            description: `步骤 1/3: 准备开始推理`,
+            description: `${texts.aiInference.stepProgress.replace('{current}', '1').replace('{total}', '3')}: ${texts.aiInference.steps.preprocessing}`,
+            i18nHeader: 'aiInference.inProgress',
             isInferenceProgress: true,
             currentStep: 1, // 从步骤1开始，而不是0
             totalSteps: 3,
@@ -82,8 +83,9 @@ export class NotificationUtil {
             ...notification,
             currentStep: step,
             stepDescription: description,
-            description: `步骤 ${step}/${notification.totalSteps}: ${description}`,
+            description: `${texts.aiInference.stepProgress.replace('{current}', step.toString()).replace('{total}', notification.totalSteps?.toString() || '3')}: ${description}`,
             header: texts.aiInference.inProgress,
+            i18nHeader: 'aiInference.inProgress',
             stepTimes: newStepTimes
         }
     }

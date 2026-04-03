@@ -116,9 +116,9 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
         return (
             <div className='LocalModelsSection'>
                 <div className='SectionTitle'>
-                    {language === Language.CHINESE ? '本地模型' : 'Local Models'}
+                    {currentTexts.modelManagement.localModels}
                     <span className='ManageLink' onClick={openLocalModelManager}>
-                        {language === Language.CHINESE ? '管理' : 'Manage'}
+                        {currentTexts.modelManagement.manage}
                     </span>
                 </div>
                 <div className='LocalModelsList'>
@@ -161,10 +161,10 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                         src={'ico/robot.png'}
                     />
                     <p className='extraBold'>
-                        {language === Language.CHINESE ? '暂无AI模型' : 'No AI Models'}
+                        {currentTexts.modelManagement.noModels}
                     </p>
                     <p>
-                        {language === Language.CHINESE ? '点击添加第一个AI模型' : 'Click to add your first AI model'}
+                        {currentTexts.modelManagement.noModelsHint}
                     </p>
                 </div>
             );
@@ -217,7 +217,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                     <div className='ModelField'>
                         <StyledTextField
                             variant='standard'
-                            label={language === Language.CHINESE ? '模型名称' : 'Model Name'}
+                            label={currentTexts.modelManagement.modelName}
                             value={editingModel.name}
                             onChange={(e) => updateEditingField('name', e.target.value)}
                             style={{ width: '100%', marginBottom: '16px' }}
@@ -226,7 +226,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                     <div className='ModelField'>
                         <StyledTextField
                             variant='standard'
-                            label={language === Language.CHINESE ? '模型地址' : 'Model URL'}
+                            label={currentTexts.modelManagement.modelUrl}
                             value={editingModel.url}
                             onChange={(e) => updateEditingField('url', e.target.value)}
                             style={{ width: '100%', marginBottom: '16px' }}
@@ -236,7 +236,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                         <StyledTextField
                             variant='standard'
                             type='password'
-                            label={language === Language.CHINESE ? 'API密钥 (可选)' : 'API Key (optional)'}
+                            label={currentTexts.modelManagement.apiKeyOptional}
                             value={editingModel.apiKey || ''}
                             onChange={(e) => updateEditingField('apiKey', e.target.value)}
                             style={{ width: '100%', marginBottom: '16px' }}
@@ -247,7 +247,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                             variant='standard'
                             multiline
                             rows={3}
-                            label={language === Language.CHINESE ? '模型描述 (可选)' : 'Description (optional)'}
+                            label={currentTexts.modelManagement.descriptionOptional}
                             value={editingModel.description || ''}
                             onChange={(e) => updateEditingField('description', e.target.value)}
                             style={{ width: '100%', marginBottom: '16px' }}
@@ -276,7 +276,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
         if (!selectedModel) {
             return (
                 <div className='ModelDetails empty'>
-                    <p>{language === Language.CHINESE ? '请选择一个模型查看详情' : 'Select a model to view details'}</p>
+                    <p>{currentTexts.modelManagement.selectModelHint}</p>
                 </div>
             );
         }
@@ -285,8 +285,8 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
             <div className='ModelDetails'>
                 <div className='ModelField header'>
                     <div className='model-name-section'>
-                        <label>{language === Language.CHINESE ? '模型名称' : 'Model Name'}</label>
-                        <span className='model-name'>{selectedModel.name || 'Unnamed Model'}</span>
+                        <label>{currentTexts.modelManagement.modelName}</label>
+                        <span className='model-name'>{selectedModel.name || currentTexts.modelManagement.unnamedModel}</span>
                     </div>
                     <div className='created-time-section'>
                         <label>{language === Language.CHINESE ? '添加时间' : 'Added'}</label>
@@ -294,16 +294,16 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                     </div>
                 </div>
                 <div className='ModelField'>
-                    <label>{language === Language.CHINESE ? '接口地址' : 'API Endpoint'}:</label>
+                    <label>{currentTexts.modelManagement.apiEndpoint}:</label>
                     <span className='url'>{selectedModel.url}</span>
                 </div>
                 <div className='ModelField'>
-                    <label>{language === Language.CHINESE ? '模型密钥' : 'API Key'}:</label>
-                    <span>{selectedModel.apiKey ? '••••••••' : (language === Language.CHINESE ? '无' : 'None')}</span>
+                    <label>{currentTexts.modelManagement.apiKey}:</label>
+                    <span>{selectedModel.apiKey ? '••••••••' : currentTexts.modelManagement.none}</span>
                 </div>
                 <div className='ModelField'>
-                    <label>{language === Language.CHINESE ? '模型描述' : 'Description'}:</label>
-                    <span>{selectedModel.description || (language === Language.CHINESE ? '暂无描述' : 'No description')}</span>
+                    <label>{currentTexts.modelManagement.description}:</label>
+                    <span>{selectedModel.description || currentTexts.modelManagement.noDescription}</span>
                 </div>
             </div>
         );
@@ -324,15 +324,13 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                 </div>
                 <div className='RightContainer'>
                     <div className='Message'>
-                        {language === Language.CHINESE ? 
-                            '管理您的AI模型。您可以添加、编辑或删除模型，选择要使用的默认模型。' : 
-                            'Manage your AI models. You can add, edit or delete models, and select a default model to use.'}
+                        {currentTexts.modelManagement.manageMessage}
                     </div>
                     <div className='ContentArea'>
                         <div className='ModelsListContainer'>
                             {renderLocalModels()}
                             <div className='SectionTitle'>
-                                {language === Language.CHINESE ? '远程模型' : 'Remote Models'}
+                                {currentTexts.modelManagement.remoteModels}
                             </div>
                             <div className='ModelsContainer'>
                                 {renderModelList()}
@@ -340,7 +338,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                         </div>
                         <div className='ModelDetailsContainer'>
                             <div className='SectionTitle'>
-                                {language === Language.CHINESE ? '模型详情' : 'Model Details'}
+                                {currentTexts.modelManagement.modelDetails}
                             </div>
                             {renderModelDetails()}
                         </div>
@@ -352,11 +350,11 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
 
     return (
         <GenericYesNoPopup
-            title={language === Language.CHINESE ? 'AI模型管理' : 'AI Models Management'}
+            title={currentTexts.modelManagement.title}
             renderContent={renderContent}
-            acceptLabel={language === Language.CHINESE ? '确定' : 'OK'}
+            acceptLabel={currentTexts.ok}
             onAccept={onAccept}
-            rejectLabel={language === Language.CHINESE ? '关闭' : 'Close'}
+            rejectLabel={currentTexts.modelManagement.close}
             onReject={onReject}
         />
     );

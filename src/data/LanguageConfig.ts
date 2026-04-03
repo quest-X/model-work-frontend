@@ -258,6 +258,90 @@ export interface LanguageTexts {
         exitPopup: string;
     };
     
+    // Queue
+    queueStatus: {
+        pending: string;
+        processing: string;
+        completed: string;
+        error: string;
+    };
+    queueEmpty: string;
+    queueEmptyHint: string;
+
+    // Video
+    video: {
+        frame: string;
+        pause: string;
+        play: string;
+        mute: string;
+        unmute: string;
+        playerAriaLabel: string;
+    };
+
+    // Notifications
+    notifications: {
+        emptyLabelName: { header: string; description: string };
+        nonUniqueLabelNames: { header: string; description: string };
+        modelDownloadError: { header: string; description: string };
+        modelInferenceError: { header: string; description: string };
+        modelLoadError: { header: string; description: string };
+        labelsFileUploadError: { header: string; description: string };
+        annotationFileParseError: { header: string; description: string };
+        annotationImportAssertionError: { header: string; description: string };
+        unsupportedInferenceServer: { header: string; description: string };
+        roboflowInferenceServerError: { header: string; description: string };
+        detectionCompleted: string; // "Detection completed"
+        detectionCompletedMessage: string; // "Detection completed: found {count} objects, took {time}s"
+        detectionFailed: string;
+        detectionFailedMessage: string;
+        detectionInProgress: string;
+    };
+
+    // AI Model Management
+    modelManagement: {
+        localModels: string;
+        remoteModels: string;
+        manage: string;
+        noModels: string;
+        noModelsHint: string;
+        modelName: string;
+        modelUrl: string;
+        apiKeyOptional: string;
+        descriptionOptional: string;
+        selectModelHint: string;
+        unnamedModel: string;
+        none: string;
+        noDescription: string;
+        manageMessage: string;
+        modelDetails: string;
+        title: string;
+        close: string;
+        apiEndpoint: string;
+        apiKey: string;
+        description: string;
+    };
+
+    // Load YOLO Model Popup
+    loadYoloModel: {
+        title: string; // "Load {model} Model"
+        titleFallback: string;
+        acceptLabel: string;
+        rejectLabel: string;
+        active: string;
+        downloaded: string;
+        uploadMessage: string;
+        officialMessage: string; // "Select {name} variants..."
+        downloading: string;
+        loading: string;
+        ready: string;
+        errorState: string;
+        preparing: string;
+        loadFailed: string;
+        connectionFailed: string;
+        dragModel: string;
+        clickToSelect: string;
+    };
+
     // Common
     makeSense: string;
     ok: string;
@@ -322,7 +406,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         labels: '标签',
         selectAll: '选中全部',
         inferenceResults: '推理结果',
-        queue: '队列',
+        queue: '文件队列',
         changelog: {
             title: '更新日志',
             close: '关闭',
@@ -556,6 +640,90 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             exitPopup: '退出弹窗'
         },
         
+        // Load YOLO Model Popup
+        loadYoloModel: {
+            title: '加载 {model} 模型',
+            titleFallback: '加载模型',
+            acceptLabel: '使用模型',
+            rejectLabel: '返回',
+            active: '使用中',
+            downloaded: '已下载',
+            uploadMessage: '拖拽自定义 .pt 模型文件到下方区域，上传到推理服务器使用。',
+            officialMessage: '选择 {name} 官方预训练模型变体，服务器将自动下载并加载。',
+            downloading: '正在下载模型...',
+            loading: '正在加载模型...',
+            ready: '加载完成',
+            errorState: '加载失败',
+            preparing: '准备中...',
+            loadFailed: '加载失败',
+            connectionFailed: '无法连接服务器',
+            dragModel: '拖拽 .pt 模型文件',
+            clickToSelect: '点击此处选择文件',
+        },
+
+        // Queue
+        queueStatus: {
+            pending: '待处理',
+            processing: '加载中',
+            completed: '已上传',
+            error: '错误',
+        },
+        queueEmpty: '队列为空',
+        queueEmptyHint: '拖拽文件到编辑区域以添加',
+
+        // Video
+        video: {
+            frame: '帧',
+            pause: '暂停',
+            play: '播放',
+            mute: '静音',
+            unmute: '取消静音',
+            playerAriaLabel: '视频播放器控制区域，按空格键播放/暂停',
+        },
+
+        // Notifications
+        notifications: {
+            emptyLabelName: { header: '标签名称为空', description: '您有一个标签没有设置名称。每个标签都必须有唯一的名称。请输入正确的名称或删除空标签后重试。' },
+            nonUniqueLabelNames: { header: '标签名称重复', description: '部分标签名称不唯一。唯一的名称对于确保数据正确导出是必要的。请修改名称后重试。' },
+            modelDownloadError: { header: '模型加载失败', description: '无法连接推理服务器或模型下载失败。请确认 detect_server.py 已启动，且服务地址正确。' },
+            modelInferenceError: { header: '推理失败', description: '无法对当前图片执行推理。请检查推理服务器是否正常运行，或更换模型后重试。' },
+            modelLoadError: { header: '模型上传失败', description: '无法将 .pt 模型文件上传到推理服务器。请确认服务器已启动且文件格式正确。' },
+            labelsFileUploadError: { header: '标签文件未上传', description: '您似乎忘记上传包含检测类别名称列表的文本文件。我们需要它来映射模型输出。请重新上传所有模型文件。' },
+            annotationFileParseError: { header: '标注文件解析失败', description: '标注文件内容不是有效的 JSON、CSV 或 XML。请修复后重试。' },
+            annotationImportAssertionError: { header: '标注文件数据无效', description: '导入的标注文件中缺少或包含无效数据。请修复后重试。' },
+            unsupportedInferenceServer: { header: '不支持的推理服务器', description: '与所选推理服务器的集成仍在开发中。请关注我们的 GitHub 获取更新。' },
+            roboflowInferenceServerError: { header: 'Roboflow 连接失败', description: '无法连接到您的 Roboflow 模型。请确认模型信息和 API 密钥正确。' },
+            detectionCompleted: '目标检测完成',
+            detectionCompletedMessage: '检测完成：发现 {count} 个对象，耗时 {time} 秒',
+            detectionFailed: '目标检测失败',
+            detectionFailedMessage: '检测过程中发生错误',
+            detectionInProgress: '目标检测中...',
+        },
+
+        // AI Model Management
+        modelManagement: {
+            localModels: '本地模型',
+            remoteModels: '远程模型',
+            manage: '管理',
+            noModels: '暂无AI模型',
+            noModelsHint: '点击添加第一个AI模型',
+            modelName: '模型名称',
+            modelUrl: '模型地址',
+            apiKeyOptional: 'API密钥 (可选)',
+            descriptionOptional: '模型描述 (可选)',
+            selectModelHint: '请选择一个模型查看详情',
+            unnamedModel: '未命名模型',
+            none: '无',
+            noDescription: '暂无描述',
+            manageMessage: '管理您的AI模型。您可以添加、编辑或删除模型，选择要使用的默认模型。',
+            modelDetails: '模型详情',
+            title: 'AI模型管理',
+            close: '关闭',
+            apiEndpoint: '接口地址',
+            apiKey: '模型密钥',
+            description: '模型描述',
+        },
+
         // Common
         makeSense: 'OpenSight Platform',
         ok: '确定',
@@ -567,7 +735,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         export: '导出',
         import: '导入',
         or: '或者',
-        
+
         // AI Inference Notifications
         aiInference: {
             inProgress: 'AI推理中',
@@ -672,7 +840,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 description: 'Run annotation model on server'
             },
             integrateAIModel: {
-                name: 'Integrate AI Model',
+                name: 'AI Model',
                 description: 'Integrate external AI model services'
             }
         },
@@ -852,6 +1020,90 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             exitPopup: 'Exit popup'
         },
         
+        // Load YOLO Model Popup
+        loadYoloModel: {
+            title: 'Load {model} Model',
+            titleFallback: 'Load Model',
+            acceptLabel: 'Use Model',
+            rejectLabel: 'Back',
+            active: 'Active',
+            downloaded: 'Downloaded',
+            uploadMessage: 'Drag and drop a custom .pt model file to the area below to upload to the inference server.',
+            officialMessage: 'Select {name} official pretrained model variant, the server will automatically download and load it.',
+            downloading: 'Downloading model...',
+            loading: 'Loading model...',
+            ready: 'Load complete',
+            errorState: 'Load failed',
+            preparing: 'Preparing...',
+            loadFailed: 'Load failed',
+            connectionFailed: 'Cannot connect to server',
+            dragModel: 'Drag .pt model file',
+            clickToSelect: 'Click here to select file',
+        },
+
+        // Queue
+        queueStatus: {
+            pending: 'Pending',
+            processing: 'Loading',
+            completed: 'Uploaded',
+            error: 'Error',
+        },
+        queueEmpty: 'Queue is empty',
+        queueEmptyHint: 'Drag files to the editor area to add',
+
+        // Video
+        video: {
+            frame: 'Frame',
+            pause: 'Pause',
+            play: 'Play',
+            mute: 'Mute',
+            unmute: 'Unmute',
+            playerAriaLabel: 'Video player controls, press Space to play/pause',
+        },
+
+        // Notifications
+        notifications: {
+            emptyLabelName: { header: 'Empty label name', description: "Looks like you didn't assign name to one of your labels. Unfortunately it is mandatory for every label to have unique name value. Insert correct name or delete empty label and try again." },
+            nonUniqueLabelNames: { header: 'Non unique label names', description: 'Looks like not all your label names are unique. Unique names are necessary to guarantee correct data export when you complete your work. Make your names unique and try again.' },
+            modelDownloadError: { header: 'Model load failed', description: 'Unable to connect to inference server or model download failed. Please ensure detect_server.py is running and the server address is correct.' },
+            modelInferenceError: { header: 'Inference failed', description: 'Unable to perform inference on the current image. Please check if the inference server is running properly, or try a different model.' },
+            modelLoadError: { header: 'Model upload failed', description: 'Unable to upload .pt model file to inference server. Please ensure the server is running and the file format is correct.' },
+            labelsFileUploadError: { header: 'Labels file was not uploaded', description: 'Looks like you forgot to upload text file containing list of detected classes names. We need it to map model output to labels. Please re-upload all model files once again.' },
+            annotationFileParseError: { header: 'Annotation files could not be parsed', description: 'The contents of an annotation file is not valid JSON, CSV, or XML. Please fix the files selected to import and try again.' },
+            annotationImportAssertionError: { header: 'Annotation files did not contain valid data', description: 'Missing or invalid annotations provided during import. Please fix the files selected to import and try again.' },
+            unsupportedInferenceServer: { header: 'Selected inference server is not yet supported', description: 'Integration with selected inference server is still under construction. Stay tuned for more updates on our GitHub.' },
+            roboflowInferenceServerError: { header: 'Roboflow connection failed', description: 'Looks like we were unable to connect to your Roboflow model. Please make sure that the model specification and Roboflow API key are correct.' },
+            detectionCompleted: 'Detection completed',
+            detectionCompletedMessage: 'Detection completed: found {count} objects, took {time}s',
+            detectionFailed: 'Detection failed',
+            detectionFailedMessage: 'An error occurred during detection',
+            detectionInProgress: 'Detecting objects...',
+        },
+
+        // AI Model Management
+        modelManagement: {
+            localModels: 'Local Models',
+            remoteModels: 'Remote Models',
+            manage: 'Manage',
+            noModels: 'No AI Models',
+            noModelsHint: 'Click to add your first AI model',
+            modelName: 'Model Name',
+            modelUrl: 'Model URL',
+            apiKeyOptional: 'API Key (optional)',
+            descriptionOptional: 'Description (optional)',
+            selectModelHint: 'Select a model to view details',
+            unnamedModel: 'Unnamed Model',
+            none: 'None',
+            noDescription: 'No description',
+            manageMessage: 'Manage your AI models. You can add, edit or delete models, and select a default model to use.',
+            modelDetails: 'Model Details',
+            title: 'AI Models Management',
+            close: 'Close',
+            apiEndpoint: 'API Endpoint',
+            apiKey: 'API Key',
+            description: 'Description',
+        },
+
         // Common
         makeSense: 'OpenSight Platform',
         ok: 'OK',
@@ -863,7 +1115,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         export: 'Export',
         import: 'Import',
         or: 'or',
-        
+
         // AI Inference Notifications
         aiInference: {
             inProgress: 'AI Inference',

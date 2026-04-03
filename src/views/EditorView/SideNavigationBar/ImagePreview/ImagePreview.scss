@@ -36,8 +36,12 @@
       max-height: 20px;
       bottom: -10px;
       left: -10px;
-      filter: invert(1) brightness(35%) sepia(100%) hue-rotate(172deg) saturate(2000%); // fallback if new css variables are not supported by browser
+      filter: invert(1) brightness(35%) sepia(100%) hue-rotate(172deg) saturate(2000%);
       filter: invert(1) brightness(35%) sepia(100%) hue-rotate(var(--hue-value)) saturate(2000%);
+
+      &.inferred {
+        filter: invert(1) brightness(35%) sepia(100%) hue-rotate(120deg) saturate(2000%);
+      }
     }
 
     .MultiSelectIndicator {

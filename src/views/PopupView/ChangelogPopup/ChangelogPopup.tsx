@@ -16,6 +16,57 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.4.7',
+        date: '2026-04-03',
+        changes: [
+            { zh: '修复矩形框绘制后鼠标松手仍继续绘制的严重 bug（移除未导入的 AISegmentationActions 调用）', en: 'Fix critical bug where rectangle kept drawing after mouse release (removed unimported AISegmentationActions call)' },
+            { zh: '恢复矩形绘制引擎核心逻辑与 origin 一致，提升绘制稳定性', en: 'Restore RectRenderEngine core logic to match origin for improved drawing stability' },
+        ]
+    },
+    {
+        version: '1.4.6',
+        date: '2026-04-02',
+        changes: [
+            { zh: '缩略图左下角勾标记文件推理状态：推理成功显示绿色勾，未推理显示蓝色勾', en: 'Thumbnail checkbox now indicates inference status: green for inferred, blue for not inferred' },
+            { zh: '推理状态颜色采用原版 AI 模式配色（hue-rotate 120deg）', en: 'Inference status color uses original AI mode palette (hue-rotate 120deg)' },
+        ]
+    },
+    {
+        version: '1.4.5',
+        date: '2026-04-02',
+        changes: [
+            { zh: '通知弹窗支持实时语言切换（切换语言后通知立即更新）', en: 'Notification popups now update instantly when switching language' },
+            { zh: '顶部导航栏"AI Model"按钮文案优化', en: 'Simplified top nav "AI Model" button label' },
+            { zh: '中文"队列"改为"文件队列"', en: 'Chinese "Queue" label changed to "File Queue"' },
+            { zh: '左右侧边栏按钮间距优化，避免文字重叠', en: 'Improved sidebar button spacing to prevent text overlap' },
+        ]
+    },
+    {
+        version: '1.4.4',
+        date: '2026-04-02',
+        changes: [
+            { zh: '全面双语化：修复 40+ 处未国际化的 UI 字符串', en: 'Full i18n: fixed 40+ hardcoded UI strings across the app' },
+            { zh: '通知消息支持中英文切换', en: 'Notification messages now support language switching' },
+            { zh: '队列面板、视频控件、模型管理弹窗等组件完成双语化', en: 'Queue panel, video controls, model management popup and more are now bilingual' },
+            { zh: '消除所有 ternary 语言判断模式，统一使用 LanguageConfig', en: 'Eliminated all ternary language patterns, unified to use LanguageConfig' },
+        ]
+    },
+    {
+        version: '1.4.3',
+        date: '2026-04-02',
+        changes: [
+            { zh: '修复模型加载进度条卡在0%的问题（改为后台异步加载）', en: 'Fixed model loading progress stuck at 0% (now loads asynchronously in background)' },
+        ]
+    },
+    {
+        version: '1.4.2',
+        date: '2026-04-02',
+        changes: [
+            { zh: '后端新增模型管理API（可用模型列表、模型切换、加载状态查询、自定义模型上传）', en: 'Added backend model management API (available models, model switching, load status, custom model upload)' },
+            { zh: '修复前端"模型加载失败"错误（后端缺少 /available-models 等接口）', en: 'Fixed frontend "model load failed" error (backend was missing /available-models endpoints)' },
+        ]
+    },
+    {
         version: '1.4.1',
         date: '2026-04-02',
         changes: [

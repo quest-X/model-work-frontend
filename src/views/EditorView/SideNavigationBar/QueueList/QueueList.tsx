@@ -8,6 +8,7 @@ import { removeQueueItem } from '../../../../store/queue/actionCreators';
 import { updateImageData } from '../../../../store/labels/actionCreators';
 import { QueueActions } from '../../../../logic/actions/QueueActions';
 import { ImageRepository } from '../../../../logic/imageRepository/ImageRepository';
+import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
 import './QueueList.scss';
 
 // ============ QueueItemCard ============
@@ -15,6 +16,7 @@ import './QueueList.scss';
 interface CardProps {
     item: QueueItem;
     isActive: boolean;
+    language: Language;
     onSelect: (item: QueueItem) => void;
     onDelete: (itemId: string) => void;
 }
@@ -25,15 +27,15 @@ const typeIconMap: Record<QueueItemType, string> = {
     [QueueItemType.FOLDER]: '/ico/files.png',
 };
 
-const statusConfig: Record<QueueItemStatus, { className: string; label: string }> = {
-    [QueueItemStatus.PENDING]:    { className: 'status-pending',    label: '待处理' },
-    [QueueItemStatus.PROCESSING]: { className: 'status-processing', label: '加载中' },
-    [QueueItemStatus.COMPLETED]:  { className: 'status-completed',  label: '已上传' },
-    [QueueItemStatus.ERROR]:      { className: 'status-error',      label: '错误' },
-};
-
-const QueueItemCard: React.FC<CardProps> = ({ item, isActive, onSelect, onDelete }) => {
-    const statusInfo = statusConfig[item.status];
+const QueueItemCard: React.FC<CardProps> = ({ item, isActive, language, onSelect, onDelete }) => {
+    const texts = LanguageConfig[language];
+    const statusLabels: Record<QueueItemStatus, { className: string; label: string }> = {
+        [QueueItemStatus.PENDING]:    { className: 'status-pending',    label: texts.queueStatus.pending },
+        [QueueItemStatus.PROCESSING]: { className: 'status-processing', label: texts.queueStatus.processing },
+        [QueueItemStatus.COMPLETED]:  { className: 'status-completed',  label: texts.queueStatus.completed },
+        [QueueItemStatus.ERROR]:      { className: 'status-error',      label: texts.queueStatus.error },
+    };
+    const statusInfo = statusLabels[item.status];
 
     return (
         <div
@@ -73,7 +75,7 @@ const QueueItemCard: React.FC<CardProps> = ({ item, isActive, onSelect, onDelete
                     e.stopPropagation();
                     onDelete(item.id);
                 }}
-                title='删除'
+                title={texts.delete}
             >
                 ✕
             </div>
@@ -87,6 +89,7 @@ interface IProps {
     items: QueueItem[];
     activeQueueItemId: string | null;
     imagesData: ImageData[];
+    language: Language;
     removeQueueItemAction: (itemId: string) => any;
     updateImageDataAction: (imageData: ImageData[]) => any;
 }
@@ -95,9 +98,11 @@ const QueueList: React.FC<IProps> = ({
     items,
     activeQueueItemId,
     imagesData,
+    language,
     removeQueueItemAction,
     updateImageDataAction,
 }) => {
+    const texts = LanguageConfig[language];
     const handleItemSelect = (item: QueueItem) => {
         if (item.id === activeQueueItemId) return;
         if (item.status === QueueItemStatus.PROCESSING) return;
@@ -117,8 +122,8 @@ const QueueList: React.FC<IProps> = ({
             {items.length === 0 ? (
                 <div className='queue-list-empty'>
                     <img src='/ico/box-opened.png' alt='empty' draggable={false} />
-                    <p>队列为空</p>
-                    <p className='queue-list-empty-hint'>拖拽文件到编辑区域以添加</p>
+                    <p>{texts.queueEmpty}</p>
+                    <p className='queue-list-empty-hint'>{texts.queueEmptyHint}</p>
                 </div>
             ) : (
                 <div className='queue-list-scroll'>
@@ -127,6 +132,7 @@ const QueueList: React.FC<IProps> = ({
                             key={item.id}
                             item={item}
                             isActive={item.id === activeQueueItemId}
+                            language={language}
                             onSelect={handleItemSelect}
                             onDelete={handleItemDelete}
                         />
@@ -141,6 +147,7 @@ const mapStateToProps = (state: AppState) => ({
     items: state.queue?.items || [],
     activeQueueItemId: state.queue?.activeQueueItemId || null,
     imagesData: state.labels.imagesData,
+    language: state.general.language,
 });
 
 const mapDispatchToProps = {

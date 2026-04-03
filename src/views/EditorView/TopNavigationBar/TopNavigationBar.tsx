@@ -160,13 +160,13 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                                     onClick={openLocalModelManager}>
                                     <div className='Marker'/>
                                     <img src='ico/ai.png' alt='local-models'/>
-                                    {props.language === Language.CHINESE ? '本地模型' : 'Local Models'}
+                                    {currentTexts.modelManagement.localModels}
                                 </div>
                                 <div className='DropDownMenuContentOption active'
                                     onClick={openRemoteModelManager}>
                                     <div className='Marker'/>
                                     <img src='ico/api.png' alt='remote-models'/>
-                                    {props.language === Language.CHINESE ? '远程模型' : 'Remote Models'}
+                                    {currentTexts.modelManagement.remoteModels}
                                 </div>
                             </div>
                         )}

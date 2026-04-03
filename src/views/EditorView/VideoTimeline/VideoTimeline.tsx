@@ -1,6 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import './VideoTimeline.scss';
 import { ISize } from '../../../interfaces/ISize';
+import { Language, LanguageConfig } from '../../../data/LanguageConfig';
+import { connect } from 'react-redux';
+import { AppState } from '../../../store';
 
 interface IProps {
     duration: number; // 视频总时长（秒）
@@ -17,6 +20,7 @@ interface IProps {
     onPlayPause?: () => void; // 播放/暂停回调
     isMuted?: boolean; // 是否静音
     onToggleMute?: () => void; // 切换静音回调
+    language: Language;
 }
 
 const VideoTimeline: React.FC<IProps> = ({
@@ -33,8 +37,10 @@ const VideoTimeline: React.FC<IProps> = ({
     annotatedFrames = [],
     onPlayPause,
     isMuted = true,
-    onToggleMute
+    onToggleMute,
+    language
 }) => {
+    const texts = LanguageConfig[language];
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -324,22 +330,22 @@ const VideoTimeline: React.FC<IProps> = ({
             <div className="TimelineControls">
                 <div className="LeftInfo">
                     <span>FPS: {fps}</span>
-                    <span>帧: {currentFrame} / {frames}</span>
+                    <span>{texts.video.frame + ': '}{currentFrame} / {frames}</span>
                 </div>
                 
                 {/* 播放和静音按钮 - 居中显示 */}
                 <div className="CenterControls">
                     {onPlayPause && (
                         <button onClick={onPlayPause} className="PlayPauseButton">
-                            {isPlaying ? '⏸ 暂停' : '▶ 播放'}
+                            {isPlaying ? '⏸ ' + texts.video.pause : '▶ ' + texts.video.play}
                         </button>
                     )}
                     {onToggleMute && (
                         <button 
                             onClick={onToggleMute} 
                             className="MuteButton"
-                            title={isMuted ? '取消静音' : '静音'}
-                            aria-label={isMuted ? '取消静音' : '静音'}
+                            title={isMuted ? texts.video.unmute : texts.video.mute}
+                            aria-label={isMuted ? texts.video.unmute : texts.video.mute}
                         >
                             {isMuted ? (
                                 // 静音图标
@@ -371,5 +377,9 @@ const VideoTimeline: React.FC<IProps> = ({
     );
 };
 
-export default VideoTimeline;
+const mapStateToProps = (state: AppState) => ({
+    language: state.general.language
+});
+
+export default connect(mapStateToProps)(VideoTimeline);
 

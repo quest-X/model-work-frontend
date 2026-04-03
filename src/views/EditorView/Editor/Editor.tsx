@@ -109,14 +109,20 @@ class Editor extends React.Component<IProps, IState> {
     // EVENT HANDLERS
     // =================================================================================================================
 
+    private mountedCanvas: HTMLCanvasElement | null = null;
+
     private mountEventListeners() {
+        // 先清理可能残留的旧 listener（防止 React 18 StrictMode 双重 mount 泄漏）
+        this.unmountEventListeners();
+
+        this.mountedCanvas = EditorModel.canvas;
         window.addEventListener(EventType.MOUSE_MOVE, this.update);
         window.addEventListener(EventType.MOUSE_UP, this.update);
-        EditorModel.canvas.addEventListener(EventType.MOUSE_DOWN, this.update);
-        EditorModel.canvas.addEventListener(EventType.MOUSE_WHEEL, this.handleZoom);
-        
+        this.mountedCanvas.addEventListener(EventType.MOUSE_DOWN, this.update);
+        this.mountedCanvas.addEventListener(EventType.MOUSE_WHEEL, this.handleZoom);
+
         // 中键拖拽事件监听器
-        EditorModel.canvas.addEventListener(EventType.MOUSE_DOWN, this.handleMiddleMouseDown);
+        this.mountedCanvas.addEventListener(EventType.MOUSE_DOWN, this.handleMiddleMouseDown);
         window.addEventListener(EventType.MOUSE_MOVE, this.handleMiddleMouseMove);
         window.addEventListener(EventType.MOUSE_UP, this.handleMiddleMouseUp);
     }
@@ -124,13 +130,16 @@ class Editor extends React.Component<IProps, IState> {
     private unmountEventListeners() {
         window.removeEventListener(EventType.MOUSE_MOVE, this.update);
         window.removeEventListener(EventType.MOUSE_UP, this.update);
-        EditorModel.canvas.removeEventListener(EventType.MOUSE_DOWN, this.update);
-        EditorModel.canvas.removeEventListener(EventType.MOUSE_WHEEL, this.handleZoom);
-        
-        // 移除中键拖拽事件监听器
-        EditorModel.canvas.removeEventListener(EventType.MOUSE_DOWN, this.handleMiddleMouseDown);
         window.removeEventListener(EventType.MOUSE_MOVE, this.handleMiddleMouseMove);
         window.removeEventListener(EventType.MOUSE_UP, this.handleMiddleMouseUp);
+
+        const cvs = this.mountedCanvas || EditorModel.canvas;
+        if (cvs) {
+            cvs.removeEventListener(EventType.MOUSE_DOWN, this.update);
+            cvs.removeEventListener(EventType.MOUSE_WHEEL, this.handleZoom);
+            cvs.removeEventListener(EventType.MOUSE_DOWN, this.handleMiddleMouseDown);
+        }
+        this.mountedCanvas = null;
     }
 
     // =================================================================================================================
@@ -193,22 +202,15 @@ class Editor extends React.Component<IProps, IState> {
             }
         }
 
-        if (!EditorModel.cursor || !EditorModel.mousePositionIndicator) {
-            return;
-        }
-
         const editorData: EditorData = EditorActions.getEditorData(event);
         EditorModel.mousePositionOnViewPortContent = CanvasUtil.getMousePositionOnCanvasFromEvent(event, EditorModel.canvas);
         EditorModel.primaryRenderingEngine.update(editorData);
 
-        // 现在imageDragMode表示标签拖拽模式，而不是图像拖拽模式
-        // 总是更新supportRenderingEngine来处理标签交互
         EditorModel.supportRenderingEngine && EditorModel.supportRenderingEngine.update(editorData);
-        
-        // 不再基于imageDragMode来控制viewPortHelper，因为现在用中键拖拽来平移图像
-        // EditorModel.viewPortHelper.update(editorData); // 移除图像拖拽功能
 
-        !this.props.activePopupType && EditorActions.updateMousePositionIndicator(event);
+        if (EditorModel.cursor && EditorModel.mousePositionIndicator) {
+            !this.props.activePopupType && EditorActions.updateMousePositionIndicator(event);
+        }
         EditorActions.fullRender();
     };
 

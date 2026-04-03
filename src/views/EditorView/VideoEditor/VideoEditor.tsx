@@ -18,11 +18,13 @@ import { ImageDataUtil } from '../../../utils/ImageDataUtil';
 import { ImageRepository } from '../../../logic/imageRepository/ImageRepository';
 import { EditorActions } from '../../../logic/actions/EditorActions';
 import { AutoSaveService } from '../../../services/AutoSaveService';
+import { Language } from '../../../data/LanguageConfig';
 
 interface IProps {
     activeVideo: VideoData | null;
     imagesData: ImageData[];
     activeImageIndex: number;
+    language: Language;
     editorSize: ISize;
     updateVideoCurrentFrame: (videoId: string, frameNumber: number, timestamp: number) => void;
     updateVideoPlayingStatus: (videoId: string, isPlaying: boolean) => void;
@@ -37,6 +39,7 @@ const VideoEditor: React.FC<IProps> = ({
     activeVideo,
     imagesData,
     activeImageIndex,
+    language,
     editorSize,
     updateVideoCurrentFrame,
     updateVideoPlayingStatus,
@@ -738,6 +741,7 @@ const VideoEditor: React.FC<IProps> = ({
                 {/* 底层：视频播放器 */}
                 <div className="VideoPlayerLayer">
                     <VideoPlayer
+                        language={language}
                         videoSrc={videoUrl}
                         currentTime={activeVideo.currentTime}
                         currentFrame={activeVideo.currentFrame}
@@ -799,7 +803,8 @@ const VideoEditor: React.FC<IProps> = ({
 const mapStateToProps = (state: AppState) => ({
     activeVideo: state.video?.activeVideo || null,
     imagesData: state.labels.imagesData,
-    activeImageIndex: state.labels.activeImageIndex
+    activeImageIndex: state.labels.activeImageIndex,
+    language: state.general.language
 });
 
 const mapDispatchToProps = {

@@ -20,6 +20,7 @@ interface IProps {
     size: ISize;
     isScrolling?: boolean;
     isChecked?: boolean;
+    isInferred?: boolean;
     onClick?: () => any;
     isSelected?: boolean;
     isMultiSelected?: boolean;
@@ -192,7 +193,7 @@ class ImagePreview extends React.Component<IProps, IState> {
                                 ✕
                             </div>
                             {isChecked && <img
-                                className="CheckBox"
+                                className={`CheckBox${this.props.isInferred ? ' inferred' : ''}`}
                                 draggable={false}
                                 src={"ico/ok.png"}
                                 alt={"checkbox"}

@@ -1,8 +1,10 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import './VideoPlayer.scss';
 import { ISize } from '../../../interfaces/ISize';
+import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 
 interface IProps {
+    language: Language;
     videoSrc: string; // 视频源
     currentTime: number; // 当前时间
     currentFrame: number; // 当前帧
@@ -20,6 +22,7 @@ interface IProps {
 }
 
 const VideoPlayer: React.FC<IProps> = ({
+    language,
     videoSrc,
     currentTime,
     currentFrame,
@@ -35,6 +38,7 @@ const VideoPlayer: React.FC<IProps> = ({
     onFirstFrameDrawn,
     processingProgress = 0
 }) => {
+    const texts = LanguageConfig[language];
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -454,7 +458,7 @@ const VideoPlayer: React.FC<IProps> = ({
                     outline: 'none', // 移除焦点时的轮廓
                     zIndex: 1
                 }}
-                aria-label="视频播放器控制区域，按空格键播放/暂停"
+                aria-label={texts.video.playerAriaLabel}
             />
             <video
                 ref={videoRef}

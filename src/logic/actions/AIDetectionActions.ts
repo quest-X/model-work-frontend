@@ -51,7 +51,7 @@ export class AIDetectionActions {
         const step2Notification = NotificationUtil.updateInferenceProgress(
             progressNotification, 
             2, 
-            '目标检测中...' // 使用检测特定的文本
+            texts.notifications.detectionInProgress
         );
         store.dispatch(updateNotificationById(progressNotification.id, step2Notification));
 
@@ -97,12 +97,15 @@ export class AIDetectionActions {
                             // 显示成功通知
                             const language = store.getState().general.language;
                             const texts = LanguageConfig[language];
-                            const successMessage = `检测完成：发现 ${results.length} 个对象，耗时 ${totalTime} 秒`;
-                            
                             const successNotification = NotificationUtil.createSuccessNotification({
-                                header: '目标检测完成',
-                                description: successMessage
+                                header: texts.notifications.detectionCompleted,
+                                description: texts.notifications.detectionCompletedMessage
+                                    .replace('{count}', String(results.length))
+                                    .replace('{time}', totalTime)
                             });
+                            successNotification.i18nHeader = 'notifications.detectionCompleted';
+                            successNotification.i18nDescription = 'notifications.detectionCompletedMessage';
+                            successNotification.i18nParams = { count: String(results.length), time: totalTime };
                             store.dispatch(submitNewNotification(successNotification));
                         }, 800); // 减少延迟时间
                     });
@@ -129,9 +132,10 @@ export class AIDetectionActions {
                     const language = store.getState().general.language;
                     const texts = LanguageConfig[language];
                     const errorNotification = NotificationUtil.createErrorNotification({
-                        header: '目标检测失败',
-                        description: error.message || '检测过程中发生错误'
+                        header: texts.notifications.detectionFailed,
+                        description: error.message || texts.notifications.detectionFailedMessage
                     });
+                    errorNotification.i18nHeader = 'notifications.detectionFailed';
                     store.dispatch(submitNewNotification(errorNotification));
                     
                     // 重置检测状态

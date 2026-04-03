@@ -19,6 +19,7 @@ interface IProps {
     activeImageIndex: number;
     imagesData: ImageData[];
     activeLabelType: LabelType;
+    imageAIStates: Map<string, any>;
 }
 
 interface IState {
@@ -182,12 +183,16 @@ class ImagesList extends React.Component<IProps, IState> {
     private renderImagePreview = (index: number, isScrolling: boolean, isVisible: boolean, style: React.CSSProperties) => {
         const imageData = this.props.imagesData[index];
 
+        const aiState = this.props.imageAIStates?.get(imageData.id);
+        const isInferred = aiState?.inferenceHistory?.some((r: any) => r.success) || false;
+
         return <ImagePreview
             key={index}
             style={style}
             size={{width: 150, height: 150}}
             isScrolling={isScrolling}
             isChecked={this.isImageChecked(index)}
+            isInferred={isInferred}
             imageData={imageData}
             onClick={() => this.onClickHandler(index)}
             isSelected={this.props.activeImageIndex === index}
@@ -221,7 +226,8 @@ const mapDispatchToProps = {};
 const mapStateToProps = (state: AppState) => ({
     activeImageIndex: state.labels.activeImageIndex,
     imagesData: state.labels.imagesData,
-    activeLabelType: state.labels.activeLabelType
+    activeLabelType: state.labels.activeLabelType,
+    imageAIStates: state.ai.imageAIStates
 });
 
 export default connect(

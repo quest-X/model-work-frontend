@@ -7,11 +7,27 @@ import {deleteNotificationById} from '../../store/notifications/actionCreators';
 import {INotification} from '../../store/notifications/types';
 import {NotificationType} from '../../data/enums/NotificationType';
 import {store} from '../../index';
-import {LanguageConfig} from '../../data/LanguageConfig';
+import {Language, LanguageConfig, LanguageTexts} from '../../data/LanguageConfig';
+
+/** Resolve a dot-path like "notifications.detectionCompleted" from LanguageTexts */
+function resolveI18n(texts: LanguageTexts, path: string, params?: Record<string, string>): string {
+    let value: any = texts;
+    for (const key of path.split('.')) {
+        value = value?.[key];
+    }
+    if (typeof value !== 'string') return path;
+    if (params) {
+        for (const [k, v] of Object.entries(params)) {
+            value = value.replace(`{${k}}`, v);
+        }
+    }
+    return value;
+}
 
 interface IProps {
     deleteNotificationByIdAction: (id: string) => void
     queue: INotification[]
+    language: Language
 }
 
 enum NotificationState {
@@ -89,9 +105,16 @@ const NotificationsView: React.FC<IProps> = (props) => {
 
     const renderNotification = () => {
         // 获取国际化文本
-        const language = store.getState().general.language;
-        const texts = LanguageConfig[language];
-        
+        const texts = LanguageConfig[props.language];
+
+        // Resolve i18n keys at render time so language switches are instant
+        const header = notification.i18nHeader
+            ? resolveI18n(texts, notification.i18nHeader, notification.i18nParams)
+            : notification.header;
+        const description = notification.i18nDescription
+            ? resolveI18n(texts, notification.i18nDescription, notification.i18nParams)
+            : notification.description;
+
         return(
             notification && <div
                 className={getNotificationWrapperClassName()}
@@ -101,7 +124,7 @@ const NotificationsView: React.FC<IProps> = (props) => {
             >
                 <div className={getNotificationClassName()}>
                     <div className='header'>
-                        {notification.header}
+                        {header}
                     </div>
                     <div className='content'>
                         {notification.isInferenceProgress ? (
@@ -192,7 +215,7 @@ const NotificationsView: React.FC<IProps> = (props) => {
                                 )}
                             </div>
                         ) : (
-                            notification.description
+                            description
                         )}
                     </div>
                     <div className='loader'/>
@@ -209,7 +232,8 @@ const mapDispatchToProps = {
 };
 
 const mapStateToProps = (state: AppState) => ({
-    queue: state.notifications.queue
+    queue: state.notifications.queue,
+    language: state.general.language
 });
 
 export default connect(

@@ -21,6 +21,7 @@ import {AIDetectionActions} from '../../../logic/actions/AIDetectionActions';
 import {ImageData} from '../../../store/labels/types';
 import {LabelsSelector} from '../../../store/selectors/LabelsSelector';
 import {getSelectedModelFamily, getServerUrl} from '../LoadModelPopup/LoadModelPopup';
+import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 enum ModelSource {
     UPLOAD = 'UPLOAD',
@@ -40,9 +41,11 @@ function getVariantLabel(variant: string): string {
 interface IProps {
     updateActivePopupTypeAction: (activePopupType: PopupWindowType) => GeneralActionTypes;
     submitNewNotificationAction: (notification: INotification) => NotificationsActionType;
+    language: Language;
 }
 
-const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, submitNewNotificationAction }) => {
+const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, submitNewNotificationAction, language }) => {
+    const texts = LanguageConfig[language];
     const modelFamily = getSelectedModelFamily();
     const serverUrl = getServerUrl();
     const variants = modelFamily?.variants || [];
@@ -79,11 +82,11 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                         resolve();
                     } else if (data.state === 'error') {
                         clearInterval(interval);
-                        reject(new Error(data.error || '加载失败'));
+                        reject(new Error(data.error || texts.loadYoloModel.loadFailed));
                     }
                 } catch {
                     clearInterval(interval);
-                    reject(new Error('无法连接服务器'));
+                    reject(new Error(texts.loadYoloModel.connectionFailed));
                 }
             }, 500);
         });
@@ -213,8 +216,8 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                             alt={variant === selectedVariant ? 'checked' : 'unchecked'}
                         />
                         <span className='variant-name'>{variant} ({getVariantLabel(variant)})</span>
-                        {isActive && <span className='status-badge active-badge'>使用中</span>}
-                        {!isActive && isDownloaded && <span className='status-badge downloaded-badge'>已下载</span>}
+                        {isActive && <span className='status-badge active-badge'>{texts.loadYoloModel.active}</span>}
+                        {!isActive && isDownloaded && <span className='status-badge downloaded-badge'>{texts.loadYoloModel.downloaded}</span>}
                     </div>
                 );
             })}
@@ -222,18 +225,18 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
     };
 
     const renderMessage = () => {
-        const uploadMessage = `拖拽自定义 .pt 模型文件到下方区域，上传到推理服务器使用。`;
-        const officialMessage = `选择 ${modelFamily?.name || 'YOLO'} 官方预训练模型变体，服务器将自动下载并加载。`;
+        const uploadMessage = texts.loadYoloModel.uploadMessage;
+        const officialMessage = texts.loadYoloModel.officialMessage.replace('{name}', modelFamily?.name || 'YOLO');
         return(<div className='message'>
             {modelSource === ModelSource.OFFICIAL ? officialMessage : uploadMessage}
         </div>)
     };
 
     const stateLabels: Record<string, string> = {
-        downloading: '正在下载模型...',
-        loading: '正在加载模型...',
-        ready: '加载完成',
-        error: '加载失败',
+        downloading: texts.loadYoloModel.downloading,
+        loading: texts.loadYoloModel.loading,
+        ready: texts.loadYoloModel.ready,
+        error: texts.loadYoloModel.errorState,
     };
 
     const renderLoader = () => {
@@ -244,7 +247,7 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                 loading={true}
             />
             <div className='progress-info'>
-                <p className='progress-text'>{stateLabels[loadState] || '准备中...'} {loadProgress}%</p>
+                <p className='progress-text'>{stateLabels[loadState] || texts.loadYoloModel.preparing} {loadProgress}%</p>
                 <div className='progress-bar'>
                     <div className='progress-fill' style={{ width: `${loadProgress}%` }} />
                 </div>
@@ -265,9 +268,9 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                 <p className='extraBold'>{modelFile.name}</p>
                 <p>{(modelFile.size / 1024 / 1024).toFixed(1)} MB</p>
             </> : <>
-                <p className='extraBold'>拖拽 .pt 模型文件</p>
-                <p>或</p>
-                <p className='extraBold'>点击此处选择文件</p>
+                <p className='extraBold'>{texts.loadYoloModel.dragModel}</p>
+                <p>{texts.or}</p>
+                <p className='extraBold'>{texts.loadYoloModel.clickToSelect}</p>
             </>}
         </div>)
     };
@@ -290,16 +293,18 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
         (modelSource === ModelSource.UPLOAD && !modelFile) ||
         (modelSource === ModelSource.OFFICIAL && !selectedVariant);
 
-    const title = modelFamily ? `加载 ${modelFamily.name.split('/')[1]?.toUpperCase() || modelFamily.id} 模型` : '加载模型';
+    const title = modelFamily
+        ? texts.loadYoloModel.title.replace('{model}', modelFamily.name.split('/')[1]?.toUpperCase() || modelFamily.id)
+        : texts.loadYoloModel.titleFallback;
 
     return (
         <GenericYesNoPopup
             title={title}
             renderContent={renderContent}
             disableAcceptButton={disableAcceptButton}
-            acceptLabel={'使用模型'}
+            acceptLabel={texts.loadYoloModel.acceptLabel}
             onAccept={onAccept}
-            rejectLabel={'返回'}
+            rejectLabel={texts.loadYoloModel.rejectLabel}
             onReject={onReject}
         />
     );
@@ -310,7 +315,9 @@ const mapDispatchToProps = {
     submitNewNotificationAction: submitNewNotification
 };
 
-const mapStateToProps = (state: AppState) => ({});
+const mapStateToProps = (state: AppState) => ({
+    language: state.general.language
+});
 
 export default connect(
     mapStateToProps,

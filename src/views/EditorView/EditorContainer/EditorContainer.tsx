@@ -400,9 +400,9 @@ const EditorContainer: React.FC<IProps> = (
                 imageAlt={'queue'}
                 onClick={queueButtonOnClick}
                 isActive={leftTabStatus && showQueueList}
-                style={{top: '160px'}}
+                style={{top: '170px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.4.1</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.4.6</div>
         </>
     };
 

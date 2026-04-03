@@ -6,6 +6,10 @@ export interface INotification {
     type: NotificationType,
     header: string,
     description: string,
+    // i18n: resolve text at render time so language switches take effect immediately
+    i18nHeader?: string,       // dot-path into LanguageTexts, e.g. "notifications.detectionCompleted"
+    i18nDescription?: string,  // dot-path or template string with {key} placeholders
+    i18nParams?: Record<string, string>, // params for template substitution
     // 推理进度相关字段
     isInferenceProgress?: boolean,
     currentStep?: number,
