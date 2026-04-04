@@ -8,6 +8,7 @@ import {ImageData, LabelName} from '../../../store/labels/types';
 import {updateSegmentationResults} from '../../../store/ai/actionCreators';
 import {updateActiveLabelId} from '../../../store/labels/actionCreators';
 import {LabelActions} from '../../../logic/actions/LabelActions';
+import {EditorModel} from '../../../staticModels/EditorModel';
 
 interface IProps {
     language: Language;
@@ -110,28 +111,47 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
 
     const generateThumbnail = (result: SegmentationResult): Promise<string> => {
         if (!activeImageData?.fileData) return Promise.resolve('');
+
+        const cropAndResolve = (source: CanvasImageSource, resolve: (url: string) => void) => {
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { resolve(''); return; }
+                const size = 60;
+                canvas.width = size;
+                canvas.height = size;
+                const {x1, y1, x2, y2} = result.bbox;
+                ctx.drawImage(source, x1, y1, x2 - x1, y2 - y1, 0, 0, size, size);
+                resolve(canvas.toDataURL());
+            } catch { resolve(''); }
+        };
+
+        const fileData = activeImageData.fileData;
+        const isVideo = fileData.type?.startsWith('video/') ||
+            /\.(mp4|webm|mov|avi|mkv)$/i.test(fileData.name || '');
+
+        if (isVideo) {
+            // 视频帧：直接从 EditorModel.videoElement 截取（已 seek 到当前帧）
+            return new Promise<string>((resolve) => {
+                const video = EditorModel.videoElement || document.querySelector('video');
+                if (video && video.readyState >= 2) {
+                    cropAndResolve(video, resolve);
+                } else {
+                    resolve('');
+                }
+            });
+        }
+
+        // 普通图片：用 Image 元素加载
         return new Promise<string>((resolve) => {
             const img = new Image();
             img.crossOrigin = 'anonymous';
-            img.onload = () => {
-                try {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) { resolve(''); return; }
-                    const size = 60;
-                    canvas.width = size;
-                    canvas.height = size;
-                    const {x1, y1, x2, y2} = result.bbox;
-                    ctx.drawImage(img, x1, y1, x2 - x1, y2 - y1, 0, 0, size, size);
-                    resolve(canvas.toDataURL());
-                } catch { resolve(''); }
-            };
+            img.onload = () => cropAndResolve(img, resolve);
             img.onerror = () => resolve('');
-            const imageData = activeImageData.fileData;
-            if (typeof imageData === 'string') {
-                img.src = imageData;
-            } else if (imageData instanceof File || imageData instanceof Blob) {
-                const objectUrl = URL.createObjectURL(imageData);
+            if (typeof fileData === 'string') {
+                img.src = fileData;
+            } else if (fileData instanceof File || fileData instanceof Blob) {
+                const objectUrl = URL.createObjectURL(fileData);
                 img.src = objectUrl;
                 const origOnload = img.onload;
                 img.onload = (e) => { URL.revokeObjectURL(objectUrl); if (typeof origOnload === 'function') origOnload.call(img, e); };
@@ -139,16 +159,47 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         });
     };
 
+    // 当 segmentationResults 为空但 labelRects 有 AI 检测结果时，从 labelRects 生成显示数据
+    // 这确保批量检测和恢复工作后面板也能显示结果
+    const displayResults = React.useMemo(() => {
+        if (segmentationResults && segmentationResults.length > 0) return segmentationResults;
+        if (!activeImageData) return [];
+        const aiRects = activeImageData.labelRects.filter(r => r.isCreatedByAI);
+        if (aiRects.length === 0) return [];
+        return aiRects.map(rect => {
+            const labelName = labelNames.find(ln => ln.id === rect.labelId);
+            const name = labelName?.name || rect.suggestedLabel || 'unknown';
+            return {
+                class_id: 0,
+                class_name: name,
+                confidence: 0,
+                bbox: {
+                    x1: rect.rect.x,
+                    y1: rect.rect.y,
+                    x2: rect.rect.x + rect.rect.width,
+                    y2: rect.rect.y + rect.rect.height,
+                    width: rect.rect.width,
+                    height: rect.rect.height
+                },
+                mask: null,
+                _labelRectId: rect.id // 用于关联
+            };
+        });
+    }, [segmentationResults, activeImageData, labelNames]);
+
     const [thumbnails, setThumbnails] = React.useState<{[key: number]: string}>({});
 
     React.useEffect(() => {
-        if (segmentationResults && segmentationResults.length > 0 && activeImageData?.fileData) {
-            segmentationResults.forEach(async (result, index) => {
+        if (displayResults.length > 0 && activeImageData?.fileData) {
+            setThumbnails({}); // 切帧时清空
+            displayResults.forEach(async (result, index) => {
                 const url = await generateThumbnail(result);
                 setThumbnails(prev => ({...prev, [index]: url}));
             });
+        } else {
+            setThumbnails({});
         }
-    }, [segmentationResults, activeImageData?.fileData]);
+    }, [displayResults, activeImageData?.id]);
 
     return (
         <div className="InferenceResultsView">
@@ -156,9 +207,9 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
                 <div className="HeaderText">{currentTexts.aiInference.results.title}</div>
             </div>
             <div className="Content">
-                {segmentationResults && segmentationResults.length > 0 ? (
+                {displayResults.length > 0 ? (
                     <div className="SegmentationResultsList">
-                        {segmentationResults.map((result, index) => (
+                        {displayResults.map((result, index) => (
                             <div key={index} className="SegmentationResultItem"
                                 onClick={() => handleClickSegmentationResult(result, index)}
                                 onMouseEnter={() => handleMouseEnterSegmentationResult(result, index)}
