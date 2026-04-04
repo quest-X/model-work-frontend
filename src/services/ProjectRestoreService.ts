@@ -3,6 +3,8 @@ import { LocalStorageManager } from '../utils/LocalStorageManager';
 import { IndexedDBManager, StoredProjectData } from '../utils/IndexedDBManager';
 import { updateLanguage, updateZoom, updateImageDragModeStatus, updateCrossHairVisibleStatus } from '../store/general/actionCreators';
 import { updateActiveImageIndex, updateActiveLabelType, updateLabelNames, updateImageDataById, addImageData, updateImageData } from '../store/labels/actionCreators';
+import { updateVideoMode, addVideoData } from '../store/video/actionCreators';
+import { VideoData } from '../store/video/types';
 import { ImageData, LabelName } from '../store/labels/types';
 import { ImageRepository } from '../logic/imageRepository/ImageRepository';
 import { LabelType } from '../data/enums/LabelType';
@@ -60,10 +62,10 @@ export class ProjectRestoreService {
                 store.dispatch(updateLabelNames(storedProject.labelNames));
             }
             
-            // 恢复图像数据 - 设置loadStatus为false让组件重新加载图像
+            // 恢复图像数据 - ArrayBuffer → File，设置loadStatus为false让组件重新加载图像
             const restoredImages: ImageData[] = storedProject.images.map((storedImage): ImageData => ({
                 id: storedImage.id,
-                fileData: storedImage.fileData,
+                fileData: new File([storedImage.fileData], storedImage.fileName, { type: storedImage.fileType || '' }),
                 loadStatus: false, // 重要：设置为false让ImagePreview重新加载
                 labelRects: storedImage.labelRects || [],
                 labelPoints: storedImage.labelPoints || [],
@@ -79,9 +81,38 @@ export class ProjectRestoreService {
             
             // 替换图像数据（不是追加）
             store.dispatch(updateImageData(restoredImages));
-            
-            // 图像会由ImagePreview组件自动加载，无需手动恢复到ImageRepository
-            console.log('图像数据已添加到Redux，ImagePreview将自动加载图像');
+
+            // 检测是否为视频项目
+            // 同时检查 MIME 类型和文件扩展名（IndexedDB 恢复后 type 可能丢失）
+            const firstFile = restoredImages[0]?.fileData;
+            const isVideoProject = firstFile && (
+                firstFile.type.startsWith('video/') ||
+                /\.(mp4|webm|mov|avi|mkv|m4v|ogg)$/i.test(firstFile.name)
+            );
+
+            if (isVideoProject) {
+                // 恢复视频模式：创建 VideoData 并激活视频模式
+                // VideoEditor 挂载后会自动检测 FPS、生成缩略图
+                const videoData: VideoData = {
+                    id: restoredImages[0].id.split('-')[0] || restoredImages[0].id, // 用第一帧 ID 作为视频 ID
+                    fileData: firstFile,
+                    loadStatus: false,
+                    duration: 0,        // VideoEditor 加载后自动填充
+                    fps: 30,            // VideoEditor 加载后自动检测
+                    totalFrames: restoredImages.length,
+                    videoSize: { width: 0, height: 0 },
+                    currentFrame: 0,
+                    currentTime: 0,
+                    isPlaying: false,
+                    frames: new Map()
+                };
+                store.dispatch(updateVideoMode(true));
+                store.dispatch(addVideoData(videoData));
+                ImageRepository.setActiveFileId(videoData.id);
+                console.log('检测到视频项目，已恢复视频模式', { frames: restoredImages.length });
+            } else {
+                console.log('图像数据已添加到Redux，ImagePreview将自动加载图像');
+            }
             
             // 设置当前图像索引，确保在有效范围内
             const validImageIndex = Math.min(

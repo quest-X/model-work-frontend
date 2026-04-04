@@ -95,7 +95,11 @@ class ImagePreview extends React.Component<IProps, IState> {
         }
         else if (!isScrolling || !this.isLoading) {
             // 视频文件无法通过 FileUtil.loadImage 加载，跳过
-            if (imageData.fileData && imageData.fileData.type.startsWith('video/')) {
+            // 同时检查 MIME 类型和扩展名（IndexedDB 恢复后 type 可能丢失）
+            if (imageData.fileData && (
+                imageData.fileData.type.startsWith('video/') ||
+                /\.(mp4|webm|mov|avi|mkv|m4v|ogg)$/i.test(imageData.fileData.name)
+            )) {
                 return;
             }
             this.isLoading = true;
