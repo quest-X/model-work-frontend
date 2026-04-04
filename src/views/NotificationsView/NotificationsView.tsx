@@ -76,7 +76,12 @@ const NotificationsView: React.FC<IProps> = (props) => {
                 setNotificationState(NotificationState.DISPLAY)
                 break
             case Animation.DISPLAY:
-                setNotificationState(NotificationState.OUT)
+                // 推理进度通知：保持显示，不自动消失（等推理完成或手动关闭）
+                if (notification?.isInferenceProgress) {
+                    // 不做任何事，保持 DISPLAY 状态
+                } else {
+                    setNotificationState(NotificationState.OUT)
+                }
                 break
             case Animation.OUT:
                 if (notification) props.deleteNotificationByIdAction(notification.id)
