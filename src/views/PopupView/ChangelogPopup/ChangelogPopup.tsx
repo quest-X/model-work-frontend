@@ -16,12 +16,20 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.8.1',
+        date: '2026-04-05',
+        changes: [
+            { zh: '【实验性】后端原生 FFmpeg 拆帧：替换 FFmpeg WASM，174 帧 1920x1440 视频仅需 0.87 秒', en: '[Experimental] Backend native FFmpeg: replaces WASM, 174 frames of 1920x1440 in 0.87s' },
+            { zh: '新增 /extract-frames API：上传视频 → 原生 FFmpeg 拆帧 → ZIP 打包返回', en: 'New /extract-frames API: upload video → native FFmpeg extraction → ZIP response' },
+            { zh: '修复 DataCloneError：视频模式下跳过 IndexedDB 保存，防止内存爆炸', en: 'Fix DataCloneError: skip IndexedDB save in video mode, prevent OOM' },
+            { zh: '拆帧失败自动回退到传统视频模式', en: 'Auto-fallback to traditional video mode if frame extraction fails' },
+        ]
+    },
+    {
         version: '1.8.0',
         date: '2026-04-04',
         changes: [
-            { zh: '【实验性】FFmpeg WASM 前端拆帧：上传视频时自动拆分为独立帧图片，全走图片模式', en: '[Experimental] FFmpeg WASM frame extraction: video uploads auto-split into individual frames, using image mode' },
-            { zh: '消除所有浏览器 video seek 精度问题、rVFC 时序问题、readyState 轮询问题', en: 'Eliminate all browser video seek precision issues, rVFC timing issues, readyState polling issues' },
-            { zh: '拆帧失败自动回退到传统视频模式', en: 'Auto-fallback to traditional video mode if frame extraction fails' },
+            { zh: '【实验性】FFmpeg WASM 前端拆帧（已被 v1.8.1 替换）', en: '[Experimental] FFmpeg WASM frame extraction (superseded by v1.8.1)' },
         ]
     },
     {
