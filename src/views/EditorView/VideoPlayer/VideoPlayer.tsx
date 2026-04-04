@@ -53,6 +53,7 @@ const VideoPlayer: React.FC<IProps> = ({
     const videoFrameCallbackIdRef = useRef<number>();
     const playPromiseRef = useRef<Promise<void> | null>(null); // 跟踪 play() Promise
     const [isVideoEnded, setIsVideoEnded] = useState(false); // 视频是否播放完毕
+    const isVideoEndedRef = useRef(false); // ref 版本，避免 play effect 因 state 变化双重触发
     const firstFrameDrawnRef = useRef<boolean>(false); // 跟踪第一帧是否已绘制
 
     // Ref 模式：存储最新的 onTimeUpdate 回调，每次渲染同步。
@@ -60,6 +61,10 @@ const VideoPlayer: React.FC<IProps> = ({
     // 避免 play effect 因 onTimeUpdate 变化而每帧重启 rVFC 循环。
     const onTimeUpdateRef = useRef(onTimeUpdate);
     onTimeUpdateRef.current = onTimeUpdate;
+
+    // 同样稳定 onPlayPause，避免播放时键盘 listener 每帧重注册
+    const onPlayPauseRef = useRef(onPlayPause);
+    onPlayPauseRef.current = onPlayPause;
 
     // 监听视频源变化，重置所有状态
     useEffect(() => {
@@ -278,10 +283,11 @@ const VideoPlayer: React.FC<IProps> = ({
         const playVideo = async (): Promise<void> => {
             if (isPlaying) {
                 try {
-                    // 重置视频结束状态
-                    if (isVideoEnded) {
+                    // 重置视频结束状态（用 ref 读取，避免 state 变化触发 effect 双重运行）
+                    if (isVideoEndedRef.current) {
                         video.currentTime = 0;
                         setIsVideoEnded(false);
+                        isVideoEndedRef.current = false;
                         hasEndedRef.current = false;
                         // 等待 seek 完成
                         await new Promise<void>((resolve) => {
@@ -364,7 +370,7 @@ const VideoPlayer: React.FC<IProps> = ({
                 cancelAnimationFrame(requestRef.current);
             }
         };
-    }, [isPlaying, isVideoLoaded, isFpsDetecting, isVideoEnded, updateVideoFrame, drawFrame]);
+    }, [isPlaying, isVideoLoaded, isFpsDetecting, updateVideoFrame, drawFrame]);
 
     // 监听外部时间变化（仅在暂停时同步，避免播放时跳帧）
     useEffect(() => {
@@ -402,6 +408,7 @@ const VideoPlayer: React.FC<IProps> = ({
         }
 
         setIsVideoEnded(true);
+        isVideoEndedRef.current = true;
 
         // 通知父组件最终帧位置（确保时间轴指针到达末尾）
         if (video && onTimeUpdateRef.current) {
@@ -417,6 +424,7 @@ const VideoPlayer: React.FC<IProps> = ({
     }, [onPause, videoDuration, detectedFps, drawFrame]);
 
     // 键盘快捷键 - 空格键播放/暂停
+    // 键盘快捷键 — 通过 ref 读取 onPlayPause，listener 只注册一次（不会因 prop 变化而重注册）
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const video = videoRef.current;
@@ -430,15 +438,14 @@ const VideoPlayer: React.FC<IProps> = ({
                 case ' ':
                     e.preventDefault();
                     e.stopPropagation();
-                    // 统一走 onPlayPause，和 Timeline 按钮一致
-                    onPlayPause?.();
+                    onPlayPauseRef.current?.();
                     break;
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isVideoLoaded, onPlayPause]);
+    }, [isVideoLoaded]);
 
     // 设置播放速率为1.0（正常速度）
     useEffect(() => {

@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.6.4',
+        date: '2026-04-04',
+        changes: [
+            { zh: '播放流畅性大幅提升：onPlayPauseRef 稳定键盘监听，消除空格键响应丢失', en: 'Major playback smoothness: stable keyboard listener via onPlayPauseRef, no more missed spacebar' },
+            { zh: '修复重播卡顿：play effect 用 ref 读取 isVideoEnded，消除 effect 双重触发导致的 rVFC 间隙', en: 'Fix replay stutter: read isVideoEnded from ref to prevent double effect run and rVFC gap' },
+            { zh: 'Timeline 进度条可靠同步：每帧 Redux dispatch 保证状态一致，简化架构消除同步 bug', en: 'Reliable timeline sync: per-frame Redux dispatch ensures consistent state, simplified architecture' },
+        ]
+    },
+    {
         version: '1.6.3',
         date: '2026-04-04',
         changes: [

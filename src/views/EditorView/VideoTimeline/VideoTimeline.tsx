@@ -46,7 +46,7 @@ const VideoTimeline: React.FC<IProps> = ({
     const [isDragging, setIsDragging] = useState(false);
     const [hoverTime, setHoverTime] = useState<number | null>(null);
 
-    // 绘制时间轴
+    // 绘制时间轴（纯 Redux prop 驱动，简单可靠）
     const drawTimeline = useCallback(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -140,8 +140,9 @@ const VideoTimeline: React.FC<IProps> = ({
         });
 
         // 绘制播放进度条
-        // 用帧位置比例计算，避免 currentTime/duration 精度问题导致末尾空白
-        const progress = frames > 0 ? currentFrame / (frames - 1) : 0;
+        const displayFrame = currentFrame;
+        const displayTime = currentTime;
+        const progress = frames > 0 ? displayFrame / (frames - 1) : 0;
         const currentX = Math.min(progress * width, width);
         ctx.fillStyle = 'rgba(33, 150, 243, 0.3)';
         ctx.fillRect(0, 0, currentX, height - 30);
@@ -192,8 +193,8 @@ const VideoTimeline: React.FC<IProps> = ({
         ctx.fillStyle = '#fff';
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'right';
-        const currentMinutes = Math.floor(currentTime / 60);
-        const currentSeconds = Math.floor(currentTime % 60);
+        const currentMinutes = Math.floor(displayTime / 60);
+        const currentSeconds = Math.floor(displayTime % 60);
         const timeText = `${currentMinutes}:${currentSeconds.toString().padStart(2, '0')} / ${Math.floor(duration / 60)}:${Math.floor(duration % 60).toString().padStart(2, '0')}`;
         ctx.fillText(timeText, width - 10, 20);
 

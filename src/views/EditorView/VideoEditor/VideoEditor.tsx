@@ -630,6 +630,7 @@ const VideoEditor: React.FC<IProps> = ({
             lastFrameRef.current = -1;
         } else {
             // 暂停：清除播放缓存，恢复 Redux selector 路径
+            // （Redux 在播放期间每帧都在更新，已同步，无需额外 dispatch）
             EditorModel.playbackImageData = null;
             // 同步侧边栏到当前帧
             if (activeVideo.currentFrame !== activeImageIndex) {
@@ -686,20 +687,17 @@ const VideoEditor: React.FC<IProps> = ({
             const now = Date.now();
             const frameChanged = frame !== currentActiveVideo.currentFrame;
             const timeSinceLastUpdate = now - lastUpdateTimeRef.current;
-            // 限制更新频率为约30fps（33ms），减少 Redux 更新次数，避免阻塞回调
+            // 限制 canvas 更新频率为 30fps（33ms）
             const shouldUpdate = frameChanged && timeSinceLastUpdate >= 33;
 
             if (shouldUpdate) {
-                updateVideoCurrentFrame(currentActiveVideo.id, frame, time);
                 lastUpdateTimeRef.current = now;
 
-                // 核心设计：推理与渲染分离
-                // 直接从 imagesDataRef 按帧号读取标注数据 → EditorModel.playbackImageData
-                // RectRenderEngine 直接读取，绕过 Redux selector，零开销。
-                // imagesDataRef 在渲染期间同步更新（非 useEffect），保证始终是最新值。
+                // 1. Redux 状态同步（每帧 dispatch，保证 timeline/侧边栏始终同步）
+                updateVideoCurrentFrame(currentActiveVideo.id, frame, time);
+
+                // 2. 设置播放时的标注数据（绕过 Redux selector，直接读 ref）
                 let frameImageData = imagesDataRef.current[frame];
-                // 防御：如果 ref 中的数据没有标注（batchApplyResults dispatch 后 ref 未同步），
-                // 回退到 EditorModel.latestImagesData（batchApplyResults 同步写入的缓存）
                 if (frameImageData && frameImageData.labelRects.length === 0 && EditorModel.latestImagesData) {
                     const latestData = EditorModel.latestImagesData[frame];
                     if (latestData && latestData.labelRects.length > 0) {
@@ -708,13 +706,14 @@ const VideoEditor: React.FC<IProps> = ({
                 }
                 EditorModel.playbackImageData = frameImageData || null;
 
-                // 侧边栏高亮更新：节流到 ~5fps，不影响标注渲染
+                // 3. 侧边栏高亮更新：节流到 ~5fps
                 const sidebarTimeSince = now - lastSidebarUpdateRef.current;
                 if (frame !== activeImageIndexRef.current && (!isPlayingRef.current || sidebarTimeSince >= 200)) {
                     updateActiveImageIndex(frame);
                     lastSidebarUpdateRef.current = now;
                 }
 
+                // 4. 渲染标注框
                 EditorActions.fullRender();
             }
         },
@@ -795,7 +794,12 @@ const VideoEditor: React.FC<IProps> = ({
                             setIsPlaying(false);
                             if (activeVideo) {
                                 updateVideoPlayingStatus(activeVideo.id, false);
+                                // 强制同步最终帧到 Redux（绕过 handleVideoTimeUpdate 的 33ms 节流）
+                                const finalFrame = lastFrameRef.current >= 0 ? lastFrameRef.current : activeVideo.currentFrame;
+                                updateVideoCurrentFrame(activeVideo.id, finalFrame, finalFrame / (activeVideo.fps || 30));
+                                updateActiveImageIndex(finalFrame);
                             }
+                            EditorModel.playbackImageData = null;
                         }}
                         onPlayPause={handlePlayPause}
                         isPlaying={isPlaying}
