@@ -16,6 +16,27 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.7.0',
+        date: '2026-04-04',
+        changes: [
+            { zh: '消除浮点精度丢帧：所有 time→frame 转换改用 Math.round，彻底解决末尾帧差 1-2 帧的问题', en: 'Eliminate float precision frame loss: all time→frame conversions use Math.round, fixing off-by-1-2 frames at video end' },
+            { zh: '整数帧号为唯一真相：视频结束帧直接用 totalFrames-1，不再从 duration 浮点重算', en: 'Integer frame as single source of truth: video end frame uses totalFrames-1 directly, no float recomputation' },
+            { zh: 'Timeline 标记用帧比例绘制，消除 frame÷fps 浮点误差导致的像素偏移', en: 'Timeline markers use frame ratio for positioning, eliminating frame÷fps float pixel drift' },
+            { zh: '批量检测进度实时显示：捕获帧 (n/174)、推理中 (n/174)，步骤指示器同步高亮', en: 'Real-time batch detection progress: capture (n/174), inference (n/174), step indicator synced' },
+            { zh: '推理进度通知不再自动消失，直到完成或手动关闭', en: 'Inference progress notification stays until completion or manual dismiss' },
+            { zh: '视频末尾自动显示 ↺ 重播按钮', en: 'Auto-show ↺ replay button at video end' },
+        ]
+    },
+    {
+        version: '1.6.6',
+        date: '2026-04-04',
+        changes: [
+            { zh: '帧计数改为从 1 开始，最后一帧显示为 174/174 而非 173/174', en: 'Frame counter now starts from 1, last frame shows 174/174 instead of 173/174' },
+            { zh: '重播按钮符号统一为 ↺，与播放 ▶ 暂停 ⏸ 风格一致', en: 'Replay button unified to ↺ symbol, consistent with ▶ play and ⏸ pause' },
+            { zh: '快捷键提示支持中英双语，新增空格键提示', en: 'Shortcut hints now bilingual, added Space key hint' },
+        ]
+    },
+    {
         version: '1.6.5',
         date: '2026-04-04',
         changes: [
