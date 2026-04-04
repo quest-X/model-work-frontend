@@ -572,7 +572,7 @@ const VideoEditor: React.FC<IProps> = ({
     const handleTimelineSeek = useCallback(
         (time: number) => {
             if (!activeVideo) return;
-            const frameNumber = Math.floor(time * activeVideo.fps);
+            const frameNumber = Math.min(Math.round(time * activeVideo.fps), activeVideo.totalFrames - 1);
             updateVideoCurrentFrame(activeVideo.id, frameNumber, time);
         },
         [activeVideo, updateVideoCurrentFrame]

@@ -55,6 +55,7 @@ const VideoPlayer: React.FC<IProps> = ({
     const [isVideoEnded, setIsVideoEnded] = useState(false); // 视频是否播放完毕
     const isVideoEndedRef = useRef(false); // ref 版本，避免 play effect 因 state 变化双重触发
     const firstFrameDrawnRef = useRef<boolean>(false); // 跟踪第一帧是否已绘制
+    const totalFramesRef = useRef<number>(0); // 整数总帧数，避免从 duration 浮点重算
 
     // Ref 模式：存储最新的 onTimeUpdate 回调，每次渲染同步。
     // 这使得 updateVideoFrame 的 useCallback 身份稳定（仅依赖 detectedFps），
@@ -194,6 +195,7 @@ const VideoPlayer: React.FC<IProps> = ({
         setDetectedFps(realFps);
         
         const totalFrames = Math.floor(duration * realFps); // 使用 floor 确保不超过视频实际可播放帧数
+        totalFramesRef.current = totalFrames;
         setIsVideoLoaded(true);
         // 将 video 元素暴露给 EditorModel，供检测等功能全分辨率截帧
         EditorModel.videoElement = video;
@@ -242,7 +244,7 @@ const VideoPlayer: React.FC<IProps> = ({
         if (!video || !onTimeUpdateRef.current) return;
 
         const currentTime = video.currentTime;
-        const currentFrame = Math.floor(currentTime * detectedFps);
+        const currentFrame = Math.round(currentTime * detectedFps);
 
         // 关键优化：先立即请求下一帧，避免延迟累积
         // 如果视频还在播放，继续请求下一帧（必须在执行耗时操作之前）
@@ -269,7 +271,7 @@ const VideoPlayer: React.FC<IProps> = ({
         if (!video || !onTimeUpdateRef.current || isPlaying) return; // 播放时不使用 timeupdate
 
         const currentTime = video.currentTime;
-        const currentFrame = Math.floor(currentTime * detectedFps);
+        const currentFrame = Math.round(currentTime * detectedFps);
 
         onTimeUpdateRef.current(currentTime, currentFrame);
         drawFrame();
@@ -410,10 +412,10 @@ const VideoPlayer: React.FC<IProps> = ({
         setIsVideoEnded(true);
         isVideoEndedRef.current = true;
 
-        // 通知父组件最终帧位置（确保时间轴指针到达末尾）
+        // 通知父组件最终帧位置（用整数帧号，不从 duration 浮点重算）
         if (video && onTimeUpdateRef.current) {
-            const finalFrame = Math.floor(videoDuration * detectedFps) - 1;
-            onTimeUpdateRef.current(videoDuration, Math.max(0, finalFrame));
+            const finalFrame = Math.max(0, totalFramesRef.current - 1);
+            onTimeUpdateRef.current(videoDuration, finalFrame);
             drawFrame();
         }
 

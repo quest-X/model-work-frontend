@@ -115,19 +115,17 @@ const VideoTimeline: React.FC<IProps> = ({
             }
         }
 
-        // 绘制已标注的帧（绿色标记）
+        // 绘制已标注的帧（绿色标记）— 用帧比例直接算像素，不经浮点除法
         ctx.fillStyle = 'rgba(76, 175, 80, 0.5)';
         annotatedFrames.forEach(frame => {
-            const time = frame / fps;
-            const x = time * pixelsPerSecond;
+            const x = frames > 1 ? (frame / (frames - 1)) * width : 0;
             ctx.fillRect(x - 1, 0, 2, height - 30);
         });
 
-        // 绘制关键帧标记（黄色小菱形）
+        // 绘制关键帧标记（黄色小菱形）— 同样用帧比例
         ctx.fillStyle = '#ffd700';
         keyframes.forEach(frame => {
-            const time = frame / fps;
-            const x = time * pixelsPerSecond;
+            const x = frames > 1 ? (frame / (frames - 1)) * width : 0;
             const y = height - 35;
             
             ctx.beginPath();
@@ -179,7 +177,7 @@ const VideoTimeline: React.FC<IProps> = ({
             // 显示悬停时间文本
             const hoverMinutes = Math.floor(hoverTime / 60);
             const hoverSeconds = Math.floor(hoverTime % 60);
-            const hoverFrame = Math.floor(hoverTime * fps);
+            const hoverFrame = Math.min(Math.round(hoverTime * fps), frames - 1);
             const hoverText = `${hoverMinutes}:${hoverSeconds.toString().padStart(2, '0')} (Frame ${hoverFrame})`;
             
             ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
@@ -244,7 +242,7 @@ const VideoTimeline: React.FC<IProps> = ({
         
         onSeek(clampedTime);
         
-        const frame = Math.floor(clampedTime * fps);
+        const frame = Math.min(Math.round(clampedTime * fps), frames - 1);
         onFrameChange(frame);
     };
 
@@ -331,7 +329,7 @@ const VideoTimeline: React.FC<IProps> = ({
             <div className="TimelineControls">
                 <div className="LeftInfo">
                     <span>FPS: {fps}</span>
-                    <span>{texts.video.frame + ': '}{String(currentFrame + 1).padStart(String(frames).length, '\u2007')} / {frames}</span>
+                    <span>{texts.video.frame + ': '}{currentFrame + 1} / {frames}</span>
                 </div>
                 
                 {/* 播放和静音按钮 - 居中显示 */}
