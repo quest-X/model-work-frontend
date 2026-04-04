@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.7.2',
+        date: '2026-04-04',
+        changes: [
+            { zh: '推理结果面板支持批量检测和恢复后的数据：从 labelRects 自动生成显示卡片', en: 'Inference panel shows results for batch detection and restored projects via labelRects fallback' },
+            { zh: '视频帧缩略图从 video 元素直接截取，不再尝试用 img 加载 mp4 文件', en: 'Video frame thumbnails captured from video element directly instead of loading mp4 as image' },
+        ]
+    },
+    {
         version: '1.7.1',
         date: '2026-04-04',
         changes: [
