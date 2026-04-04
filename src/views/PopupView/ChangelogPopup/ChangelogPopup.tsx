@@ -16,6 +16,28 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.6.3',
+        date: '2026-04-04',
+        changes: [
+            { zh: '彻底修复批量检测断片：视频模式全帧覆盖，不再依赖选中状态，174/174 帧 0 断片', en: 'Fix batch detection gaps: video mode processes all frames regardless of selection, 174/174 with 0 gaps' },
+            { zh: '修复播放时检测框不跟随：onTimeUpdateRef 模式稳定 rVFC 循环，消除每帧重启', en: 'Fix playback box following: onTimeUpdateRef pattern stabilizes rVFC loop, preventing per-frame restarts' },
+            { zh: '修复 AI 检测框不显示：批量检测后自动设置 aiLabelsVisible，确保框可见', en: 'Fix AI boxes invisible: auto-set aiLabelsVisible after batch detection via addInferenceHistory' },
+            { zh: '修复播放数据过时：EditorModel.latestImagesData 缓存 + fallback，确保立即生效', en: 'Fix stale playback data: EditorModel.latestImagesData cache with fallback for immediate availability' },
+            { zh: 'seekVideoToTimeForCapture 增强：readyState 轮询上限 2s，4 次重试，5s 超时保护', en: 'Enhanced seekVideoToTimeForCapture: 2s readyState polling, 4 retries, 5s emergency timeout' },
+        ]
+    },
+    {
+        version: '1.6.2',
+        date: '2026-04-04',
+        changes: [
+            { zh: '捕获与推理流水线并行：捕获帧的同时 4 路并发推理，总时间大幅缩短', en: 'Pipeline parallelism: capture and 4-way concurrent inference run simultaneously, greatly reducing total time' },
+            { zh: 'seek 改用 requestVideoFrameCallback 确认帧真正渲染后再截图，帧捕获可靠性最大化', en: 'Seek uses requestVideoFrameCallback to confirm actual frame render before capture, maximizing reliability' },
+            { zh: '批量写入 Redux：全部推理完成后单次 dispatch 更新所有图像，消除 N 次重渲染', en: 'Batch Redux write: single dispatch after all inference, eliminating N re-renders' },
+            { zh: '进度通知实时显示百分比、捕获数、推理数，清晰掌握进度', en: 'Real-time progress with percentage, capture count, and inference count' },
+            { zh: '修复 queueMicrotask 导致的批量模式 Redux 数据竞争', en: 'Fix Redux data race in batch mode caused by queueMicrotask async writes' },
+        ]
+    },
+    {
         version: '1.6.1',
         date: '2026-04-04',
         changes: [
