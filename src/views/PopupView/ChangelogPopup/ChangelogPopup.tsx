@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.8.0',
+        date: '2026-04-04',
+        changes: [
+            { zh: '【实验性】FFmpeg WASM 前端拆帧：上传视频时自动拆分为独立帧图片，全走图片模式', en: '[Experimental] FFmpeg WASM frame extraction: video uploads auto-split into individual frames, using image mode' },
+            { zh: '消除所有浏览器 video seek 精度问题、rVFC 时序问题、readyState 轮询问题', en: 'Eliminate all browser video seek precision issues, rVFC timing issues, readyState polling issues' },
+            { zh: '拆帧失败自动回退到传统视频模式', en: 'Auto-fallback to traditional video mode if frame extraction fails' },
+        ]
+    },
+    {
         version: '1.7.2',
         date: '2026-04-04',
         changes: [

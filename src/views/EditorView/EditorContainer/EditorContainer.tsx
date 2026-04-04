@@ -272,19 +272,45 @@ const EditorContainer: React.FC<IProps> = (
                 // 添加到队列
                 const newQueueItems: QueueItem[] = [];
                 
-                // 添加视频文件（每个单独）
+                // 视频文件：FFmpeg WASM 拆帧后作为图片文件夹处理
                 for (const videoFile of videoFiles) {
-                    const thumbnail = await generateThumbnail(videoFile);
-                    const item: QueueItem = {
-                        id: uuidv4(),
-                        name: videoFile.name,
-                        type: QueueItemType.VIDEO,
-                        file: videoFile,
-                        status: QueueItemStatus.PENDING,
-                        uploadedAt: Date.now(),
-                        thumbnail
-                    };
-                    newQueueItems.push(item);
+                    try {
+                        console.log(`[FFmpeg] 开始拆帧: ${videoFile.name}`);
+                        const result = await FrameExtractorService.extractFrames(
+                            videoFile, 30,
+                            (phase, current, total) => {
+                                console.log(`[FFmpeg] ${phase}: ${current}/${total}`);
+                            }
+                        );
+                        console.log(`[FFmpeg] 拆帧完成: ${result.totalFrames} 帧`);
+
+                        // 将拆出的帧作为图片文件夹添加到队列
+                        const thumbnail = await generateThumbnail(result.frames[0]);
+                        const item: QueueItem = {
+                            id: uuidv4(),
+                            name: `${videoFile.name} (${result.totalFrames} 帧 @ ${result.fps}fps)`,
+                            type: QueueItemType.FOLDER,
+                            files: result.frames,
+                            status: QueueItemStatus.PENDING,
+                            uploadedAt: Date.now(),
+                            thumbnail
+                        };
+                        newQueueItems.push(item);
+                    } catch (err) {
+                        console.error('[FFmpeg] 拆帧失败，回退到视频模式:', err);
+                        // 回退：用旧的视频模式
+                        const thumbnail = await generateThumbnail(videoFile);
+                        const item: QueueItem = {
+                            id: uuidv4(),
+                            name: videoFile.name,
+                            type: QueueItemType.VIDEO,
+                            file: videoFile,
+                            status: QueueItemStatus.PENDING,
+                            uploadedAt: Date.now(),
+                            thumbnail
+                        };
+                        newQueueItems.push(item);
+                    }
                 }
 
                 // 添加图像文件（按文件夹分组）
@@ -402,7 +428,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '170px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.7.2</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.8.0</div>
         </>
     };
 

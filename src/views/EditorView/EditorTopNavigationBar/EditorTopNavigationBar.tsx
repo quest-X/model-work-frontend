@@ -373,10 +373,10 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 {useMemo(() => {
                     const activeImageData = LabelsSelector.getActiveImageData();
                     const detectionAvailable = hasDetectionModel;
-                    
+
                     // 检测按钮状态完全独立，不依赖分割功能
                     let buttonText, buttonIcon, isActive, isDisabled;
-                    
+
                     if (!detectionAvailable) {
                         // 没有检测模型时
                         buttonText = currentTexts.editorTopNavBar.cannotDetect;
@@ -390,32 +390,44 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         isActive = true;
                         isDisabled = false;
                     } else {
-                        // 检测可用时，检查当前图片是否有AI标签来决定按钮状态
-                        if (activeImageData) {
-                            const imageAIState = imageAIStates.get(activeImageData.id) || { 
-                                aiLabelsVisible: false,
-                                segmentationLabelsVisible: false,
-                                inferenceHistory: [] 
-                            };
-                            
-                            // 检查是否真的有检测产生的AI标签（排除分割标签）
-                            const hasActualDetectionLabels = activeImageData.labelRects?.some(rect => rect.isCreatedByAI) ||
-                                                            activeImageData.labelPoints?.some(point => point.isCreatedByAI) ||
-                                                            activeImageData.labelLines?.some(line => line.isCreatedByAI);
-                            // 注意：多边形标签主要由分割产生，所以不包含在检测标签检查中
-                            
-                            if (imageAIState.aiLabelsVisible && hasActualDetectionLabels) {
-                                // 当前显示检测标签，按钮为"关闭"状态
+                        // 检测可用时，检查多选/单选图片状态
+                        const selectedImages = imagesData.filter((img: ImageData) => img.isSelected);
+                        const isBatchMode = selectedImages.length > 1;
+                        const imagesToCheck = isBatchMode ? selectedImages : (activeImageData ? [activeImageData] : []);
+
+                        if (imagesToCheck.length > 0) {
+                            // 检查所有目标图片是否都已推理且标签可见
+                            const allInferredAndVisible = imagesToCheck.every((img: ImageData) => {
+                                const imgAIState = imageAIStates.get(img.id) || {
+                                    aiLabelsVisible: false,
+                                    inferenceHistory: []
+                                };
+                                const hasDetectionLabels = img.labelRects?.some((rect: any) => rect.isCreatedByAI) ||
+                                                           img.labelPoints?.some((point: any) => point.isCreatedByAI) ||
+                                                           img.labelLines?.some((line: any) => line.isCreatedByAI);
+                                return imgAIState.aiLabelsVisible && hasDetectionLabels;
+                            });
+
+                            // 检查是否存在任一图片未推理过
+                            const anyNotInferred = imagesToCheck.some((img: ImageData) => {
+                                const hasDetectionLabels = img.labelRects?.some((rect: any) => rect.isCreatedByAI) ||
+                                                           img.labelPoints?.some((point: any) => point.isCreatedByAI) ||
+                                                           img.labelLines?.some((line: any) => line.isCreatedByAI);
+                                return !hasDetectionLabels;
+                            });
+
+                            if (allInferredAndVisible) {
+                                // 所有图片都已推理且标签可见，按钮为"关闭"状态
                                 buttonText = currentTexts.editorTopNavBar.disableDetection;
                                 buttonIcon = 'ico/eye.png';
                                 isActive = true;
-                            } else if (hasActualDetectionLabels && !imageAIState.aiLabelsVisible) {
-                                // 有检测标签但未显示，按钮为"开启"状态
+                            } else if (anyNotInferred) {
+                                // 存在未推理的图片，按钮为闭眼状态
                                 buttonText = currentTexts.editorTopNavBar.enableDetection;
                                 buttonIcon = 'ico/eye-off.png';
                                 isActive = false;
                             } else {
-                                // 没有检测标签，按钮为"检测"状态
+                                // 所有图片都已推理但标签未显示
                                 buttonText = currentTexts.editorTopNavBar.enableDetection;
                                 buttonIcon = 'ico/eye-off.png';
                                 isActive = false;
@@ -428,7 +440,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         }
                         isDisabled = false;
                     }
-                    
+
                     return getButtonWithTooltip(
                         'full-image-detection',
                         buttonText,
@@ -439,7 +451,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         isDisabled ? undefined : fullImageDetectionOnClick,
                         isDisabled
                     );
-                }, [hasDetectionModel, isFullImageInferenceInProgress, imageAIStates, activeImageIndex, currentTexts, fullImageDetectionOnClick])}
+                }, [hasDetectionModel, isFullImageInferenceInProgress, imageAIStates, imagesData, activeImageIndex, currentTexts, fullImageDetectionOnClick])}
             </div>
             {withAI && <div className='ButtonWrapper'>
                     {

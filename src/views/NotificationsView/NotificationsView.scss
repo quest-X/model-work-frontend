@@ -143,16 +143,16 @@ $warningColor: #eed202;
                 animation: pulse 1.5s infinite;
               }
             }
-            
+
             &.completed {
               color: rgba(255, 255, 255, 0.9);
               &::before {
-                border-color: #009efd; // 已完成步骤改为蓝色
-                background-color: #009efd; // 已执行步骤用蓝色
+                border-color: #009efd; // 已完成步骤用蓝色
+                background-color: #009efd;
               }
-              
+
               .step-time {
-                color: #009efd; // 完成时间改为蓝色
+                color: #009efd; // 完成时间用蓝色
                 font-weight: 600;
               }
             }
