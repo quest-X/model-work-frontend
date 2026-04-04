@@ -108,18 +108,21 @@ export class AutoSaveService {
             return;
         }
         
-        // 转换ImageData到StoredImageData格式
-        const storedImages: StoredImageData[] = imagesData.map((imageData): StoredImageData => ({
-            id: imageData.id,
-            fileName: imageData.fileData.name,
-            fileData: imageData.fileData,
-            loadStatus: imageData.loadStatus,
-            labelRects: imageData.labelRects || [],
-            labelPoints: imageData.labelPoints || [],
-            labelLines: imageData.labelLines || [],
-            labelPolygons: imageData.labelPolygons || [],
-            labelNameIds: imageData.labelNameIds || []
-        }));
+        // 转换ImageData到StoredImageData格式（File → ArrayBuffer 以支持 IndexedDB 持久化）
+        const storedImages: StoredImageData[] = await Promise.all(
+            imagesData.map(async (imageData): Promise<StoredImageData> => ({
+                id: imageData.id,
+                fileName: imageData.fileData.name,
+                fileData: await imageData.fileData.arrayBuffer(),
+                fileType: imageData.fileData.type,
+                loadStatus: imageData.loadStatus,
+                labelRects: imageData.labelRects || [],
+                labelPoints: imageData.labelPoints || [],
+                labelLines: imageData.labelLines || [],
+                labelPolygons: imageData.labelPolygons || [],
+                labelNameIds: imageData.labelNameIds || []
+            }))
+        );
         
         const projectData: StoredProjectData = {
             id: 'current-project',

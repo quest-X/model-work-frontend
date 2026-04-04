@@ -277,6 +277,9 @@ export interface LanguageTexts {
         mute: string;
         unmute: string;
         playerAriaLabel: string;
+        shortcutMove1: string;
+        shortcutMove10: string;
+        shortcutPlayPause: string;
     };
 
     // Notifications
@@ -397,7 +400,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         
         // EmptyProjectView
         welcomeTitle: '欢迎使用 OpenSight Platform',
-        welcomeDescription: '请拖拽图像到此处或点击上传',
+        welcomeDescription: '拖拽图像视频到此处或点击上传',
         dragActiveMessage: '释放文件以上传图像',
         uploadHints: {
             dragSupport: '• 支持拖拽上传图像文件',
@@ -483,8 +486,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         popups: {
             uploadFiles: {
                 title: '上传文件',
-                addNewFiles: '拖拽图像或视频到此处',
-                clickToSelect: '点击此处选择文件',
+                addNewFiles: '拖拽图像视频到此处',
+                clickToSelect: '点击上传',
                 oneFileLoaded: '已加载 1 个文件',
                 multipleFilesLoaded: '已加载 {count} 个文件',
                 loadButton: '上传',
@@ -662,7 +665,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             loadFailed: '加载失败',
             connectionFailed: '无法连接服务器',
             dragModel: '拖拽 .pt 模型文件',
-            clickToSelect: '点击此处选择文件',
+            clickToSelect: '点击上传',
         },
 
         // Queue
@@ -673,7 +676,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             error: '错误',
         },
         queueEmpty: '队列为空',
-        queueEmptyHint: '拖拽文件到编辑区域以添加',
+        queueEmptyHint: '拖拽图像视频到此处或点击上传',
 
         // Video
         video: {
@@ -684,6 +687,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             mute: '静音',
             unmute: '取消静音',
             playerAriaLabel: '视频播放器控制区域，按空格键播放/暂停',
+            shortcutMove1: '← →: 移动 1 帧',
+            shortcutMove10: 'A D 移动 10 帧',
+            shortcutPlayPause: '空格: 播放/暂停',
         },
 
         // Notifications
@@ -742,7 +748,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         load: '加载',
         export: '导出',
         import: '导入',
-        or: '或者',
+        or: '或',
 
         // AI Inference Notifications
         aiInference: {
@@ -758,7 +764,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             totalTime: '总耗时：',
             detectedObjects: '检测物体：',
             completedStep: '推理完成',
-            successMessage: '成功检测 {count} 个任务，总耗时 {time}s',
+            successMessage: '成功检测 {count} 个目标，总耗时 {time}s',
             failedMessage: '分割推理过程中发生错误，请重试',
             results: {
                 title: '推理结果',
@@ -781,7 +787,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         
         // EmptyProjectView
         welcomeTitle: 'Welcome to OpenSight Platform',
-        welcomeDescription: 'Drag images here or click to upload',
+        welcomeDescription: 'Drag images or videos here or click to upload',
         dragActiveMessage: 'Drop files to upload images',
         uploadHints: {
             dragSupport: '• Support drag and drop image files',
@@ -868,7 +874,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             uploadFiles: {
                 title: 'Upload Files',
                 addNewFiles: 'Drop images or videos here',
-                clickToSelect: 'Click here to select files',
+                clickToSelect: 'Click to upload',
                 oneFileLoaded: '1 file loaded',
                 multipleFilesLoaded: '{count} files loaded',
                 loadButton: 'Upload',
@@ -1046,7 +1052,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             loadFailed: 'Load failed',
             connectionFailed: 'Cannot connect to server',
             dragModel: 'Drag .pt model file',
-            clickToSelect: 'Click here to select file',
+            clickToSelect: 'Click to upload',
         },
 
         // Queue
@@ -1057,7 +1063,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             error: 'Error',
         },
         queueEmpty: 'Queue is empty',
-        queueEmptyHint: 'Drag files to the editor area to add',
+        queueEmptyHint: 'Drag images or videos here or click to upload',
 
         // Video
         video: {
@@ -1068,6 +1074,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             mute: 'Mute',
             unmute: 'Unmute',
             playerAriaLabel: 'Video player controls, press Space to play/pause',
+            shortcutMove1: '← →: Move 1 frame',
+            shortcutMove10: 'A D Move 10 frames',
+            shortcutPlayPause: 'Space: Play/Pause',
         },
 
         // Notifications

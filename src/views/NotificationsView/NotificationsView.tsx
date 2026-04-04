@@ -163,7 +163,7 @@ const NotificationsView: React.FC<IProps> = (props) => {
                                     />
                                 </div>
                                 <div className='steps-list'>
-                                    <div className={`step ${notification.currentStep >= 1 ? 'completed' : notification.currentStep === 0 ? 'active' : 'pending'}`}>
+                                    <div className={`step ${notification.currentStep > 1 ? 'completed' : notification.currentStep === 1 ? 'active' : 'pending'}`}>
                                         <span className='step-name'>{(() => {
                                             const language = store.getState().general.language;
                                             const texts = LanguageConfig[language];
@@ -175,7 +175,7 @@ const NotificationsView: React.FC<IProps> = (props) => {
                                             </span>
                                         )}
                                     </div>
-                                    <div className={`step ${notification.currentStep >= 2 ? 'completed' : notification.currentStep === 1 ? 'active' : 'pending'}`}>
+                                    <div className={`step ${notification.currentStep > 2 ? 'completed' : notification.currentStep === 2 ? 'active' : 'pending'}`}>
                                         <span className='step-name'>{(() => {
                                             const language = store.getState().general.language;
                                             const texts = LanguageConfig[language];
@@ -187,7 +187,7 @@ const NotificationsView: React.FC<IProps> = (props) => {
                                             </span>
                                         )}
                                     </div>
-                                    <div className={`step ${notification.currentStep >= 3 ? 'completed' : notification.currentStep === 2 ? 'active' : 'pending'}`}>
+                                    <div className={`step ${notification.currentStep > 3 ? 'completed' : notification.currentStep === 3 ? 'active' : 'pending'}`}>
                                         <span className='step-name'>{(() => {
                                             const language = store.getState().general.language;
                                             const texts = LanguageConfig[language];

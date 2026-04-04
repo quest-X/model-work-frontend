@@ -13,7 +13,8 @@ export interface StoredProjectData {
 export interface StoredImageData {
     id: string;
     fileName: string;
-    fileData: File;
+    fileData: ArrayBuffer;
+    fileType: string;
     loadStatus: boolean;
     labelRects: any[];
     labelPoints: any[];
