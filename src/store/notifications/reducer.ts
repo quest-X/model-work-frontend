@@ -11,13 +11,10 @@ export function notificationsReducer(
 ): NotificationsState {
     switch (action.type) {
         case Action.SUBMIT_NEW_NOTIFICATION: {
-            if (state.queue.length > 0 && state.queue.at(-1).type === action.payload.notification.type) {
-                return state;
-            } else {
-                return {
-                    ...state,
-                    queue: [...state.queue, action.payload.notification]
-                }
+            // 新通知直接替换所有旧通知，避免堆叠
+            return {
+                ...state,
+                queue: [action.payload.notification]
             }
         }
         case Action.DELETE_NOTIFICATION_BY_ID: {

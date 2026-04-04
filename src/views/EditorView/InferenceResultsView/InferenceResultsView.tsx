@@ -174,7 +174,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
             return {
                 class_id: 0,
                 class_name: name,
-                confidence: 0,
+                confidence: rect.confidence || 0,
                 bbox: {
                     x1: rect.rect.x,
                     y1: rect.rect.y,

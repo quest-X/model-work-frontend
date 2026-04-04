@@ -90,6 +90,7 @@ const EditorContainer: React.FC<IProps> = (
     const [showInferenceResults, setShowInferenceResults] = useState<boolean>(false);
     const [showQueueList, setShowQueueList] = useState<boolean>(false);
     const [isWindowDragActive, setIsWindowDragActive] = useState(false);
+    const [videoProcessing, setVideoProcessing] = useState<{phase: string; progress: number; fileName: string} | null>(null);
 
     // 监听 window 级别的拖拽，确保 canvas/Scrollbars 不会阻断 drop 事件
     useEffect(() => {
@@ -276,38 +277,27 @@ const EditorContainer: React.FC<IProps> = (
                 // 添加到队列
                 const newQueueItems: QueueItem[] = [];
                 
-                // 视频文件：FFmpeg WASM 拆帧后作为图片文件夹处理
+                // 视频文件：后端 FFmpeg 拆帧 → 视频模式
                 for (const videoFile of videoFiles) {
-                    // 创建进度通知
-                    const progressNotification = NotificationUtil.createMessageNotification({
-                        header: `正在处理视频: ${videoFile.name}`,
-                        description: '加载 FFmpeg 引擎...'
-                    });
-                    store.dispatch(submitNewNotification(progressNotification));
-
                     try {
                         console.log(`[FFmpeg] 开始拆帧: ${videoFile.name}`);
+                        setVideoProcessing({ phase: '上传视频...', progress: 0, fileName: videoFile.name });
+
                         const result = await FrameExtractorService.extractFrames(
                             videoFile, 30,
                             (phase, current, total) => {
-                                const desc = total > 0
-                                    ? `${phase}: ${current}/${total}`
-                                    : phase;
-                                store.dispatch(updateNotificationById(progressNotification.id, {
-                                    ...progressNotification,
-                                    description: desc
-                                }));
+                                const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+                                if (phase === '上传视频') {
+                                    setVideoProcessing({ phase: `上传中 ${pct}%`, progress: pct, fileName: videoFile.name });
+                                } else if (phase === '解压帧') {
+                                    setVideoProcessing({ phase: `解析帧 ${pct}%`, progress: pct, fileName: videoFile.name });
+                                } else {
+                                    setVideoProcessing({ phase, progress: 0, fileName: videoFile.name });
+                                }
                             }
                         );
                         console.log(`[FFmpeg] 拆帧完成: ${result.totalFrames} 帧`);
-
-                        // 完成通知
-                        store.dispatch(updateNotificationById(progressNotification.id, {
-                            ...progressNotification,
-                            header: `视频处理完成: ${videoFile.name}`,
-                            description: `已提取 ${result.totalFrames} 帧 @ ${result.fps}fps`
-                        }));
-                        setTimeout(() => store.dispatch(deleteNotificationById(progressNotification.id)), 3000);
+                        setVideoProcessing(null);
 
                         // 将拆出的帧作为视频模式添加到队列（保留视频 UI）
                         const thumbnail = await generateThumbnail(result.frames[0]);
@@ -331,14 +321,14 @@ const EditorContainer: React.FC<IProps> = (
                         newQueueItems.push(item);
                     } catch (err) {
                         console.error('[FFmpeg] 拆帧失败，回退到视频模式:', err);
+                        setVideoProcessing(null);
                         // 错误通知
-                        store.dispatch(updateNotificationById(progressNotification.id,
-                            NotificationUtil.createErrorNotification({
-                                header: `FFmpeg 拆帧失败: ${videoFile.name}`,
-                                description: '已回退到视频模式'
-                            })
-                        ));
-                        setTimeout(() => store.dispatch(deleteNotificationById(progressNotification.id)), 5000);
+                        const errorNotification = NotificationUtil.createErrorNotification({
+                            header: `FFmpeg 拆帧失败: ${videoFile.name}`,
+                            description: '已回退到视频模式'
+                        });
+                        store.dispatch(submitNewNotification(errorNotification));
+                        setTimeout(() => store.dispatch(deleteNotificationById(errorNotification.id)), 5000);
                         // 回退：用旧的视频模式
                         const thumbnail = await generateThumbnail(videoFile);
                         const item: QueueItem = {
@@ -590,6 +580,16 @@ const EditorContainer: React.FC<IProps> = (
                             key='editor-bottom-navigation-bar'
                         />
                     </>
+                ) : videoProcessing ? (
+                    <div className='EmptyProjectView' style={{cursor: 'default'}}>
+                        <div className='EmptyProjectContent'>
+                            <div className='VideoProcessingOverlay'>
+                                <div className='ProcessingSpinner'></div>
+                                <h2>{videoProcessing.fileName}</h2>
+                                <p>{videoProcessing.phase}</p>
+                            </div>
+                        </div>
+                    </div>
                 ) : (
                     <div className={`EmptyProjectView ${isDragActive ? 'drag-active' : ''}`} onClick={openFileDialog} style={{cursor: 'pointer'}}>
                         <div className='EmptyProjectContent'>

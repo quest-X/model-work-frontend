@@ -3,7 +3,7 @@ import {DetectionAPIDetector, DetectionResult} from "../../ai/DetectionAPIDetect
 import {ImageData, LabelName, LabelRect} from "../../store/labels/types";
 import {LabelStatus} from "../../data/enums/LabelStatus";
 import {v4 as uuidv4} from "uuid";
-import {updateImageDataById, updateImageData, updateLabelNames} from "../../store/labels/actionCreators";
+import {updateImageDataById, updateImageData, updateLabelNames, updateActiveImageIndex} from "../../store/labels/actionCreators";
 import {updateFullImageInferenceStatus, addInferenceHistory, toggleImageAILabelsVisibility, updateSegmentationResults} from "../../store/ai/actionCreators";
 import {submitNewNotification, deleteNotificationById, updateNotificationById} from "../../store/notifications/actionCreators";
 import {updatePerClassColorationStatus} from "../../store/general/actionCreators";
@@ -425,11 +425,10 @@ export class AIDetectionActions {
         }
 
         // ── 完成 ──
-        // 视频模式：检测完成后用整数帧号直接 dispatch 到最后一帧
-        // 不依赖 video.currentTime seek（浮点精度会丢失 1-2 帧）
+        // 视频模式：检测完成后同步到第一帧，确保画面和检测结果一致
         if (isVideo && activeVideo) {
-            const lastFrame = allImagesData.length - 1;
-            store.dispatch(updateVideoCurrentFrame(activeVideo.id, lastFrame, lastFrame / fps));
+            store.dispatch(updateVideoCurrentFrame(activeVideo.id, 0, 0));
+            store.dispatch(updateActiveImageIndex(0));
         }
 
         store.dispatch(deleteNotificationById(progressNotification.id));
@@ -518,7 +517,8 @@ export class AIDetectionActions {
                     isCreatedByAI: true,
                     isVisible: true,
                     status: LabelStatus.ACCEPTED,
-                    suggestedLabel: labelId ? null : result.info.name
+                    suggestedLabel: labelId ? null : result.info.name,
+                    confidence: result.info.confidence
                 });
             }
 

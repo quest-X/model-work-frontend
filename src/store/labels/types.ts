@@ -16,6 +16,7 @@ export type LabelRect = Annotation & {
     isCreatedByAI: boolean;
     status: LabelStatus;
     suggestedLabel: string;
+    confidence?: number; // AI 检测置信度 (0-1)
 }
 
 export type LabelPoint = Annotation & {
