@@ -35,6 +35,10 @@ import InferenceResultsView from '../InferenceResultsView/InferenceResultsView';
 import {AutoSaveService} from '../../../services/AutoSaveService';
 import {v4 as uuidv4} from 'uuid';
 import {ImageRepository} from '../../../logic/imageRepository/ImageRepository';
+import {FrameExtractorService} from '../../../services/FrameExtractorService';
+import {store} from '../../../index';
+import {submitNewNotification, updateNotificationById, deleteNotificationById} from '../../../store/notifications/actionCreators';
+import {NotificationUtil} from '../../../utils/NotificationUtil';
 // import {inferenceEventEmitter, InferenceResultsEvent} from '../../../logic/actions/AISegmentationActions';
 
 interface IProps {
@@ -274,15 +278,36 @@ const EditorContainer: React.FC<IProps> = (
                 
                 // 视频文件：FFmpeg WASM 拆帧后作为图片文件夹处理
                 for (const videoFile of videoFiles) {
+                    // 创建进度通知
+                    const progressNotification = NotificationUtil.createMessageNotification({
+                        header: `正在处理视频: ${videoFile.name}`,
+                        description: '加载 FFmpeg 引擎...'
+                    });
+                    store.dispatch(submitNewNotification(progressNotification));
+
                     try {
                         console.log(`[FFmpeg] 开始拆帧: ${videoFile.name}`);
                         const result = await FrameExtractorService.extractFrames(
                             videoFile, 30,
                             (phase, current, total) => {
-                                console.log(`[FFmpeg] ${phase}: ${current}/${total}`);
+                                const desc = total > 0
+                                    ? `${phase}: ${current}/${total}`
+                                    : phase;
+                                store.dispatch(updateNotificationById(progressNotification.id, {
+                                    ...progressNotification,
+                                    description: desc
+                                }));
                             }
                         );
                         console.log(`[FFmpeg] 拆帧完成: ${result.totalFrames} 帧`);
+
+                        // 完成通知
+                        store.dispatch(updateNotificationById(progressNotification.id, {
+                            ...progressNotification,
+                            header: `视频处理完成: ${videoFile.name}`,
+                            description: `已提取 ${result.totalFrames} 帧 @ ${result.fps}fps`
+                        }));
+                        setTimeout(() => store.dispatch(deleteNotificationById(progressNotification.id)), 3000);
 
                         // 将拆出的帧作为图片文件夹添加到队列
                         const thumbnail = await generateThumbnail(result.frames[0]);
@@ -298,6 +323,14 @@ const EditorContainer: React.FC<IProps> = (
                         newQueueItems.push(item);
                     } catch (err) {
                         console.error('[FFmpeg] 拆帧失败，回退到视频模式:', err);
+                        // 错误通知
+                        store.dispatch(updateNotificationById(progressNotification.id,
+                            NotificationUtil.createErrorNotification({
+                                header: `FFmpeg 拆帧失败: ${videoFile.name}`,
+                                description: '已回退到视频模式'
+                            })
+                        ));
+                        setTimeout(() => store.dispatch(deleteNotificationById(progressNotification.id)), 5000);
                         // 回退：用旧的视频模式
                         const thumbnail = await generateThumbnail(videoFile);
                         const item: QueueItem = {

@@ -102,12 +102,23 @@ export class AutoSaveService {
         const state = store.getState();
         const imagesData = state.labels.imagesData;
         const labelNames = state.labels.labels;
-        
+
         if (imagesData.length === 0) {
-            // 空数据，静默跳过
             return;
         }
-        
+
+        // 视频模式下跳过 IndexedDB 保存（视频帧引用大文件会导致 DataCloneError）
+        if (state.video?.isVideoMode) {
+            return;
+        }
+
+        // 估算总数据大小，超过 500MB 跳过（防止 OOM）
+        const totalSize = imagesData.reduce((sum, img) => sum + (img.fileData?.size || 0), 0);
+        if (totalSize > 500 * 1024 * 1024) {
+            console.warn(`自动保存跳过：数据量过大 (${(totalSize / 1024 / 1024).toFixed(0)}MB)`);
+            return;
+        }
+
         // 转换ImageData到StoredImageData格式（File → ArrayBuffer 以支持 IndexedDB 持久化）
         const storedImages: StoredImageData[] = await Promise.all(
             imagesData.map(async (imageData): Promise<StoredImageData> => ({
@@ -123,7 +134,7 @@ export class AutoSaveService {
                 labelNameIds: imageData.labelNameIds || []
             }))
         );
-        
+
         const projectData: StoredProjectData = {
             id: 'current-project',
             images: storedImages,
@@ -133,9 +144,7 @@ export class AutoSaveService {
             version: '1.11.0-alpha',
             segmentationResults: state.ai?.segmentationResults || [] // 保存推理结果
         };
-        
-        // 静默保存（减少控制台日志噪音）
-        
+
         await IndexedDBManager.saveProject(projectData);
     }
     
