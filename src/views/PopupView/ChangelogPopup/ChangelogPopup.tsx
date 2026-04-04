@@ -16,6 +16,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.8.3',
+        date: '2026-04-05',
+        changes: [
+            { zh: '推理结果卡片显示真实置信度（不再显示 0.0%）', en: 'Inference result cards now show real confidence scores (no longer 0.0%)' },
+            { zh: '批量检测完成后画面与检测框同步到第一帧', en: 'Canvas and detection boxes sync to frame 1 after batch detection completes' },
+            { zh: '视频加载进度直接显示在主画布（上传中 / 解析帧百分比）', en: 'Video loading progress shown directly on main canvas (upload / frame extraction percentage)' },
+            { zh: '通知弹窗不再堆叠：新通知立刻替换旧通知', en: 'Notifications no longer stack: new notification immediately replaces the old one' },
+        ]
+    },
+    {
         version: '1.8.2',
         date: '2026-04-05',
         changes: [
