@@ -183,6 +183,34 @@ export class DetectionAPIDetector {
     }
 
     /**
+     * 从预先捕获的 Blob 调用检测API（批量检测用）
+     * @param blob 预捕获的图像 Blob
+     * @param filename 文件名
+     */
+    public static async predictFromBlob(blob: Blob, filename: string = 'frame.jpg'): Promise<DetectionResult[]> {
+        if (!this.config.enabled) {
+            throw new Error('Detection API is disabled');
+        }
+
+        const formData = new FormData();
+        formData.append('file', blob, filename);
+
+        const response = await axios.post<DetectionAPIResponse>(
+            this.config.url,
+            formData,
+            {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                timeout: 30000,
+            }
+        );
+
+        if (response.data.status === 'success' && response.data.results) {
+            return response.data.results;
+        }
+        throw new Error('Detection failed: ' + response.data.status);
+    }
+
+    /**
      * 测试API连接
      */
     public static async testConnection(): Promise<boolean> {

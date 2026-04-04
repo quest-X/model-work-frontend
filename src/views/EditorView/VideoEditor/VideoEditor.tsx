@@ -62,11 +62,21 @@ const VideoEditor: React.FC<IProps> = ({
     const isGeneratingRef = React.useRef(false);
     const generationIdRef = React.useRef(0); // cancellation token for thumbnail generation
 
-    // 使用 ref 存储最新的 imagesData，避免在 useEffect 依赖中包含它
+    // 使用 ref 存储最新的 imagesData，避免在 useCallback 依赖中包含它
+    // 重要：必须在渲染期间同步更新（不能用 useEffect），
+    // 否则 batchApplyResults dispatch 后第一次播放回调读到的是旧数组
     const imagesDataRef = React.useRef<ImageData[]>(imagesData);
-    useEffect(() => {
-        imagesDataRef.current = imagesData;
-    }, [imagesData]);
+    imagesDataRef.current = imagesData;
+
+    // Ref 模式：存储播放回调中频繁变化的值，使 handleVideoTimeUpdate 的身份稳定。
+    // activeVideo 每帧通过 Redux 创建新对象，如果放在 useCallback deps 中会导致
+    // handleVideoTimeUpdate 每帧重建 ~30次/秒。用 ref 读取则无此问题。
+    const activeVideoRef = React.useRef(activeVideo);
+    activeVideoRef.current = activeVideo;
+    const activeImageIndexRef = React.useRef(activeImageIndex);
+    activeImageIndexRef.current = activeImageIndex;
+    const isPlayingRef = React.useRef(isPlaying);
+    isPlayingRef.current = isPlaying;
 
     // 初始化视频URL
     useEffect(() => {
@@ -640,17 +650,19 @@ const VideoEditor: React.FC<IProps> = ({
     const lastSidebarUpdateRef = React.useRef<number>(0); // 侧边栏高亮节流
     const handleVideoTimeUpdate = useCallback(
         (time: number, frame: number) => {
-            if (!activeVideo) return;
-            
+            // 从 ref 读取最新值，使此回调身份稳定（deps 仅含稳定的 action creators）
+            const currentActiveVideo = activeVideoRef.current;
+            if (!currentActiveVideo) return;
+
             // 检测跳帧：如果播放中且帧号跳跃超过阈值，输出警告
             // 重要：如果帧号从大跳到小（比如从300跳到0），说明视频被重置了，应该重置 lastFrameRef
             // 注意：对于高帧率视频（>60fps），requestVideoFrameCallback 可能因主线程繁忙而延迟
             // 导致检测到跳帧，这是正常的，不应该视为错误
-            if (isPlaying && lastFrameRef.current >= 0) {
+            if (isPlayingRef.current && lastFrameRef.current >= 0) {
                 const frameDiff = frame - lastFrameRef.current;
-                
+
                 // 如果帧号大幅倒退（超过总帧数的一半），说明视频被重置了
-                if (frameDiff < -activeVideo.totalFrames / 2) {
+                if (frameDiff < -currentActiveVideo.totalFrames / 2) {
                     // 视频重置，重置帧跟踪
                     lastFrameRef.current = -1;
                     frameSkipCountRef.current = 0;
@@ -668,34 +680,37 @@ const VideoEditor: React.FC<IProps> = ({
                 // 移除正常连续帧的日志输出
             }
             lastFrameRef.current = frame;
-            
-            // 调试日志：仅在播放时每60帧输出一次，减少日志频率
-            if (isPlaying && frame % 60 === 0 && frameSkipCountRef.current > 0) {
-                console.log(`[VideoEditor] 23. 播放中 - 帧: ${frame}, 时间: ${time.toFixed(2)}s, 跳帧统计: ${frameSkipCountRef.current} 次`);
-            }
-            
+
             // 优化：减少 Redux 更新频率，避免阻塞 requestVideoFrameCallback
             // 只在帧号变化时更新，并且限制更新频率（约30fps，33ms）
             const now = Date.now();
-            const frameChanged = frame !== activeVideo.currentFrame;
+            const frameChanged = frame !== currentActiveVideo.currentFrame;
             const timeSinceLastUpdate = now - lastUpdateTimeRef.current;
             // 限制更新频率为约30fps（33ms），减少 Redux 更新次数，避免阻塞回调
             const shouldUpdate = frameChanged && timeSinceLastUpdate >= 33;
-            
+
             if (shouldUpdate) {
-                updateVideoCurrentFrame(activeVideo.id, frame, time);
+                updateVideoCurrentFrame(currentActiveVideo.id, frame, time);
                 lastUpdateTimeRef.current = now;
 
                 // 核心设计：推理与渲染分离
-                // 直接从 imagesDataRef 按帧号读取预计算的标注数据，
-                // 设置到 EditorModel.playbackImageData，RectRenderEngine 直接读取。
-                // 完全绕过 Redux selector (activeImageIndex → getActiveImageData)，零开销。
-                const frameImageData = imagesDataRef.current[frame];
+                // 直接从 imagesDataRef 按帧号读取标注数据 → EditorModel.playbackImageData
+                // RectRenderEngine 直接读取，绕过 Redux selector，零开销。
+                // imagesDataRef 在渲染期间同步更新（非 useEffect），保证始终是最新值。
+                let frameImageData = imagesDataRef.current[frame];
+                // 防御：如果 ref 中的数据没有标注（batchApplyResults dispatch 后 ref 未同步），
+                // 回退到 EditorModel.latestImagesData（batchApplyResults 同步写入的缓存）
+                if (frameImageData && frameImageData.labelRects.length === 0 && EditorModel.latestImagesData) {
+                    const latestData = EditorModel.latestImagesData[frame];
+                    if (latestData && latestData.labelRects.length > 0) {
+                        frameImageData = latestData;
+                    }
+                }
                 EditorModel.playbackImageData = frameImageData || null;
 
                 // 侧边栏高亮更新：节流到 ~5fps，不影响标注渲染
                 const sidebarTimeSince = now - lastSidebarUpdateRef.current;
-                if (frame !== activeImageIndex && (!isPlaying || sidebarTimeSince >= 200)) {
+                if (frame !== activeImageIndexRef.current && (!isPlayingRef.current || sidebarTimeSince >= 200)) {
                     updateActiveImageIndex(frame);
                     lastSidebarUpdateRef.current = now;
                 }
@@ -703,7 +718,7 @@ const VideoEditor: React.FC<IProps> = ({
                 EditorActions.fullRender();
             }
         },
-        [activeVideo, activeImageIndex, updateVideoCurrentFrame, updateActiveImageIndex, isPlaying]
+        [updateVideoCurrentFrame, updateActiveImageIndex]
     );
 
     // 计算各部分尺寸

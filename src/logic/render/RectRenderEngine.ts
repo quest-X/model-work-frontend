@@ -230,15 +230,13 @@ export class RectRenderEngine extends BaseRenderEngine {
             segmentationLabelsVisible = currentImageAIState ? currentImageAIState.segmentationLabelsVisible : false;
         }
         
-        // 完全移除调试日志以达到极致性能
-        
         // 渲染矩形框标签
         if (imageData && imageData.labelRects) {
             imageData.labelRects.forEach((labelRect: LabelRect) => {
                 // 检查标签是否应该显示
-                const shouldShow = labelRect.isVisible && 
+                const shouldShow = labelRect.isVisible &&
                     (labelRect.isCreatedByAI ? aiLabelsVisible : true);
-                
+
                 if (shouldShow) {
                     if (labelRect.status === LabelStatus.ACCEPTED && labelRect.id === activeLabelId) {
                         this.drawActiveRect(labelRect, data)
