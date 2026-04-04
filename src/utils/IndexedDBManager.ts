@@ -92,7 +92,7 @@ export class IndexedDBManager {
             const request = store.put(saveData);
             
             request.onsuccess = () => {
-                console.log('项目数据已保存到IndexedDB');
+                // 静默保存
                 resolve(true);
             };
             

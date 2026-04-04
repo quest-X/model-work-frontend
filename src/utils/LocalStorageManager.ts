@@ -23,7 +23,7 @@ export class LocalStorageManager {
                 lastSaved: Date.now()
             };
             localStorage.setItem(this.STORAGE_KEY, JSON.stringify(updatedSettings));
-            console.log('项目设置已保存到localStorage');
+            // 静默保存
         } catch (error) {
             console.error('保存设置失败:', error);
         }

@@ -69,7 +69,7 @@ export class AutoSaveService {
             // 保存重型数据到IndexedDB
             await this.saveProjectData();
             
-            console.log('当前状态保存完成');
+            // 静默保存，不刷屏
         } catch (error) {
             console.error('保存当前状态失败:', error);
         }
@@ -104,7 +104,7 @@ export class AutoSaveService {
         const labelNames = state.labels.labels;
         
         if (imagesData.length === 0) {
-            console.log('没有图像数据需要保存');
+            // 空数据，静默跳过
             return;
         }
         
@@ -131,12 +131,7 @@ export class AutoSaveService {
             segmentationResults: state.ai?.segmentationResults || [] // 保存推理结果
         };
         
-        console.log('保存项目数据:', {
-            图像数量: storedImages.length,
-            标签名称数量: labelNames.length,
-            推理结果数量: state.ai?.segmentationResults?.length || 0,
-            当前图像索引: state.labels.activeImageIndex
-        });
+        // 静默保存（减少控制台日志噪音）
         
         await IndexedDBManager.saveProject(projectData);
     }

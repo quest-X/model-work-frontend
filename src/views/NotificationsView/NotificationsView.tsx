@@ -79,7 +79,7 @@ const NotificationsView: React.FC<IProps> = (props) => {
                 setNotificationState(NotificationState.OUT)
                 break
             case Animation.OUT:
-                props.deleteNotificationByIdAction(notification.id)
+                if (notification) props.deleteNotificationByIdAction(notification.id)
                 setNotificationState(NotificationState.IDLE)
                 break
         }
@@ -104,6 +104,12 @@ const NotificationsView: React.FC<IProps> = (props) => {
     }
 
     const renderNotification = () => {
+        // 防御：通知可能在动画期间被删除，queue 已空但 state 未回到 IDLE
+        if (!notification) {
+            setNotificationState(NotificationState.IDLE);
+            return null;
+        }
+
         // 获取国际化文本
         const texts = LanguageConfig[props.language];
 
