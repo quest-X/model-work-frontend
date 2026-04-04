@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.6.5',
+        date: '2026-04-04',
+        changes: [
+            { zh: '修复通知系统崩溃：检测完成后通知渲染不再报错', en: 'Fix notification crash: detection completion notification no longer throws' },
+            { zh: '清理控制台日志噪音：自动保存不再每秒刷屏，控制台只显示有意义的信息', en: 'Clean console logs: auto-save no longer floods console, only meaningful info shown' },
+        ]
+    },
+    {
         version: '1.6.4',
         date: '2026-04-04',
         changes: [
