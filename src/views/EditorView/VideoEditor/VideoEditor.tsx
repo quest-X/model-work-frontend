@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { connect } from 'react-redux';
 import './VideoEditor.scss';
 import VideoPlayer from '../VideoPlayer/VideoPlayer';
+import FramePlayer from '../FramePlayer/FramePlayer';
 import VideoTimeline from '../VideoTimeline/VideoTimeline';
 import Editor from '../Editor/Editor';
 import { AppState } from '../../../store';
@@ -78,16 +79,16 @@ const VideoEditor: React.FC<IProps> = ({
     const isPlayingRef = React.useRef(isPlaying);
     isPlayingRef.current = isPlaying;
 
-    // 初始化视频URL
+    // 初始化视频URL（无预拆帧时才需要）
     useEffect(() => {
-        if (activeVideo?.fileData) {
-            // 递增 generation ID，取消所有进行中的缩略图生成
+        if (activeVideo?.fileData && !activeVideo.preExtractedFrames) {
+            // 递增 generation ID，取消所有进���中的缩略图生成
             generationIdRef.current++;
             const url = URL.createObjectURL(activeVideo.fileData);
             setVideoUrl(url);
             return () => {
                 const currentImagesData = imagesDataRef.current;
-                // 仅在 repository 未被清空时保存缓存（避免覆盖 QueueActions 已保存的有效缓存）
+                // 仅在 repository ���被清空时保存缓存��避免覆盖 QueueActions 已保存的有效缓存）
                 if (activeVideo.id && currentImagesData.length > 0) {
                     const firstImg = currentImagesData[0];
                     if (firstImg && ImageRepository.getById(firstImg.id)) {
@@ -109,8 +110,25 @@ const VideoEditor: React.FC<IProps> = ({
                 isGeneratingRef.current = false;
             };
         }
+        // 有预拆帧时：清理 effect
+        if (activeVideo?.preExtractedFrames) {
+            generationIdRef.current++;
+            return () => {
+                const currentImagesData = imagesDataRef.current;
+                if (activeVideo.id && currentImagesData.length > 0) {
+                    const firstImg = currentImagesData[0];
+                    if (firstImg && ImageRepository.getById(firstImg.id)) {
+                        ImageRepository.saveFileCache(activeVideo.id, currentImagesData);
+                    }
+                }
+                EditorModel.videoFrameImage = null;
+                EditorModel.playbackImageData = null;
+                generationIdRef.current++;
+                isGeneratingRef.current = false;
+            };
+        }
         return undefined;
-    }, [activeVideo?.fileData, activeVideo?.id]);
+    }, [activeVideo?.fileData, activeVideo?.id, activeVideo?.preExtractedFrames]);
     
     // 确保视频加载后第一帧被选中（如果 activeImageIndex 为 null 或无效）
     useEffect(() => {
@@ -227,9 +245,9 @@ const VideoEditor: React.FC<IProps> = ({
 
         isGeneratingRef.current = true;
         const currentGenerationId = generationIdRef.current;
-        
+
         const thumbnailSize = 150;
-        
+
         // 创建或获取缩略图画布
         let thumbnailCanvas = thumbnailCanvasRef.current;
         if (!thumbnailCanvas) {
@@ -238,6 +256,67 @@ const VideoEditor: React.FC<IProps> = ({
             thumbnailCanvas.height = thumbnailSize;
             thumbnailCanvasRef.current = thumbnailCanvas;
         }
+
+        // ========== 预拆帧模式：直接从 File 生成缩略图（无需 video seek）==========
+        if (activeVideo?.preExtractedFrames) {
+            const frames = activeVideo.preExtractedFrames;
+            const thumbnailCtx = thumbnailCanvas.getContext('2d');
+            if (!thumbnailCtx) { isGeneratingRef.current = false; return; }
+
+            const actualEnd = Math.min(endFrame, frameImageDataArray.length, frames.length);
+
+            for (let i = startFrame; i < actualEnd; i++) {
+                if (generationIdRef.current !== currentGenerationId) {
+                    isGeneratingRef.current = false;
+                    return;
+                }
+
+                try {
+                    const bitmap = await createImageBitmap(frames[i]);
+
+                    const scale = Math.min(thumbnailSize / bitmap.width, thumbnailSize / bitmap.height);
+                    const scaledWidth = bitmap.width * scale;
+                    const scaledHeight = bitmap.height * scale;
+                    const offsetX = (thumbnailSize - scaledWidth) / 2;
+                    const offsetY = (thumbnailSize - scaledHeight) / 2;
+
+                    thumbnailCtx.fillStyle = '#000';
+                    thumbnailCtx.fillRect(0, 0, thumbnailSize, thumbnailSize);
+                    thumbnailCtx.drawImage(bitmap, offsetX, offsetY, scaledWidth, scaledHeight);
+                    bitmap.close();
+
+                    const thumbnailDataUrl = thumbnailCanvas.toDataURL('image/jpeg', 0.5);
+
+                    await new Promise<void>((resolve) => {
+                        const thumbnailImage = new Image();
+                        thumbnailImage.onload = () => {
+                            ImageRepository.storeImage(frameImageDataArray[i].id, thumbnailImage);
+                            const updatedImageData = { ...frameImageDataArray[i], loadStatus: true };
+                            frameImageDataArray[i] = updatedImageData;
+                            updateImageDataById(updatedImageData.id, updatedImageData);
+                            resolve();
+                        };
+                        thumbnailImage.src = thumbnailDataUrl;
+                    });
+
+                    setLoadedThumbnailCount(i + 1);
+                    if (startFrame === 0) {
+                        setProcessingProgress(Math.round(((i + 1) / actualEnd) * 100));
+                    }
+                    // 每20帧让出主线程（比 video seek 快很多，减少 yield 频率）
+                    if ((i - startFrame) % 20 === 0 && i > startFrame) {
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
+                } catch (error) {
+                    console.error(`[VideoEditor] 预拆帧缩略图生成失败 帧 ${i}:`, error);
+                }
+            }
+
+            isGeneratingRef.current = false;
+            return;
+        }
+
+        // ========== 回退模式：使用 video seek 生成缩略图 ==========
         const thumbnailCtx = thumbnailCanvas.getContext('2d');
         
             // 创建或获取临时视频元素（使用独立的video element避免与主播放器冲突）
@@ -599,16 +678,16 @@ const VideoEditor: React.FC<IProps> = ({
         // 如果当前不在播放（包括视频结束后），下次一定是播放
         const newPlayingStatus = !isPlaying;
         
-        // 如果开始播放，先检查是否有足够的缓冲帧
-        if (newPlayingStatus && !isGeneratingRef.current) {
+        // 如果开始播放，先检查是否有足够的缓冲帧（仅 VideoPlayer 模式需要）
+        if (newPlayingStatus && !isGeneratingRef.current && !activeVideo.preExtractedFrames) {
             const currentFrame = activeVideo.currentFrame;
             const bufferSize = 60; // 需要2秒缓冲（假设30fps）
             const requiredFrame = Math.min(currentFrame + bufferSize, totalFrameCount);
-            
+
             // 如果缓冲不足，先加载必要的帧
             if (loadedThumbnailCount < requiredFrame) {
                 console.log(`[VideoEditor] 播放缓冲: 当前加载到帧 ${loadedThumbnailCount}, 需要加载到帧 ${requiredFrame}`);
-                
+
                 // 快速加载缓冲区
                 await generateThumbnailsInRangeRef.current?.(
                     loadedThumbnailCount,
@@ -777,35 +856,52 @@ const VideoEditor: React.FC<IProps> = ({
             <div className="VideoAnnotationSection" style={{ height: videoAndAnnotationHeight }}>
                 {/* 底层：视频播放器 */}
                 <div className="VideoPlayerLayer">
-                    <VideoPlayer
-                        language={language}
-                        videoSrc={videoUrl}
-                        currentTime={activeVideo.currentTime}
-                        currentFrame={activeVideo.currentFrame}
-                        fps={activeVideo.fps}
-                        size={videoPlayerSize}
-                        onTimeUpdate={handleVideoTimeUpdate}
-                        onLoadedMetadata={handleVideoMetadataLoaded}
-                        onFirstFrameDrawn={handleFirstFrameDrawn}
-                        onPlay={() => {
-                            setIsPlaying(true);
-                        }}
-                        onPause={() => {
-                            setIsPlaying(false);
-                            if (activeVideo) {
-                                updateVideoPlayingStatus(activeVideo.id, false);
-                                // 强制同步最终帧到 Redux（绕过 handleVideoTimeUpdate 的 33ms 节流）
-                                const finalFrame = lastFrameRef.current >= 0 ? lastFrameRef.current : activeVideo.currentFrame;
-                                updateVideoCurrentFrame(activeVideo.id, finalFrame, finalFrame / (activeVideo.fps || 30));
-                                updateActiveImageIndex(finalFrame);
-                            }
-                            EditorModel.playbackImageData = null;
-                        }}
-                        onPlayPause={handlePlayPause}
-                        isPlaying={isPlaying}
-                        defaultMuted={isMuted}
-                        processingProgress={processingProgress}
-                    />
+                    {activeVideo.preExtractedFrames ? (
+                        <FramePlayer
+                            language={language}
+                            frames={activeVideo.preExtractedFrames}
+                            fps={activeVideo.fps}
+                            duration={activeVideo.duration}
+                            totalFrames={activeVideo.totalFrames}
+                            videoSize={activeVideo.videoSize}
+                            currentTime={activeVideo.currentTime}
+                            currentFrame={activeVideo.currentFrame}
+                            isPlaying={isPlaying}
+                            onTimeUpdate={handleVideoTimeUpdate}
+                            onLoadedMetadata={handleVideoMetadataLoaded}
+                            onFirstFrameDrawn={handleFirstFrameDrawn}
+                            onPlayPause={handlePlayPause}
+                        />
+                    ) : (
+                        <VideoPlayer
+                            language={language}
+                            videoSrc={videoUrl}
+                            currentTime={activeVideo.currentTime}
+                            currentFrame={activeVideo.currentFrame}
+                            fps={activeVideo.fps}
+                            size={videoPlayerSize}
+                            onTimeUpdate={handleVideoTimeUpdate}
+                            onLoadedMetadata={handleVideoMetadataLoaded}
+                            onFirstFrameDrawn={handleFirstFrameDrawn}
+                            onPlay={() => {
+                                setIsPlaying(true);
+                            }}
+                            onPause={() => {
+                                setIsPlaying(false);
+                                if (activeVideo) {
+                                    updateVideoPlayingStatus(activeVideo.id, false);
+                                    const finalFrame = lastFrameRef.current >= 0 ? lastFrameRef.current : activeVideo.currentFrame;
+                                    updateVideoCurrentFrame(activeVideo.id, finalFrame, finalFrame / (activeVideo.fps || 30));
+                                    updateActiveImageIndex(finalFrame);
+                                }
+                                EditorModel.playbackImageData = null;
+                            }}
+                            onPlayPause={handlePlayPause}
+                            isPlaying={isPlaying}
+                            defaultMuted={isMuted}
+                            processingProgress={processingProgress}
+                        />
+                    )}
                 </div>
 
                 {/* 顶层：标注编辑器 */}

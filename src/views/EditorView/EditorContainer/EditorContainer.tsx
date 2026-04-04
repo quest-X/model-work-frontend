@@ -309,13 +309,21 @@ const EditorContainer: React.FC<IProps> = (
                         }));
                         setTimeout(() => store.dispatch(deleteNotificationById(progressNotification.id)), 3000);
 
-                        // 将拆出的帧作为图片文件夹添加到队列
+                        // 将拆出的帧作为视频模式添加到队列（保留视频 UI）
                         const thumbnail = await generateThumbnail(result.frames[0]);
                         const item: QueueItem = {
                             id: uuidv4(),
                             name: `${videoFile.name} (${result.totalFrames} 帧 @ ${result.fps}fps)`,
-                            type: QueueItemType.FOLDER,
-                            files: result.frames,
+                            type: QueueItemType.VIDEO,
+                            file: videoFile,
+                            extractedFrames: result.frames,
+                            extractionMetadata: {
+                                fps: result.fps,
+                                duration: result.duration,
+                                totalFrames: result.totalFrames,
+                                width: result.width,
+                                height: result.height,
+                            },
                             status: QueueItemStatus.PENDING,
                             uploadedAt: Date.now(),
                             thumbnail
@@ -461,7 +469,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '170px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.8.1</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.8.2</div>
         </>
     };
 

@@ -16,10 +16,21 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.8.2',
+        date: '2026-04-05',
+        changes: [
+            { zh: 'FFmpeg 拆帧后进入视频模式 UI：播放控制栏、时间轴、帧导航完整保留', en: 'FFmpeg extracted frames now enter video mode UI: playback controls, timeline, frame navigation fully preserved' },
+            { zh: '新增 FramePlayer 组件：canvas + setInterval 驱动帧播放，不依赖 <video> 元素', en: 'New FramePlayer component: canvas + setInterval driven playback, no <video> element dependency' },
+            { zh: '批量检测直接使用预拆帧 JPEG，跳过逐帧 seek+capture，速度大幅提升', en: 'Batch detection uses pre-extracted JPEGs directly, skipping per-frame seek+capture for major speedup' },
+            { zh: '缩略图生成使用 createImageBitmap 直接从帧文件生成，无需 video seek', en: 'Thumbnail generation uses createImageBitmap from frame files directly, no video seek needed' },
+            { zh: '修复 CORS expose_headers 缺失导致前端无法读取拆帧元数据的问题', en: 'Fix missing CORS expose_headers preventing frontend from reading frame extraction metadata' },
+        ]
+    },
+    {
         version: '1.8.1',
         date: '2026-04-05',
         changes: [
-            { zh: '【实验性】后端原生 FFmpeg 拆帧：替换 FFmpeg WASM，174 帧 1920x1440 视频仅需 0.87 秒', en: '[Experimental] Backend native FFmpeg: replaces WASM, 174 frames of 1920x1440 in 0.87s' },
+            { zh: '后端原生 FFmpeg 拆帧：替换 FFmpeg WASM，174 帧 1920x1440 视频仅需 0.87 秒', en: 'Backend native FFmpeg: replaces WASM, 174 frames of 1920x1440 in 0.87s' },
             { zh: '新增 /extract-frames API：上传视频 → 原生 FFmpeg 拆帧 → ZIP 打包返回', en: 'New /extract-frames API: upload video → native FFmpeg extraction → ZIP response' },
             { zh: '修复 DataCloneError：视频模式下跳过 IndexedDB 保存，防止内存爆炸', en: 'Fix DataCloneError: skip IndexedDB save in video mode, prevent OOM' },
             { zh: '拆帧失败自动回退到传统视频模式', en: 'Auto-fallback to traditional video mode if frame extraction fails' },

@@ -19,6 +19,14 @@ export type QueueItem = {
     type: QueueItemType;
     file?: File;
     files?: File[]; // For folders
+    extractedFrames?: File[];          // FFmpeg 拆出的 JPEG 帧（VIDEO 模式专用）
+    extractionMetadata?: {             // 拆帧时的视频元信息
+        fps: number;
+        duration: number;
+        totalFrames: number;
+        width: number;
+        height: number;
+    };
     status: QueueItemStatus;
     uploadedAt: number; // timestamp
     thumbnail?: string; // Base64 thumbnail for images/videos

@@ -234,12 +234,11 @@ export class AIDetectionActions {
             }));
         };
 
-        // ======== 视频模式：顺序两阶段 ========
-        if (isVideo && EditorModel.videoElement) {
-            const video = EditorModel.videoElement;
+        // ======== 视频模式 ========
+        const preFrames = activeVideo?.preExtractedFrames;
 
+        if (isVideo && (preFrames || EditorModel.videoElement)) {
             // 视频模式：检测 ALL 帧（不依赖 isSelected 标志，直接用 store 中的完整列表）
-            // imagesToDetect 可能只包含 isSelected=true 的帧，导致遗漏
             const frameQueue: { frameIdx: number; imageData: ImageData }[] = [];
             for (let frameIdx = 0; frameIdx < allImagesData.length; frameIdx++) {
                 frameQueue.push({ frameIdx, imageData: allImagesData[frameIdx] });
@@ -254,75 +253,80 @@ export class AIDetectionActions {
                 return;
             }
 
-            // === Phase 1: 顺序捕获（无并发，无共享可变状态） ===
-            const captureCanvas = document.createElement('canvas');
-            captureCanvas.width = video.videoWidth;
-            captureCanvas.height = video.videoHeight;
-            const captureCtx = captureCanvas.getContext('2d')!;
+            let capturedBlobs: Array<Blob | null>;
 
-            const capturedBlobs: Array<Blob | null> = new Array(captureTotal).fill(null);
-            let captureSuccess = 0;
-            let captureFail = 0;
-            const captureStartTime = Date.now();
+            if (preFrames) {
+                // === 预拆帧模式：直接使用帧 File 作为 Blob（跳过 Phase 1 捕获） ===
+                console.log('[Capture] 预拆帧模式：跳过 Phase 1，直接使用帧数据', { captureTotal });
+                notify(1, `使用预拆帧数据 (${captureTotal} 帧)`, '跳过捕获阶段...', true);
+                capturedBlobs = frameQueue.map(({ frameIdx }) =>
+                    frameIdx < preFrames.length ? (preFrames[frameIdx] as Blob) : null
+                );
+            } else {
+                // === 回退模式：Phase 1 顺序捕获 ===
+                const video = EditorModel.videoElement!;
+                const captureCanvas = document.createElement('canvas');
+                captureCanvas.width = video.videoWidth;
+                captureCanvas.height = video.videoHeight;
+                const captureCtx = captureCanvas.getContext('2d')!;
 
-            console.log('[Capture] Phase 1 starting', {
-                captureTotal,
-                videoSize: `${video.videoWidth}x${video.videoHeight}`,
-                readyState: video.readyState
-            });
+                capturedBlobs = new Array(captureTotal).fill(null);
+                let captureSuccess = 0;
+                let captureFail = 0;
+                const captureStartTime = Date.now();
 
-            for (let i = 0; i < captureTotal; i++) {
-                const { frameIdx } = frameQueue[i];
-                const targetTime = frameIdx / fps;
+                console.log('[Capture] Phase 1 starting', {
+                    captureTotal,
+                    videoSize: `${video.videoWidth}x${video.videoHeight}`,
+                    readyState: video.readyState
+                });
 
-                // 更新进度 + yield
-                if (i % 5 === 0 || i === captureTotal - 1) {
-                    const pct = Math.round((i / captureTotal) * 33);
-                    notify(1,
-                        `捕获帧 (${i + 1}/${captureTotal})`,
-                        `${pct}% — 帧 ${frameIdx}`
-                    );
-                }
-                if (i % 8 === 0 && i > 0) await this.yieldToUI();
+                for (let i = 0; i < captureTotal; i++) {
+                    const { frameIdx } = frameQueue[i];
+                    const targetTime = frameIdx / fps;
 
-                // 最多 4 次重试，递增等待
-                let captured = false;
-                for (let attempt = 0; attempt < 4; attempt++) {
-                    await this.seekVideoToTimeForCapture(video, targetTime);
-                    try {
-                        capturedBlobs[i] = await this.captureFrameToBlob(video, captureCtx, captureCanvas);
-                        captured = true;
-                        break;
-                    } catch (err) {
-                        console.warn(`[Capture] Frame ${frameIdx} attempt ${attempt + 1} failed: ${(err as Error).message}, readyState=${video.readyState}`);
-                        if (attempt < 3) {
-                            // 递增等待：300ms, 600ms, 1000ms
-                            await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+                    if (i % 5 === 0 || i === captureTotal - 1) {
+                        const pct = Math.round((i / captureTotal) * 33);
+                        notify(1, `捕获帧 (${i + 1}/${captureTotal})`, `${pct}% — 帧 ${frameIdx}`);
+                    }
+                    if (i % 8 === 0 && i > 0) await this.yieldToUI();
+
+                    let captured = false;
+                    for (let attempt = 0; attempt < 4; attempt++) {
+                        await this.seekVideoToTimeForCapture(video, targetTime);
+                        try {
+                            capturedBlobs[i] = await this.captureFrameToBlob(video, captureCtx, captureCanvas);
+                            captured = true;
+                            break;
+                        } catch (err) {
+                            console.warn(`[Capture] Frame ${frameIdx} attempt ${attempt + 1} failed: ${(err as Error).message}, readyState=${video.readyState}`);
+                            if (attempt < 3) {
+                                await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+                            }
                         }
+                    }
+
+                    if (captured) {
+                        captureSuccess++;
+                    } else {
+                        captureFail++;
+                        console.error(`[Capture] Frame ${frameIdx} FAILED after 3 attempts`);
                     }
                 }
 
-                if (captured) {
-                    captureSuccess++;
-                } else {
-                    captureFail++;
-                    console.error(`[Capture] Frame ${frameIdx} FAILED after 3 attempts`);
-                }
+                captureCanvas.width = 0;
+                captureCanvas.height = 0;
+
+                const captureElapsed = ((Date.now() - captureStartTime) / 1000).toFixed(1);
+                console.log('[Capture] Phase 1 complete', {
+                    success: captureSuccess,
+                    failed: captureFail,
+                    total: captureTotal,
+                    elapsed: captureElapsed + 's'
+                });
             }
 
-            // 释放 canvas
-            captureCanvas.width = 0;
-            captureCanvas.height = 0;
-
-            const captureElapsed = ((Date.now() - captureStartTime) / 1000).toFixed(1);
-            console.log('[Capture] Phase 1 complete', {
-                success: captureSuccess,
-                failed: captureFail,
-                total: captureTotal,
-                elapsed: captureElapsed + 's'
-            });
-
-            // === Phase 2: 4路并发推理（withConcurrency，无共享可变状态） ===
+            // === Phase 2: 4路并发推理 ===
             const inferStartTime = Date.now();
             console.log('[Inference] Phase 2 starting', { captureTotal, concurrency: 4 });
 
@@ -346,7 +350,7 @@ export class AIDetectionActions {
             });
 
             const inferenceResults = await this.withConcurrency(tasks, 4, (done, ttl) => {
-                const pct = 33 + Math.round((done / ttl) * 55);
+                const pct = preFrames ? Math.round((done / ttl) * 90) : 33 + Math.round((done / ttl) * 55);
                 notify(2, `推理中 (${done}/${ttl})`, `${pct}% — 帧 ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
             });
 

@@ -32,24 +32,33 @@ export class QueueActions {
             const cachedData = ImageRepository.restoreFileCache(targetItem.id);
 
             if (targetItem.type === QueueItemType.VIDEO) {
+                const meta = targetItem.extractionMetadata;
                 const videoData: VideoData = {
                     id: targetItem.id,
                     fileData: targetItem.file!,
-                    loadStatus: false,
-                    duration: 0,
-                    fps: 30,
-                    totalFrames: 0,
-                    videoSize: { width: 0, height: 0 },
+                    loadStatus: !!meta,
+                    duration: meta?.duration || 0,
+                    fps: meta?.fps || 30,
+                    totalFrames: meta?.totalFrames || 0,
+                    videoSize: meta
+                        ? { width: meta.width, height: meta.height }
+                        : { width: 0, height: 0 },
                     currentFrame: 0,
                     currentTime: 0,
                     isPlaying: false,
-                    frames: new Map()
+                    frames: new Map(),
+                    preExtractedFrames: targetItem.extractedFrames,
                 };
                 store.dispatch(updateVideoMode(true));
                 store.dispatch(addVideoData(videoData));
                 ImageRepository.setActiveFileId(targetItem.id);
                 if (cachedData) {
                     store.dispatch(updateImageData(cachedData));
+                    store.dispatch(updateActiveImageIndex(0));
+                } else if (targetItem.extractedFrames) {
+                    store.dispatch(updateImageData(
+                        targetItem.extractedFrames.map(f => ImageDataUtil.createImageDataFromFileData(f))
+                    ));
                     store.dispatch(updateActiveImageIndex(0));
                 }
             } else {
