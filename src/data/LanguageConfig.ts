@@ -273,6 +273,7 @@ export interface LanguageTexts {
         frame: string;
         pause: string;
         play: string;
+        replay: string;
         mute: string;
         unmute: string;
         playerAriaLabel: string;
@@ -679,6 +680,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             frame: '帧',
             pause: '暂停',
             play: '播放',
+            replay: '重播',
             mute: '静音',
             unmute: '取消静音',
             playerAriaLabel: '视频播放器控制区域，按空格键播放/暂停',
@@ -1062,6 +1064,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             frame: 'Frame',
             pause: 'Pause',
             play: 'Play',
+            replay: 'Replay',
             mute: 'Mute',
             unmute: 'Unmute',
             playerAriaLabel: 'Video player controls, press Space to play/pause',

@@ -331,14 +331,18 @@ const VideoTimeline: React.FC<IProps> = ({
             <div className="TimelineControls">
                 <div className="LeftInfo">
                     <span>FPS: {fps}</span>
-                    <span>{texts.video.frame + ': '}{currentFrame} / {frames}</span>
+                    <span>{texts.video.frame + ': '}{String(currentFrame + 1).padStart(String(frames).length, '\u2007')} / {frames}</span>
                 </div>
                 
                 {/* 播放和静音按钮 - 居中显示 */}
                 <div className="CenterControls">
                     {onPlayPause && (
                         <button onClick={onPlayPause} className="PlayPauseButton">
-                            {isPlaying ? '⏸ ' + texts.video.pause : '▶ ' + texts.video.play}
+                            {isPlaying
+                                ? '⏸ ' + texts.video.pause
+                                : currentFrame >= frames - 1
+                                    ? '↺ ' + texts.video.replay
+                                    : '▶ ' + texts.video.play}
                         </button>
                     )}
                     {onToggleMute && (
@@ -369,8 +373,8 @@ const VideoTimeline: React.FC<IProps> = ({
                 
                 <div className="RightInfo">
                     <div className="HelpText">
-                        <span>← → : 移动 1 帧</span>
-                        <span>A, D : 移动 10 帧</span>
+                        <span>{texts.video.shortcutMove1}</span>
+                        <span>{texts.video.shortcutPlayPause}</span>
                     </div>
                 </div>
             </div>

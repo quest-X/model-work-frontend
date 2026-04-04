@@ -7,6 +7,7 @@ import {updateImageDataById, updateImageData, updateLabelNames} from "../../stor
 import {updateFullImageInferenceStatus, addInferenceHistory, toggleImageAILabelsVisibility, updateSegmentationResults} from "../../store/ai/actionCreators";
 import {submitNewNotification, deleteNotificationById, updateNotificationById} from "../../store/notifications/actionCreators";
 import {updatePerClassColorationStatus} from "../../store/general/actionCreators";
+import {updateVideoCurrentFrame} from "../../store/video/actionCreators";
 import {NotificationUtil} from "../../utils/NotificationUtil";
 import {LabelUtil} from "../../utils/LabelUtil";
 import {RectUtil} from "../../utils/RectUtil";
@@ -219,14 +220,15 @@ export class AIDetectionActions {
 
         console.log('[BatchDetect] Mode:', isVideo ? `video (fps=${fps})` : 'image');
 
-        // 通知辅助（节流 150ms）— 更新 stepDescription（UI 实际显示的字段）
+        // 通知辅助（节流 150ms）— 更新 stepDescription + currentStep
         let lastNotifyTime = 0;
-        const notify = (stepDesc: string, detail: string, force = false) => {
+        const notify = (step: number, stepDesc: string, detail: string, force = false) => {
             const now = Date.now();
             if (!force && now - lastNotifyTime < 150) return;
             lastNotifyTime = now;
             store.dispatch(updateNotificationById(progressNotification.id, {
                 ...progressNotification,
+                currentStep: step,
                 stepDescription: stepDesc,
                 description: detail
             }));
@@ -276,7 +278,7 @@ export class AIDetectionActions {
                 // 更新进度 + yield
                 if (i % 5 === 0 || i === captureTotal - 1) {
                     const pct = Math.round((i / captureTotal) * 33);
-                    notify(
+                    notify(1,
                         `捕获帧 (${i + 1}/${captureTotal})`,
                         `${pct}% — 帧 ${frameIdx}`
                     );
@@ -345,7 +347,7 @@ export class AIDetectionActions {
 
             const inferenceResults = await this.withConcurrency(tasks, 4, (done, ttl) => {
                 const pct = 33 + Math.round((done / ttl) * 55);
-                notify(`推理中 (${done}/${ttl})`, `${pct}% — 帧 ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
+                notify(2, `推理中 (${done}/${ttl})`, `${pct}% — 帧 ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
             });
 
             const inferElapsed = ((Date.now() - inferStartTime) / 1000).toFixed(1);
@@ -357,7 +359,7 @@ export class AIDetectionActions {
             });
 
             // === Phase 3: 批量写入 Redux ===
-            notify(`写入标注数据 (${captureTotal} 帧)`, '即将完成...', true);
+            notify(3, `写入标注数据 (${captureTotal} 帧)`, '即将完成...', true);
             await this.yieldToUI();
 
             console.log('[Apply] Phase 3 starting');
@@ -397,7 +399,7 @@ export class AIDetectionActions {
 
             const imageResults = await this.withConcurrency(imageTasks, 4, (done, ttl) => {
                 const pct = Math.round((done / ttl) * 100);
-                notify(`推理中 (${done}/${ttl})`, `${pct}% — ${imageQueue[done - 1]?.fileData?.name || `Image ${done}`}`);
+                notify(2, `推理中 (${done}/${ttl})`, `${pct}% — ${imageQueue[done - 1]?.fileData?.name || `Image ${done}`}`);
             });
 
             this.batchApplyResults(
@@ -419,6 +421,13 @@ export class AIDetectionActions {
         }
 
         // ── 完成 ──
+        // 视频模式：检测完成后用整数帧号直接 dispatch 到最后一帧
+        // 不依赖 video.currentTime seek（浮点精度会丢失 1-2 帧）
+        if (isVideo && activeVideo) {
+            const lastFrame = allImagesData.length - 1;
+            store.dispatch(updateVideoCurrentFrame(activeVideo.id, lastFrame, lastFrame / fps));
+        }
+
         store.dispatch(deleteNotificationById(progressNotification.id));
         store.dispatch(updateFullImageInferenceStatus(false));
 
