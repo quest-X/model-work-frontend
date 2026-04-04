@@ -16,11 +16,12 @@ interface IProps {
     segmentationResults: SegmentationResult[];
     activeImageData: ImageData | null;
     labelNames: LabelName[];
+    isVideoMode: boolean;
     updateSegmentationResults: (results: SegmentationResult[]) => void;
     updateActiveLabelId: (activeLabelId: string | null) => void;
 }
 
-const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, segmentationResults, activeImageData, labelNames, updateSegmentationResults, updateActiveLabelId}) => {
+const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, segmentationResults, activeImageData, labelNames, isVideoMode, updateSegmentationResults, updateActiveLabelId}) => {
     const currentTexts = LanguageConfig[language];
 
     const handleDeleteSegmentationResult = (result: SegmentationResult, index: number) => {
@@ -159,10 +160,11 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         });
     };
 
-    // 当 segmentationResults 为空但 labelRects 有 AI 检测结果时，从 labelRects 生成显示数据
-    // 这确保批量检测和恢复工作后面板也能显示结果
+    // 生成当前帧的推理结果显示数据
+    // 视频模式下：始终从当前帧的 labelRects 生成（批量检测结果存在每帧的 labelRects 中）
+    // 图片模式下：优先使用全局 segmentationResults（单张检测时设置），否则从 labelRects 回退
     const displayResults = React.useMemo(() => {
-        if (segmentationResults && segmentationResults.length > 0) return segmentationResults;
+        if (!isVideoMode && segmentationResults && segmentationResults.length > 0) return segmentationResults;
         if (!activeImageData) return [];
         const aiRects = activeImageData.labelRects.filter(r => r.isCreatedByAI);
         if (aiRects.length === 0) return [];
@@ -185,7 +187,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
                 _labelRectId: rect.id // 用于关联
             };
         });
-    }, [segmentationResults, activeImageData, labelNames]);
+    }, [segmentationResults, activeImageData, labelNames, isVideoMode]);
 
     const [thumbnails, setThumbnails] = React.useState<{[key: number]: string}>({});
 
@@ -290,7 +292,8 @@ const mapStateToProps = (state: AppState) => ({
     suggestedLabelList: state.ai.suggestedLabelList,
     segmentationResults: state.ai.segmentationResults,
     activeImageData: state.labels.imagesData[state.labels.activeImageIndex] || null,
-    labelNames: state.labels.labels
+    labelNames: state.labels.labels,
+    isVideoMode: state.video?.isVideoMode || false
 });
 
 const mapDispatchToProps = {

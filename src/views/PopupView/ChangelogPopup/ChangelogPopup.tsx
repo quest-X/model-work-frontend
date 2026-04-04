@@ -24,6 +24,8 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '批量检测直接使用预拆帧 JPEG，跳过逐帧 seek+capture，速度大幅提升', en: 'Batch detection uses pre-extracted JPEGs directly, skipping per-frame seek+capture for major speedup' },
             { zh: '缩略图生成使用 createImageBitmap 直接从帧文件生成，无需 video seek', en: 'Thumbnail generation uses createImageBitmap from frame files directly, no video seek needed' },
             { zh: '修复 CORS expose_headers 缺失导致前端无法读取拆帧元数据的问题', en: 'Fix missing CORS expose_headers preventing frontend from reading frame extraction metadata' },
+            { zh: '修复播放到末尾后无法重播的问题', en: 'Fix replay not working after playback reaches the end' },
+            { zh: '修复视频模式下推理结果面板不随帧切换刷新的问题', en: 'Fix inference results panel not updating when switching frames in video mode' },
         ]
     },
     {
