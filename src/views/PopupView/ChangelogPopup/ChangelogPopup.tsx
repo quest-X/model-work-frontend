@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.7.1',
+        date: '2026-04-04',
+        changes: [
+            { zh: '修复恢复工作后缩略图永久转圈：检测视频项目并自动恢复视频模式，重新生成缩略图', en: 'Fix infinite spinner on thumbnails after restore: detect video project and auto-restore video mode' },
+            { zh: '修复 IndexedDB 恢复后文件 MIME 类型丢失：同时检查文件扩展名作为兜底', en: 'Fix lost MIME type after IndexedDB restore: fallback to file extension check' },
+        ]
+    },
+    {
         version: '1.7.0',
         date: '2026-04-04',
         changes: [
