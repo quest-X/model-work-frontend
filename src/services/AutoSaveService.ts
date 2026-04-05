@@ -107,11 +107,6 @@ export class AutoSaveService {
             return;
         }
 
-        // 视频模式下跳过 IndexedDB 保存（视频帧引用大文件会导致 DataCloneError）
-        if (state.video?.isVideoMode) {
-            return;
-        }
-
         // 估算总数据大小，超过 500MB 跳过（防止 OOM）
         const totalSize = imagesData.reduce((sum, img) => sum + (img.fileData?.size || 0), 0);
         if (totalSize > 500 * 1024 * 1024) {
@@ -120,6 +115,7 @@ export class AutoSaveService {
         }
 
         // 转换ImageData到StoredImageData格式（File → ArrayBuffer 以支持 IndexedDB 持久化）
+        // 视频模式下每帧是小 JPEG (~50KB)，可以正常保存
         const storedImages: StoredImageData[] = await Promise.all(
             imagesData.map(async (imageData): Promise<StoredImageData> => ({
                 id: imageData.id,
@@ -135,6 +131,10 @@ export class AutoSaveService {
             }))
         );
 
+        // 视频模式：保存拆帧元数据以支持恢复
+        const isVideoMode = state.video?.isVideoMode || false;
+        const activeVideo = isVideoMode ? state.video?.activeVideo : null;
+
         const projectData: StoredProjectData = {
             id: 'current-project',
             images: storedImages,
@@ -142,7 +142,15 @@ export class AutoSaveService {
             currentImageIndex: state.labels.activeImageIndex,
             lastModified: Date.now(),
             version: '1.11.0-alpha',
-            segmentationResults: state.ai?.segmentationResults || [] // 保存推理结果
+            segmentationResults: state.ai?.segmentationResults || [],
+            isVideoProject: isVideoMode && !!activeVideo?.preExtractedFrames,
+            extractionMetadata: activeVideo?.preExtractedFrames ? {
+                fps: activeVideo.fps,
+                duration: activeVideo.duration,
+                totalFrames: activeVideo.totalFrames,
+                width: activeVideo.videoSize.width,
+                height: activeVideo.videoSize.height,
+            } : undefined,
         };
 
         await IndexedDBManager.saveProject(projectData);

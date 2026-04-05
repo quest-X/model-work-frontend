@@ -83,33 +83,42 @@ export class ProjectRestoreService {
             store.dispatch(updateImageData(restoredImages));
 
             // 检测是否为视频项目
-            // 同时检查 MIME 类型和文件扩展名（IndexedDB 恢复后 type 可能丢失）
+            // 优先使用 isVideoProject 标记（v1.8.5+），回退到文件名/MIME 推断
             const firstFile = restoredImages[0]?.fileData;
-            const isVideoProject = firstFile && (
+            const isVideoProject = storedProject.isVideoProject || (firstFile && (
                 firstFile.type.startsWith('video/') ||
                 /\.(mp4|webm|mov|avi|mkv|m4v|ogg)$/i.test(firstFile.name)
-            );
+            ));
 
             if (isVideoProject) {
-                // 恢复视频模式：创建 VideoData 并激活视频模式
-                // VideoEditor 挂载后会自动检测 FPS、生成缩略图
+                const meta = storedProject.extractionMetadata;
+                // 从恢复的 ImageData 重建 preExtractedFrames（每帧就是一个小 JPEG File）
+                const preExtractedFrames = restoredImages.map(img => img.fileData);
+
                 const videoData: VideoData = {
-                    id: restoredImages[0].id.split('-')[0] || restoredImages[0].id, // 用第一帧 ID 作为视频 ID
+                    id: restoredImages[0].id.split('-')[0] || restoredImages[0].id,
                     fileData: firstFile,
-                    loadStatus: false,
-                    duration: 0,        // VideoEditor 加载后自动填充
-                    fps: 30,            // VideoEditor 加载后自动检测
-                    totalFrames: restoredImages.length,
-                    videoSize: { width: 0, height: 0 },
+                    loadStatus: !!meta,
+                    duration: meta?.duration || 0,
+                    fps: meta?.fps || 30,
+                    totalFrames: meta?.totalFrames || restoredImages.length,
+                    videoSize: meta
+                        ? { width: meta.width, height: meta.height }
+                        : { width: 0, height: 0 },
                     currentFrame: 0,
                     currentTime: 0,
                     isPlaying: false,
-                    frames: new Map()
+                    frames: new Map(),
+                    preExtractedFrames,
                 };
                 store.dispatch(updateVideoMode(true));
                 store.dispatch(addVideoData(videoData));
                 ImageRepository.setActiveFileId(videoData.id);
-                console.log('检测到视频项目，已恢复视频模式', { frames: restoredImages.length });
+                console.log('检测到视频项目，已恢复视频模式（含预拆帧）', {
+                    frames: restoredImages.length,
+                    hasMetadata: !!meta,
+                    fps: videoData.fps
+                });
             } else {
                 console.log('图像数据已添加到Redux，ImagePreview将自动加载图像');
             }

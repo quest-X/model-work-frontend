@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.8.5',
+        date: '2026-04-05',
+        changes: [
+            { zh: '修复视频模式恢复工作失败的问题：预拆帧数据现在会保存到 IndexedDB', en: 'Fix video mode restore failure: pre-extracted frames are now saved to IndexedDB' },
+            { zh: '恢复时自动重建 preExtractedFrames + extractionMetadata（fps/尺寸等）', en: 'Auto-rebuild preExtractedFrames + extractionMetadata (fps/dimensions) on restore' },
+        ]
+    },
+    {
         version: '1.8.4',
         date: '2026-04-05',
         changes: [

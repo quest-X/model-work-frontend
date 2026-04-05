@@ -8,6 +8,14 @@ export interface StoredProjectData {
     lastModified: number;
     version: string;
     segmentationResults?: any[]; // AI推理结果
+    isVideoProject?: boolean;   // 是否为视频项目（预拆帧模式）
+    extractionMetadata?: {      // 视频拆帧元数据
+        fps: number;
+        duration: number;
+        totalFrames: number;
+        width: number;
+        height: number;
+    };
 }
 
 export interface StoredImageData {
