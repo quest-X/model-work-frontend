@@ -16,6 +16,18 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.8.7',
+        date: '2026-04-05',
+        changes: [
+            { zh: '大视频按需取帧：后端 FFmpeg 用 -frames:v 替代 -t，修复单帧提取失败', en: 'Large video on-demand: backend FFmpeg uses -frames:v instead of -t, fix single-frame extraction failure' },
+            { zh: '前端批量取帧（30帧/批）+ 去重，替代逐帧请求，减少 90% HTTP 请求', en: 'Frontend batch frame fetch (30/batch) with dedup, replacing per-frame requests, 90% fewer HTTP calls' },
+            { zh: '修复 handleVideoMetadataLoaded 无限循环（imagesData 依赖导致）', en: 'Fix handleVideoMetadataLoaded infinite loop caused by imagesData dependency cycle' },
+            { zh: '大视频缩略图改为从后端取帧生成，不再使用慢速 video seek', en: 'Large video thumbnails generated from backend frames instead of slow video seek' },
+            { zh: '预加载串行化：逐批加载避免并发 FFmpeg 进程过多', en: 'Serialize preload batches to prevent concurrent FFmpeg process overload' },
+            { zh: '修复上传完成时短暂闪回欢迎页的问题', en: 'Fix brief flash-back to welcome page when upload completes' },
+        ]
+    },
+    {
         version: '1.8.6',
         date: '2026-04-05',
         changes: [
