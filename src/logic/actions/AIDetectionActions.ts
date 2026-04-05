@@ -187,15 +187,18 @@ export class AIDetectionActions {
     }
 
     /**
-     * 批量检测 — 顺序两阶段架构（无竞态条件）
+     * Batch detection -- sequential two-phase architecture (no race conditions)
      *
-     * 视频模式：
-     *   Phase 1: 顺序捕获（一帧一帧 seek+capture，无并发，无共享可变状态）
-     *   Phase 2: 4路并发推理（withConcurrency，已验证安全）
-     *   Phase 3: 单次 Redux dispatch 批量写入所有结果
+     * Video mode (both fast_ffmpeg_mode and raw_browser_mode):
+     *   Phase 1: Sequential capture
+     *     - fast_ffmpeg_mode (full-load): uses preExtractedFrames JPEGs directly as Blobs
+     *     - fast_ffmpeg_mode (on-demand): fetches frame batches from backend via sessionId
+     *     - raw_browser_mode fallback: seek + capture from <video> element one by one
+     *   Phase 2: 4-way concurrent inference (withConcurrency, verified safe)
+     *   Phase 3: Single Redux dispatch to batch-write all results
      *
-     * 图像模式：
-     *   4路并发推理 → 批量写入
+     * Image mode:
+     *   4-way concurrent inference -> batch write
      */
     public static async detectBatch(imagesToDetect: ImageData[]): Promise<void> {
         if (!DetectionAPIDetector.isEnabled() || imagesToDetect.length === 0) return;
@@ -219,7 +222,9 @@ export class AIDetectionActions {
         const activeVideo = isVideo ? videoState.activeVideo : null;
         const fps = activeVideo?.fps || 30;
 
-        console.log('[BatchDetect] Mode:', isVideo ? `video (fps=${fps})` : 'image');
+        console.log('[BatchDetect] Mode:', isVideo
+            ? `video/${activeVideo?.preExtractedFrames ? 'fast_ffmpeg_mode(full-load)' : (activeVideo?.sessionId || EditorModel.videoSessionId) ? 'fast_ffmpeg_mode(on-demand)' : 'raw_browser_mode'} (fps=${fps})`
+            : 'image');
 
         // 通知辅助（节流 150ms）— 更新 stepDescription + currentStep
         let lastNotifyTime = 0;
@@ -235,12 +240,12 @@ export class AIDetectionActions {
             }));
         };
 
-        // ======== 视频模式 ========
+        // ======== Video mode (fast_ffmpeg_mode or raw_browser_mode) ========
         const preFrames = activeVideo?.preExtractedFrames;
         const sessionId = activeVideo?.sessionId || EditorModel.videoSessionId;
 
         if (isVideo && (preFrames || sessionId || EditorModel.videoElement)) {
-            // 视频模式：检测 ALL 帧
+            // Video mode: detect ALL frames (capture strategy depends on active playback mode)
             const frameQueue: { frameIdx: number; imageData: ImageData }[] = [];
             for (let frameIdx = 0; frameIdx < allImagesData.length; frameIdx++) {
                 frameQueue.push({ frameIdx, imageData: allImagesData[frameIdx] });
@@ -258,15 +263,15 @@ export class AIDetectionActions {
             let capturedBlobs: Array<Blob | null>;
 
             if (preFrames) {
-                // === 全量模式：直接使用帧 File 作为 Blob ===
-                console.log('[Capture] 全量模式：使用预拆帧数据', { captureTotal });
-                notify(1, `使用预拆帧数据 (${captureTotal} 帧)`, '跳过捕获阶段...', true);
+                // === fast_ffmpeg_mode (full-load): use pre-extracted JPEG Files directly as Blobs ===
+                console.log('[Capture] fast_ffmpeg_mode (full-load): using pre-extracted frames', { captureTotal });
+                notify(1, `Using pre-extracted frames (${captureTotal})`, 'Skipping capture phase...', true);
                 capturedBlobs = frameQueue.map(({ frameIdx }) =>
                     frameIdx < preFrames.length ? (preFrames[frameIdx] as Blob) : null
                 );
             } else if (sessionId) {
-                // === 按需模式：逐批从后端获取帧 ===
-                console.log('[Capture] 按需模式：从后端逐批获取帧', { captureTotal, sessionId });
+                // === fast_ffmpeg_mode (on-demand): fetch frames in batches from backend ===
+                console.log('[Capture] fast_ffmpeg_mode (on-demand): fetching frames from backend', { captureTotal, sessionId });
                 capturedBlobs = new Array(captureTotal).fill(null);
                 const FETCH_BATCH = 10;
                 for (let i = 0; i < captureTotal; i += FETCH_BATCH) {
@@ -287,7 +292,7 @@ export class AIDetectionActions {
                     if (i % 20 === 0 && i > 0) await this.yieldToUI();
                 }
             } else {
-                // === 回退模式：Phase 1 顺序捕获 ===
+                // === raw_browser_mode fallback: Phase 1 sequential seek+capture from <video> ===
                 const video = EditorModel.videoElement!;
                 const captureCanvas = document.createElement('canvas');
                 captureCanvas.width = video.videoWidth;

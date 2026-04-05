@@ -73,11 +73,13 @@ export class DetectionAPIDetector {
             // 准备form-data
             const formData = new FormData();
 
-            // 判断是否为视频文件（视频模式下 fileData 是整个视频文件，不能直接发送）
+            // Determine capture strategy based on the active playback mode.
+            // In raw_browser_mode the fileData is the entire video file (cannot send directly);
+            // in fast_ffmpeg_mode the decoded frame Image is available via EditorModel.videoFrameImage.
             const isVideoFile = imageData.fileData && imageData.fileData.type.startsWith('video/');
 
             if (isVideoFile) {
-                // 视频模式：从 video 元素全分辨率截取当前帧
+                // raw_browser_mode: capture current frame at full resolution from <video> element
                 const video = EditorModel.videoElement;
                 if (!video || video.readyState < 2) {
                     throw new Error('Video not ready. Please wait for the video to load.');
@@ -95,7 +97,7 @@ export class DetectionAPIDetector {
                 });
                 formData.append('file', blob, 'video_frame.jpg');
             } else if (EditorModel.videoFrameImage) {
-                // 预拆帧/按需取帧模式：从已解码的 Image 截取像素
+                // fast_ffmpeg_mode (full-load or on-demand): capture pixels from the decoded frame Image
                 const img = EditorModel.videoFrameImage;
                 const canvas = document.createElement('canvas');
                 canvas.width = img.naturalWidth || img.width;

@@ -278,7 +278,7 @@ const EditorContainer: React.FC<IProps> = (
                 // 添加到队列
                 const newQueueItems: QueueItem[] = [];
                 
-                // 视频文件：后端 FFmpeg 拆帧 → 视频模式
+                // Video files: backend FFmpeg extraction -> fast_ffmpeg_mode (FramePlayer)
                 for (const videoFile of videoFiles) {
                     try {
                         console.log(`[FFmpeg] 开始拆帧: ${videoFile.name}`);
@@ -298,9 +298,9 @@ const EditorContainer: React.FC<IProps> = (
                             }
                         );
                         const isOnDemand = !!result.sessionId;
-                        console.log(`[FFmpeg] 完成: ${isOnDemand ? '按需模式' : '全量模式'}, ${result.totalFrames} 帧`);
+                        console.log(`[FFmpeg] Done: fast_ffmpeg_mode (${isOnDemand ? 'on-demand' : 'full-load'}), ${result.totalFrames} frames`);
 
-                        // 初始化全局帧池（不再预解码，由 FramePlayer 统一处理）
+                        // Initialize global frame pool for fast_ffmpeg_mode (FramePlayer handles decoding)
                         EditorModel.preloadedImageCache = new Map();
                         if (!isOnDemand) {
                             EditorModel.videoFrameFiles = [...result.frames];
@@ -344,16 +344,16 @@ const EditorContainer: React.FC<IProps> = (
                         newQueueItems.push(item);
                         setVideoProcessing(null);
                     } catch (err) {
-                        console.error('[FFmpeg] 拆帧失败，回退到视频模式:', err);
+                        console.error('[FFmpeg] Extraction failed, falling back to raw_browser_mode:', err);
                         setVideoProcessing(null);
                         // 错误通知
                         const errorNotification = NotificationUtil.createErrorNotification({
                             header: `FFmpeg 拆帧失败: ${videoFile.name}`,
-                            description: '已回退到视频模式'
+                            description: '已回退到 raw_browser_mode'
                         });
                         store.dispatch(submitNewNotification(errorNotification));
                         setTimeout(() => store.dispatch(deleteNotificationById(errorNotification.id)), 5000);
-                        // 回退：用旧的视频模式
+                        // Fallback: raw_browser_mode (browser-native <video> element, no pre-extracted frames)
                         const thumbnail = await generateThumbnail(videoFile);
                         const item: QueueItem = {
                             id: uuidv4(),

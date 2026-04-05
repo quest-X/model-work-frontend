@@ -1,3 +1,20 @@
+/**
+ * FramePlayer — fast_ffmpeg_mode playback component
+ *
+ * This component implements the "fast_ffmpeg_mode" video playback path:
+ * the backend FFmpeg process extracts every frame as a JPEG file, and this
+ * component plays the JPEG sequence on a <canvas> driven by setInterval.
+ *
+ * Two sub-modes are handled transparently:
+ *   - Full-load (small videos): all frame Files are available in `frames` prop.
+ *   - On-demand  (large videos): frames are fetched in batches via `sessionId`
+ *     using a sliding-window cache (see MIN_AHEAD / MAX_AVAILABLE constants).
+ *
+ * Counterpart: VideoPlayer.tsx implements "raw_browser_mode" (browser-native
+ * <video> element). The switch between the two lives in VideoEditor.tsx.
+ *
+ * @see VideoPlaybackMode in data/enums/VideoPlaybackMode.ts
+ */
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import '../VideoPlayer/VideoPlayer.scss';
 import { ISize } from '../../../interfaces/ISize';
@@ -8,7 +25,7 @@ import { FrameExtractorService } from '../../../services/FrameExtractorService';
 interface IProps {
     language: Language;
     frames: File[];
-    sessionId?: string;  // 按需取帧模式的会话 ID
+    sessionId?: string;  // fast_ffmpeg_mode (on-demand): backend session ID for batch frame fetching
     fps: number;
     duration: number;
     totalFrames: number;

@@ -1,9 +1,18 @@
 /**
  * FrameExtractorService — v1.9.0
  *
- * 双模式：
- *   1. 小视频（< FULL_LOAD_THRESHOLD 帧）：一次性全量拆帧（旧模式，快）
- *   2. 大视频：一次上传 → 按需取帧（新模式，内存安全）
+ * This service powers the "fast_ffmpeg_mode" playback path. It uploads the
+ * video to the backend FFmpeg server and retrieves extracted JPEG frames.
+ *
+ * Two sub-modes within fast_ffmpeg_mode:
+ *   1. Full-load (small videos, <=1 GB): all frames downloaded at once.
+ *   2. On-demand  (large videos, >1 GB): upload once, fetch frames in
+ *      batches via sessionId (sliding-window in FramePlayer).
+ *
+ * If this service fails (backend unreachable), EditorContainer falls back
+ * to raw_browser_mode (browser-native <video> element via VideoPlayer).
+ *
+ * @see VideoPlaybackMode in data/enums/VideoPlaybackMode.ts
  */
 import axios from 'axios';
 import JSZip from 'jszip';
@@ -15,7 +24,7 @@ export interface FrameExtractionResult {
     totalFrames: number;
     width: number;
     height: number;
-    sessionId?: string;  // 大视频模式的会话 ID
+    sessionId?: string;  // fast_ffmpeg_mode (on-demand): backend session ID for batch frame fetching
 }
 
 export type ProgressCallback = (phase: string, current: number, total: number) => void;
@@ -51,7 +60,7 @@ export class FrameExtractorService {
         const fileSizeMB = videoFile.size / 1024 / 1024;
         if (fileSizeMB <= LARGE_VIDEO_SIZE_MB) {
             // 小视频：全量拆帧
-            console.log(`[FrameExtractor] 小视频模式: 全量加载 ${metadata.totalFrames} 帧 (${fileSizeMB.toFixed(0)}MB)`);
+            console.log(`[FrameExtractor] fast_ffmpeg_mode (full-load): ${metadata.totalFrames} frames (${fileSizeMB.toFixed(0)}MB)`);
             onProgress?.('解压帧', 0, metadata.totalFrames);
             const frames = await this.fetchFrameRange(sessionId, 0, metadata.totalFrames, onProgress);
 
@@ -64,8 +73,8 @@ export class FrameExtractorService {
                 height: metadata.height,
             };
         } else {
-            // 大视频：按需模式，不预加载帧
-            console.log(`[FrameExtractor] 大视频模式: 按需取帧, sessionId=${sessionId}`);
+            // Large video: fast_ffmpeg_mode (on-demand), frames fetched in batches via sessionId
+            console.log(`[FrameExtractor] fast_ffmpeg_mode (on-demand): sessionId=${sessionId}`);
 
             return {
                 frames: [],  // 不预加载

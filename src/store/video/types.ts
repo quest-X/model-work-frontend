@@ -24,8 +24,10 @@ export type VideoData = {
     isPlaying: boolean; // 是否正在播放
     frames: Map<number, VideoFrameData>; // 帧数据映射
     videoUrl?: string; // 视频URL（用于播放）
-    preExtractedFrames?: File[]; // 预拆帧 JPEG 数组（小视频全量模式）
-    sessionId?: string; // 后端视频会话 ID（大视频按需取帧模式）
+    preExtractedFrames?: File[]; // fast_ffmpeg_mode (full-load): all JPEG frames in memory
+    sessionId?: string; // fast_ffmpeg_mode (on-demand): backend session ID for batch frame fetching
+    // Note: when neither preExtractedFrames nor sessionId is set, VideoEditor
+    // falls back to raw_browser_mode (browser-native <video> via VideoPlayer).
 };
 
 // 视频状态

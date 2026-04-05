@@ -1,3 +1,20 @@
+/**
+ * VideoPlayer — raw_browser_mode playback component
+ *
+ * This component implements the "raw_browser_mode" video playback path:
+ * the browser-native <video> element handles all decoding and playback.
+ * Frames are captured to a <canvas> only when paused (for annotation overlay)
+ * or during detection (seek + drawImage).
+ *
+ * This mode is used as a fallback when backend FFmpeg extraction fails or the
+ * backend is unreachable. During playback the <video> element is shown directly
+ * (no per-frame canvas copy); on pause the last frame is drawn to <canvas>.
+ *
+ * Counterpart: FramePlayer.tsx implements "fast_ffmpeg_mode" (FFmpeg-extracted
+ * JPEG sequence playback). The switch between the two lives in VideoEditor.tsx.
+ *
+ * @see VideoPlaybackMode in data/enums/VideoPlaybackMode.ts
+ */
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import './VideoPlayer.scss';
 import { ISize } from '../../../interfaces/ISize';
