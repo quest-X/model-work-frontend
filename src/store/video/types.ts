@@ -24,7 +24,8 @@ export type VideoData = {
     isPlaying: boolean; // 是否正在播放
     frames: Map<number, VideoFrameData>; // 帧数据映射
     videoUrl?: string; // 视频URL（用于播放）
-    preExtractedFrames?: File[]; // 预拆帧 JPEG 数组（存在时使用 FramePlayer）
+    preExtractedFrames?: File[]; // 预拆帧 JPEG 数组（小视频全量模式）
+    sessionId?: string; // 后端视频会话 ID（大视频按需取帧模式）
 };
 
 // 视频状态

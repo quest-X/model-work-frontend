@@ -3,10 +3,12 @@ import '../VideoPlayer/VideoPlayer.scss';
 import { ISize } from '../../../interfaces/ISize';
 import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { EditorModel } from '../../../staticModels/EditorModel';
+import { FrameExtractorService } from '../../../services/FrameExtractorService';
 
 interface IProps {
     language: Language;
     frames: File[];
+    sessionId?: string;  // 按需取帧模式的会话 ID
     fps: number;
     duration: number;
     totalFrames: number;
@@ -23,6 +25,7 @@ interface IProps {
 const FramePlayer: React.FC<IProps> = ({
     language,
     frames,
+    sessionId,
     fps,
     duration,
     totalFrames,
@@ -59,44 +62,85 @@ const FramePlayer: React.FC<IProps> = ({
     const playFrameRef = useRef(0);
     const isVideoEndedRef = useRef(false); // 是否播放到末尾
 
-    // 加载单帧图像（LRU 缓存上限 200 帧，防止内存无限增长）
+    // 加载单帧图像 — 三层查找：LRU 缓存 → 全局帧池 → 后端按需请求
     const MAX_CACHED_FRAMES = 200;
-    const loadFrameImage = useCallback((frameIdx: number): Promise<HTMLImageElement> => {
-        const cache = frameCacheRef.current;
-        const cached = cache.get(frameIdx);
-        if (cached) return Promise.resolve(cached);
+    // 防止同一帧重复请求
+    const pendingRequestsRef = useRef<Map<number, Promise<HTMLImageElement>>>(new Map());
 
-        // LRU 驱逐：超过上限时删除最早的条目
-        if (cache.size >= MAX_CACHED_FRAMES) {
-            const firstKey = cache.keys().next().value;
-            cache.delete(firstKey);
-            const oldUrl = blobUrlCacheRef.current.get(firstKey);
-            if (oldUrl) {
-                URL.revokeObjectURL(oldUrl);
-                blobUrlCacheRef.current.delete(firstKey);
-            }
+    const loadFrameImage = useCallback(async (frameIdx: number): Promise<HTMLImageElement> => {
+        if (frameIdx < 0 || frameIdx >= totalFrames) {
+            throw new Error(`Frame ${frameIdx} out of range [0, ${totalFrames})`);
         }
 
-        return new Promise((resolve, reject) => {
-            if (frameIdx < 0 || frameIdx >= frames.length) {
-                reject(new Error(`Frame index ${frameIdx} out of range`));
-                return;
+        // 1. LRU 缓存命中
+        const cache = frameCacheRef.current;
+        const cached = cache.get(frameIdx);
+        if (cached) return cached;
+
+        // 2. 防止重复请求
+        const pending = pendingRequestsRef.current.get(frameIdx);
+        if (pending) return pending;
+
+        const promise = (async () => {
+            // 3. 全局帧池 / props.frames
+            const allFrames = EditorModel.videoFrameFiles;
+            let frameFile = (allFrames.length > frameIdx ? allFrames[frameIdx] : null)
+                || (frames.length > frameIdx ? frames[frameIdx] : null);
+
+            // 4. 按需从后端获取（大视频模式）
+            if (!frameFile && sessionId) {
+                const fetched = await FrameExtractorService.fetchFrameRange(sessionId, frameIdx, 1);
+                if (fetched.length > 0) {
+                    frameFile = fetched[0];
+                    // 存入全局帧池以便复用
+                    if (allFrames.length <= frameIdx) {
+                        // 扩展数组（稀疏）
+                        allFrames[frameIdx] = frameFile;
+                    }
+                }
             }
-            const img = new Image();
-            const url = URL.createObjectURL(frames[frameIdx]);
-            blobUrlCacheRef.current.set(frameIdx, url);
-            img.onload = () => {
-                cache.set(frameIdx, img);
-                resolve(img);
-            };
-            img.onerror = () => {
-                URL.revokeObjectURL(url);
-                blobUrlCacheRef.current.delete(frameIdx);
-                reject(new Error(`Failed to load frame ${frameIdx}`));
-            };
-            img.src = url;
-        });
-    }, [frames]);
+
+            if (!frameFile) {
+                throw new Error(`Frame ${frameIdx} unavailable`);
+            }
+
+            // LRU 驱逐
+            if (cache.size >= MAX_CACHED_FRAMES) {
+                const firstKey = cache.keys().next().value;
+                cache.delete(firstKey);
+                const oldUrl = blobUrlCacheRef.current.get(firstKey);
+                if (oldUrl) {
+                    URL.revokeObjectURL(oldUrl);
+                    blobUrlCacheRef.current.delete(firstKey);
+                }
+            }
+
+            // 创建 Image
+            return new Promise<HTMLImageElement>((resolve, reject) => {
+                const img = new Image();
+                const url = URL.createObjectURL(frameFile!);
+                blobUrlCacheRef.current.set(frameIdx, url);
+                img.onload = () => {
+                    cache.set(frameIdx, img);
+                    resolve(img);
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    blobUrlCacheRef.current.delete(frameIdx);
+                    reject(new Error(`Failed to decode frame ${frameIdx}`));
+                };
+                img.src = url;
+            });
+        })();
+
+        pendingRequestsRef.current.set(frameIdx, promise);
+        try {
+            const result = await promise;
+            return result;
+        } finally {
+            pendingRequestsRef.current.delete(frameIdx);
+        }
+    }, [frames, sessionId, totalFrames]);
 
     // 绘制指定帧到 canvas
     const drawFrame = useCallback(async (frameIdx: number) => {
@@ -149,19 +193,42 @@ const FramePlayer: React.FC<IProps> = ({
     }, [loadFrameImage, videoSize]);
 
     // 预加载：加载当前帧附近的帧
-    const preloadFrames = useCallback((centerIdx: number, range: number = 10) => {
-        const start = Math.max(0, centerIdx);
-        const end = Math.min(frames.length, centerIdx + range);
-        for (let i = start; i < end; i++) {
+    // === 3 层预取策略 ===
+    // P0: 首屏（帧 0-19）— init 时立刻触发
+    // P1: 播放缓冲（帧 20-499）— P0 完成后触发
+    // P2: 跳帧窗口（目标帧 -20 ~ +80）— seek/播放时触发
+
+    const preloadRange = useCallback((start: number, end: number) => {
+        const s = Math.max(0, start);
+        const e = Math.min(totalFrames, end);
+        for (let i = s; i < e; i++) {
             if (!frameCacheRef.current.has(i)) {
-                loadFrameImage(i).catch(() => {/* ignore preload failures */});
+                loadFrameImage(i).catch(() => {/* ignore */});
             }
         }
-    }, [frames.length, loadFrameImage]);
+    }, [totalFrames, loadFrameImage]);
+
+    // P2: 跳帧/播放窗口 — 前 20 后 80
+    const preloadAroundPosition = useCallback((targetFrame: number) => {
+        preloadRange(targetFrame - 20, targetFrame + 80);
+    }, [preloadRange]);
+
+    // P0 + P1: 首屏 + 播放缓冲
+    const preloadInitial = useCallback(async () => {
+        // P0: 帧 0-19（同步预取，最高优先）
+        preloadRange(0, 20);
+        // P1: 帧 20-499（稍后预取，播放缓冲）
+        setTimeout(() => preloadRange(20, 500), 100);
+    }, [preloadRange]);
+
+    // 播放时追踪上次预取位置，每推进 30 帧触发一次 P2
+    const lastPreloadFrameRef = useRef(0);
 
     // 初始化：加载第一帧 + 通知元数据
     useEffect(() => {
-        if (frames.length === 0 || videoSize.width === 0) return undefined;
+        // 全量模式需要 frames，按需模式需要 sessionId
+        const hasSource = frames.length > 0 || !!sessionId;
+        if (!hasSource || videoSize.width === 0) return undefined;
 
         let cancelled = false;
 
@@ -190,8 +257,8 @@ const FramePlayer: React.FC<IProps> = ({
                 // 自动聚焦
                 focusableElementRef.current?.focus();
 
-                // 预加载前几帧
-                preloadFrames(1, 20);
+                // P0 + P1 预取
+                preloadInitial();
             } catch (err) {
                 console.error('[FramePlayer] Init failed:', err);
             }
@@ -201,8 +268,9 @@ const FramePlayer: React.FC<IProps> = ({
 
         return () => {
             cancelled = true;
+            setIsLoaded(false);
         };
-    }, [frames, videoSize.width, videoSize.height]);  // eslint-disable-line react-hooks/exhaustive-deps
+    }, [frames, sessionId, videoSize.width, videoSize.height]);  // eslint-disable-line react-hooks/exhaustive-deps
 
     // 用 ref 跟踪 currentFrame，避免播放 effect 依赖它导致 interval 反复重建
     const currentFrameRef = useRef(currentFrame);
@@ -247,8 +315,11 @@ const FramePlayer: React.FC<IProps> = ({
                 onTimeUpdateRef.current?.(time, nextFrame);
                 drawFrame(nextFrame);
 
-                // 预加载后续帧
-                preloadFrames(nextFrame + 1, 10);
+                // P2: 每推进 30 帧触发一次预取（前20后80）
+                if (nextFrame - lastPreloadFrameRef.current >= 30) {
+                    lastPreloadFrameRef.current = nextFrame;
+                    preloadAroundPosition(nextFrame);
+                }
             }, interval);
         } else {
             if (playIntervalRef.current) {
@@ -263,7 +334,7 @@ const FramePlayer: React.FC<IProps> = ({
                 playIntervalRef.current = undefined;
             }
         };
-    }, [isPlaying, isLoaded, fps, totalFrames, duration, drawFrame, preloadFrames]);
+    }, [isPlaying, isLoaded, fps, totalFrames, duration, drawFrame, preloadAroundPosition]);
 
     // 外部时间变化 → seek（仅在暂停时响应）
     useEffect(() => {
@@ -271,8 +342,9 @@ const FramePlayer: React.FC<IProps> = ({
 
         const targetFrame = Math.min(Math.round(currentTime * fps), totalFrames - 1);
         drawFrame(Math.max(0, targetFrame));
-        preloadFrames(targetFrame, 10);
-    }, [currentTime, isLoaded, isPlaying, fps, totalFrames, drawFrame, preloadFrames]);
+        // P2: seek 时预取目标帧前20后80
+        preloadAroundPosition(targetFrame);
+    }, [currentTime, isLoaded, isPlaying, fps, totalFrames, drawFrame, preloadAroundPosition]);
 
     // 键盘快捷键：空格播放/暂停
     useEffect(() => {
@@ -291,12 +363,13 @@ const FramePlayer: React.FC<IProps> = ({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isLoaded]);
 
-    // 清理：释放所有 blob URL
+    // 清理：清空缓存引用（不主动 revokeObjectURL，避免 Strict Mode 下撤销正在加载的 URL）
+    // 浏览器会在 Image 对象被 GC 后自动回收 blob URL
     useEffect(() => {
         return () => {
-            blobUrlCacheRef.current.forEach(url => URL.revokeObjectURL(url));
-            blobUrlCacheRef.current.clear();
-            frameCacheRef.current.clear();
+            frameCacheRef.current = new Map();
+            blobUrlCacheRef.current = new Map();
+            pendingRequestsRef.current = new Map();
             EditorModel.videoFrameImage = null;
         };
     }, []);

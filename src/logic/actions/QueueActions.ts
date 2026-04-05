@@ -7,6 +7,7 @@ import { addVideoData, updateVideoMode } from '../../store/video/actionCreators'
 import { ImageRepository } from '../imageRepository/ImageRepository';
 import { ImageDataUtil } from '../../utils/ImageDataUtil';
 import { VideoData } from '../../store/video/types';
+import { EditorModel } from '../../staticModels/EditorModel';
 
 export class QueueActions {
     public static async switchToQueueItem(
@@ -33,6 +34,7 @@ export class QueueActions {
 
             if (targetItem.type === QueueItemType.VIDEO) {
                 const meta = targetItem.extractionMetadata;
+                const hasSessionId = !!EditorModel.videoSessionId;
                 const videoData: VideoData = {
                     id: targetItem.id,
                     fileData: targetItem.file!,
@@ -48,6 +50,7 @@ export class QueueActions {
                     isPlaying: false,
                     frames: new Map(),
                     preExtractedFrames: targetItem.extractedFrames,
+                    sessionId: hasSessionId ? EditorModel.videoSessionId : undefined,
                 };
                 store.dispatch(updateVideoMode(true));
                 store.dispatch(addVideoData(videoData));
@@ -59,6 +62,16 @@ export class QueueActions {
                     store.dispatch(updateImageData(
                         targetItem.extractedFrames.map(f => ImageDataUtil.createImageDataFromFileData(f))
                     ));
+                    store.dispatch(updateActiveImageIndex(0));
+                } else if (hasSessionId && meta) {
+                    // 按需模式：创建空 ImageData 占位（帧数据按需获取）
+                    const placeholders: ImageData[] = [];
+                    for (let i = 0; i < meta.totalFrames; i++) {
+                        placeholders.push(ImageDataUtil.createImageDataFromFileData(
+                            new File([], `frame_${String(i).padStart(6, '0')}.jpg`, { type: 'image/jpeg' })
+                        ));
+                    }
+                    store.dispatch(updateImageData(placeholders));
                     store.dispatch(updateActiveImageIndex(0));
                 }
             } else {

@@ -36,6 +36,7 @@ import {AutoSaveService} from '../../../services/AutoSaveService';
 import {v4 as uuidv4} from 'uuid';
 import {ImageRepository} from '../../../logic/imageRepository/ImageRepository';
 import {FrameExtractorService} from '../../../services/FrameExtractorService';
+import {EditorModel} from '../../../staticModels/EditorModel';
 import {store} from '../../../index';
 import {submitNewNotification, updateNotificationById, deleteNotificationById} from '../../../store/notifications/actionCreators';
 import {NotificationUtil} from '../../../utils/NotificationUtil';
@@ -296,17 +297,36 @@ const EditorContainer: React.FC<IProps> = (
                                 }
                             }
                         );
-                        console.log(`[FFmpeg] 拆帧完成: ${result.totalFrames} 帧`);
                         setVideoProcessing(null);
 
-                        // 将拆出的帧作为视频模式添加到队列（保留视频 UI）
-                        const thumbnail = await generateThumbnail(result.frames[0]);
+                        const isOnDemand = !!result.sessionId;
+                        console.log(`[FFmpeg] 完成: ${isOnDemand ? '按需模式' : '全量模式'}, ${result.totalFrames} 帧`);
+
+                        // 全量模式：初始化全局帧池
+                        if (!isOnDemand) {
+                            EditorModel.videoFrameFiles = [...result.frames];
+                        }
+                        // 按需模式：存 sessionId
+                        if (isOnDemand) {
+                            EditorModel.videoSessionId = result.sessionId!;
+                        }
+
+                        // 生成缩略图（按需模式取第一帧）
+                        let thumbnail: string | undefined;
+                        if (result.frames.length > 0) {
+                            thumbnail = await generateThumbnail(result.frames[0]);
+                        } else if (isOnDemand) {
+                            // 按需模式：取第 1 帧做缩略图
+                            const [firstFrame] = await FrameExtractorService.fetchFrameRange(result.sessionId!, 0, 1);
+                            if (firstFrame) thumbnail = await generateThumbnail(firstFrame);
+                        }
+
                         const item: QueueItem = {
                             id: uuidv4(),
                             name: `${videoFile.name} (${result.totalFrames} 帧 @ ${result.fps}fps)`,
                             type: QueueItemType.VIDEO,
                             file: videoFile,
-                            extractedFrames: result.frames,
+                            extractedFrames: isOnDemand ? undefined : result.frames,
                             extractionMetadata: {
                                 fps: result.fps,
                                 duration: result.duration,
@@ -459,7 +479,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '170px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.8.5</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.8.6</div>
         </>
     };
 

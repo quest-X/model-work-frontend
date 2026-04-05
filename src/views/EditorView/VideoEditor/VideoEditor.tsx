@@ -856,10 +856,11 @@ const VideoEditor: React.FC<IProps> = ({
             <div className="VideoAnnotationSection" style={{ height: videoAndAnnotationHeight }}>
                 {/* 底层：视频播放器 */}
                 <div className="VideoPlayerLayer">
-                    {activeVideo.preExtractedFrames ? (
+                    {(activeVideo.preExtractedFrames || activeVideo.sessionId) ? (
                         <FramePlayer
                             language={language}
-                            frames={activeVideo.preExtractedFrames}
+                            frames={activeVideo.preExtractedFrames || []}
+                            sessionId={activeVideo.sessionId}
                             fps={activeVideo.fps}
                             duration={activeVideo.duration}
                             totalFrames={activeVideo.totalFrames}

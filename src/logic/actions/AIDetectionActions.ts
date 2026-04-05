@@ -14,6 +14,7 @@ import {RectUtil} from "../../utils/RectUtil";
 import {IRect} from "../../interfaces/IRect";
 import {AISelector} from "../../store/selectors/AISelector";
 import {LanguageConfig} from "../../data/LanguageConfig";
+import {FrameExtractorService} from "../../services/FrameExtractorService";
 import {EditorActions} from "./EditorActions";
 import {EditorModel} from "../../staticModels/EditorModel";
 
@@ -236,9 +237,10 @@ export class AIDetectionActions {
 
         // ======== 视频模式 ========
         const preFrames = activeVideo?.preExtractedFrames;
+        const sessionId = activeVideo?.sessionId || EditorModel.videoSessionId;
 
-        if (isVideo && (preFrames || EditorModel.videoElement)) {
-            // 视频模式：检测 ALL 帧（不依赖 isSelected 标志，直接用 store 中的完整列表）
+        if (isVideo && (preFrames || sessionId || EditorModel.videoElement)) {
+            // 视频模式：检测 ALL 帧
             const frameQueue: { frameIdx: number; imageData: ImageData }[] = [];
             for (let frameIdx = 0; frameIdx < allImagesData.length; frameIdx++) {
                 frameQueue.push({ frameIdx, imageData: allImagesData[frameIdx] });
@@ -256,12 +258,34 @@ export class AIDetectionActions {
             let capturedBlobs: Array<Blob | null>;
 
             if (preFrames) {
-                // === 预拆帧模式：直接使用帧 File 作为 Blob（跳过 Phase 1 捕获） ===
-                console.log('[Capture] 预拆帧模式：跳过 Phase 1，直接使用帧数据', { captureTotal });
+                // === 全量模式：直接使用帧 File 作为 Blob ===
+                console.log('[Capture] 全量模式：使用预拆帧数据', { captureTotal });
                 notify(1, `使用预拆帧数据 (${captureTotal} 帧)`, '跳过捕获阶段...', true);
                 capturedBlobs = frameQueue.map(({ frameIdx }) =>
                     frameIdx < preFrames.length ? (preFrames[frameIdx] as Blob) : null
                 );
+            } else if (sessionId) {
+                // === 按需模式：逐批从后端获取帧 ===
+                console.log('[Capture] 按需模式：从后端逐批获取帧', { captureTotal, sessionId });
+                capturedBlobs = new Array(captureTotal).fill(null);
+                const FETCH_BATCH = 10;
+                for (let i = 0; i < captureTotal; i += FETCH_BATCH) {
+                    const count = Math.min(FETCH_BATCH, captureTotal - i);
+                    const pct = Math.round((i / captureTotal) * 33);
+                    notify(1,
+                        `${texts.aiInference.steps.captureFrame} (${i + count}/${captureTotal})`,
+                        `${pct}%`
+                    );
+                    try {
+                        const batchFrames = await FrameExtractorService.fetchFrameRange(sessionId, i, count);
+                        for (let j = 0; j < batchFrames.length; j++) {
+                            capturedBlobs[i + j] = batchFrames[j] as Blob;
+                        }
+                    } catch (err) {
+                        console.warn(`[Capture] 按需获取帧 ${i}-${i + count} 失败:`, err);
+                    }
+                    if (i % 20 === 0 && i > 0) await this.yieldToUI();
+                }
             } else {
                 // === 回退模式：Phase 1 顺序捕获 ===
                 const video = EditorModel.videoElement!;

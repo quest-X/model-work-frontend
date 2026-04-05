@@ -16,6 +16,19 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.8.6',
+        date: '2026-04-05',
+        changes: [
+            { zh: '视频加载架构升级：fast_ffmpeg_mode（默认）+ raw_browser_mode（回退）双模式', en: 'Video loading architecture: fast_ffmpeg_mode (default) + raw_browser_mode (fallback)' },
+            { zh: '大视频（>10K 帧）支持按需取帧，一次上传 + 任意 seek', en: 'Large video (>10K frames) on-demand loading: upload once + seek anywhere' },
+            { zh: '3 层智能预取：首屏 P0(0-19) → 播放缓冲 P1(20-499) → 跳帧窗口 P2(-20/+80)', en: '3-tier prefetch: P0 thumbnails(0-19) → P1 playback buffer(20-499) → P2 seek window(-20/+80)' },
+            { zh: 'LRU 缓存控制内存（上限 300 帧），自动驱逐远离播放指针的旧帧', en: 'LRU cache memory control (300 frame cap), auto-evict frames far from playhead' },
+            { zh: '后端新增 POST /upload-video + GET /frames/{id} API', en: 'Backend: new POST /upload-video + GET /frames/{id} API' },
+            { zh: '修复中文文件名导致 HTTP header latin-1 编码失败', en: 'Fix Chinese filename causing HTTP header latin-1 encoding failure' },
+            { zh: '大文件流式上传到磁盘（不占后端内存）', en: 'Large file streaming upload to disk (no backend memory usage)' },
+        ]
+    },
+    {
         version: '1.8.5',
         date: '2026-04-05',
         changes: [
