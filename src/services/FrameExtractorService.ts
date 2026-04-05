@@ -21,7 +21,7 @@ export interface FrameExtractionResult {
 export type ProgressCallback = (phase: string, current: number, total: number) => void;
 
 const API_BASE = 'http://localhost:8000';
-const FULL_LOAD_THRESHOLD = 10000; // ≤10K帧全量加载，>10K帧按需加载
+const LARGE_VIDEO_SIZE_MB = 1024;  // >1GB 按需加载，≤1GB 全量加载
 
 export class FrameExtractorService {
 
@@ -47,10 +47,11 @@ export class FrameExtractorService {
 
         console.log(`[FrameExtractor] 上传完成, 会话=${sessionId}, 总帧数=${metadata.totalFrames}`);
 
-        // 2. 根据帧数决定模式
-        if (metadata.totalFrames <= FULL_LOAD_THRESHOLD) {
+        // 2. 根据文件大小决定模式（≤1GB 全量，>1GB 按需）
+        const fileSizeMB = videoFile.size / 1024 / 1024;
+        if (fileSizeMB <= LARGE_VIDEO_SIZE_MB) {
             // 小视频：全量拆帧
-            console.log(`[FrameExtractor] 小视频模式: 全量加载 ${metadata.totalFrames} 帧`);
+            console.log(`[FrameExtractor] 小视频模式: 全量加载 ${metadata.totalFrames} 帧 (${fileSizeMB.toFixed(0)}MB)`);
             onProgress?.('解压帧', 0, metadata.totalFrames);
             const frames = await this.fetchFrameRange(sessionId, 0, metadata.totalFrames, onProgress);
 

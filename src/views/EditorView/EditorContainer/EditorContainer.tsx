@@ -299,6 +299,7 @@ const EditorContainer: React.FC<IProps> = (
                         );
                         const isOnDemand = !!result.sessionId;
                         console.log(`[FFmpeg] 完成: ${isOnDemand ? '按需模式' : '全量模式'}, ${result.totalFrames} 帧`);
+                        setVideoProcessing({ phase: '初始化视频...', progress: 100, fileName: videoFile.name });
 
                         // 全量模式：初始化全局帧池
                         if (!isOnDemand) {
@@ -309,15 +310,12 @@ const EditorContainer: React.FC<IProps> = (
                             EditorModel.videoSessionId = result.sessionId!;
                         }
 
-                        // 生成缩略图（按需模式取第一帧）
+                        // 生成缩略图（按需模式跳过，FramePlayer 初始化时会取帧0）
                         let thumbnail: string | undefined;
                         if (result.frames.length > 0) {
                             thumbnail = await generateThumbnail(result.frames[0]);
-                        } else if (isOnDemand) {
-                            // 按需模式：取第 1 帧做缩略图
-                            const [firstFrame] = await FrameExtractorService.fetchFrameRange(result.sessionId!, 0, 1);
-                            if (firstFrame) thumbnail = await generateThumbnail(firstFrame);
                         }
+                        // 按需模式不在这里取帧0，避免重复请求
 
                         const item: QueueItem = {
                             id: uuidv4(),
@@ -478,7 +476,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '170px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.8.7</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.8.8</div>
         </>
     };
 

@@ -16,6 +16,20 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.8.8',
+        date: '2026-04-05',
+        changes: [
+            { zh: '大视频判定改为文件大小（>1GB 按需加载），不再依赖帧数阈值', en: 'Large video detection based on file size (>1GB on-demand), no longer frame count threshold' },
+            { zh: '4 层预加载策略（P0/P1/P2/P3）：播放缓冲 + 跳帧窗口 + 常备化预加载', en: '4-tier preload strategy (P0/P1/P2/P3): playback buffer + seek window + background preload' },
+            { zh: '播放丢帧优化：缓存命中同步绘制，未命中异步加载不阻塞播放节奏', en: 'Playback frame-skip: sync draw on cache hit, async load on miss without blocking playback' },
+            { zh: '消除帧0重复请求，缩略图生成与预加载共享全局帧池', en: 'Eliminate frame 0 duplicate fetch, thumbnail generation shares global frame pool with preloader' },
+            { zh: '帧0加载完立即允许播放，P0/P1/P3 全部后台运行', en: 'Play enabled immediately after frame 0, P0/P1/P3 all run in background' },
+            { zh: '上传完成后显示"初始化视频..."状态，消除空白等待期', en: 'Show "Initializing video..." status after upload, eliminate blank waiting period' },
+            { zh: 'LRU 缓存上限扩大到 100000 帧 + 内存感知驱逐（堆内存 >80% 时触发）', en: 'LRU cache expanded to 100K frames + memory-aware eviction (triggered at >80% heap usage)' },
+            { zh: '后端会话自动清理：1 小时过期 + 每 10 分钟扫描清理临时文件', en: 'Backend session auto-cleanup: 1h TTL + 10min scan to clean temp files' },
+        ]
+    },
+    {
         version: '1.8.7',
         date: '2026-04-05',
         changes: [
