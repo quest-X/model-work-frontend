@@ -66,7 +66,6 @@ export class FrameExtractorService {
         } else {
             // 大视频：按需模式，不预加载帧
             console.log(`[FrameExtractor] 大视频模式: 按需取帧, sessionId=${sessionId}`);
-            onProgress?.('完成', metadata.totalFrames, metadata.totalFrames);
 
             return {
                 frames: [],  // 不预加载

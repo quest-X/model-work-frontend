@@ -19,8 +19,6 @@ import { ImageDataUtil } from '../../../utils/ImageDataUtil';
 import { ImageRepository } from '../../../logic/imageRepository/ImageRepository';
 import { EditorActions } from '../../../logic/actions/EditorActions';
 import { EditorModel } from '../../../staticModels/EditorModel';
-import { AutoSaveService } from '../../../services/AutoSaveService';
-import { FrameExtractorService } from '../../../services/FrameExtractorService';
 import { Language } from '../../../data/LanguageConfig';
 
 interface IProps {
@@ -54,15 +52,10 @@ const VideoEditor: React.FC<IProps> = ({
 }) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [videoUrl, setVideoUrl] = useState<string>('');
-    const [isGeneratingThumbnails, setIsGeneratingThumbnails] = useState(false);
     const [loadedThumbnailCount, setLoadedThumbnailCount] = useState(0);
     const [totalFrameCount, setTotalFrameCount] = useState(0);
-    const [isMuted, setIsMuted] = useState<boolean>(true); // 静音状态，默认静音
-    const [processingProgress, setProcessingProgress] = useState(0); // 视频处理进度 (0-100)
-    const tempVideoRef = React.useRef<HTMLVideoElement>(null);
-    const thumbnailCanvasRef = React.useRef<HTMLCanvasElement>(null);
-    const isGeneratingRef = React.useRef(false);
-    const generationIdRef = React.useRef(0); // cancellation token for thumbnail generation
+    const [isMuted, setIsMuted] = useState<boolean>(true);
+    const generationIdRef = React.useRef(0);
 
     // 使用 ref 存储最新的 imagesData，避免在 useCallback 依赖中包含它
     // 重要：必须在渲染期间同步更新（不能用 useEffect），
@@ -100,15 +93,7 @@ const VideoEditor: React.FC<IProps> = ({
                 URL.revokeObjectURL(url);
                 EditorModel.videoFrameImage = null;
                 EditorModel.playbackImageData = null;
-                generationIdRef.current++; // 取消清理时仍在运行的生成
-                if (tempVideoRef.current) {
-                    tempVideoRef.current.src = '';
-                    (tempVideoRef as React.MutableRefObject<HTMLVideoElement | null>).current = null;
-                }
-                if (thumbnailCanvasRef.current) {
-                    (thumbnailCanvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = null;
-                }
-                isGeneratingRef.current = false;
+                generationIdRef.current++;
             };
         }
         // 有预拆帧时：清理 effect
@@ -125,7 +110,6 @@ const VideoEditor: React.FC<IProps> = ({
                 EditorModel.videoFrameImage = null;
                 EditorModel.playbackImageData = null;
                 generationIdRef.current++;
-                isGeneratingRef.current = false;
             };
         }
         return undefined;
@@ -189,303 +173,41 @@ const VideoEditor: React.FC<IProps> = ({
         }
     }, [activeImageIndex, activeVideo, imagesData.length, isPlaying, updateVideoCurrentFrame]);
 
-    // 懒加载更多缩略图（当浏览到接近已加载的末尾时）
+    // 缩略图缓冲区：ImageData 未就绪时暂存，就绪后刷入
+    const pendingThumbnailsRef = React.useRef<Map<number, HTMLImageElement>>(new Map());
+
+    // FramePlayer 帧完整加载回调：存储缩略图 + 更新 ImageData
+    const applyThumbnail = useCallback((frameIdx: number, thumbnailImage: HTMLImageElement): boolean => {
+        const currentImagesData = imagesDataRef.current;
+        if (frameIdx >= currentImagesData.length) return false;
+        const imageData = currentImagesData[frameIdx];
+        if (!imageData || imageData.loadStatus) return true; // 已加载，视为成功
+        ImageRepository.storeImage(imageData.id, thumbnailImage);
+        const updated = { ...imageData, loadStatus: true };
+        currentImagesData[frameIdx] = updated;
+        updateImageDataById(imageData.id, updated);
+        setLoadedThumbnailCount(prev => Math.max(prev, frameIdx + 1));
+        return true;
+    }, [updateImageDataById]);
+
+    const handleFrameReady = useCallback((frameIdx: number, thumbnailImage: HTMLImageElement) => {
+        if (!applyThumbnail(frameIdx, thumbnailImage)) {
+            // ImageData 还没创建，缓冲起来
+            pendingThumbnailsRef.current.set(frameIdx, thumbnailImage);
+        }
+    }, [applyThumbnail]);
+
+    // ImageData 就绪后，刷入缓冲区
     useEffect(() => {
-        if (!activeVideo || imagesData.length === 0 || loadedThumbnailCount >= totalFrameCount) {
-            return;
+        const pending = pendingThumbnailsRef.current;
+        if (imagesData.length === 0 || pending.size === 0) return;
+        for (const [frameIdx, thumb] of pending) {
+            applyThumbnail(frameIdx, thumb);
         }
+        console.log(`[VideoEditor] 刷入 ${pending.size} 个缓冲缩略图`);
+        pending.clear();
+    }, [imagesData.length, applyThumbnail]);
 
-        // 如果视频正在播放，暂停懒加载以避免干扰
-        if (isPlaying) {
-            return;
-        }
-
-        // 情况1: 用户点击/浏览到了还未加载缩略图的帧，立即加载该区域
-        if (activeImageIndex >= loadedThumbnailCount && !isGeneratingRef.current) {
-            const batchSize = 30; // 加载包含当前帧的一批
-            const startFrame = loadedThumbnailCount;
-            const endFrame = Math.min(activeImageIndex + batchSize, totalFrameCount);
-            
-            generateThumbnailsInRangeRef.current?.(
-                startFrame,
-                endFrame,
-                imagesData,
-                activeVideo.fps,
-                activeVideo.videoSize
-            );
-        }
-        // 情况2: 用户接近已加载的末尾，预加载下一批
-        else if (activeImageIndex >= loadedThumbnailCount - 10 && !isGeneratingRef.current) {
-            const batchSize = 20; // 每次预加载20帧
-            const nextEndFrame = Math.min(loadedThumbnailCount + batchSize, totalFrameCount);
-            
-            generateThumbnailsInRangeRef.current?.(
-                loadedThumbnailCount,
-                nextEndFrame,
-                imagesData,
-                activeVideo.fps,
-                activeVideo.videoSize
-            );
-        }
-    }, [activeImageIndex, loadedThumbnailCount, totalFrameCount, activeVideo, imagesData, isPlaying]);
-
-    // 生成指定范围的缩略图 - 使用 useRef 存储函数以避免循环依赖
-    const generateThumbnailsInRangeRef = React.useRef<
-        (startFrame: number, endFrame: number, frameImageDataArray: ImageData[], fps: number, videoSize: ISize) => Promise<void>
-    >();
-
-    generateThumbnailsInRangeRef.current = async (
-        startFrame: number,
-        endFrame: number,
-        frameImageDataArray: ImageData[],
-        fps: number,
-        videoSize: ISize
-    ) => {
-        if (isGeneratingRef.current) return;
-        if (isPlaying) return;
-
-        isGeneratingRef.current = true;
-        const currentGenerationId = generationIdRef.current;
-
-        const thumbnailSize = 150;
-
-        // 创建或获取缩略图画布
-        let thumbnailCanvas = thumbnailCanvasRef.current;
-        if (!thumbnailCanvas) {
-            thumbnailCanvas = document.createElement('canvas');
-            thumbnailCanvas.width = thumbnailSize;
-            thumbnailCanvas.height = thumbnailSize;
-            thumbnailCanvasRef.current = thumbnailCanvas;
-        }
-
-        // ========== 预拆帧模式：直接从 File 生成缩略图（无需 video seek）==========
-        if (activeVideo?.preExtractedFrames) {
-            const frames = activeVideo.preExtractedFrames;
-            const thumbnailCtx = thumbnailCanvas.getContext('2d');
-            if (!thumbnailCtx) { isGeneratingRef.current = false; return; }
-
-            const actualEnd = Math.min(endFrame, frameImageDataArray.length, frames.length);
-
-            for (let i = startFrame; i < actualEnd; i++) {
-                if (generationIdRef.current !== currentGenerationId) {
-                    isGeneratingRef.current = false;
-                    return;
-                }
-
-                try {
-                    const bitmap = await createImageBitmap(frames[i]);
-
-                    const scale = Math.min(thumbnailSize / bitmap.width, thumbnailSize / bitmap.height);
-                    const scaledWidth = bitmap.width * scale;
-                    const scaledHeight = bitmap.height * scale;
-                    const offsetX = (thumbnailSize - scaledWidth) / 2;
-                    const offsetY = (thumbnailSize - scaledHeight) / 2;
-
-                    thumbnailCtx.fillStyle = '#000';
-                    thumbnailCtx.fillRect(0, 0, thumbnailSize, thumbnailSize);
-                    thumbnailCtx.drawImage(bitmap, offsetX, offsetY, scaledWidth, scaledHeight);
-                    bitmap.close();
-
-                    const thumbnailDataUrl = thumbnailCanvas.toDataURL('image/jpeg', 0.5);
-
-                    await new Promise<void>((resolve) => {
-                        const thumbnailImage = new Image();
-                        thumbnailImage.onload = () => {
-                            ImageRepository.storeImage(frameImageDataArray[i].id, thumbnailImage);
-                            const updatedImageData = { ...frameImageDataArray[i], loadStatus: true };
-                            frameImageDataArray[i] = updatedImageData;
-                            updateImageDataById(updatedImageData.id, updatedImageData);
-                            resolve();
-                        };
-                        thumbnailImage.src = thumbnailDataUrl;
-                    });
-
-                    setLoadedThumbnailCount(i + 1);
-                    if (startFrame === 0) {
-                        setProcessingProgress(Math.round(((i + 1) / actualEnd) * 100));
-                    }
-                    // 每20帧让出主线程（比 video seek 快很多，减少 yield 频率）
-                    if ((i - startFrame) % 20 === 0 && i > startFrame) {
-                        await new Promise(resolve => setTimeout(resolve, 0));
-                    }
-                } catch (error) {
-                    console.error(`[VideoEditor] 预拆帧缩略图生成失败 帧 ${i}:`, error);
-                }
-            }
-
-            isGeneratingRef.current = false;
-            return;
-        }
-
-        // ========== 按需取帧模式：从后端批量获取帧生成缩略图 ==========
-        if (activeVideoRef.current?.sessionId) {
-            const sid = activeVideoRef.current.sessionId;
-            const thumbnailCtx = thumbnailCanvas.getContext('2d');
-            if (!thumbnailCtx) { isGeneratingRef.current = false; return; }
-
-            const actualEnd = Math.min(endFrame, frameImageDataArray.length);
-            const BATCH = 30;
-
-            for (let batchStart = startFrame; batchStart < actualEnd; batchStart += BATCH) {
-                if (generationIdRef.current !== currentGenerationId) {
-                    isGeneratingRef.current = false;
-                    return;
-                }
-
-                const batchCount = Math.min(BATCH, actualEnd - batchStart);
-                try {
-                    const files = await FrameExtractorService.fetchFrameRange(sid, batchStart, batchCount);
-
-                    for (let j = 0; j < files.length; j++) {
-                        const idx = batchStart + j;
-                        if (idx >= frameImageDataArray.length) break;
-
-                        const bitmap = await createImageBitmap(files[j]);
-                        const scale = Math.min(thumbnailSize / bitmap.width, thumbnailSize / bitmap.height);
-                        const scaledWidth = bitmap.width * scale;
-                        const scaledHeight = bitmap.height * scale;
-                        const offsetX = (thumbnailSize - scaledWidth) / 2;
-                        const offsetY = (thumbnailSize - scaledHeight) / 2;
-
-                        thumbnailCtx.fillStyle = '#000';
-                        thumbnailCtx.fillRect(0, 0, thumbnailSize, thumbnailSize);
-                        thumbnailCtx.drawImage(bitmap, offsetX, offsetY, scaledWidth, scaledHeight);
-                        bitmap.close();
-
-                        const thumbnailDataUrl = thumbnailCanvas.toDataURL('image/jpeg', 0.5);
-                        await new Promise<void>((resolve) => {
-                            const thumbnailImage = new Image();
-                            thumbnailImage.onload = () => {
-                                ImageRepository.storeImage(frameImageDataArray[idx].id, thumbnailImage);
-                                const updatedImageData = { ...frameImageDataArray[idx], loadStatus: true };
-                                frameImageDataArray[idx] = updatedImageData;
-                                updateImageDataById(updatedImageData.id, updatedImageData);
-                                resolve();
-                            };
-                            thumbnailImage.src = thumbnailDataUrl;
-                        });
-
-                        // 同时存入全局帧池供 FramePlayer 使用
-                        if (EditorModel.videoFrameFiles) {
-                            EditorModel.videoFrameFiles[idx] = files[j];
-                        }
-
-                        setLoadedThumbnailCount(idx + 1);
-                    }
-
-                    if (startFrame === 0) {
-                        setProcessingProgress(Math.round(((Math.min(batchStart + batchCount, actualEnd)) / actualEnd) * 100));
-                    }
-                } catch (error) {
-                    console.error(`[VideoEditor] 按需取帧缩略图生成失败 batch ${batchStart}:`, error);
-                }
-            }
-
-            isGeneratingRef.current = false;
-            return;
-        }
-
-        // ========== 回退模式：使用 video seek 生成缩略图 ==========
-        const thumbnailCtx = thumbnailCanvas.getContext('2d');
-
-            // 创建或获取临时视频元素（使用独立的video element避免与主播放器冲突）
-            let tempVideo = tempVideoRef.current;
-            if (!tempVideo) {
-                tempVideo = document.createElement('video');
-                tempVideo.src = videoUrl;
-                tempVideo.muted = true;
-                tempVideo.preload = 'auto';
-                tempVideo.playsInline = true; // 避免全屏播放
-                tempVideoRef.current = tempVideo;
-
-                // 等待视频可以播放
-                await new Promise<void>((resolve) => {
-                    tempVideo.onloadedmetadata = () => {
-                        resolve();
-                    };
-                });
-            }
-
-            const actualEnd = Math.min(endFrame, frameImageDataArray.length);
-            const totalToGenerate = actualEnd - startFrame;
-            const startTime = performance.now();
-
-            for (let i = startFrame; i < actualEnd; i++) {
-                try {
-                    // 检查是否被取消（视频切换）
-                    if (generationIdRef.current !== currentGenerationId) {
-                        isGeneratingRef.current = false;
-                        return;
-                    }
-                    const time = i / fps;
-                    tempVideo.currentTime = time;
-
-                    // 等待视频跳转完成
-                    await new Promise<void>((resolve) => {
-                        tempVideo.onseeked = () => resolve();
-                    });
-
-                    // 在缩略图画布上绘制当前帧
-                    const scale = Math.min(
-                        thumbnailSize / videoSize.width,
-                        thumbnailSize / videoSize.height
-                    );
-                    const scaledWidth = videoSize.width * scale;
-                    const scaledHeight = videoSize.height * scale;
-                    const offsetX = (thumbnailSize - scaledWidth) / 2;
-                    const offsetY = (thumbnailSize - scaledHeight) / 2;
-
-                    thumbnailCtx.fillStyle = '#000';
-                    thumbnailCtx.fillRect(0, 0, thumbnailSize, thumbnailSize);
-                    thumbnailCtx.drawImage(
-                        tempVideo,
-                        offsetX,
-                        offsetY,
-                        scaledWidth,
-                        scaledHeight
-                    );
-
-                    // 将画布转换为图像 - 为每一帧创建独立的 Image 对象
-                    // 使用较低的质量 (0.5) 以加快生成速度，减少内存占用
-                    const thumbnailDataUrl = thumbnailCanvas.toDataURL('image/jpeg', 0.5);
-
-                    // 使用 Promise 确保图像完全加载后再存储
-                    await new Promise<void>((resolve) => {
-                        const thumbnailImage = new Image();
-                        thumbnailImage.onload = () => {
-                            // 图像加载完成后再存储到 Repository
-                            ImageRepository.storeImage(frameImageDataArray[i].id, thumbnailImage);
-
-                            // 更新 imageData 的 loadStatus 并触发 Redux 更新，让 ImagePreview 组件知道图像已就绪
-                            const updatedImageData = { ...frameImageDataArray[i], loadStatus: true };
-                            frameImageDataArray[i] = updatedImageData;
-                            updateImageDataById(updatedImageData.id, updatedImageData);
-
-                            resolve();
-                        };
-                        // 设置 src 会触发加载
-                        thumbnailImage.src = thumbnailDataUrl;
-                    });
-
-                    setLoadedThumbnailCount(i + 1);
-
-                    // 更新进度（只在初始批次时更新）
-                    if (startFrame === 0) {
-                        const progress = Math.round(((i + 1) / actualEnd) * 100);
-                        setProcessingProgress(progress);
-                    }
-
-                    // 每10帧让出主线程，避免阻塞UI（减少频率以加快速度）
-                    if ((i - startFrame) % 10 === 0 && i > startFrame) {
-                        await new Promise(resolve => setTimeout(resolve, 0));
-                    }
-                } catch (error) {
-                    console.error(`[VideoEditor] 6. 生成第 ${i} 帧缩略图失败:`, error);
-                }
-            }
-
-            isGeneratingRef.current = false;
-    };
 
     // 处理第一帧绘制完成 - 生成缩略图 + 全分辨率图像
     const handleFirstFrameDrawn = useCallback(
@@ -569,7 +291,7 @@ const VideoEditor: React.FC<IProps> = ({
                 updateImageDataById(updatedImageData.id, updatedImageData);
             }
         },
-        [activeVideo, imagesData, updateImageDataById]
+        [activeVideo, updateImageDataById]
     );
 
     // 处理视频元数据加载
@@ -614,14 +336,12 @@ const VideoEditor: React.FC<IProps> = ({
 
                 if (needsRegeneration) {
                     const hasExistingData = currentImagesData.length === frames;
-                    console.log(`[VideoEditor] ${hasExistingData ? '10. 缓存无效' : '10. 首次加载'}，共 ${frames} 帧，开始生成缩略图...`);
+                    console.log(`[VideoEditor] ${hasExistingData ? '缓存无效' : '首次加载'}，共 ${frames} 帧`);
                     setTotalFrameCount(frames);
-                    setIsGeneratingThumbnails(true);
 
                     let frameImageDataArray: ImageData[] = [];
 
                     if (hasExistingData) {
-                        console.log(`[VideoEditor] 11. 保留已有标注数据，重置加载状态...`);
                         frameImageDataArray = currentImagesData.map(img => ({
                             ...img,
                             loadStatus: false
@@ -630,21 +350,18 @@ const VideoEditor: React.FC<IProps> = ({
                             updateImageDataById(img.id, img);
                         });
                     } else {
-                        console.log(`[VideoEditor] 11. 开始创建 ${frames} 个帧的 ImageData 对象...`);
                         for (let i = 0; i < frames; i++) {
                             const frameImageData = ImageDataUtil.createImageDataFromFileData(activeVideo.fileData);
                             frameImageData.loadStatus = false;
                             if (i === 0) {
                                 frameImageData.isSelected = true;
-                                console.log('[VideoEditor] 12. 第一帧的 isSelected 已设置为 true');
                             }
                             frameImageDataArray.push(frameImageData);
                         }
                         addImageData(frameImageDataArray);
                     }
 
-                    console.log(`[VideoEditor] 13. ImageData 准备完成，数组长度: ${frameImageDataArray.length}`);
-                    console.log('[VideoEditor] 14. 验证帧顺序: 前5帧ID:', frameImageDataArray.slice(0, 5).map((d, i) => `[${i}]:${d.id.substring(0, 8)}`));
+                    console.log(`[VideoEditor] ImageData 准备完成: ${frameImageDataArray.length} 帧`);
 
                     if (frameImageDataArray.length > 0) {
                         const firstFrameImageData = frameImageDataArray[0];
@@ -652,40 +369,21 @@ const VideoEditor: React.FC<IProps> = ({
                         if (!hasExistingData && !firstFrameImageData.isSelected) {
                             const updatedFirstFrame = { ...firstFrameImageData, isSelected: true };
                             updateImageDataById(firstFrameImageData.id, updatedFirstFrame);
-                            console.log('[VideoEditor] 15. 第一帧的 isSelected 已设置为 true');
                         }
 
                         setTimeout(() => {
                             updateVideoCurrentFrame(activeVideo.id, 0, 0);
-                            console.log('[VideoEditor] 16. 视频当前帧已设置为第0帧');
                             updateActiveImageIndex(0);
-                            console.log('[VideoEditor] 17. 活动图像索引已设置为0 - 左侧列表已选中第一帧');
                         }, 0);
                     }
 
-                    let initialLoadCount: number;
-                    if (frames <= 300) {
-                        initialLoadCount = frames;
-                    } else if (frames <= 1800) {
-                        initialLoadCount = Math.min(150, frames);
-                    } else {
-                        initialLoadCount = Math.min(300, frames);
-                    }
-
-                    console.log(`\n[VideoEditor] 18. 视频总帧数: ${frames}, 初始加载策略: 加载前 ${initialLoadCount} 帧`);
-                    console.log(`[VideoEditor] 19. 开始生成初始缩略图 (0 -> ${initialLoadCount-1})...`);
-
-                    await generateThumbnailsInRangeRef.current?.(0, initialLoadCount, frameImageDataArray, fps, videoSize);
-
-                    setIsGeneratingThumbnails(false);
-                    setProcessingProgress(0);
-                    console.log(`[VideoEditor] 20. 初始缩略图生成完成 (${initialLoadCount}/${frames} 帧)\n`);
+                    // 缩略图由 FramePlayer 的 onFrameReady 统一生成，此处不再独立启动
                 }
             } finally {
                 metadataLoadedLockRef.current = false;
             }
         },
-        [activeVideo, updateVideoMetadata, addImageData, videoUrl, updateVideoCurrentFrame, updateActiveImageIndex, updateImageDataById]
+        [activeVideo, updateVideoMetadata, addImageData, updateVideoCurrentFrame, updateActiveImageIndex, updateImageDataById]
     );
 
     // 处理时间轴拖动
@@ -716,36 +414,12 @@ const VideoEditor: React.FC<IProps> = ({
     // 处理播放/暂停
     const handlePlayPause = useCallback(async () => {
         if (!activeVideo) return;
-        // 如果当前不在播放（包括视频结束后），下次一定是播放
         const newPlayingStatus = !isPlaying;
-        
-        // 如果开始播放，先检查是否有足够的缓冲帧（仅 VideoPlayer 模式需要）
-        if (newPlayingStatus && !isGeneratingRef.current && !activeVideo.preExtractedFrames) {
-            const currentFrame = activeVideo.currentFrame;
-            const bufferSize = 60; // 需要2秒缓冲（假设30fps）
-            const requiredFrame = Math.min(currentFrame + bufferSize, totalFrameCount);
 
-            // 如果缓冲不足，先加载必要的帧
-            if (loadedThumbnailCount < requiredFrame) {
-                console.log(`[VideoEditor] 播放缓冲: 当前加载到帧 ${loadedThumbnailCount}, 需要加载到帧 ${requiredFrame}`);
-
-                // 快速加载缓冲区
-                await generateThumbnailsInRangeRef.current?.(
-                    loadedThumbnailCount,
-                    requiredFrame,
-                    imagesData,
-                    activeVideo.fps,
-                    activeVideo.videoSize
-                );
-            }
-        }
-        
         setIsPlaying(newPlayingStatus);
         updateVideoPlayingStatus(activeVideo.id, newPlayingStatus);
         
         if (newPlayingStatus) {
-            // 如果开始播放，确保停止缩略图生成并重置跳帧计数器
-            isGeneratingRef.current = false;
             frameSkipCountRef.current = 0;
             lastFrameRef.current = -1;
         } else {
@@ -757,7 +431,7 @@ const VideoEditor: React.FC<IProps> = ({
                 updateActiveImageIndex(activeVideo.currentFrame);
             }
         }
-    }, [activeVideo, isPlaying, updateVideoPlayingStatus, loadedThumbnailCount, totalFrameCount, imagesData, activeImageIndex, updateActiveImageIndex]);
+    }, [activeVideo, isPlaying, updateVideoPlayingStatus, activeImageIndex, updateActiveImageIndex]);
 
     // 处理静音切换
     const handleToggleMute = useCallback(() => {
@@ -913,6 +587,7 @@ const VideoEditor: React.FC<IProps> = ({
                             onLoadedMetadata={handleVideoMetadataLoaded}
                             onFirstFrameDrawn={handleFirstFrameDrawn}
                             onPlayPause={handlePlayPause}
+                            onFrameReady={handleFrameReady}
                         />
                     ) : (
                         <VideoPlayer
@@ -941,7 +616,7 @@ const VideoEditor: React.FC<IProps> = ({
                             onPlayPause={handlePlayPause}
                             isPlaying={isPlaying}
                             defaultMuted={isMuted}
-                            processingProgress={processingProgress}
+                            processingProgress={0}
                         />
                     )}
                 </div>

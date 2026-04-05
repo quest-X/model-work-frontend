@@ -19,14 +19,13 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
         version: '1.8.8',
         date: '2026-04-05',
         changes: [
-            { zh: '大视频判定改为文件大小（>1GB 按需加载），不再依赖帧数阈值', en: 'Large video detection based on file size (>1GB on-demand), no longer frame count threshold' },
-            { zh: '4 层预加载策略（P0/P1/P2/P3）：播放缓冲 + 跳帧窗口 + 常备化预加载', en: '4-tier preload strategy (P0/P1/P2/P3): playback buffer + seek window + background preload' },
-            { zh: '播放丢帧优化：缓存命中同步绘制，未命中异步加载不阻塞播放节奏', en: 'Playback frame-skip: sync draw on cache hit, async load on miss without blocking playback' },
-            { zh: '消除帧0重复请求，缩略图生成与预加载共享全局帧池', en: 'Eliminate frame 0 duplicate fetch, thumbnail generation shares global frame pool with preloader' },
-            { zh: '帧0加载完立即允许播放，P0/P1/P3 全部后台运行', en: 'Play enabled immediately after frame 0, P0/P1/P3 all run in background' },
-            { zh: '上传完成后显示"初始化视频..."状态，消除空白等待期', en: 'Show "Initializing video..." status after upload, eliminate blank waiting period' },
-            { zh: 'LRU 缓存上限扩大到 100000 帧 + 内存感知驱逐（堆内存 >80% 时触发）', en: 'LRU cache expanded to 100K frames + memory-aware eviction (triggered at >80% heap usage)' },
-            { zh: '后端会话自动清理：1 小时过期 + 每 10 分钟扫描清理临时文件', en: 'Backend session auto-cleanup: 1h TTL + 10min scan to clean temp files' },
+            { zh: '帧加载架构重写：available_frames 滑动窗口（前方 500 帧保障 + 2000 帧缓存上限 + 自动淘汰旧帧）', en: 'Frame loading rewrite: available_frames sliding window (500 ahead guarantee + 2000 cache cap + auto-evict old frames)' },
+            { zh: '帧完整加载统一：取帧 + 解码 Image + 生成缩略图一体化，不再分开抢资源', en: 'Unified frame loading: fetch + decode + thumbnail in one pass, no more resource contention' },
+            { zh: '初始加载 500 帧完成后才允许播放，显示"解析中 X%"进度', en: 'Playback enabled only after initial 500 frames loaded, with "Parsing X%" progress' },
+            { zh: '播放时后台加载暂停，全部资源给播放保证流畅', en: 'Background loading paused during playback, all resources dedicated to smooth playback' },
+            { zh: '跳播快速缓存 500 帧图片（不生成缩略图），优先保证播放连续', en: 'Seek preloads 500 frame images (skip thumbnails) for immediate playback continuity' },
+            { zh: '去掉 EditorContainer 预解码 100 帧，上传完直接交给 FramePlayer 统一处理', en: 'Removed EditorContainer 100-frame pre-decode, upload hands off to FramePlayer directly' },
+            { zh: '后端会话自动清理：新上传时清理所有旧会话临时文件', en: 'Backend session auto-cleanup: all old session temp files cleaned on new upload' },
         ]
     },
     {

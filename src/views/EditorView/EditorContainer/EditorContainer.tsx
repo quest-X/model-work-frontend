@@ -289,7 +289,7 @@ const EditorContainer: React.FC<IProps> = (
                             (phase, current, total) => {
                                 const pct = total > 0 ? Math.round((current / total) * 100) : 0;
                                 if (phase === '上传视频') {
-                                    setVideoProcessing({ phase: `上传中 ${pct}%`, progress: pct, fileName: videoFile.name });
+                                    setVideoProcessing({ phase: `上传中 ${pct >= 100 ? 99 : pct}%`, progress: pct, fileName: videoFile.name });
                                 } else if (phase === '解压帧') {
                                     setVideoProcessing({ phase: `解析帧 ${pct}%`, progress: pct, fileName: videoFile.name });
                                 } else {
@@ -299,23 +299,30 @@ const EditorContainer: React.FC<IProps> = (
                         );
                         const isOnDemand = !!result.sessionId;
                         console.log(`[FFmpeg] 完成: ${isOnDemand ? '按需模式' : '全量模式'}, ${result.totalFrames} 帧`);
-                        setVideoProcessing({ phase: '初始化视频...', progress: 100, fileName: videoFile.name });
 
-                        // 全量模式：初始化全局帧池
+                        // 初始化全局帧池（不再预解码，由 FramePlayer 统一处理）
+                        EditorModel.preloadedImageCache = new Map();
                         if (!isOnDemand) {
                             EditorModel.videoFrameFiles = [...result.frames];
-                        }
-                        // 按需模式：存 sessionId
-                        if (isOnDemand) {
+                        } else {
                             EditorModel.videoSessionId = result.sessionId!;
+                            EditorModel.videoFrameFiles = [];
                         }
 
-                        // 生成缩略图（按需模式跳过，FramePlayer 初始化时会取帧0）
+                        // 缩略图从第 0 帧文件生成
                         let thumbnail: string | undefined;
-                        if (result.frames.length > 0) {
-                            thumbnail = await generateThumbnail(result.frames[0]);
+                        if (EditorModel.videoFrameFiles?.[0]) {
+                            thumbnail = await generateThumbnail(EditorModel.videoFrameFiles[0]);
+                        } else if (isOnDemand) {
+                            // 大视频：取第 0 帧生成缩略图
+                            try {
+                                const batch = await FrameExtractorService.fetchFrameRange(result.sessionId!, 0, 1);
+                                if (batch.length > 0) {
+                                    EditorModel.videoFrameFiles[0] = batch[0];
+                                    thumbnail = await generateThumbnail(batch[0]);
+                                }
+                            } catch { /* skip */ }
                         }
-                        // 按需模式不在这里取帧0，避免重复请求
 
                         const item: QueueItem = {
                             id: uuidv4(),

@@ -20,7 +20,17 @@ interface IProps {
     onLoadedMetadata?: (duration: number, frames: number, fps: number, videoSize: ISize) => void;
     onPlayPause?: () => void;
     onFirstFrameDrawn?: (canvas: HTMLCanvasElement) => void;
+    // 帧完整加载回调：Image 解码 + 缩略图生成完毕
+    onFrameReady?: (frameIdx: number, thumbnailImage: HTMLImageElement) => void;
 }
+
+const THUMBNAIL_SIZE = 150;
+const BATCH_SIZE = 30;
+
+// === available_frames 滑动窗口 ===
+const MIN_AHEAD = 500;       // 当前位置前方始终保持 500 帧可播放
+const MAX_AVAILABLE = 2000;  // 缓存上限（超出则淘汰远离当前位置的旧帧）
+const KEEP_BEHIND = 100;     // 当前位置后方保留 100 帧（支持短回退）
 
 const FramePlayer: React.FC<IProps> = ({
     language,
@@ -37,66 +47,76 @@ const FramePlayer: React.FC<IProps> = ({
     onLoadedMetadata,
     onPlayPause,
     onFirstFrameDrawn,
+    onFrameReady,
 }) => {
     const texts = LanguageConfig[language];
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const focusableElementRef = useRef<HTMLDivElement>(null);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [loadingProgress, setLoadingProgress] = useState(0); // initLoad 进度 0-100
 
-    // 帧图像缓存：frameIndex → HTMLImageElement
+    // 帧图像缓存
     const frameCacheRef = useRef<Map<number, HTMLImageElement>>(new Map());
-    // Blob URL 缓存：frameIndex → URL (用于及时释放)
     const blobUrlCacheRef = useRef<Map<number, string>>(new Map());
 
-    // 稳定的 ref 模式（与 VideoPlayer 一致）
+    // 稳定 ref
     const onTimeUpdateRef = useRef(onTimeUpdate);
     onTimeUpdateRef.current = onTimeUpdate;
     const onPlayPauseRef = useRef(onPlayPause);
     onPlayPauseRef.current = onPlayPause;
     const isPlayingRef = useRef(isPlaying);
     isPlayingRef.current = isPlaying;
+    const onFrameReadyRef = useRef(onFrameReady);
+    onFrameReadyRef.current = onFrameReady;
 
-    // 播放定时器
+    // 播放
     const playIntervalRef = useRef<ReturnType<typeof setInterval>>();
     const playFrameRef = useRef(0);
-    const isVideoEndedRef = useRef(false); // 是否播放到末尾
+    const isVideoEndedRef = useRef(false);
 
-    // 加载单帧图像 — 三层查找：LRU 缓存 → 全局帧池 → 后端按需请求
-    // 缓存上限：100000 帧，但会通过内存检查动态限制
-    const MAX_CACHED_FRAMES = 100000;
-    // 防止同一帧重复请求
+    // 加载去重
     const pendingRequestsRef = useRef<Map<number, Promise<HTMLImageElement>>>(new Map());
-    // 防止同一批次重复请求后端
     const pendingBatchRef = useRef<Map<number, Promise<File[]>>>(new Map());
 
+    // === available_frames 滑动窗口控制 ===
+    const loadGenRef = useRef(0);       // 取消令牌
+    const thumbnailCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const initPhaseRef = useRef(true);  // 初始化阶段标志
+    const lastSeekFrameRef = useRef(-1);
+
+    // 稳定 ref
+    const loadFrameFullRef = useRef<(frameIdx: number) => Promise<void>>(() => Promise.resolve());
+    const maintainRef = useRef<() => void>(() => {});
+
+    // 加载单帧图像（缓存 → 全局帧池 → 后端批量取）
     const loadFrameImage = useCallback(async (frameIdx: number): Promise<HTMLImageElement> => {
         if (frameIdx < 0 || frameIdx >= totalFrames) {
             throw new Error(`Frame ${frameIdx} out of range [0, ${totalFrames})`);
         }
 
-        // 1. LRU 缓存命中
         const cache = frameCacheRef.current;
         const cached = cache.get(frameIdx);
         if (cached) return cached;
 
-        // 2. 防止重复请求
+        const preloaded = EditorModel.preloadedImageCache.get(frameIdx);
+        if (preloaded) {
+            cache.set(frameIdx, preloaded);
+            EditorModel.preloadedImageCache.delete(frameIdx);
+            return preloaded;
+        }
+
         const pending = pendingRequestsRef.current.get(frameIdx);
         if (pending) return pending;
 
         const promise = (async () => {
-            // 3. 全局帧池 / props.frames
             const allFrames = EditorModel.videoFrameFiles;
             let frameFile = (allFrames.length > frameIdx ? allFrames[frameIdx] : null)
                 || (frames.length > frameIdx ? frames[frameIdx] : null);
 
-            // 4. 按需从后端获取（大视频模式）— 批量取帧避免逐帧请求
             if (!frameFile && sessionId) {
-                const BATCH_SIZE = 30;
                 const batchStart = Math.floor(frameIdx / BATCH_SIZE) * BATCH_SIZE;
                 const batchCount = Math.min(BATCH_SIZE, totalFrames - batchStart);
-
-                // 复用同一批次的请求
                 let batchPromise = pendingBatchRef.current.get(batchStart);
                 if (!batchPromise) {
                     batchPromise = FrameExtractorService.fetchFrameRange(sessionId, batchStart, batchCount);
@@ -104,47 +124,21 @@ const FramePlayer: React.FC<IProps> = ({
                     batchPromise.finally(() => pendingBatchRef.current.delete(batchStart));
                 }
                 const fetched = await batchPromise;
-                // 存入全局帧池
                 for (let i = 0; i < fetched.length; i++) {
                     allFrames[batchStart + i] = fetched[i];
                 }
                 frameFile = allFrames[frameIdx] || null;
             }
 
-            if (!frameFile) {
-                throw new Error(`Frame ${frameIdx} unavailable`);
-            }
+            if (!frameFile) throw new Error(`Frame ${frameIdx} unavailable`);
 
-            // 内存感知驱逐：帧数上限 + 内存上限（可用内存的 80%）
-            const shouldEvict = (() => {
-                if (cache.size >= MAX_CACHED_FRAMES) return true;
-                // 检查内存压力（仅 Chrome 支持 performance.memory）
-                const mem = (performance as any).memory;
-                if (mem && mem.jsHeapSizeLimit > 0) {
-                    const usageRatio = mem.usedJSHeapSize / mem.jsHeapSizeLimit;
-                    if (usageRatio > 0.8) return true;
-                }
-                return false;
-            })();
-            if (shouldEvict && cache.size > 0) {
-                const firstKey = cache.keys().next().value;
-                cache.delete(firstKey);
-                const oldUrl = blobUrlCacheRef.current.get(firstKey);
-                if (oldUrl) {
-                    URL.revokeObjectURL(oldUrl);
-                    blobUrlCacheRef.current.delete(firstKey);
-                }
-            }
+            // 驱逐由 evictOldFrames 统一处理，此处不做
 
-            // 创建 Image
             return new Promise<HTMLImageElement>((resolve, reject) => {
                 const img = new Image();
                 const url = URL.createObjectURL(frameFile!);
                 blobUrlCacheRef.current.set(frameIdx, url);
-                img.onload = () => {
-                    cache.set(frameIdx, img);
-                    resolve(img);
-                };
+                img.onload = () => { cache.set(frameIdx, img); resolve(img); };
                 img.onerror = () => {
                     URL.revokeObjectURL(url);
                     blobUrlCacheRef.current.delete(frameIdx);
@@ -155,192 +149,160 @@ const FramePlayer: React.FC<IProps> = ({
         })();
 
         pendingRequestsRef.current.set(frameIdx, promise);
-        try {
-            const result = await promise;
-            return result;
-        } finally {
-            pendingRequestsRef.current.delete(frameIdx);
-        }
+        try { return await promise; }
+        finally { pendingRequestsRef.current.delete(frameIdx); }
     }, [frames, sessionId, totalFrames]);
 
-    // 绘制指定帧到 canvas（同步快速路径 + 异步慢速路径）
-    // 用于 Editor 渲染的离屏 canvas（复用，避免每帧创建）
-    const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const ensureCanvasSize = (canvas: HTMLCanvasElement) => {
+        if (canvas.width !== videoSize.width || canvas.height !== videoSize.height) {
+            canvas.width = videoSize.width;
+            canvas.height = videoSize.height;
+        }
+    };
 
     const drawFrame = useCallback(async (frameIdx: number) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-
-        if (canvas.width !== videoSize.width || canvas.height !== videoSize.height) {
-            canvas.width = videoSize.width;
-            canvas.height = videoSize.height;
-        }
-
+        ensureCanvasSize(canvas);
         try {
             const img = await loadFrameImage(frameIdx);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-            // 更新 EditorModel.videoFrameImage — 直接用已加载的 img
             EditorModel.videoFrameImage = img;
         } catch (err) {
             console.error(`[FramePlayer] drawFrame(${frameIdx}) failed:`, err);
         }
     }, [loadFrameImage, videoSize]);
 
-    // 同步绘制：仅在缓存命中时绘制，返回是否成功（播放丢帧用）
     const drawFrameSync = useCallback((frameIdx: number): boolean => {
         const canvas = canvasRef.current;
         if (!canvas) return false;
         const ctx = canvas.getContext('2d');
         if (!ctx) return false;
 
-        const cached = frameCacheRef.current.get(frameIdx);
-        if (!cached) return false;
-
-        if (canvas.width !== videoSize.width || canvas.height !== videoSize.height) {
-            canvas.width = videoSize.width;
-            canvas.height = videoSize.height;
+        let cached = frameCacheRef.current.get(frameIdx);
+        if (!cached) {
+            const preloaded = EditorModel.preloadedImageCache.get(frameIdx);
+            if (preloaded) {
+                frameCacheRef.current.set(frameIdx, preloaded);
+                EditorModel.preloadedImageCache.delete(frameIdx);
+                cached = preloaded;
+            } else {
+                return false;
+            }
         }
-
+        ensureCanvasSize(canvas);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(cached, 0, 0, canvas.width, canvas.height);
         EditorModel.videoFrameImage = cached;
         return true;
     }, [videoSize]);
 
-    // 预加载：加载当前帧附近的帧
-    // === 4 层预取策略 ===
-    // P0: 首屏（帧 0-49）— init 时立刻触发，完成后立刻触发 P1
-    // P1: 播放缓冲（每次 500 帧）— P0 完成后立刻触发
-    // P2: 跳帧窗口（当前帧 -100 ~ +500）— seek/播放时触发
-    // P3: 常备化预加载 — P0-P2 空闲时，从头到尾加载所有帧（上限 100000）
-
-    // P3 取消标志：当 P2 触发时取消正在进行的 P3
-    const p3CancelledRef = useRef(false);
-    const p3RunningRef = useRef(false);
-    // 当前活跃的 P0-P2 任务数
-    const activePriorityTasksRef = useRef(0);
-
-    const preloadRange = useCallback(async (start: number, end: number, priority: 'p0' | 'p1' | 'p2' | 'p3' = 'p1') => {
-        const s = Math.max(0, start);
-        const e = Math.min(totalFrames, end);
-        if (s >= e) return;
-
-        const isHighPriority = priority !== 'p3';
-        if (isHighPriority) activePriorityTasksRef.current++;
-
+    // === 完整加载一帧：Image 解码 + 缩略图 ===
+    const loadFrameFull = useCallback(async (frameIdx: number): Promise<void> => {
         try {
-            const BATCH = 30;
-            for (let batchStart = Math.floor(s / BATCH) * BATCH; batchStart < e; batchStart += BATCH) {
-                // P3 在高优先级任务进入时让路
-                if (priority === 'p3' && p3CancelledRef.current) return;
+            const img = await loadFrameImage(frameIdx);
+            const cb = onFrameReadyRef.current;
+            if (!cb || videoSize.width === 0) return;
 
-                const batchEnd = Math.min(batchStart + BATCH, e);
-                // 检查此批次是否已全部缓存
-                let allCached = true;
-                let firstUncached = -1;
-                for (let i = Math.max(s, batchStart); i < batchEnd; i++) {
-                    if (!frameCacheRef.current.has(i)) {
-                        allCached = false;
-                        if (firstUncached < 0) firstUncached = i;
-                        break;
-                    }
-                }
-                if (allCached) continue;
-
-                if (firstUncached >= 0) {
-                    try {
-                        await loadFrameImage(firstUncached);
-                    } catch { /* ignore */ }
-                }
-
-                // P3 每批后检查内存
-                if (priority === 'p3') {
-                    const m = (performance as any).memory;
-                    const pressure = m && m.jsHeapSizeLimit > 0 && (m.usedJSHeapSize / m.jsHeapSizeLimit) > 0.8;
-                    if (frameCacheRef.current.size >= MAX_CACHED_FRAMES || pressure) return;
-                }
+            if (!thumbnailCanvasRef.current) {
+                const c = document.createElement('canvas');
+                c.width = THUMBNAIL_SIZE;
+                c.height = THUMBNAIL_SIZE;
+                thumbnailCanvasRef.current = c;
             }
-        } finally {
-            if (isHighPriority) activePriorityTasksRef.current--;
+            const ctx = thumbnailCanvasRef.current.getContext('2d');
+            if (!ctx) return;
+
+            const scale = Math.min(THUMBNAIL_SIZE / videoSize.width, THUMBNAIL_SIZE / videoSize.height);
+            const sw = videoSize.width * scale;
+            const sh = videoSize.height * scale;
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+            ctx.drawImage(img, (THUMBNAIL_SIZE - sw) / 2, (THUMBNAIL_SIZE - sh) / 2, sw, sh);
+
+            const dataUrl = thumbnailCanvasRef.current.toDataURL('image/jpeg', 0.5);
+            await new Promise<void>(resolve => {
+                const thumb = new Image();
+                thumb.onload = () => { cb(frameIdx, thumb); resolve(); };
+                thumb.onerror = () => resolve();
+                thumb.src = dataUrl;
+            });
+        } catch (err) {
+            console.error(`[FramePlayer] loadFrameFull(${frameIdx}) failed:`, err);
         }
-    }, [totalFrames, loadFrameImage]);
+    }, [loadFrameImage, videoSize]);
 
-    // P3: 常备化预加载 — 空闲时从头到尾加载未缓存帧
-    const startP3 = useCallback(async () => {
-        if (p3RunningRef.current) return;
-        p3RunningRef.current = true;
-        p3CancelledRef.current = false;
+    // === available_frames 滑动窗口维护 ===
+    // 淘汰远离当前位置的旧帧
+    const evictOldFrames = useCallback((currentPos: number) => {
+        const cache = frameCacheRef.current;
+        if (cache.size <= MAX_AVAILABLE) return;
 
-        const MAX_P3_FRAMES = Math.min(100000, totalFrames);
-
-        // 等待 P0-P2 完成
-        while (activePriorityTasksRef.current > 0) {
-            await new Promise(r => setTimeout(r, 200));
-            if (p3CancelledRef.current) { p3RunningRef.current = false; return; }
+        const toEvict: number[] = [];
+        for (const key of cache.keys()) {
+            if (key < currentPos - KEEP_BEHIND) toEvict.push(key);
+            if (cache.size - toEvict.length <= MAX_AVAILABLE) break;
         }
+        for (const key of toEvict) {
+            cache.delete(key);
+            const url = blobUrlCacheRef.current.get(key);
+            if (url) { URL.revokeObjectURL(url); blobUrlCacheRef.current.delete(key); }
+        }
+        if (toEvict.length > 0) {
+            console.log(`[FramePlayer] 淘汰 ${toEvict.length} 旧帧, 缓存=${cache.size}`);
+        }
+    }, []);
 
-        // 从头开始找未加载的帧，逐批加载
-        const BATCH = 30;
-        for (let i = 0; i < MAX_P3_FRAMES; i += BATCH) {
-            if (p3CancelledRef.current) break;
-            // 等待高优先级任务完成
-            while (activePriorityTasksRef.current > 0) {
+    // 持续维护 available_frames：保证当前位置前方始终有 MIN_AHEAD 帧可播放
+    const maintainAvailableFrames = useCallback(async () => {
+        const gen = ++loadGenRef.current;
+
+        while (loadGenRef.current === gen) {
+            const pos = isPlayingRef.current ? playFrameRef.current : currentFrameRef.current;
+            const searchEnd = Math.min(pos + MAX_AVAILABLE, totalFrames);
+
+            // 找当前位置前方第一个未缓存帧
+            let target = -1;
+            for (let i = Math.max(0, pos); i < searchEnd; i++) {
+                if (!frameCacheRef.current.has(i)) { target = i; break; }
+            }
+
+            if (target < 0) {
+                // 窗口内全部已缓存
                 await new Promise(r => setTimeout(r, 200));
-                if (p3CancelledRef.current) break;
-            }
-            if (p3CancelledRef.current) break;
-
-            // 检查内存：帧数上限或内存压力则停止
-            const mem = (performance as any).memory;
-            const memoryPressure = mem && mem.jsHeapSizeLimit > 0 && (mem.usedJSHeapSize / mem.jsHeapSizeLimit) > 0.8;
-            if (frameCacheRef.current.size >= MAX_CACHED_FRAMES || memoryPressure) {
-                console.log(`[FramePlayer] P3 停止: 缓存 ${frameCacheRef.current.size} 帧, 内存压力: ${memoryPressure}`);
-                break;
+                continue;
             }
 
-            // 检查此批次是否需要加载
-            let needsLoad = false;
-            for (let j = i; j < Math.min(i + BATCH, MAX_P3_FRAMES); j++) {
-                if (!frameCacheRef.current.has(j)) { needsLoad = true; break; }
-            }
-            if (!needsLoad) continue;
+            const isUrgent = target < pos + MIN_AHEAD;
 
-            await preloadRange(i, Math.min(i + BATCH, MAX_P3_FRAMES), 'p3');
+            if (isUrgent) {
+                // 紧急：在 MIN_AHEAD 范围内有空缺 → 只缓存图片（快，即使播放中也加载）
+                try { await loadFrameImage(target); } catch {}
+            } else if (!isPlayingRef.current) {
+                // 非紧急 + 未播放 → 完整加载（含缩略图）
+                try { await loadFrameFullRef.current(target); } catch {}
+                if (target % 10 === 0) await new Promise(r => setTimeout(r, 0));
+            } else {
+                // 非紧急 + 播放中 → 缓冲充足，暂停加载
+                await new Promise(r => setTimeout(r, 300));
+                continue;
+            }
+
+            // 淘汰旧帧
+            evictOldFrames(pos);
         }
+    }, [totalFrames, loadFrameImage, evictOldFrames]);
 
-        p3RunningRef.current = false;
-    }, [totalFrames, preloadRange]);
+    // 更新稳定 ref
+    loadFrameFullRef.current = loadFrameFull;
+    maintainRef.current = () => { maintainAvailableFrames(); };
 
-    // P0 + P1 + P3: 首屏 → 播放缓冲 → 常备化
-    const preloadInitial = useCallback(async () => {
-        // P0: 帧 0-49（最高优先）
-        await preloadRange(0, 50, 'p0');
-        // P1: 帧 50-549（P0 完成后立刻触发）
-        await preloadRange(50, 550, 'p1');
-        // P3: 空闲时从头到尾加载
-        startP3();
-    }, [preloadRange, startP3]);
-
-    // P2: 跳帧/播放窗口 — 前 100 后 500
-    const preloadAroundPosition = useCallback(async (targetFrame: number) => {
-        // 打断 P3
-        p3CancelledRef.current = true;
-        await preloadRange(targetFrame - 100, targetFrame + 500, 'p2');
-        // P2 完成后恢复 P3
-        startP3();
-    }, [preloadRange, startP3]);
-
-    // 播放时追踪上次预取位置，每推进 30 帧触发一次 P2
-    const lastPreloadFrameRef = useRef(0);
-
-    // 初始化：加载第一帧 + 通知元数据（只执行一次）
+    // === 初始化 ===
     const initDoneRef = useRef(false);
     useEffect(() => {
-        // 全量模式需要 frames，按需模式需要 sessionId
         const hasSource = frames.length > 0 || !!sessionId;
         if (!hasSource || videoSize.width === 0) return undefined;
         if (initDoneRef.current) return undefined;
@@ -349,18 +311,27 @@ const FramePlayer: React.FC<IProps> = ({
 
         const init = async () => {
             try {
+                // 移入解析阶段预加载缓存
+                const preloaded = EditorModel.preloadedImageCache;
+                if (preloaded.size > 0) {
+                    for (const [idx, img] of preloaded) {
+                        frameCacheRef.current.set(idx, img);
+                    }
+                    console.log(`[FramePlayer] 从预加载缓存移入 ${preloaded.size} 帧到 LRU`);
+                    preloaded.clear();
+                }
+
+                // 加载并绘制第 0 帧
                 await loadFrameImage(0);
                 if (cancelled) return;
-
                 await drawFrame(0);
                 if (cancelled) return;
 
                 initDoneRef.current = true;
 
-                // 通知父组件元数据（触发缩略图生成）
+                // 通知父组件元数据（触发 ImageData 创建）
                 onLoadedMetadata?.(duration, totalFrames, fps, videoSize);
 
-                // 触发第一帧绘制回调
                 if (canvasRef.current) {
                     setTimeout(() => {
                         if (!cancelled && canvasRef.current) {
@@ -369,40 +340,50 @@ const FramePlayer: React.FC<IProps> = ({
                     }, 0);
                 }
 
-                // 自动聚焦
                 focusableElementRef.current?.focus();
 
-                // 帧0已加载，立即允许播放
+                // 等待 VideoEditor 创建 ImageData（下一个 React 渲染周期）
+                await new Promise(r => setTimeout(r, 100));
+                if (cancelled) return;
+
+                const gen = ++loadGenRef.current;
+                const initEnd = Math.min(MIN_AHEAD, totalFrames);
+
+                for (let i = 0; i < initEnd; i++) {
+                    if (loadGenRef.current !== gen || cancelled) return;
+                    await loadFrameFullRef.current(i);
+                    if (i % 30 === 0) {
+                        setLoadingProgress(Math.round(((i + 1) / initEnd) * 100));
+                        await new Promise(r => setTimeout(r, 0));
+                    }
+                }
+                if (loadGenRef.current !== gen || cancelled) return;
+
                 setIsLoaded(true);
 
-                // 延迟 500ms 启动预加载，让缩略图生成先填充全局帧池，避免重复请求后端
-                setTimeout(() => {
-                    preloadRange(0, 50, 'p0')
-                        .then(() => preloadRange(50, 550, 'p1'))
-                        .then(() => startP3());
-                }, 500);
+                // 初始化完成，允许 seek
+                initPhaseRef.current = false;
+
+                // 启动 available_frames 滑动窗口维护
+                maintainRef.current();
             } catch (err) {
                 console.error('[FramePlayer] Init failed:', err);
             }
         };
 
         init();
+        return () => { cancelled = true; };
+    }, [frames.length, sessionId, videoSize.width, videoSize.height]); // eslint-disable-line react-hooks/exhaustive-deps
 
-        return () => {
-            cancelled = true;
-        };
-    }, [frames, sessionId, videoSize.width, videoSize.height]);  // eslint-disable-line react-hooks/exhaustive-deps
-
-    // 用 ref 跟踪 currentFrame，避免播放 effect 依赖它导致 interval 反复重建
+    // 播放帧 ref
     const currentFrameRef = useRef(currentFrame);
     currentFrameRef.current = currentFrame;
 
-    // 播放/暂停控制
+    // === 播放/暂停控制 ===
     useEffect(() => {
         if (!isLoaded) return undefined;
 
         if (isPlaying) {
-            // 如果播放到末尾后重新播放，重置到第 0 帧
             if (isVideoEndedRef.current) {
                 isVideoEndedRef.current = false;
                 playFrameRef.current = 0;
@@ -418,7 +399,6 @@ const FramePlayer: React.FC<IProps> = ({
                 const nextFrame = playFrameRef.current + 1;
 
                 if (nextFrame >= totalFrames) {
-                    // 播放到末尾
                     clearInterval(playIntervalRef.current);
                     playIntervalRef.current = undefined;
                     isVideoEndedRef.current = true;
@@ -431,18 +411,10 @@ const FramePlayer: React.FC<IProps> = ({
                 }
 
                 playFrameRef.current = nextFrame;
-                const time = nextFrame / fps;
-                onTimeUpdateRef.current?.(time, nextFrame);
+                onTimeUpdateRef.current?.(nextFrame / fps, nextFrame);
 
-                // 同步绘制优先：缓存命中就画，没命中就异步加载（不阻塞 interval）
                 if (!drawFrameSync(nextFrame)) {
-                    drawFrame(nextFrame); // 异步，不 await，不卡住播放节奏
-                }
-
-                // P2: 每推进 30 帧触发一次预取（前20后80）
-                if (nextFrame - lastPreloadFrameRef.current >= 30) {
-                    lastPreloadFrameRef.current = nextFrame;
-                    preloadAroundPosition(nextFrame);
+                    drawFrame(nextFrame);
                 }
             }, interval);
         } else {
@@ -458,39 +430,44 @@ const FramePlayer: React.FC<IProps> = ({
                 playIntervalRef.current = undefined;
             }
         };
-    }, [isPlaying, isLoaded, fps, totalFrames, duration, drawFrameSync, preloadAroundPosition]);
+    }, [isPlaying, isLoaded, fps, totalFrames, duration, drawFrameSync, drawFrame]);
 
-    // 外部时间变化 → seek（仅在暂停时响应）
+    // === 外部 seek（暂停时响应 currentTime 变化）===
     useEffect(() => {
         if (!isLoaded || isPlaying) return;
+        // 初始化阶段不响应 seek，避免干扰 initLoad
+        if (initPhaseRef.current) return;
 
-        const targetFrame = Math.min(Math.round(currentTime * fps), totalFrames - 1);
-        drawFrame(Math.max(0, targetFrame));
-        // P2: seek 时预取目标帧前20后80
-        preloadAroundPosition(targetFrame);
-    }, [currentTime, isLoaded, isPlaying, fps, totalFrames, drawFrame, preloadAroundPosition]);
+        const targetFrame = Math.max(0, Math.min(Math.round(currentTime * fps), totalFrames - 1));
 
-    // 键盘快捷键：空格播放/暂停
+        // 帧号没变则跳过，防止 seek 重复触发
+        if (targetFrame === lastSeekFrameRef.current) return;
+        lastSeekFrameRef.current = targetFrame;
+
+        drawFrame(targetFrame);
+        // 重启滑动窗口维护，从新位置开始填充
+        maintainRef.current();
+    }, [currentTime, isLoaded, isPlaying, fps, totalFrames, drawFrame]);
+
+    // 键盘快捷键
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!isLoaded) return;
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
             if (e.key === ' ') {
                 e.preventDefault();
                 e.stopPropagation();
                 onPlayPauseRef.current?.();
             }
         };
-
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isLoaded]);
 
-    // 清理：清空缓存引用（不主动 revokeObjectURL，避免 Strict Mode 下撤销正在加载的 URL）
-    // 浏览器会在 Image 对象被 GC 后自动回收 blob URL
+    // 清理（不主动 revokeObjectURL，避免 Strict Mode 双重挂载间撤销正在加载的 URL）
     useEffect(() => {
         return () => {
+            loadGenRef.current++; // 终止 maintainAvailableFrames 循环
             frameCacheRef.current = new Map();
             blobUrlCacheRef.current = new Map();
             pendingRequestsRef.current = new Map();
@@ -527,7 +504,7 @@ const FramePlayer: React.FC<IProps> = ({
             {!isLoaded && (
                 <div className="LoadingOverlay">
                     <div className="LoadingSpinner"></div>
-                    <p>加载帧数据中...</p>
+                    <p>解析中 {loadingProgress}%</p>
                 </div>
             )}
         </div>
