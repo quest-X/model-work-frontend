@@ -59,11 +59,23 @@ const FramePlayer: React.FC<IProps> = ({
     const playFrameRef = useRef(0);
     const isVideoEndedRef = useRef(false); // 是否播放到末尾
 
-    // 加载单帧图像
+    // 加载单帧图像（LRU 缓存上限 200 帧，防止内存无限增长）
+    const MAX_CACHED_FRAMES = 200;
     const loadFrameImage = useCallback((frameIdx: number): Promise<HTMLImageElement> => {
         const cache = frameCacheRef.current;
         const cached = cache.get(frameIdx);
         if (cached) return Promise.resolve(cached);
+
+        // LRU 驱逐：超过上限时删除最早的条目
+        if (cache.size >= MAX_CACHED_FRAMES) {
+            const firstKey = cache.keys().next().value;
+            cache.delete(firstKey);
+            const oldUrl = blobUrlCacheRef.current.get(firstKey);
+            if (oldUrl) {
+                URL.revokeObjectURL(oldUrl);
+                blobUrlCacheRef.current.delete(firstKey);
+            }
+        }
 
         return new Promise((resolve, reject) => {
             if (frameIdx < 0 || frameIdx >= frames.length) {

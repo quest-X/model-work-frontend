@@ -52,13 +52,20 @@ export class FrameExtractorService {
 
         // 2. 解析 metadata
         const metadataHeader = response.headers['x-frame-metadata'];
-        const metadata = metadataHeader ? JSON.parse(metadataHeader) : {};
+        let metadata: any = {};
+        if (metadataHeader) {
+            try { metadata = JSON.parse(metadataHeader); } catch { /* malformed header, use defaults */ }
+        }
         console.log('[FrameExtractor] 后端返回 metadata:', metadata);
 
         // 3. 解压 ZIP
         onProgress?.('解压帧', 0, metadata.totalFrames || 0);
         const zip = await JSZip.loadAsync(response.data);
+        const MAX_FRAMES = 10000;
         const frameNames = Object.keys(zip.files).filter(n => n.endsWith('.jpg')).sort();
+        if (frameNames.length > MAX_FRAMES) {
+            throw new Error(`帧数超出上限: ${frameNames.length} > ${MAX_FRAMES}`);
+        }
         const totalFrames = frameNames.length;
 
         console.log(`[FrameExtractor] ZIP 包含 ${totalFrames} 帧`);

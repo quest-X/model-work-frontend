@@ -153,9 +153,9 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
                 img.src = fileData;
             } else if (fileData instanceof File || fileData instanceof Blob) {
                 const objectUrl = URL.createObjectURL(fileData);
+                img.onload = () => { URL.revokeObjectURL(objectUrl); cropAndResolve(img, resolve); };
+                img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(''); };
                 img.src = objectUrl;
-                const origOnload = img.onload;
-                img.onload = (e) => { URL.revokeObjectURL(objectUrl); if (typeof origOnload === 'function') origOnload.call(img, e); };
             } else { resolve(''); }
         });
     };
@@ -228,12 +228,11 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
                                         color: getConfidenceColor(result.info?.confidence || result.confidence || 0),
                                         backgroundColor: getConfidenceBackgroundColor(result.info?.confidence || result.confidence || 0)
                                     }}>
-                                        {((result.info?.confidence || result.confidence || 0) * 100).toFixed(1)}%
+                                        {(((result.info?.confidence ?? result.confidence ?? 0) || 0) * 100).toFixed(1)}%
                                     </div>
                                 </div>
                                 <div className="ResultContent">
                                     <div className="ThumbnailContainer">
-                                        <div className="ThumbnailLabel">{currentTexts.aiInference.results.thumbnail}</div>
                                         <div className="Thumbnail">
                                             {thumbnails[index] ? (
                                                 <img src={thumbnails[index]} alt={`${result.info?.name || result.class_name} thumbnail`} className="ThumbnailImage"/>

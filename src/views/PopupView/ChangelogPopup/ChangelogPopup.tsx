@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.8.4',
+        date: '2026-04-05',
+        changes: [
+            { zh: '推理结果卡片移除冗余"缩略图"标签', en: 'Remove redundant "Thumbnail" label from inference result cards' },
+            { zh: '批量检测通知支持中英双语（捕获帧/推理中）', en: 'Batch detection notifications now support bilingual display (capture/inferring)' },
+            { zh: '代码审查：confidence 防御性校验、JSON.parse 容错、帧缓存上限、帧数上限校验', en: 'Code audit: confidence null guard, JSON.parse error handling, frame cache LRU, frame count validation' },
+        ]
+    },
+    {
         version: '1.8.3',
         date: '2026-04-05',
         changes: [

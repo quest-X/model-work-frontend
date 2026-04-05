@@ -287,7 +287,7 @@ export class AIDetectionActions {
 
                     if (i % 5 === 0 || i === captureTotal - 1) {
                         const pct = Math.round((i / captureTotal) * 33);
-                        notify(1, `捕获帧 (${i + 1}/${captureTotal})`, `${pct}% — 帧 ${frameIdx}`);
+                        notify(1, `${texts.aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`, `${pct}% — 帧 ${frameIdx}`);
                     }
                     if (i % 8 === 0 && i > 0) await this.yieldToUI();
 
@@ -351,7 +351,7 @@ export class AIDetectionActions {
 
             const inferenceResults = await this.withConcurrency(tasks, 4, (done, ttl) => {
                 const pct = preFrames ? Math.round((done / ttl) * 90) : 33 + Math.round((done / ttl) * 55);
-                notify(2, `推理中 (${done}/${ttl})`, `${pct}% — 帧 ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
+                notify(2, `${texts.aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — 帧 ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
             });
 
             const inferElapsed = ((Date.now() - inferStartTime) / 1000).toFixed(1);
@@ -403,7 +403,7 @@ export class AIDetectionActions {
 
             const imageResults = await this.withConcurrency(imageTasks, 4, (done, ttl) => {
                 const pct = Math.round((done / ttl) * 100);
-                notify(2, `推理中 (${done}/${ttl})`, `${pct}% — ${imageQueue[done - 1]?.fileData?.name || `Image ${done}`}`);
+                notify(2, `${texts.aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${imageQueue[done - 1]?.fileData?.name || `Image ${done}`}`);
             });
 
             this.batchApplyResults(
@@ -518,7 +518,7 @@ export class AIDetectionActions {
                     isVisible: true,
                     status: LabelStatus.ACCEPTED,
                     suggestedLabel: labelId ? null : result.info.name,
-                    confidence: result.info.confidence
+                    confidence: result.info.confidence ?? 0
                 });
             }
 

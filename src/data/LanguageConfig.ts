@@ -370,6 +370,8 @@ export interface LanguageTexts {
             preprocessing: string;
             inference: string;
             postprocessing: string;
+            captureFrame: string;  // "捕获帧"
+            inferring: string;     // "推理中"
         };
         stepProgress: string; // "步骤 {current}/{total}"
         totalTime: string; // "总耗时："
@@ -758,7 +760,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             steps: {
                 preprocessing: '预处理',
                 inference: '推理过程',
-                postprocessing: '后处理'
+                postprocessing: '后处理',
+                captureFrame: '捕获帧',
+                inferring: '推理中'
             },
             stepProgress: '步骤 {current}/{total}',
             totalTime: '总耗时：',
@@ -1145,7 +1149,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             steps: {
                 preprocessing: 'Preprocessing',
                 inference: 'Inference',
-                postprocessing: 'Post-processing'
+                postprocessing: 'Post-processing',
+                captureFrame: 'Capturing frames',
+                inferring: 'Inferring'
             },
             stepProgress: 'Step {current}/{total}',
             totalTime: 'Total Time:',
