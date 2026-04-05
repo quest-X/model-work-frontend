@@ -94,7 +94,22 @@ export class DetectionAPIDetector {
                     }, 'image/jpeg', 0.95);
                 });
                 formData.append('file', blob, 'video_frame.jpg');
-            } else if (imageData.fileData) {
+            } else if (EditorModel.videoFrameImage) {
+                // 预拆帧/按需取帧模式：从已解码的 Image 截取像素
+                const img = EditorModel.videoFrameImage;
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth || img.width;
+                canvas.height = img.naturalHeight || img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const blob: Blob = await new Promise((resolve, reject) => {
+                    canvas.toBlob((b) => {
+                        if (b) resolve(b);
+                        else reject(new Error('Failed to capture frame image'));
+                    }, 'image/jpeg', 0.95);
+                });
+                formData.append('file', blob, 'frame.jpg');
+            } else if (imageData.fileData && imageData.fileData.size > 0) {
                 // 图像模式：直接发送原始文件
                 formData.append('file', imageData.fileData, imageData.fileData.name || 'image.jpg');
             } else {

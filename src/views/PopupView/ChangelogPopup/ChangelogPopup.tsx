@@ -26,6 +26,7 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '跳播快速缓存 500 帧图片（不生成缩略图），优先保证播放连续', en: 'Seek preloads 500 frame images (skip thumbnails) for immediate playback continuity' },
             { zh: '去掉 EditorContainer 预解码 100 帧，上传完直接交给 FramePlayer 统一处理', en: 'Removed EditorContainer 100-frame pre-decode, upload hands off to FramePlayer directly' },
             { zh: '后端会话自动清理：新上传时清理所有旧会话临时文件', en: 'Backend session auto-cleanup: all old session temp files cleaned on new upload' },
+            { zh: '修复大视频推理 500 错误：按需模式帧占位文件为空，改为从已解码 Image 截取像素', en: 'Fix large video detection 500 error: on-demand placeholder files were empty, now captures pixels from decoded Image' },
         ]
     },
     {
