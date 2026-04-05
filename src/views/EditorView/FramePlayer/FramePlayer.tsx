@@ -66,6 +66,8 @@ const FramePlayer: React.FC<IProps> = ({
     const MAX_CACHED_FRAMES = 200;
     // 防止同一帧重复请求
     const pendingRequestsRef = useRef<Map<number, Promise<HTMLImageElement>>>(new Map());
+    // 防止同一批次重复请求后端
+    const pendingBatchRef = useRef<Map<number, Promise<File[]>>>(new Map());
 
     const loadFrameImage = useCallback(async (frameIdx: number): Promise<HTMLImageElement> => {
         if (frameIdx < 0 || frameIdx >= totalFrames) {
@@ -87,17 +89,25 @@ const FramePlayer: React.FC<IProps> = ({
             let frameFile = (allFrames.length > frameIdx ? allFrames[frameIdx] : null)
                 || (frames.length > frameIdx ? frames[frameIdx] : null);
 
-            // 4. 按需从后端获取（大视频模式）
+            // 4. 按需从后端获取（大视频模式）— 批量取帧避免逐帧请求
             if (!frameFile && sessionId) {
-                const fetched = await FrameExtractorService.fetchFrameRange(sessionId, frameIdx, 1);
-                if (fetched.length > 0) {
-                    frameFile = fetched[0];
-                    // 存入全局帧池以便复用
-                    if (allFrames.length <= frameIdx) {
-                        // 扩展数组（稀疏）
-                        allFrames[frameIdx] = frameFile;
-                    }
+                const BATCH_SIZE = 30;
+                const batchStart = Math.floor(frameIdx / BATCH_SIZE) * BATCH_SIZE;
+                const batchCount = Math.min(BATCH_SIZE, totalFrames - batchStart);
+
+                // 复用同一批次的请求
+                let batchPromise = pendingBatchRef.current.get(batchStart);
+                if (!batchPromise) {
+                    batchPromise = FrameExtractorService.fetchFrameRange(sessionId, batchStart, batchCount);
+                    pendingBatchRef.current.set(batchStart, batchPromise);
+                    batchPromise.finally(() => pendingBatchRef.current.delete(batchStart));
                 }
+                const fetched = await batchPromise;
+                // 存入全局帧池
+                for (let i = 0; i < fetched.length; i++) {
+                    allFrames[batchStart + i] = fetched[i];
+                }
+                frameFile = allFrames[frameIdx] || null;
             }
 
             if (!frameFile) {
@@ -198,12 +208,33 @@ const FramePlayer: React.FC<IProps> = ({
     // P1: 播放缓冲（帧 20-499）— P0 完成后触发
     // P2: 跳帧窗口（目标帧 -20 ~ +80）— seek/播放时触发
 
-    const preloadRange = useCallback((start: number, end: number) => {
+    const preloadRange = useCallback(async (start: number, end: number) => {
         const s = Math.max(0, start);
         const e = Math.min(totalFrames, end);
-        for (let i = s; i < e; i++) {
-            if (!frameCacheRef.current.has(i)) {
-                loadFrameImage(i).catch(() => {/* ignore */});
+        // 按批次串行加载，避免并发 FFmpeg 进程过多
+        const BATCH = 30;
+        for (let batchStart = Math.floor(s / BATCH) * BATCH; batchStart < e; batchStart += BATCH) {
+            // 检查此批次是否已全部缓存
+            const batchEnd = Math.min(batchStart + BATCH, e);
+            const allCached = (() => {
+                for (let i = Math.max(s, batchStart); i < batchEnd; i++) {
+                    if (!frameCacheRef.current.has(i)) return false;
+                }
+                return true;
+            })();
+            if (allCached) continue;
+
+            // 加载批次中第一个未缓存的帧（会触发整批请求）
+            const firstUncached = (() => {
+                for (let i = Math.max(s, batchStart); i < batchEnd; i++) {
+                    if (!frameCacheRef.current.has(i)) return i;
+                }
+                return -1;
+            })();
+            if (firstUncached >= 0) {
+                try {
+                    await loadFrameImage(firstUncached);
+                } catch { /* ignore */ }
             }
         }
     }, [totalFrames, loadFrameImage]);
@@ -224,11 +255,13 @@ const FramePlayer: React.FC<IProps> = ({
     // 播放时追踪上次预取位置，每推进 30 帧触发一次 P2
     const lastPreloadFrameRef = useRef(0);
 
-    // 初始化：加载第一帧 + 通知元数据
+    // 初始化：加载第一帧 + 通知元数据（只执行一次）
+    const initDoneRef = useRef(false);
     useEffect(() => {
         // 全量模式需要 frames，按需模式需要 sessionId
         const hasSource = frames.length > 0 || !!sessionId;
         if (!hasSource || videoSize.width === 0) return undefined;
+        if (initDoneRef.current) return undefined;
 
         let cancelled = false;
 
@@ -240,6 +273,7 @@ const FramePlayer: React.FC<IProps> = ({
                 await drawFrame(0);
                 if (cancelled) return;
 
+                initDoneRef.current = true;
                 setIsLoaded(true);
 
                 // 通知父组件元数据
@@ -268,7 +302,6 @@ const FramePlayer: React.FC<IProps> = ({
 
         return () => {
             cancelled = true;
-            setIsLoaded(false);
         };
     }, [frames, sessionId, videoSize.width, videoSize.height]);  // eslint-disable-line react-hooks/exhaustive-deps
 

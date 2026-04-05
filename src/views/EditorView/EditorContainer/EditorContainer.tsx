@@ -297,8 +297,6 @@ const EditorContainer: React.FC<IProps> = (
                                 }
                             }
                         );
-                        setVideoProcessing(null);
-
                         const isOnDemand = !!result.sessionId;
                         console.log(`[FFmpeg] 完成: ${isOnDemand ? '按需模式' : '全量模式'}, ${result.totalFrames} 帧`);
 
@@ -339,6 +337,7 @@ const EditorContainer: React.FC<IProps> = (
                             thumbnail
                         };
                         newQueueItems.push(item);
+                        setVideoProcessing(null);
                     } catch (err) {
                         console.error('[FFmpeg] 拆帧失败，回退到视频模式:', err);
                         setVideoProcessing(null);
