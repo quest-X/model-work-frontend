@@ -188,6 +188,10 @@ class LabelInputField extends React.Component<IProps, IState> {
                     <div
                         className='Marker'
                         style={value ? {backgroundColor: value.color} : {}}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            this.props.updateActivePopupType(PopupWindowType.UPDATE_LABEL);
+                        }}
                     />
                     <div className='Content'>
                         <div className='ContentWrapper'>

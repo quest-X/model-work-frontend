@@ -291,7 +291,7 @@ const EditorContainer: React.FC<IProps> = (
                                 if (phase === '上传视频') {
                                     setVideoProcessing({ phase: `上传中 ${pct >= 100 ? 99 : pct}%`, progress: pct, fileName: videoFile.name });
                                 } else if (phase === '解压帧') {
-                                    setVideoProcessing({ phase: `解析帧 ${pct}%`, progress: pct, fileName: videoFile.name });
+                                    setVideoProcessing({ phase: `上传中 ${pct >= 100 ? 99 : pct}%`, progress: pct, fileName: videoFile.name });
                                 } else {
                                     setVideoProcessing({ phase, progress: 0, fileName: videoFile.name });
                                 }
@@ -483,7 +483,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '170px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.8.9</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.9.0</div>
         </>
     };
 

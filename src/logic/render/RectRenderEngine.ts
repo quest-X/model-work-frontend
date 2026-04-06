@@ -639,12 +639,12 @@ export class RectRenderEngine extends BaseRenderEngine {
             height: 16
         };
         
-        // 获取标签颜色，如果有标签ID则使用标签颜色，否则使用默认颜色
+        // 获取标签颜色：检查 perClassColoration 设置
         let bgColor = 'rgba(255, 255, 255, 0.8)'; // 默认白色背景
-        if (labelRect.labelId) {
+        const perClassColor = GeneralSelector.getEnablePerClassColorationStatus();
+        if (perClassColor && labelRect.labelId) {
             const labelName = LabelsSelector.getLabelNameById(labelRect.labelId);
             if (labelName && labelName.color) {
-                // 将hex颜色转换为rgba
                 const hex = labelName.color.replace('#', '');
                 const r = parseInt(hex.substring(0, 2), 16);
                 const g = parseInt(hex.substring(2, 4), 16);
@@ -652,22 +652,22 @@ export class RectRenderEngine extends BaseRenderEngine {
                 bgColor = `rgba(${r}, ${g}, ${b}, 0.8)`;
             }
         }
-        
+
         DrawUtil.drawRectWithFill(this.canvas, labelBg, bgColor);
-        
+
         // 绘制标签文字（在背景内完全居中）
         const textPosition: IPoint = {
-            x: labelBg.x + labelBg.width / 2, // 水平居中
-            y: labelBg.y + labelBg.height / 2 // 垂直居中（背景中心点）
+            x: labelBg.x + labelBg.width / 2,
+            y: labelBg.y + labelBg.height / 2
         };
         DrawUtil.drawText(
             this.canvas,
             labelText,
             12,
             textPosition,
-            '#FFFFFF',
+            perClassColor ? '#FFFFFF' : '#000000',
             true,
-            'center' // 水平居中对齐，垂直对齐已默认为middle
+            'center'
         );
     }
     

@@ -16,6 +16,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.9.0',
+        date: '2026-04-06',
+        changes: [
+            { zh: '修复缩略图选中蓝色边框上部与右侧宽度不一致（box-sizing 修正）', en: 'Fix thumbnail selection blue border uneven width between top and right (box-sizing fix)' },
+            { zh: '点击标签色块直接打开编辑标签弹窗', en: 'Click label color marker to open label editor popup directly' },
+            { zh: '关闭按类别着色时，标签文字背景同步关闭颜色', en: 'Label text background respects per-class coloration toggle' },
+            { zh: '界面文案优化："更新标签列表"→"编辑标签"，"创建项目"→"确认"', en: 'UI text refinement: "Update labels list" → "Edit labels", "Create project" → "Confirm"' },
+        ]
+    },
+    {
         version: '1.8.9',
         date: '2026-04-06',
         changes: [
@@ -24,7 +34,6 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '修复播放无法到达最后一帧：节流绕过 + 闭包帧号修正 + 最后一帧确保画完再暂停', en: 'Fix playback not reaching last frame: throttle bypass + stale closure fix + ensure last frame drawn before pause' },
             { zh: '帧缓冲区改为 fps 自适应：基于秒数 × fps 动态计算，高帧率视频缓冲更充足', en: 'Frame buffer fps-aware: dynamically calculated as seconds × fps, better buffering for high-fps videos' },
             { zh: 'fps 兜底增加 console.warn，快速定位帧率缺失问题', en: 'Add console.warn for fps fallback, quickly identify missing fps issues' },
-            { zh: '帧率显示国际化：中文"帧率"、英文"FPS"', en: 'FPS label i18n: Chinese "帧率", English "FPS"' },
         ]
     },
     {

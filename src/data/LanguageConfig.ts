@@ -349,6 +349,47 @@ export interface LanguageTexts {
         clickToSelect: string;
     };
 
+    // MainView
+    mainView: {
+        goBack: string;
+        getStarted: string;
+    };
+
+    // DropZone
+    dropZone: {
+        dropImages: string;
+        or: string;
+        clickToSelect: string;
+        oneImageLoaded: string;
+        multipleImagesLoaded: string;
+        objectDetection: string;
+        imageRecognition: string;
+    };
+
+    // LoadLabelNamesPopup
+    loadLabelsPopup: {
+        loadingFailed: string;
+        tryAgain: string;
+        dropLabelsFile: string;
+        or: string;
+        clickToSelect: string;
+        oneLabelFound: string;
+        multipleLabelsFound: string;
+        message: string;
+        title: string;
+        startProject: string;
+        back: string;
+    };
+
+    // TagLabelsList
+    emptyLabelList: string;
+
+    // SizeItUpView
+    sizeItUp: {
+        windowTooSmall: string;
+        minimumSize: string;
+    };
+
     // Common
     makeSense: string;
     ok: string;
@@ -497,8 +538,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             },
         insertLabelNames: {
             titleCreate: '创建标签列表',
-            titleUpdate: '更新标签列表',
-            acceptButton: '创建项目',
+            titleUpdate: '编辑标签',
+            acceptButton: '确认',
             rejectButton: '取消',
             insertLabel: '输入标签',
             addLabel: '添加标签',
@@ -738,6 +779,47 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             apiEndpoint: '接口地址',
             apiKey: '模型密钥',
             description: '模型描述',
+        },
+
+        // MainView
+        mainView: {
+            goBack: '返回',
+            getStarted: '开始',
+        },
+
+        // DropZone
+        dropZone: {
+            dropImages: '拖拽图像',
+            or: '或者',
+            clickToSelect: '点击此处选择文件',
+            oneImageLoaded: '已加载 1 张图像',
+            multipleImagesLoaded: '已加载 {count} 张图像',
+            objectDetection: '目标检测',
+            imageRecognition: '图像识别',
+        },
+
+        // LoadLabelNamesPopup
+        loadLabelsPopup: {
+            loadingFailed: '标签文件加载失败',
+            tryAgain: '请重试',
+            dropLabelsFile: '拖拽标签文件',
+            or: '或者',
+            clickToSelect: '点击此处选择文件',
+            oneLabelFound: '找到 1 个标签',
+            multipleLabelsFound: '找到 {count} 个标签',
+            message: '加载一个包含标签列表的文本文件。每个标签名称应该用换行符分隔。如果你没有准备好的文件，没关系，你可以现在创建自己的列表。',
+            title: '加载标签描述文件',
+            startProject: '开始项目',
+            back: '返回',
+        },
+
+        // TagLabelsList
+        emptyLabelList: '标签列表为空',
+
+        // SizeItUpView
+        sizeItUp: {
+            windowTooSmall: '窗口太小了！',
+            minimumSize: '请至少调整为 {width} x {height} 像素。',
         },
 
         // Common
@@ -1127,6 +1209,47 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             apiEndpoint: 'API Endpoint',
             apiKey: 'API Key',
             description: 'Description',
+        },
+
+        // MainView
+        mainView: {
+            goBack: 'Go Back',
+            getStarted: 'Get Started',
+        },
+
+        // DropZone
+        dropZone: {
+            dropImages: 'Drop images',
+            or: 'or',
+            clickToSelect: 'Click here to select them',
+            oneImageLoaded: '1 image loaded',
+            multipleImagesLoaded: '{count} images loaded',
+            objectDetection: 'Object Detection',
+            imageRecognition: 'Image recognition',
+        },
+
+        // LoadLabelNamesPopup
+        loadLabelsPopup: {
+            loadingFailed: 'Loading of labels file was unsuccessful',
+            tryAgain: 'Try again',
+            dropLabelsFile: 'Drop labels file',
+            or: 'or',
+            clickToSelect: 'Click here to select it',
+            oneLabelFound: 'only 1 label found',
+            multipleLabelsFound: '{count} labels found',
+            message: 'Load a text file with a list of labels you are planning to use. The names of each label should be separated by new line. If you don\'t have a prepared file, no problem. You can create your own list now.',
+            title: 'Load file with labels description',
+            startProject: 'Start project',
+            back: 'Back',
+        },
+
+        // TagLabelsList
+        emptyLabelList: 'Your label list is empty',
+
+        // SizeItUpView
+        sizeItUp: {
+            windowTooSmall: 'Ops... This window is too tight for me!',
+            minimumSize: 'Please... make it at least {width} x {height} px.',
         },
 
         // Common

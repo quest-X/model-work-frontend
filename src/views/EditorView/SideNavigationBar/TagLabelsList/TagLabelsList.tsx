@@ -11,12 +11,14 @@ import classNames from "classnames";
 import {ImageButton} from "../../../Common/ImageButton/ImageButton";
 import {PopupWindowType} from "../../../../data/enums/PopupWindowType";
 import {updateActivePopupType} from "../../../../store/general/actionCreators";
+import {Language, LanguageConfig} from "../../../../data/LanguageConfig";
 interface IProps {
     size: ISize;
     imageData: ImageData;
     updateImageDataById: (id: string, newImageData: ImageData) => any;
     labelNames: LabelName[];
     updateActivePopupType: (activePopupType: PopupWindowType) => any;
+    language: Language;
 }
 
 const TagLabelsList: React.FC<IProps> = (
@@ -25,8 +27,10 @@ const TagLabelsList: React.FC<IProps> = (
         imageData,
         updateImageDataById,
         labelNames,
-        updateActivePopupType
+        updateActivePopupType,
+        language
     }) => {
+    const texts = LanguageConfig[language];
     const labelInputFieldHeight = 40;
     const listStyle: React.CSSProperties = {
         width: size?.width || 0,
@@ -103,7 +107,7 @@ const TagLabelsList: React.FC<IProps> = (
                         alt={"upload"}
                         src={"ico/type-writer.png"}
                     />
-                    <p className="extraBold">Your label list is empty</p>
+                    <p className="extraBold">{texts.emptyLabelList}</p>
                 </div> :
                 <Scrollbars>
                     <div
@@ -125,7 +129,8 @@ const mapDispatchToProps = {
 };
 
 const mapStateToProps = (state: AppState) => ({
-    labelNames : state.labels.labels
+    labelNames : state.labels.labels,
+    language: state.general.language
 });
 
 export default connect(

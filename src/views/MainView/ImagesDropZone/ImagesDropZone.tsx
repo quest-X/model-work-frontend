@@ -12,6 +12,7 @@ import {updateActivePopupType, updateProjectData} from '../../../store/general/a
 import {ProjectData} from '../../../store/general/types';
 import {ImageDataUtil} from '../../../utils/ImageDataUtil';
 import { sortBy } from 'lodash';
+import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 interface IProps {
     updateActiveImageIndexAction: (activeImageIndex: number) => any;
@@ -19,9 +20,12 @@ interface IProps {
     updateProjectDataAction: (projectData: ProjectData) => any;
     updateActivePopupTypeAction: (activePopupType: PopupWindowType) => any;
     projectData: ProjectData;
+    language: Language;
 }
 
 const ImagesDropZone: React.FC<IProps> = (props: PropsWithChildren<IProps>) => {
+    const texts = LanguageConfig[props.language];
+
     const {acceptedFiles, getRootProps, getInputProps} = useDropzone({
         accept: {
             'image/*': ['.jpeg', '.png']
@@ -51,9 +55,9 @@ const ImagesDropZone: React.FC<IProps> = (props: PropsWithChildren<IProps>) => {
                     alt={'upload'}
                     src={'ico/box-opened.png'}
                 />
-                <p className='extraBold'>Drop images</p>
-                <p>or</p>
-                <p className='extraBold'>Click here to select them</p>
+                <p className='extraBold'>{texts.dropZone.dropImages}</p>
+                <p>{texts.dropZone.or}</p>
+                <p className='extraBold'>{texts.dropZone.clickToSelect}</p>
             </>;
         else if (acceptedFiles.length === 1)
             return <>
@@ -62,7 +66,7 @@ const ImagesDropZone: React.FC<IProps> = (props: PropsWithChildren<IProps>) => {
                     alt={'uploaded'}
                     src={'ico/box-closed.png'}
                 />
-                <p className='extraBold'>1 image loaded</p>
+                <p className='extraBold'>{texts.dropZone.oneImageLoaded}</p>
             </>;
         else
             return <>
@@ -73,7 +77,7 @@ const ImagesDropZone: React.FC<IProps> = (props: PropsWithChildren<IProps>) => {
                     alt={'uploaded'}
                     src={'ico/box-closed.png'}
                 />
-                <p key={2} className='extraBold'>{acceptedFiles.length} images loaded</p>
+                <p key={2} className='extraBold'>{texts.dropZone.multipleImagesLoaded.replace('{count}', String(acceptedFiles.length))}</p>
             </>;
     };
 
@@ -87,12 +91,12 @@ const ImagesDropZone: React.FC<IProps> = (props: PropsWithChildren<IProps>) => {
             </div>
             <div className='DropZoneButtons'>
                 <TextButton
-                    label={'Object Detection'}
+                    label={texts.dropZone.objectDetection}
                     isDisabled={!acceptedFiles.length}
                     onClick={startEditorWithObjectDetection}
                 />
                 <TextButton
-                    label={'Image recognition'}
+                    label={texts.dropZone.imageRecognition}
                     isDisabled={!acceptedFiles.length}
                     onClick={startEditorWithImageRecognition}
                 />
@@ -109,7 +113,8 @@ const mapDispatchToProps = {
 };
 
 const mapStateToProps = (state: AppState) => ({
-    projectData: state.general.projectData
+    projectData: state.general.projectData,
+    language: state.general.language
 });
 
 export default connect(

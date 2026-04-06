@@ -9,10 +9,19 @@ import { EditorFeatureData, IEditorFeature } from '../../data/info/EditorFeature
 import { styled, Tooltip, tooltipClasses, TooltipProps } from '@mui/material';
 import Fade from '@mui/material/Fade';
 import ImagesDropZone from './ImagesDropZone/ImagesDropZone';
+import { connect } from 'react-redux';
+import { AppState } from '../../store';
+import { Language, LanguageConfig } from '../../data/LanguageConfig';
 
-const MainView: React.FC = () => {
+interface IProps {
+    language: Language;
+}
+
+const MainView: React.FC<IProps> = ({ language }) => {
     const [projectInProgress, setProjectInProgress] = useState(false);
     const [projectCanceled, setProjectCanceled] = useState(false);
+
+    const texts = LanguageConfig[language];
 
     const startProject = () => {
         setProjectInProgress(true);
@@ -117,7 +126,7 @@ const MainView: React.FC = () => {
                     <div className='TriangleVerticalContent' />
                 </div>
                 {projectInProgress && <TextButton
-                    label={'Go Back'}
+                    label={texts.mainView.goBack}
                     onClick={endProject}
                 />}
             </div>
@@ -128,7 +137,7 @@ const MainView: React.FC = () => {
                     {getSocialMediaButtons({ width: 30, height: 30 })}
                 </div>
                 {!projectInProgress && <TextButton
-                    label={'Get Started'}
+                    label={texts.mainView.getStarted}
                     onClick={startProject}
                     externalClassName={'get-started-button'}
                 />}
@@ -137,4 +146,10 @@ const MainView: React.FC = () => {
     );
 };
 
-export default MainView;
+const mapStateToProps = (state: AppState) => ({
+    language: state.general.language
+});
+
+export default connect(
+    mapStateToProps
+)(MainView);

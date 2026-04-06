@@ -3,6 +3,8 @@ import './GenericYesNoPopup.scss'
 import {TextButton} from '../../Common/TextButton/TextButton';
 import {ContextManager} from '../../../logic/context/ContextManager';
 import {ContextType} from '../../../data/enums/ContextType';
+import {store} from '../../../index';
+import {LanguageConfig} from '../../../data/LanguageConfig';
 
 interface IProps {
     title: string;
@@ -39,6 +41,9 @@ export const GenericYesNoPopup: React.FC<IProps> = (
         }
     }, [status]);
 
+    const language = store.getState().general.language;
+    const texts = LanguageConfig[language];
+
     return (
         <div className='GenericYesNoPopup'>
             <div className='Header'>
@@ -49,13 +54,13 @@ export const GenericYesNoPopup: React.FC<IProps> = (
             </div>
             <div className='Footer'>
                 {!skipRejectButton && <TextButton
-                    label={rejectLabel ? rejectLabel : 'NO, THANKS'}
+                    label={rejectLabel ? rejectLabel : texts.cancel}
                     onClick={onReject}
                     externalClassName={'reject'}
                     isDisabled={disableRejectButton}
                 />}
                 {!skipAcceptButton && <TextButton
-                    label={acceptLabel ? acceptLabel : 'YES'}
+                    label={acceptLabel ? acceptLabel : texts.ok}
                     onClick={onAccept}
                     externalClassName={'accept'}
                     isDisabled={disableAcceptButton}
