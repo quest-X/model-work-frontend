@@ -289,7 +289,13 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
 const mapStateToProps = (state: AppState) => ({
     language: state.general.language,
     suggestedLabelList: state.ai.suggestedLabelList,
-    segmentationResults: state.ai.segmentationResults,
+    segmentationResults: (() => {
+        const imageId = state.labels.imagesData[state.labels.activeImageIndex]?.id;
+        if (imageId && state.ai.imageSegmentationResults.has(imageId)) {
+            return state.ai.imageSegmentationResults.get(imageId)!;
+        }
+        return state.ai.segmentationResults;
+    })(),
     activeImageData: state.labels.imagesData[state.labels.activeImageIndex] || null,
     labelNames: state.labels.labels,
     isVideoMode: state.video?.isVideoMode || false

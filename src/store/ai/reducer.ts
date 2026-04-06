@@ -53,6 +53,7 @@ const initialState: AIState = {
     isAIDisabled: true,
     isFullImageInferenceInProgress: false,
     segmentationResults: [],
+    imageSegmentationResults: new Map(),
     imageAIStates: storedAIState
 };
 
@@ -139,9 +140,17 @@ export function aiReducer(
             return newState;
         }
         case Action.UPDATE_SEGMENTATION_RESULTS: {
+            const { segmentationResults, imageId } = action.payload;
+            const newImageSegmentationResults = new Map(state.imageSegmentationResults);
+
+            if (imageId) {
+                newImageSegmentationResults.set(imageId, segmentationResults);
+            }
+
             return {
                 ...state,
-                segmentationResults: action.payload.segmentationResults
+                segmentationResults: segmentationResults,
+                imageSegmentationResults: newImageSegmentationResults
             }
         }
         case Action.ADD_INFERENCE_HISTORY: {

@@ -82,11 +82,12 @@ export function toggleImageAILabelsVisibility(imageId: string): AIActionTypes {
     }
 }
 
-export function updateSegmentationResults(segmentationResults: SegmentationResult[]): AIActionTypes {
+export function updateSegmentationResults(segmentationResults: SegmentationResult[], imageId?: string): AIActionTypes {
     return {
         type: Action.UPDATE_SEGMENTATION_RESULTS,
         payload: {
-            segmentationResults
+            segmentationResults,
+            imageId
         }
     }
 }

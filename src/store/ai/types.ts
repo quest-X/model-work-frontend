@@ -52,9 +52,10 @@ export type AIState = {
     isFullImageInferenceInProgress: boolean;
 
     // SEGMENTATION/DETECTION RESULTS
-    segmentationResults: SegmentationResult[];
-    
-    // AI LABELS VISIBILITY STATE - 每张图片独立
+    segmentationResults: SegmentationResult[]; // 全局推理结果（保留用于兼容）
+    imageSegmentationResults: Map<string, SegmentationResult[]>; // 按图像ID存储推理结果
+
+    // AI LABELS VISIBILITY STATE - 每张图片���立
     imageAIStates: Map<string, {
         aiLabelsVisible: boolean; // 检测标签是否显示（默认false闭眼）
         inferenceHistory: Array<{
@@ -144,6 +145,7 @@ interface UpdateSegmentationResults {
     type: typeof Action.UPDATE_SEGMENTATION_RESULTS;
     payload: {
         segmentationResults: SegmentationResult[];
+        imageId?: string; // 关联的图像ID
     }
 }
 

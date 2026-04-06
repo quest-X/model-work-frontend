@@ -3,7 +3,9 @@ import { LocalStorageManager } from '../utils/LocalStorageManager';
 import { IndexedDBManager, StoredProjectData } from '../utils/IndexedDBManager';
 import { updateLanguage, updateZoom, updateImageDragModeStatus, updateCrossHairVisibleStatus } from '../store/general/actionCreators';
 import { updateActiveImageIndex, updateActiveLabelType, updateLabelNames, updateImageDataById, addImageData, updateImageData } from '../store/labels/actionCreators';
+import { updateSegmentationResults } from '../store/ai/actionCreators';
 import { updateVideoMode, addVideoData } from '../store/video/actionCreators';
+import { addQueueItems, setActiveQueueItem } from '../store/queue/actionCreators';
 import { VideoData } from '../store/video/types';
 import { ImageData, LabelName } from '../store/labels/types';
 import { ImageRepository } from '../logic/imageRepository/ImageRepository';
@@ -61,7 +63,20 @@ export class ProjectRestoreService {
             if (storedProject.labelNames.length > 0) {
                 store.dispatch(updateLabelNames(storedProject.labelNames));
             }
-            
+
+            // 恢复队列数据
+            if (storedProject.queueItems && storedProject.queueItems.length > 0) {
+                store.dispatch(addQueueItems(storedProject.queueItems));
+                if (storedProject.activeQueueItemId) {
+                    store.dispatch(setActiveQueueItem(storedProject.activeQueueItemId));
+                    ImageRepository.setActiveFileId(storedProject.activeQueueItemId);
+                }
+                console.log('队列数据恢复成功:', {
+                    队列项数量: storedProject.queueItems.length,
+                    活动队列项ID: storedProject.activeQueueItemId
+                });
+            }
+
             // 恢复图像数据 - ArrayBuffer → File，设置loadStatus为false让组件重新加载图像
             const restoredImages: ImageData[] = storedProject.images.map((storedImage): ImageData => ({
                 id: storedImage.id,
@@ -81,6 +96,20 @@ export class ProjectRestoreService {
             
             // 替换图像数据（不是追加）
             store.dispatch(updateImageData(restoredImages));
+
+            // 恢复AI推理结果
+            if (storedProject.segmentationResults && storedProject.segmentationResults.length > 0) {
+                store.dispatch(updateSegmentationResults(storedProject.segmentationResults));
+                console.log('全局推理结果已恢复:', storedProject.segmentationResults.length, '个结果');
+            }
+
+            // 恢复按图像ID存储的推理结果
+            if (storedProject.imageSegmentationResults) {
+                Object.entries(storedProject.imageSegmentationResults).forEach(([imageId, results]) => {
+                    store.dispatch(updateSegmentationResults(results, imageId));
+                });
+                console.log('按图像存储的推理结果已恢复:', Object.keys(storedProject.imageSegmentationResults).length, '张图像');
+            }
 
             // 检测是否为视频项目
             // 优先使用 isVideoProject 标记（v1.8.5+），回退到文件名/MIME 推断

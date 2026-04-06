@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.9.1',
+        date: '2026-04-06',
+        changes: [
+            { zh: '修复视频模式缩放：鼠标滚轮缩放时视频帧与检测框同步缩放', en: 'Fix video mode zoom: video frame now scales together with detection boxes on mouse wheel zoom' },
+            { zh: '修复文件队列中英文切换不完全：帧数/图像数等备注现在跟随语言动态显示', en: 'Fix incomplete i18n in file queue: frame/image count metadata now updates dynamically with language switch' },
+        ]
+    },
+    {
         version: '1.9.0',
         date: '2026-04-06',
         changes: [

@@ -1,5 +1,5 @@
 /**
- * FrameExtractorService — v1.9.0
+ * FrameExtractorService — v1.9.1
  *
  * This service powers the "fast_ffmpeg_mode" playback path. It uploads the
  * video to the backend FFmpeg server and retrieves extracted JPEG frames.

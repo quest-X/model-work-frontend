@@ -25,6 +25,8 @@ export interface LanguageTexts {
     selectAll: string;
     inferenceResults: string;
     queue: string;
+    videoMeta: string;   // e.g. "{frames} 帧 @ {fps}fps"
+    folderMeta: string;  // e.g. "{count}张图像"
     changelog: {
         title: string;
         close: string;
@@ -457,6 +459,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         selectAll: '选中全部',
         inferenceResults: '推理结果',
         queue: '文件队列',
+        videoMeta: '{frames} 帧 @ {fps}fps',
+        folderMeta: '{count}张图像',
         changelog: {
             title: '更新日志',
             close: '关闭',
@@ -887,6 +891,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         selectAll: 'Select All',
         inferenceResults: 'AI Results',
         queue: 'File Queue',
+        videoMeta: '{frames} frames @ {fps}fps',
+        folderMeta: '{count} images',
         changelog: {
             title: 'Changelog',
             close: 'Close',

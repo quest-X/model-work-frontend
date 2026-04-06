@@ -94,21 +94,23 @@ export class RectRenderEngine extends BaseRenderEngine {
                     }
                 }
             } else {
-                // 普通模式：恢复 origin 逻辑
-                const rectUnderMouse: LabelRect = this.getRectUnderMouse(data);
-                if (!!rectUnderMouse) {
-                    const rect: IRect = this.calculateRectRelativeToActiveImage(rectUnderMouse.rect, data);
+                // 编辑模式：先检查锚点，然后只在边缘可以拖拽，内部可以创建新矩形
+                const rectUnderMouseEdge: LabelRect = this.getRectUnderMouse(data);
+                if (!!rectUnderMouseEdge) {
+                    const rect: IRect = this.calculateRectRelativeToActiveImage(rectUnderMouseEdge.rect, data);
                     const anchorUnderMouse: RectAnchor = this.getAnchorUnderMouseByRect(rect, data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
-                    if (!!anchorUnderMouse && rectUnderMouse.status === LabelStatus.ACCEPTED) {
-                        store.dispatch(updateActiveLabelId(rectUnderMouse.id));
+
+                    store.dispatch(updateActiveLabelId(rectUnderMouseEdge.id));
+
+                    if (!!anchorUnderMouse && rectUnderMouseEdge.status === LabelStatus.ACCEPTED) {
+                        // 锚点优先级最高 - 调整大小
                         this.startRectResize(anchorUnderMouse);
-                    } else {
-                        if (!!LabelsSelector.getHighlightedLabelId())
-                            store.dispatch(updateActiveLabelId(LabelsSelector.getHighlightedLabelId()));
-                        else
-                            this.startRectCreation(data.mousePositionOnViewPortContent);
+                    } else if (rectUnderMouseEdge.status === LabelStatus.ACCEPTED) {
+                        // 在边缘但不在锚点上 - 拖拽移动
+                        this.startRectMove(data.mousePositionOnViewPortContent, rectUnderMouseEdge.id);
                     }
                 } else if (isMouseOverImage) {
+                    // 不在任何矩形边缘上（包括内部区域）- 创建新矩形
                     this.startRectCreation(data.mousePositionOnViewPortContent);
                 }
             }
@@ -405,14 +407,36 @@ export class RectRenderEngine extends BaseRenderEngine {
     }
 
     private updateCursorStyle(data: EditorData) {
-        if (!!this.canvas && !!data.mousePositionOnViewPortContent && !GeneralSelector.getImageDragModeStatus()) {
+        if (!!this.canvas && !!data.mousePositionOnViewPortContent) {
+            const isInLabelDragMode: boolean = GeneralSelector.getImageDragModeStatus();
             const rectUnderMouse: LabelRect = this.getRectUnderMouse(data);
             const rectAnchorUnderMouse: RectAnchor = this.getAnchorUnderMouse(data);
-            if ((!!rectAnchorUnderMouse && rectUnderMouse && rectUnderMouse.status === LabelStatus.ACCEPTED) || !!this.startResizeRectAnchor) {
+
+            if (isInLabelDragMode) {
+                // 标签拖拽模式下：
+                if (!!this.startMoveRectPoint && !!this.moveRectId) {
+                    store.dispatch(updateCustomCursorStyle(CustomCursorStyle.GRABBING));
+                } else if (!!rectAnchorUnderMouse && rectUnderMouse) {
+                    store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
+                } else {
+                    const rectForDrag: LabelRect = this.getRectUnderMouseForDrag(data);
+                    if (!!rectForDrag) {
+                        store.dispatch(updateCustomCursorStyle(CustomCursorStyle.GRAB));
+                    } else {
+                        RenderEngineUtil.wrapDefaultCursorStyleInCancel(data);
+                    }
+                }
+            } else if (!!this.startResizeRectAnchor) {
                 store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
-                return;
-            }
-            else if (RenderEngineUtil.isMouseOverCanvas(data)) {
+            } else if (!!this.startMoveRectPoint && !!this.moveRectId) {
+                // 编辑模式下的移动操作，使用 GRABBING
+                store.dispatch(updateCustomCursorStyle(CustomCursorStyle.GRABBING));
+            } else if (!!rectAnchorUnderMouse && rectUnderMouse && rectUnderMouse.status === LabelStatus.ACCEPTED) {
+                store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
+            } else if (!!rectUnderMouse && rectUnderMouse.status === LabelStatus.ACCEPTED) {
+                // 鼠标在矩形边缘上（但不在锚点上），显示 GRAB 表示可以拖拽
+                store.dispatch(updateCustomCursorStyle(CustomCursorStyle.GRAB));
+            } else if (RenderEngineUtil.isMouseOverCanvas(data)) {
                 if (!RenderEngineUtil.isMouseOverImage(data) && !!this.startCreateRectPoint)
                     store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
                 else

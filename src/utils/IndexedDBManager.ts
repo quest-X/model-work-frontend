@@ -1,4 +1,5 @@
 import { ImageData, LabelName } from '../store/labels/types';
+import { QueueItem } from '../store/queue/types';
 
 export interface StoredProjectData {
     id: string;
@@ -16,6 +17,9 @@ export interface StoredProjectData {
         width: number;
         height: number;
     };
+    imageSegmentationResults?: Record<string, any[]>; // 按图像ID存储的推理结果
+    queueItems?: QueueItem[];           // 队列项列表
+    activeQueueItemId?: string | null;  // 当前活动的队列项ID
 }
 
 export interface StoredImageData {

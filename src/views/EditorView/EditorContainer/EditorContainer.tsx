@@ -326,7 +326,7 @@ const EditorContainer: React.FC<IProps> = (
 
                         const item: QueueItem = {
                             id: uuidv4(),
-                            name: `${videoFile.name} (${result.totalFrames} 帧 @ ${result.fps}fps)`,
+                            name: videoFile.name,
                             type: QueueItemType.VIDEO,
                             file: videoFile,
                             extractedFrames: isOnDemand ? undefined : result.frames,
@@ -388,7 +388,7 @@ const EditorContainer: React.FC<IProps> = (
                         const thumbnail = await generateThumbnail(sortedFolderFiles[0]);
                         const item: QueueItem = {
                             id: uuidv4(),
-                            name: `${folderName} (${files.length}张图像)`,
+                            name: folderName,
                             type: QueueItemType.FOLDER,
                             files: sortedFolderFiles,
                             status: QueueItemStatus.PENDING,
@@ -483,7 +483,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '170px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.9.0</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.9.1</div>
         </>
     };
 

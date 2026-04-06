@@ -131,9 +131,21 @@ export class AutoSaveService {
             }))
         );
 
+        // 转换 imageSegmentationResults Map 到普通对象以便序列化
+        const imageSegmentationResultsObj: Record<string, any[]> = {};
+        if (state.ai?.imageSegmentationResults) {
+            state.ai.imageSegmentationResults.forEach((results, imageId) => {
+                imageSegmentationResultsObj[imageId] = results;
+            });
+        }
+
         // 视频模式：保存拆帧元数据以支持恢复
         const isVideoMode = state.video?.isVideoMode || false;
         const activeVideo = isVideoMode ? state.video?.activeVideo : null;
+
+        // 保存队列数据
+        const queueItems = state.queue?.items || [];
+        const activeQueueItemId = state.queue?.activeQueueItemId || null;
 
         const projectData: StoredProjectData = {
             id: 'current-project',
@@ -143,6 +155,7 @@ export class AutoSaveService {
             lastModified: Date.now(),
             version: '1.11.0-alpha',
             segmentationResults: state.ai?.segmentationResults || [],
+            imageSegmentationResults: imageSegmentationResultsObj,
             isVideoProject: isVideoMode && !!activeVideo?.preExtractedFrames,
             extractionMetadata: activeVideo?.preExtractedFrames ? {
                 fps: activeVideo.fps,
@@ -151,6 +164,8 @@ export class AutoSaveService {
                 width: activeVideo.videoSize.width,
                 height: activeVideo.videoSize.height,
             } : undefined,
+            queueItems: queueItems,
+            activeQueueItemId: activeQueueItemId,
         };
 
         await IndexedDBManager.saveProject(projectData);

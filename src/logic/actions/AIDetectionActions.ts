@@ -77,9 +77,9 @@ export class AIDetectionActions {
                     // 将检测结果转换为可编辑的标注框
                     this.convertDetectionResultsToLabelRects(imageData, results);
 
-                    // 将检测结果同步到推理结果视图
+                    // 将检测结果同步到推理结果视图（按图像ID存储）
                     const segResults = DetectionAPIDetector.convertToSegmentationFormat(results);
-                    store.dispatch(updateSegmentationResults(segResults));
+                    store.dispatch(updateSegmentationResults(segResults, imageData.id));
                     
                     // 批量更新通知，避免多次dispatch
                     queueMicrotask(() => {
@@ -401,6 +401,9 @@ export class AIDetectionActions {
             for (let i = 0; i < captureTotal; i++) {
                 const r = inferenceResults[i];
                 if (r !== null) {
+                    // 按图像ID存储推理结果，确保持久化
+                    const segResults = DetectionAPIDetector.convertToSegmentationFormat(r);
+                    store.dispatch(updateSegmentationResults(segResults, frameQueue[i].imageData.id));
                     store.dispatch(addInferenceHistory(frameQueue[i].imageData.id, r.length, true, 'detection'));
                     totalObjects += r.length;
                     successCount++;
@@ -443,6 +446,9 @@ export class AIDetectionActions {
             for (let i = 0; i < imageQueue.length; i++) {
                 const results = imageResults[i];
                 if (results !== null) {
+                    // 按图像ID存储推理结果，确保持久化
+                    const segResults = DetectionAPIDetector.convertToSegmentationFormat(results);
+                    store.dispatch(updateSegmentationResults(segResults, imageQueue[i].id));
                     store.dispatch(addInferenceHistory(imageQueue[i].id, results.length, true, 'detection'));
                     totalObjects += results.length;
                     successCount++;

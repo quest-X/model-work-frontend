@@ -569,8 +569,9 @@ const VideoEditor: React.FC<IProps> = ({
         <div className="VideoEditor">
             {/* 合并的视频播放和标注区域 */}
             <div className="VideoAnnotationSection" style={{ height: videoAndAnnotationHeight }}>
-                {/* 底层：视频播放器 */}
-                <div className="VideoPlayerLayer">
+                {/* 底层：视频播放器
+                     暂停时隐藏（标注画布已绘制视频帧，避免缩放时未缩放的帧透出） */}
+                <div className="VideoPlayerLayer" style={{ visibility: isPlaying ? 'visible' : 'hidden' }}>
                     {/* Playback mode switch:
                         - fast_ffmpeg_mode  → FramePlayer (backend FFmpeg extracts JPEG frames)
                         - raw_browser_mode  → VideoPlayer (browser-native <video> element, fallback)

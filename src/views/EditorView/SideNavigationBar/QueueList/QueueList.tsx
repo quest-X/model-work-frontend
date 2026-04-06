@@ -8,7 +8,7 @@ import { removeQueueItem } from '../../../../store/queue/actionCreators';
 import { updateImageData } from '../../../../store/labels/actionCreators';
 import { QueueActions } from '../../../../logic/actions/QueueActions';
 import { ImageRepository } from '../../../../logic/imageRepository/ImageRepository';
-import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
+import {Language, LanguageConfig, LanguageTexts} from '../../../../data/LanguageConfig';
 import './QueueList.scss';
 
 // ============ QueueItemCard ============
@@ -27,8 +27,27 @@ const typeIconMap: Record<QueueItemType, string> = {
     [QueueItemType.FOLDER]: '/ico/files.png',
 };
 
+// Strip legacy metadata suffix baked into item.name (e.g. " (174 帧 @ 30fps)" or " (174张图像)")
+const stripMetaSuffix = (name: string): string => name.replace(/\s*\([\d]+(张图像| 帧 @ [\d.]+fps| frames @ [\d.]+fps| images)\)$/, '');
+
+const getDisplayName = (item: QueueItem, texts: LanguageTexts): string => {
+    const baseName = stripMetaSuffix(item.name);
+    if (item.type === QueueItemType.VIDEO && item.extractionMetadata) {
+        const meta = texts.videoMeta
+            .replace('{frames}', String(item.extractionMetadata.totalFrames))
+            .replace('{fps}', String(item.extractionMetadata.fps));
+        return `${baseName} (${meta})`;
+    }
+    if (item.type === QueueItemType.FOLDER && item.files) {
+        const meta = texts.folderMeta.replace('{count}', String(item.files.length));
+        return `${baseName} (${meta})`;
+    }
+    return baseName;
+};
+
 const QueueItemCard: React.FC<CardProps> = ({ item, isActive, language, onSelect, onDelete }) => {
     const texts = LanguageConfig[language];
+    const displayName = getDisplayName(item, texts);
     const statusLabels: Record<QueueItemStatus, { className: string; label: string }> = {
         [QueueItemStatus.PENDING]:    { className: 'status-pending',    label: texts.queueStatus.pending },
         [QueueItemStatus.PROCESSING]: { className: 'status-processing', label: texts.queueStatus.processing },
@@ -41,11 +60,11 @@ const QueueItemCard: React.FC<CardProps> = ({ item, isActive, language, onSelect
         <div
             className={classNames('queue-item-card', { 'active': isActive })}
             onClick={() => onSelect(item)}
-            title={item.error || item.name}
+            title={item.error || displayName}
         >
             <div className='card-thumbnail'>
                 {item.thumbnail ? (
-                    <img src={item.thumbnail} alt={item.name} draggable={false} />
+                    <img src={item.thumbnail} alt={displayName} draggable={false} />
                 ) : (
                     <img
                         className='type-icon-fallback'
@@ -63,7 +82,7 @@ const QueueItemCard: React.FC<CardProps> = ({ item, isActive, language, onSelect
             </div>
 
             <div className='card-info'>
-                <span className='card-name'>{item.name}</span>
+                <span className='card-name'>{displayName}</span>
                 <span className={classNames('card-status', statusInfo.className)}>
                     {statusInfo.label}
                 </span>
