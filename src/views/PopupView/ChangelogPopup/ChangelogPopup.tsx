@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.9.2',
+        date: '2026-04-06',
+        changes: [
+            { zh: '编辑模式支持边框拖拽移动矩形（对齐 v2），边缘悬停显示抓手光标', en: 'Edit mode supports border drag to move rects (align with v2), edge hover shows grab cursor' },
+            { zh: '修复刷新恢复后文件队列丢失：队列项和活动队列 ID 现在持久化到 IndexedDB', en: 'Fix file queue lost after refresh restore: queue items and active queue ID now persisted to IndexedDB' },
+            { zh: '修复刷新恢复后推理结果丢失：推理结果按图像 ID 存储，视频批量检测结果也纳入持久化', en: 'Fix inference results lost after refresh restore: results stored per image ID, video batch detection results also persisted' },
+        ]
+    },
+    {
         version: '1.9.1',
         date: '2026-04-06',
         changes: [
