@@ -16,6 +16,18 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.8.9',
+        date: '2026-04-06',
+        changes: [
+            { zh: '修复帧率硬编码：视频 fps 不再写死 30，自动使用原始帧率（支持 120fps/60fps/50fps 等）', en: 'Fix hardcoded fps: video fps no longer forced to 30, auto-detect original frame rate (120/60/50fps etc.)' },
+            { zh: '播放引擎重构：setInterval → requestAnimationFrame + 时间驱动，消除异步绘制竞争', en: 'Playback engine rewrite: setInterval → rAF + time-driven, eliminate async draw races' },
+            { zh: '修复播放无法到达最后一帧：节流绕过 + 闭包帧号修正 + 最后一帧确保画完再暂停', en: 'Fix playback not reaching last frame: throttle bypass + stale closure fix + ensure last frame drawn before pause' },
+            { zh: '帧缓冲区改为 fps 自适应：基于秒数 × fps 动态计算，高帧率视频缓冲更充足', en: 'Frame buffer fps-aware: dynamically calculated as seconds × fps, better buffering for high-fps videos' },
+            { zh: 'fps 兜底增加 console.warn，快速定位帧率缺失问题', en: 'Add console.warn for fps fallback, quickly identify missing fps issues' },
+            { zh: '帧率显示国际化：中文"帧率"、英文"FPS"', en: 'FPS label i18n: Chinese "帧率", English "FPS"' },
+        ]
+    },
+    {
         version: '1.8.8',
         date: '2026-04-05',
         changes: [

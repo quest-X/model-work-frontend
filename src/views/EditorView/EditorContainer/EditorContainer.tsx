@@ -285,7 +285,7 @@ const EditorContainer: React.FC<IProps> = (
                         setVideoProcessing({ phase: '上传视频...', progress: 0, fileName: videoFile.name });
 
                         const result = await FrameExtractorService.extractFrames(
-                            videoFile, 30,
+                            videoFile, 0,
                             (phase, current, total) => {
                                 const pct = total > 0 ? Math.round((current / total) * 100) : 0;
                                 if (phase === '上传视频') {
@@ -483,7 +483,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '170px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.8.8</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v1.8.9</div>
         </>
     };
 

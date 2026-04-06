@@ -40,7 +40,7 @@ export class QueueActions {
                     fileData: targetItem.file!,
                     loadStatus: !!meta,
                     duration: meta?.duration || 0,
-                    fps: meta?.fps || 30,
+                    fps: meta?.fps || (console.warn('[QueueActions] fps 缺失，使用默认值 30'), 30),
                     totalFrames: meta?.totalFrames || 0,
                     videoSize: meta
                         ? { width: meta.width, height: meta.height }

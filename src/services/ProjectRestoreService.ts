@@ -100,7 +100,7 @@ export class ProjectRestoreService {
                     fileData: firstFile,
                     loadStatus: !!meta,
                     duration: meta?.duration || 0,
-                    fps: meta?.fps || 30,
+                    fps: meta?.fps || (console.warn('[ProjectRestore] fps 缺失，使用默认值 30'), 30),
                     totalFrames: meta?.totalFrames || restoredImages.length,
                     videoSize: meta
                         ? { width: meta.width, height: meta.height }

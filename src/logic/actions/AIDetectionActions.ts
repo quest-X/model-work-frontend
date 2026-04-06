@@ -220,7 +220,7 @@ export class AIDetectionActions {
         const isVideo = videoState.isVideoMode;
         const allImagesData: ImageData[] = store.getState().labels.imagesData;
         const activeVideo = isVideo ? videoState.activeVideo : null;
-        const fps = activeVideo?.fps || 30;
+        const fps = activeVideo?.fps || (console.warn('[BatchDetect] fps 缺失，使用默认值 30'), 30);
 
         console.log('[BatchDetect] Mode:', isVideo
             ? `video/${activeVideo?.preExtractedFrames ? 'fast_ffmpeg_mode(full-load)' : (activeVideo?.sessionId || EditorModel.videoSessionId) ? 'fast_ffmpeg_mode(on-demand)' : 'raw_browser_mode'} (fps=${fps})`

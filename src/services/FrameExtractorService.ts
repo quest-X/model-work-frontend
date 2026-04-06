@@ -43,7 +43,7 @@ export class FrameExtractorService {
      */
     static async extractFrames(
         videoFile: File,
-        targetFps: number = 30,
+        targetFps: number = 0,
         onProgress?: ProgressCallback,
     ): Promise<FrameExtractionResult> {
 
@@ -92,7 +92,7 @@ export class FrameExtractorService {
 
     static async uploadVideo(
         videoFile: File,
-        targetFps: number = 30,
+        targetFps: number = 0,
         onProgress?: ProgressCallback,
     ): Promise<{ sessionId: string; metadata: any }> {
 

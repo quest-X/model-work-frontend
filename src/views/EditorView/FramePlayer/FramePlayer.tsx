@@ -3,7 +3,7 @@
  *
  * This component implements the "fast_ffmpeg_mode" video playback path:
  * the backend FFmpeg process extracts every frame as a JPEG file, and this
- * component plays the JPEG sequence on a <canvas> driven by setInterval.
+ * component plays the JPEG sequence on a <canvas> driven by requestAnimationFrame.
  *
  * Two sub-modes are handled transparently:
  *   - Full-load (small videos): all frame Files are available in `frames` prop.
@@ -44,10 +44,10 @@ interface IProps {
 const THUMBNAIL_SIZE = 150;
 const BATCH_SIZE = 30;
 
-// === available_frames 滑动窗口 ===
-const MIN_AHEAD = 500;       // 当前位置前方始终保持 500 帧可播放
-const MAX_AVAILABLE = 2000;  // 缓存上限（超出则淘汰远离当前位置的旧帧）
-const KEEP_BEHIND = 100;     // 当前位置后方保留 100 帧（支持短回退）
+// === available_frames 滑动窗口（基于秒数 × fps 动态计算） ===
+const MIN_AHEAD_SECONDS = 15;   // 前方保持 15 秒可播放
+const MAX_AVAILABLE_SECONDS = 60; // 缓存上限 60 秒
+const KEEP_BEHIND_SECONDS = 3;  // 后方保留 3 秒（支持短回退）
 
 const FramePlayer: React.FC<IProps> = ({
     language,
@@ -67,6 +67,12 @@ const FramePlayer: React.FC<IProps> = ({
     onFrameReady,
 }) => {
     const texts = LanguageConfig[language];
+
+    // 基于实际 fps 动态计算滑动窗口参数
+    const MIN_AHEAD = Math.ceil(MIN_AHEAD_SECONDS * (fps || 30));
+    const MAX_AVAILABLE = Math.ceil(MAX_AVAILABLE_SECONDS * (fps || 30));
+    const KEEP_BEHIND = Math.ceil(KEEP_BEHIND_SECONDS * (fps || 30));
+
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const focusableElementRef = useRef<HTMLDivElement>(null);
@@ -87,8 +93,8 @@ const FramePlayer: React.FC<IProps> = ({
     const onFrameReadyRef = useRef(onFrameReady);
     onFrameReadyRef.current = onFrameReady;
 
-    // 播放
-    const playIntervalRef = useRef<ReturnType<typeof setInterval>>();
+    // 播放（rAF 驱动）
+    const rafRef = useRef<number>();
     const playFrameRef = useRef(0);
     const isVideoEndedRef = useRef(false);
 
@@ -271,7 +277,7 @@ const FramePlayer: React.FC<IProps> = ({
         if (toEvict.length > 0) {
             console.log(`[FramePlayer] 淘汰 ${toEvict.length} 旧帧, 缓存=${cache.size}`);
         }
-    }, []);
+    }, [MAX_AVAILABLE, KEEP_BEHIND]);
 
     // 持续维护 available_frames：保证当前位置前方始终有 MIN_AHEAD 帧可播放
     const maintainAvailableFrames = useCallback(async () => {
@@ -311,7 +317,7 @@ const FramePlayer: React.FC<IProps> = ({
             // 淘汰旧帧
             evictOldFrames(pos);
         }
-    }, [totalFrames, loadFrameImage, evictOldFrames]);
+    }, [totalFrames, loadFrameImage, evictOldFrames, MIN_AHEAD, MAX_AVAILABLE]);
 
     // 更新稳定 ref
     loadFrameFullRef.current = loadFrameFull;
@@ -396,7 +402,7 @@ const FramePlayer: React.FC<IProps> = ({
     const currentFrameRef = useRef(currentFrame);
     currentFrameRef.current = currentFrame;
 
-    // === 播放/暂停控制 ===
+    // === 播放/暂停控制（rAF + 时间驱动） ===
     useEffect(() => {
         if (!isLoaded) return undefined;
 
@@ -405,46 +411,69 @@ const FramePlayer: React.FC<IProps> = ({
                 isVideoEndedRef.current = false;
                 playFrameRef.current = 0;
                 onTimeUpdateRef.current?.(0, 0);
-                drawFrame(0);
+                drawFrameSync(0) || drawFrame(0);
             } else {
                 playFrameRef.current = currentFrameRef.current;
             }
 
-            const interval = 1000 / fps;
+            const startTime = performance.now();
+            const startFrame = playFrameRef.current;
 
-            playIntervalRef.current = setInterval(() => {
-                const nextFrame = playFrameRef.current + 1;
+            const tick = (now: number) => {
+                // 基于真实时间计算目标帧号（不累加，不漂移）
+                const elapsed = (now - startTime) / 1000;
+                const targetFrame = Math.min(
+                    startFrame + Math.floor(elapsed * fps),
+                    totalFrames - 1
+                );
 
-                if (nextFrame >= totalFrames) {
-                    clearInterval(playIntervalRef.current);
-                    playIntervalRef.current = undefined;
-                    isVideoEndedRef.current = true;
-                    onTimeUpdateRef.current?.(duration, totalFrames - 1);
-                    if (!drawFrameSync(totalFrames - 1)) {
-                        drawFrame(totalFrames - 1);
-                    }
-                    onPlayPauseRef.current?.();
+                // 帧号没变 → 跳过（屏幕刷新率 > 视频帧率时）
+                if (targetFrame === playFrameRef.current && targetFrame < totalFrames - 1) {
+                    rafRef.current = requestAnimationFrame(tick);
                     return;
                 }
 
-                playFrameRef.current = nextFrame;
-                onTimeUpdateRef.current?.(nextFrame / fps, nextFrame);
+                // 始终更新帧位置（确保帧号和时间轴跟随真实时间）
+                playFrameRef.current = targetFrame;
+                onTimeUpdateRef.current?.(targetFrame / fps, targetFrame);
 
-                if (!drawFrameSync(nextFrame)) {
-                    drawFrame(nextFrame);
+                // 尝试同步绘制（缓存命中则画，否则保持上一帧画面）
+                drawFrameSync(targetFrame);
+
+                // 到达最后一帧 → 确保画完再暂停
+                if (targetFrame >= totalFrames - 1) {
+                    onTimeUpdateRef.current?.(duration, totalFrames - 1);
+
+                    if (!frameCacheRef.current.has(totalFrames - 1)) {
+                        // 最后一帧不在缓存 → 异步加载，画完再暂停
+                        drawFrame(totalFrames - 1).then(() => {
+                            isVideoEndedRef.current = true;
+                            onPlayPauseRef.current?.();
+                        });
+                    } else {
+                        // 最后一帧在缓存 → 确保画上再暂停
+                        drawFrameSync(totalFrames - 1);
+                        isVideoEndedRef.current = true;
+                        onPlayPauseRef.current?.();
+                    }
+                    return; // 不再 requestAnimationFrame
                 }
-            }, interval);
+
+                rafRef.current = requestAnimationFrame(tick);
+            };
+
+            rafRef.current = requestAnimationFrame(tick);
         } else {
-            if (playIntervalRef.current) {
-                clearInterval(playIntervalRef.current);
-                playIntervalRef.current = undefined;
+            if (rafRef.current) {
+                cancelAnimationFrame(rafRef.current);
+                rafRef.current = undefined;
             }
         }
 
         return () => {
-            if (playIntervalRef.current) {
-                clearInterval(playIntervalRef.current);
-                playIntervalRef.current = undefined;
+            if (rafRef.current) {
+                cancelAnimationFrame(rafRef.current);
+                rafRef.current = undefined;
             }
         };
     }, [isPlaying, isLoaded, fps, totalFrames, duration, drawFrameSync, drawFrame]);
@@ -484,6 +513,7 @@ const FramePlayer: React.FC<IProps> = ({
     // 清理（不主动 revokeObjectURL，避免 Strict Mode 双重挂载间撤销正在加载的 URL）
     useEffect(() => {
         return () => {
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
             loadGenRef.current++; // 终止 maintainAvailableFrames 循环
             frameCacheRef.current = new Map();
             blobUrlCacheRef.current = new Map();

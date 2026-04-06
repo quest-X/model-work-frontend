@@ -423,13 +423,12 @@ const VideoEditor: React.FC<IProps> = ({
             frameSkipCountRef.current = 0;
             lastFrameRef.current = -1;
         } else {
-            // 暂停：清除播放缓存，恢复 Redux selector 路径
-            // （Redux 在播放期间每帧都在更新，已同步，无需额外 dispatch）
+            // 暂停：用 lastFrameRef（实时值）而非闭包中过时的 activeVideo.currentFrame
             EditorModel.playbackImageData = null;
-            // 同步侧边栏到当前帧
-            if (activeVideo.currentFrame !== activeImageIndex) {
-                updateActiveImageIndex(activeVideo.currentFrame);
-            }
+            const finalFrame = lastFrameRef.current >= 0 ? lastFrameRef.current : activeVideo.currentFrame;
+            const safeFps = activeVideo.fps || 30;
+            updateVideoCurrentFrame(activeVideo.id, finalFrame, finalFrame / safeFps);
+            updateActiveImageIndex(finalFrame);
         }
     }, [activeVideo, isPlaying, updateVideoPlayingStatus, activeImageIndex, updateActiveImageIndex]);
 
@@ -481,8 +480,9 @@ const VideoEditor: React.FC<IProps> = ({
             const now = Date.now();
             const frameChanged = frame !== currentActiveVideo.currentFrame;
             const timeSinceLastUpdate = now - lastUpdateTimeRef.current;
-            // 限制 canvas 更新频率为 30fps（33ms）
-            const shouldUpdate = frameChanged && timeSinceLastUpdate >= 33;
+            // 限制 canvas 更新频率为 30fps（33ms），但最后一帧必须更新（否则播放结束时帧号不对）
+            const isLastFrame = frame >= currentActiveVideo.totalFrames - 1;
+            const shouldUpdate = frameChanged && (isLastFrame || timeSinceLastUpdate >= 33);
 
             if (shouldUpdate) {
                 lastUpdateTimeRef.current = now;
@@ -612,7 +612,8 @@ const VideoEditor: React.FC<IProps> = ({
                                 if (activeVideo) {
                                     updateVideoPlayingStatus(activeVideo.id, false);
                                     const finalFrame = lastFrameRef.current >= 0 ? lastFrameRef.current : activeVideo.currentFrame;
-                                    updateVideoCurrentFrame(activeVideo.id, finalFrame, finalFrame / (activeVideo.fps || 30));
+                                    const safeFps = activeVideo.fps || (console.warn('[VideoEditor] fps 缺失，使用默认值 30'), 30);
+                                    updateVideoCurrentFrame(activeVideo.id, finalFrame, finalFrame / safeFps);
                                     updateActiveImageIndex(finalFrame);
                                 }
                                 EditorModel.playbackImageData = null;
