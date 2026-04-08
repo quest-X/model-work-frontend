@@ -40,6 +40,16 @@ const EditorBottomNavigationBar: React.FC<IProps> = ({size, imageData, totalImag
         return () => clearInterval(interval);
     }, []);
 
+    const truncateFilename = (name: string, maxLen: number): string => {
+        if (name.length <= maxLen) return name;
+        const ext = name.lastIndexOf('.') >= 0 ? name.slice(name.lastIndexOf('.')) : '';
+        const base = name.slice(0, name.length - ext.length);
+        const keep = maxLen - ext.length - 3; // 3 for "..."
+        const head = Math.ceil(keep / 2);
+        const tail = Math.floor(keep / 2);
+        return base.slice(0, head) + '...' + base.slice(-tail) + ext;
+    };
+
     const getImageCounter = () => {
         return (activeImageIndex + 1) + " / " + totalImageCount;
     };
@@ -88,7 +98,7 @@ const EditorBottomNavigationBar: React.FC<IProps> = ({size, imageData, totalImag
                         arrow
                         enterDelay={500}
                     >
-                        <div className="CurrentImageName"> {imageData.fileData.name} </div>
+                        <div className="CurrentImageName"> {truncateFilename(imageData.fileData.name, 40)} </div>
                     </Tooltip> :
                     <div className="CurrentImageCount"> {getImageCounter()} </div>
                 }

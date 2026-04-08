@@ -42,6 +42,8 @@ const PolygonLabelsList: React.FC<IProps> = (
     }
 ) => {
     const currentTexts = LanguageConfig[language];
+    if (!imageData) return null;
+
     const labelInputFieldHeight = 40;
     const listStyle: React.CSSProperties = {
         width: size.width,
@@ -49,7 +51,7 @@ const PolygonLabelsList: React.FC<IProps> = (
     };
     const listStyleContent: React.CSSProperties = {
         width: size.width,
-        height: imageData.labelPolygons.length * labelInputFieldHeight
+        height: (imageData.labelPolygons || []).length * labelInputFieldHeight
     };
 
     const deletePolygonLabelById = (labelPolygonId: string) => {
@@ -108,7 +110,7 @@ const PolygonLabelsList: React.FC<IProps> = (
             style={listStyle}
             onClickCapture={onClickHandler}
         >
-            {imageData.labelPolygons.length === 0 ?
+            {(imageData.labelPolygons || []).length === 0 ?
                 <EmptyLabelList
                     labelBefore={currentTexts.drawFirstPolygon}
                     labelAfter={currentTexts.noLabelsCreated}

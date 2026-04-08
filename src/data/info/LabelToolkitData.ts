@@ -17,7 +17,7 @@ export const getLabelToolkitData = (language: Language): ILabelToolkit[] => {
         {
             labelType: LabelType.ALL,
             headerText: texts.labelTypes.all,
-            imageSrc: 'ico/tags.png', // 临时使用tags图标
+            imageSrc: 'ico/all.png',
             imageAlt: 'all-labels',
             projectType: ProjectType.OBJECT_DETECTION,
         },

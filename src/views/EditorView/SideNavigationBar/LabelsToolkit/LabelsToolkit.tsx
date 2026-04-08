@@ -57,8 +57,6 @@ class LabelsToolkit extends React.Component<IProps, IState> {
             [
                 LabelType.ALL,
                 LabelType.RECT,
-                LabelType.POINT,
-                LabelType.LINE,
                 LabelType.POLYGON
             ];
 

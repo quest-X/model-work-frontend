@@ -16,6 +16,19 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.9.4',
+        date: '2026-04-08',
+        changes: [
+            { zh: '隐藏点标注和线条标注功能（工具栏、侧栏、导入导出弹窗）', en: 'Hide point and line annotation features (toolbar, sidebar, import/export popups)' },
+            { zh: '标签类型重命名：矩形框→检测标签，多边形→分割标签', en: 'Rename label types: Rect→Detection, Polygon→Segmentation' },
+            { zh: '模型弹窗重命名：加载AI模型→本地模型，接入AI模型→远程模型', en: 'Rename model popups: Load AI Model→Local Model, Integrate AI Model→Remote Model' },
+            { zh: '全部标签图标统一使用 all.png', en: 'Unify "All Labels" icon to all.png' },
+            { zh: '文件名过长时底栏省略中部显示，悬停查看完整名', en: 'Truncate long filenames in bottom bar with ellipsis, hover for full name' },
+            { zh: '推理结果坐标标签缩写为 Coords 防止挤压', en: 'Shorten coordinates label to Coords to prevent overflow' },
+            { zh: '修复重新开始后黑屏：PolygonLabelsList 空数据保护', en: 'Fix black screen after fresh start: PolygonLabelsList null-data guard' },
+        ]
+    },
+    {
         version: '1.9.3',
         date: '2026-04-08',
         changes: [

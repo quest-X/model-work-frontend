@@ -333,6 +333,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         () => onToolClick(LabelType.RECT)
                     )
                 }
+                {/* Point and Line tools hidden
                 {
                     getButtonWithTooltip(
                         'tool-point',
@@ -355,6 +356,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         () => onToolClick(LabelType.LINE)
                     )
                 }
+                */}
                 {
                     getButtonWithTooltip(
                         'tool-polygon',

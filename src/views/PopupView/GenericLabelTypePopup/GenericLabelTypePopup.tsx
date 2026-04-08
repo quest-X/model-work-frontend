@@ -45,7 +45,7 @@ const GenericLabelTypePopup: React.FC<IProps> = (
     const getSidebarButtons = () => {
         const labelToolkitData = getLabelToolkitData(language);
         return labelToolkitData
-            .filter((label: ILabelToolkit) => label.projectType === projectType && label.labelType !== LabelType.ALL)
+            .filter((label: ILabelToolkit) => label.projectType === projectType && label.labelType !== LabelType.ALL && label.labelType !== LabelType.POINT && label.labelType !== LabelType.LINE)
             .map((label: ILabelToolkit) => {
                 return <ImageButton
                     key={label.labelType}

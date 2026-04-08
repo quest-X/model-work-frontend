@@ -523,10 +523,10 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         labelTypes: {
             all: '全部标签',
             imageRecognition: '图像识别',
-            rect: '矩形框',
+            rect: '检测标签',
             point: '点',
             line: '线条',
-            polygon: '多边形'
+            polygon: '分割标签'
         },
         
         // Popup Windows
@@ -578,7 +578,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 rejectButton: '取消'
             },
             loadModel: {
-                title: '加载AI模型',
+                title: '本地模型',
                 selectModel: '选择要加载的模型：',
                 acceptButton: '进入',
                 rejectButton: '取消',
@@ -615,7 +615,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 localYoloUrl: '服务地址'
             },
             integrateModel: {
-                title: '接入AI模型',
+                title: '远程模型',
                 acceptButton: '接入',
                 rejectButton: '取消',
                 modelUrl: '模型地址',
@@ -955,10 +955,10 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         labelTypes: {
             all: 'All Labels',
             imageRecognition: 'Image recognition',
-            rect: 'Rect',
+            rect: 'Detection',
             point: 'Point',
             line: 'Line',
-            polygon: 'Polygon'
+            polygon: 'Segmentation'
         },
         
         // Popup Windows
@@ -1010,7 +1010,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 rejectButton: 'Cancel'
             },
             loadModel: {
-                title: 'Load AI Model',
+                title: 'Local Model',
                 selectModel: 'Select model to load:',
                 acceptButton: 'Enter',
                 rejectButton: 'Cancel',
@@ -1047,7 +1047,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 localYoloUrl: 'Server URL'
             },
             integrateModel: {
-                title: 'Integrate AI Model',
+                title: 'Remote Model',
                 acceptButton: 'Integrate',
                 rejectButton: 'Cancel',
                 modelUrl: 'Model URL',
@@ -1293,7 +1293,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 noResults: 'No inference results',
                 noResultsHint: 'Draw annotation boxes to trigger AI inference',
                 confidence: 'Confidence',
-                coordinates: 'Coordinates',
+                coordinates: 'Coords',
                 size: 'Size',
                 area: 'Area',
                 thumbnail: 'Thumbnail',
