@@ -697,7 +697,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         // Load YOLO Model Popup
         loadYoloModel: {
             title: '加载 {model} 模型',
-            titleFallback: '加载模型',
+            titleFallback: '自定义模型',
             acceptLabel: '使用模型',
             rejectLabel: '返回',
             active: '使用中',
@@ -1129,7 +1129,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         // Load YOLO Model Popup
         loadYoloModel: {
             title: 'Load {model} Model',
-            titleFallback: 'Load Model',
+            titleFallback: 'Custom Model',
             acceptLabel: 'Use Model',
             rejectLabel: 'Back',
             active: 'Active',

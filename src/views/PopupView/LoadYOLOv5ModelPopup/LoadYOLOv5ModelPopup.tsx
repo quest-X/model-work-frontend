@@ -50,7 +50,7 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
     const serverUrl = getServerUrl();
     const variants = modelFamily?.variants || [];
 
-    const [modelSource, setModelSource] = useState(ModelSource.OFFICIAL);
+    const [modelSource, setModelSource] = useState(modelFamily ? ModelSource.OFFICIAL : ModelSource.UPLOAD);
     const [selectedVariant, setSelectedVariant] = useState(variants[0] || '');
     const [isLoading, setIsLoading] = useState(false);
     const [loadProgress, setLoadProgress] = useState(0);

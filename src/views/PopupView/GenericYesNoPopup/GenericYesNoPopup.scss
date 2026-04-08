@@ -35,11 +35,12 @@
     font-size: 14px;
     background-color: $darkThemeSecondColor;
     flex: 1;
+    overflow-y: auto;
 
     display: flex;
     flex-direction: column;
     flex-wrap: nowrap;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     align-content: center;
 

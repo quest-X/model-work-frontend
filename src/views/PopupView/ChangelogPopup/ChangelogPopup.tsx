@@ -16,6 +16,17 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.9.5',
+        date: '2026-04-08',
+        changes: [
+            { zh: '本地模型弹窗重构为三区布局：自定义 / 检测模型 / 分割模型', en: 'Refactor local model popup into 3-section layout: Custom / Detection / Segmentation' },
+            { zh: '自定义区新增 .pt / .onnx / .engine 三种格式选项（后两者占位）', en: 'Custom section adds .pt / .onnx / .engine format options (latter two as placeholders)' },
+            { zh: '分割模型区添加 SAM 系列占位（SAM / SAM 2 / SAM 3 / MobileSAM / FastSAM）', en: 'Segmentation section adds SAM family placeholders (SAM / SAM 2 / SAM 3 / MobileSAM / FastSAM)' },
+            { zh: '弹窗内容区支持滚动，底部按钮不再被遮挡', en: 'Popup content area now scrollable, footer buttons no longer clipped' },
+            { zh: '模型列表已下载数量字号统一', en: 'Unify downloaded model count font size in model list' },
+        ]
+    },
+    {
         version: '1.9.4',
         date: '2026-04-08',
         changes: [

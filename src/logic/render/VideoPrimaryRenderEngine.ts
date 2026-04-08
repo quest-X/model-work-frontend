@@ -15,8 +15,7 @@ export class VideoPrimaryRenderEngine extends PrimaryEditorRenderEngine {
     }
 
     public drawImage(image: HTMLImageElement, imageRect: IRect) {
-        if (VideoSelector.isVideoPlaying()) {
-            // 播放中：保持透明，让下层 VideoPlayer 显示视频帧
+        if (VideoSelector.isVideoPlaying() || !imageRect) {
             return;
         }
         // 暂停时：在标注画布上绘制视频帧，使其跟随缩放

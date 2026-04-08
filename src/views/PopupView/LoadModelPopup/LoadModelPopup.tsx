@@ -65,6 +65,12 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
     };
 
     const onAccept = () => {
+        if (selectedId === 'custom-pt') {
+            _selectedModelFamily = null;
+            _serverUrl = serverUrl;
+            updateActivePopupType(PopupWindowType.LOAD_YOLO_V5_MODEL);
+            return;
+        }
         const family = YOLO_MODEL_FAMILIES.find(f => f.id === selectedId);
         if (!family) return;
         _selectedModelFamily = family;
@@ -82,37 +88,69 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
         return family.variants.some(v => v === baseName);
     };
 
-    const getOptions = () => {
-        return YOLO_MODEL_FAMILIES.map((family) => {
-            const isSelected = selectedId === family.id;
-            const downloaded = getDownloadedCount(family);
-            const total = family.variants.length;
-            const isActive = isActiveFamily(family);
-            return <div
-                className={`OptionsItem${downloaded > 0 ? ' has-models' : ''}${isActive ? ' active-model' : ''}`}
-                onClick={() => onSelect(family.id)}
-                key={family.id}
-            >
-                <img
-                    draggable={false}
-                    src={isSelected ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'}
-                    alt={isSelected ? 'checked' : 'unchecked'}
-                />
-                {family.name} - 检测模型
-                {downloaded > 0 && <span className='model-count'> ({downloaded}/{total})</span>}
-                {isActive && <span className='active-badge'>✓ {currentModelName.replace('.pt', '')}</span>}
-            </div>
-        })
+    const renderFamilyOption = (family: YOLOModelFamily) => {
+        const isSelected = selectedId === family.id;
+        const downloaded = getDownloadedCount(family);
+        const total = family.variants.length;
+        const isActive = isActiveFamily(family);
+        return <div
+            className={`OptionsItem${downloaded > 0 ? ' has-models' : ''}${isActive ? ' active-model' : ''}`}
+            onClick={() => onSelect(family.id)}
+            key={family.id}
+        >
+            <img
+                draggable={false}
+                src={isSelected ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'}
+                alt={isSelected ? 'checked' : 'unchecked'}
+            />
+            {family.name}
+            {downloaded > 0 && <span className='model-count'> ({downloaded}/{total})</span>}
+            {isActive && <span className='active-badge'>✓ {currentModelName.replace('.pt', '')}</span>}
+        </div>
     };
+
+    const zhTexts = language === Language.CHINESE;
 
     const renderContent = () => {
         return <div className='LoadModelPopupContent'>
-            <div className='Message'>
-                {currentTexts.popups.loadModel.welcomeMessage}
-            </div>
-            <div className='Companion'>
+            <div className='ModelSection'>
+                <div className='SectionHeader'>{zhTexts ? '自定义' : 'Custom'}</div>
                 <div className='Options'>
-                    {getOptions()}
+                    <div
+                        className='OptionsItem'
+                        onClick={() => onSelect('custom-pt')}
+                    >
+                        <img
+                            draggable={false}
+                            src={selectedId === 'custom-pt' ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'}
+                            alt={selectedId === 'custom-pt' ? 'checked' : 'unchecked'}
+                        />
+                        {zhTexts ? '模型 .pt 文件' : '.pt model file'}
+                    </div>
+                    <div className='OptionsItem disabled'>
+                        <img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />
+                        {zhTexts ? '模型 .onnx 文件（即将推出）' : '.onnx model file (coming soon)'}
+                    </div>
+                    <div className='OptionsItem disabled'>
+                        <img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />
+                        {zhTexts ? '模型 .engine / .trt 文件（即将推出）' : '.engine / .trt model file (coming soon)'}
+                    </div>
+                </div>
+            </div>
+            <div className='ModelSection'>
+                <div className='SectionHeader'>{zhTexts ? '检测模型' : 'Detection Models'}</div>
+                <div className='Options'>
+                    {YOLO_MODEL_FAMILIES.map(f => renderFamilyOption(f))}
+                </div>
+            </div>
+            <div className='ModelSection disabled'>
+                <div className='SectionHeader'>{zhTexts ? '分割模型（即将推出）' : 'Segmentation Models (coming soon)'}</div>
+                <div className='Options'>
+                    <div className='OptionsItem'><img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />SAM (Segment Anything Model)</div>
+                    <div className='OptionsItem'><img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />SAM 2 (Segment Anything Model 2)</div>
+                    <div className='OptionsItem'><img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />SAM 3 (Segment Anything Model 3)</div>
+                    <div className='OptionsItem'><img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />MobileSAM</div>
+                    <div className='OptionsItem'><img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />FastSAM</div>
                 </div>
             </div>
             <div className='ServerConfig'>
@@ -122,7 +160,7 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
                     autoComplete={'off'}
                     type={'text'}
                     margin={'dense'}
-                    label={'推理服务地址'}
+                    label={zhTexts ? '推理服务地址' : 'Inference server URL'}
                     value={serverUrl}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setServerUrl(e.target.value)}
                     style={{ width: 300 }}
