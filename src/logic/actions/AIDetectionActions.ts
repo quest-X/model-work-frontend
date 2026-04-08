@@ -316,7 +316,7 @@ export class AIDetectionActions {
 
                     if (i % 5 === 0 || i === captureTotal - 1) {
                         const pct = Math.round((i / captureTotal) * 33);
-                        notify(1, `${texts.aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`, `${pct}% — 帧 ${frameIdx}`);
+                        notify(1, `${texts.aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`, `${pct}% — ${texts.frame} ${frameIdx}`);
                     }
                     if (i % 8 === 0 && i > 0) await this.yieldToUI();
 
@@ -380,7 +380,7 @@ export class AIDetectionActions {
 
             const inferenceResults = await this.withConcurrency(tasks, 4, (done, ttl) => {
                 const pct = preFrames ? Math.round((done / ttl) * 90) : 33 + Math.round((done / ttl) * 55);
-                notify(2, `${texts.aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — 帧 ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
+                notify(2, `${texts.aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${texts.frame} ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
             });
 
             const inferElapsed = ((Date.now() - inferStartTime) / 1000).toFixed(1);

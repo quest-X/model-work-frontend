@@ -16,6 +16,18 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.9.6',
+        date: '2026-04-08',
+        changes: [
+            { zh: '导出标注新增简单/完整模式切换：完整模式包含图像 + 标签 + 8:1:1 数据集划分', en: 'Export annotations: add Simple/Complete mode toggle — Complete includes images + labels + 8:1:1 dataset split' },
+            { zh: '所有导出格式（YOLO/VOC/COCO/VGG/CSV）均支持完整模式', en: 'All export formats (YOLO/VOC/COCO/VGG/CSV) support Complete mode' },
+            { zh: '导入标注简化：去掉格式选择步骤，拖拽文件自动识别格式（.json→COCO, .txt→YOLO, .xml→VOC）', en: 'Simplify import: remove format selection, auto-detect from file extension (.json→COCO, .txt→YOLO, .xml→VOC)' },
+            { zh: '导出格式描述简化为格式名 + 简要说明', en: 'Simplify export format labels to name + brief description' },
+            { zh: '修复导出/导入弹窗 JSX 多余逗号渲染为文本', en: 'Fix stray comma rendered as text in export/import popups' },
+            { zh: '修复推理通知中硬编码中文"帧"，改用 LanguageConfig', en: 'Fix hardcoded Chinese "帧" in inference notifications, use LanguageConfig' },
+        ]
+    },
+    {
         version: '1.9.5',
         date: '2026-04-08',
         changes: [

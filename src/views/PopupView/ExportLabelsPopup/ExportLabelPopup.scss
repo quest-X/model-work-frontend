@@ -13,14 +13,55 @@
     .Message {
       align-self: stretch;
       color: white;
-      font-size: 15px;
-      padding: 30px 40px;
-      border-bottom: solid 1px $darkThemeFirstColor;
+      font-size: 14px;
+      padding: 20px 40px 10px 40px;
+    }
+
+    .ModeToggle {
+      align-self: stretch;
+      display: flex;
+      margin: 6px 40px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 3px;
+
+      .ModeButton {
+        flex: 1;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.45);
+        cursor: pointer;
+        user-select: none;
+        font-size: 13px;
+        font-weight: 500;
+        transition: all 0.15s ease;
+
+        &:hover {
+          color: rgba(255, 255, 255, 0.7);
+        }
+
+        &.active {
+          color: white;
+          background: rgba(255, 255, 255, 0.12);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        .ModeDesc {
+          font-size: 11px;
+          font-weight: 400;
+          opacity: 0.6;
+        }
+      }
     }
 
     .Options {
       align-self: stretch;
-      padding: 30px 40px;
+      padding: 10px 40px 20px 40px;
 
       display: flex;
       flex-direction: column;
@@ -40,14 +81,14 @@
 
         cursor: pointer;
         user-select: none;
-        font-size: 15px;
+        font-size: 14px;
         padding: 5px 0;
 
         > img {
           max-width: 20px;
           max-height: 20px;
           margin-right: 10px;
-          filter: invert(1) brightness(35%) sepia(100%) hue-rotate(172deg) saturate(2000%); // fallback if new css variables are not supported by browser
+          filter: invert(1) brightness(35%) sepia(100%) hue-rotate(172deg) saturate(2000%);
           filter: invert(1) brightness(35%) sepia(100%) hue-rotate(var(--hue-value)) saturate(2000%);
           user-select: none;
         }

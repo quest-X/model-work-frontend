@@ -12,49 +12,71 @@ import {ISize} from '../../interfaces/ISize';
 import {NumberUtil} from '../../utils/NumberUtil';
 import {RectUtil} from '../../utils/RectUtil';
 import {Settings} from '../../settings/Settings';
+import {DatasetSplitUtil} from '../../utils/DatasetSplitUtil';
+import {ExportMode} from '../../views/PopupView/ExportLabelsPopup/ExportLabelPopup';
 
 export class RectLabelsExporter {
-    public static export(exportFormatType: AnnotationFormatType): void {
+    public static export(exportFormatType: AnnotationFormatType, mode: ExportMode = 'simple'): void {
         switch (exportFormatType) {
             case AnnotationFormatType.YOLO:
-                RectLabelsExporter.exportAsYOLO();
+                RectLabelsExporter.exportAsYOLO(mode);
                 break;
             case AnnotationFormatType.VOC:
-                RectLabelsExporter.exportAsVOC();
+                RectLabelsExporter.exportAsVOC(mode);
                 break;
             case AnnotationFormatType.CSV:
-                RectLabelsExporter.exportAsCSV();
+                RectLabelsExporter.exportAsCSV(mode);
                 break;
             default:
                 return;
         }
     }
 
-    private static exportAsYOLO(): void {
+    private static exportAsYOLO(mode: ExportMode): void {
         const zip = new JSZip();
-        LabelsSelector.getImagesData()
-            .forEach((imageData: ImageData) => {
-                const fileContent: string = RectLabelsExporter.wrapRectLabelsIntoYOLO(imageData);
-                if (fileContent) {
-                    const fileName : string = imageData.fileData.name.replace(/\.[^/.]+$/, '.txt');
-                    try {
-                        zip.file(fileName, fileContent);
-                    } catch (error) {
-                        // TODO
-                        throw new Error(error as string);
+        const imagesData = LabelsSelector.getImagesData();
+
+        if (mode === 'complete') {
+            const split = DatasetSplitUtil.split(imagesData);
+            const labelNames = LabelsSelector.getLabelNames();
+
+            for (const [splitName, splitImages] of Object.entries(split)) {
+                for (const imageData of splitImages) {
+                    const fileContent = RectLabelsExporter.wrapRectLabelsIntoYOLO(imageData);
+                    if (fileContent) {
+                        const txtName = imageData.fileData.name.replace(/\.[^/.]+$/, '.txt');
+                        zip.file(`labels/${splitName}/${txtName}`, fileContent);
+                    }
+                    if (imageData.fileData) {
+                        zip.file(`images/${splitName}/${imageData.fileData.name}`, imageData.fileData);
                     }
                 }
-            });
+            }
 
-        try {
-            zip.generateAsync({type:'blob'})
-                .then((content: Blob) => {
-                    saveAs(content, `${ExporterUtil.getExportFileName()}.zip`);
-                });
-        } catch (error) {
-            // TODO
-            throw new Error(error as string);
+            // data.yaml
+            const classNames = labelNames.map(l => l.name);
+            const yaml = [
+                `train: images/train`,
+                `val: images/val`,
+                `test: images/test`,
+                ``,
+                `nc: ${classNames.length}`,
+                `names: [${classNames.map(n => `'${n}'`).join(', ')}]`,
+            ].join('\n');
+            zip.file('data.yaml', yaml);
+        } else {
+            imagesData.forEach((imageData: ImageData) => {
+                const fileContent = RectLabelsExporter.wrapRectLabelsIntoYOLO(imageData);
+                if (fileContent) {
+                    const fileName = imageData.fileData.name.replace(/\.[^/.]+$/, '.txt');
+                    zip.file(fileName, fileContent);
+                }
+            });
         }
+
+        zip.generateAsync({type:'blob'}).then((content: Blob) => {
+            saveAs(content, `${ExporterUtil.getExportFileName()}.zip`);
+        });
     }
 
     public static wrapRectLabelIntoYOLO(labelRect: LabelRect, labelNames: LabelName[], imageSize: ISize): string {
@@ -116,30 +138,43 @@ export class RectLabelsExporter {
         return labelRectsString.join('\n');
     }
 
-    private static exportAsVOC(): void {
+    private static exportAsVOC(mode: ExportMode): void {
         const zip = new JSZip();
-        LabelsSelector.getImagesData().forEach((imageData: ImageData) => {
-            const fileContent: string = RectLabelsExporter.wrapImageIntoVOC(imageData);
-            if (fileContent) {
-                const fileName : string = imageData.fileData.name.replace(/\.[^/.]+$/, '.xml');
-                try {
-                    zip.file(fileName, fileContent);
-                } catch (error) {
-                    // TODO
-                    throw new Error(error as string);
-                }
-            }
-        });
+        const imagesData = LabelsSelector.getImagesData();
 
-        try {
-            zip.generateAsync({type:'blob'})
-                .then(content => {
-                    saveAs(content, `${ExporterUtil.getExportFileName()}.zip`);
-                });
-        } catch (error) {
-            // TODO
-            throw new Error(error as string);
+        if (mode === 'complete') {
+            const split = DatasetSplitUtil.split(imagesData);
+            const allImages: ImageData[] = [];
+
+            for (const [splitName, splitImages] of Object.entries(split)) {
+                const fileNames: string[] = [];
+                for (const imageData of splitImages) {
+                    const fileContent = RectLabelsExporter.wrapImageIntoVOC(imageData);
+                    if (fileContent) {
+                        const xmlName = imageData.fileData.name.replace(/\.[^/.]+$/, '.xml');
+                        zip.file(`Annotations/${xmlName}`, fileContent);
+                        fileNames.push(imageData.fileData.name.replace(/\.[^/.]+$/, ''));
+                    }
+                    if (imageData.fileData) {
+                        zip.file(`JPEGImages/${imageData.fileData.name}`, imageData.fileData);
+                    }
+                    allImages.push(imageData);
+                }
+                zip.file(`ImageSets/Main/${splitName}.txt`, fileNames.join('\n'));
+            }
+        } else {
+            imagesData.forEach((imageData: ImageData) => {
+                const fileContent = RectLabelsExporter.wrapImageIntoVOC(imageData);
+                if (fileContent) {
+                    const fileName = imageData.fileData.name.replace(/\.[^/.]+$/, '.xml');
+                    zip.file(fileName, fileContent);
+                }
+            });
         }
+
+        zip.generateAsync({type:'blob'}).then(content => {
+            saveAs(content, `${ExporterUtil.getExportFileName()}.zip`);
+        });
     }
 
     private static wrapRectLabelsIntoVOC(imageData: ImageData): string {
@@ -195,21 +230,38 @@ export class RectLabelsExporter {
     }
 
 
-    private static exportAsCSV(): void {
-        try {
-            const contentEntries: string[] = LabelsSelector.getImagesData()
-                .map((imageData: ImageData) => {
-                    return RectLabelsExporter.wrapRectLabelsIntoCSV(imageData)})
-                .filter((imageLabelData: string) => {
-                    return !!imageLabelData})
-            contentEntries.unshift(Settings.RECT_LABELS_EXPORT_CSV_COLUMN_NAMES)
+    private static exportAsCSV(mode: ExportMode): void {
+        const imagesData = LabelsSelector.getImagesData();
 
+        if (mode === 'complete') {
+            const zip = new JSZip();
+            const split = DatasetSplitUtil.split(imagesData);
+
+            for (const [splitName, splitImages] of Object.entries(split)) {
+                const entries: string[] = splitImages
+                    .map(d => RectLabelsExporter.wrapRectLabelsIntoCSV(d))
+                    .filter(Boolean);
+                entries.unshift(Settings.RECT_LABELS_EXPORT_CSV_COLUMN_NAMES);
+                zip.file(`${splitName}.csv`, entries.join('\n'));
+
+                for (const imageData of splitImages) {
+                    if (imageData.fileData) {
+                        zip.file(`images/${splitName}/${imageData.fileData.name}`, imageData.fileData);
+                    }
+                }
+            }
+
+            zip.generateAsync({type:'blob'}).then((content: Blob) => {
+                saveAs(content, `${ExporterUtil.getExportFileName()}.zip`);
+            });
+        } else {
+            const contentEntries: string[] = imagesData
+                .map((imageData: ImageData) => RectLabelsExporter.wrapRectLabelsIntoCSV(imageData))
+                .filter(Boolean);
+            contentEntries.unshift(Settings.RECT_LABELS_EXPORT_CSV_COLUMN_NAMES);
             const content: string = contentEntries.join('\n');
             const fileName: string = `${ExporterUtil.getExportFileName()}.csv`;
             ExporterUtil.saveAs(content, fileName);
-        } catch (error) {
-            // TODO
-            throw new Error(error as string);
         }
     }
 

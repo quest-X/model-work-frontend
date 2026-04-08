@@ -83,6 +83,14 @@ const ImportLabelPopup: React.FC<IProps> = (
         submitNewNotification(NotificationUtil.createErrorNotification(NotificationsDataMap[notification]));
     };
 
+    const detectFormatFromFiles = (files: File[]): AnnotationFormatType | null => {
+        const extensions = files.map(f => f.name.split('.').pop()?.toLowerCase());
+        if (extensions.some(e => e === 'json')) return AnnotationFormatType.COCO;
+        if (extensions.some(e => e === 'xml')) return AnnotationFormatType.VOC;
+        if (extensions.some(e => e === 'txt')) return AnnotationFormatType.YOLO;
+        return null;
+    };
+
     const { getRootProps, getInputProps } = useDropzone({
         accept: {
             "application/json": [".json" ],
@@ -91,7 +99,13 @@ const ImportLabelPopup: React.FC<IProps> = (
         },
         multiple: true,
         onDrop: (acceptedFiles) => {
-            const importer = new (ImporterSpecData[formatType])([labelType]);
+            const detectedFormat = formatType || detectFormatFromFiles(acceptedFiles);
+            if (!detectedFormat || !ImporterSpecData[detectedFormat]) {
+                onAnnotationsLoadFailure(new Error('Unsupported file format'));
+                return;
+            }
+            setFormatType(detectedFormat);
+            const importer = new (ImporterSpecData[detectedFormat])([labelType]);
             importer.import(acceptedFiles, onAnnotationLoadSuccess, onAnnotationsLoadFailure);
         }
     });
@@ -175,22 +189,9 @@ const ImportLabelPopup: React.FC<IProps> = (
     };
 
     const renderInternalContent = (type: LabelType) => {
-        if (!formatType && getImportFormatData(language)[type].length !== 0) {
-            return <>
-                <div className='Message'>
-                    {currentTexts.popups.importAnnotations.selectFileFormat}
-                </div>,
-                <div className='Options'>
-                    {getOptions(getImportFormatData(language)[type])}
-                </div>
-            </>;
-        }
-        const importFormatData = getImportFormatData(language)[type];
-        return importFormatData.length === 0 ?
-            <FeatureInProgress language={language} /> :
-            <div {...getRootProps({ className: 'DropZone' })}>
-                {getDropZoneContent()}
-            </div>;
+        return <div {...getRootProps({ className: 'DropZone' })}>
+            {getDropZoneContent()}
+        </div>;
     };
 
     return (
@@ -200,7 +201,7 @@ const ImportLabelPopup: React.FC<IProps> = (
             onLabelTypeChange={onLabelTypeChange}
             acceptLabel={currentTexts.popups.importAnnotations.acceptButton}
             onAccept={onAccept}
-            skipAcceptButton={getImportFormatData(language)[labelType].length === 0}
+            skipAcceptButton={false}
             disableAcceptButton={loadedImageData.length === 0 || loadedLabelNames.length === 0 || !!annotationsLoadedError}
             rejectLabel={currentTexts.popups.importAnnotations.rejectButton}
             onReject={onReject}

@@ -13,18 +13,43 @@ import {
 } from "../../../data/labels/COCO";
 import {flatten} from "lodash";
 import {IPoint} from "../../../interfaces/IPoint";
+import JSZip from 'jszip';
+import {saveAs} from 'file-saver';
+import {DatasetSplitUtil} from '../../../utils/DatasetSplitUtil';
+import {ExportMode} from '../../../views/PopupView/ExportLabelsPopup/ExportLabelPopup';
 
 export type LabelDataMap = { [key: string]: number; }
 
 export class COCOExporter {
-    public static export(): void {
+    public static export(mode: ExportMode = 'simple'): void {
         const imagesData: ImageData[] = LabelsSelector.getImagesData();
         const labelNames: LabelName[] = LabelsSelector.getLabelNames();
         const projectName: string = GeneralSelector.getProjectName();
-        const COCOObject: COCOObject = COCOExporter.mapImagesDataToCOCOObject(imagesData, labelNames, projectName);
-        const content: string = JSON.stringify(COCOObject);
-        const fileName: string = `${ExporterUtil.getExportFileName()}.json`;
-        ExporterUtil.saveAs(content, fileName);
+
+        if (mode === 'complete') {
+            const zip = new JSZip();
+            const split = DatasetSplitUtil.split(imagesData);
+
+            for (const [splitName, splitImages] of Object.entries(split)) {
+                const cocoObj = COCOExporter.mapImagesDataToCOCOObject(splitImages, labelNames, projectName);
+                zip.file(`${splitName}.json`, JSON.stringify(cocoObj, null, 2));
+
+                for (const imageData of splitImages) {
+                    if (imageData.fileData) {
+                        zip.file(`images/${splitName}/${imageData.fileData.name}`, imageData.fileData);
+                    }
+                }
+            }
+
+            zip.generateAsync({type:'blob'}).then((content: Blob) => {
+                saveAs(content, `${ExporterUtil.getExportFileName()}.zip`);
+            });
+        } else {
+            const COCOObj = COCOExporter.mapImagesDataToCOCOObject(imagesData, labelNames, projectName);
+            const content: string = JSON.stringify(COCOObj);
+            const fileName: string = `${ExporterUtil.getExportFileName()}.json`;
+            ExporterUtil.saveAs(content, fileName);
+        }
     }
 
     private static mapImagesDataToCOCOObject(

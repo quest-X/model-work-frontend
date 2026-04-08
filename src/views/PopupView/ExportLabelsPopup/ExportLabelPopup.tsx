@@ -15,6 +15,8 @@ import { AppState } from '../../../store';
 import { connect } from 'react-redux';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
+export type ExportMode = 'simple' | 'complete';
+
 interface IProps {
     activeLabelType: LabelType,
     language: Language;
@@ -25,11 +27,14 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
     const effectiveLabelType = activeLabelType === LabelType.ALL ? LabelType.RECT : activeLabelType;
     const [labelType, setLabelType] = useState(effectiveLabelType);
     const [exportFormatType, setExportFormatType] = useState(null);
+    const [exportMode, setExportMode] = useState<ExportMode>('simple');
+
+    const zhTexts = language === Language.CHINESE;
 
     const onAccept = (type: LabelType) => {
         switch (type) {
             case LabelType.RECT:
-                RectLabelsExporter.export(exportFormatType);
+                RectLabelsExporter.export(exportFormatType, exportMode);
                 break;
             case LabelType.POINT:
                 PointLabelsExporter.export(exportFormatType);
@@ -38,7 +43,7 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
                 LineLabelsExporter.export(exportFormatType);
                 break;
             case LabelType.POLYGON:
-                PolygonLabelsExporter.export(exportFormatType);
+                PolygonLabelsExporter.export(exportFormatType, exportMode);
                 break;
             case LabelType.IMAGE_RECOGNITION:
                 TagLabelsExporter.export(exportFormatType);
@@ -82,7 +87,23 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
         return <>
             <div className='Message'>
                 {currentTexts.popups.exportAnnotations.selectFormat}
-            </div>,
+            </div>
+            <div className='ModeToggle'>
+                <div
+                    className={`ModeButton${exportMode === 'simple' ? ' active' : ''}`}
+                    onClick={() => setExportMode('simple')}
+                >
+                    {zhTexts ? '简单' : 'Simple'}
+                    <span className='ModeDesc'>{zhTexts ? '仅标签' : 'Labels only'}</span>
+                </div>
+                <div
+                    className={`ModeButton${exportMode === 'complete' ? ' active' : ''}`}
+                    onClick={() => setExportMode('complete')}
+                >
+                    {zhTexts ? '完整' : 'Complete'}
+                    <span className='ModeDesc'>{zhTexts ? '标签 + 图像 + 数据集划分' : 'Labels + images + dataset split'}</span>
+                </div>
+            </div>
             <div className='Options'>
                 {getOptions(getExportFormatData(language)[type])}
             </div>

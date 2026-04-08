@@ -4,14 +4,39 @@ import {findLast} from "lodash";
 import {IPoint} from "../../../interfaces/IPoint";
 import {LabelsSelector} from "../../../store/selectors/LabelsSelector";
 import {ExporterUtil} from "../../../utils/ExporterUtil";
+import JSZip from 'jszip';
+import {saveAs} from 'file-saver';
+import {DatasetSplitUtil} from '../../../utils/DatasetSplitUtil';
+import {ExportMode} from '../../../views/PopupView/ExportLabelsPopup/ExportLabelPopup';
 
 export class VGGExporter {
-    public static export(): void {
+    public static export(mode: ExportMode = 'simple'): void {
         const imagesData: ImageData[] = LabelsSelector.getImagesData();
         const labelNames: LabelName[] = LabelsSelector.getLabelNames();
-        const content: string = JSON.stringify(VGGExporter.mapImagesDataToVGGObject(imagesData, labelNames));
-        const fileName: string = `${ExporterUtil.getExportFileName()}.json`;
-        ExporterUtil.saveAs(content, fileName);
+
+        if (mode === 'complete') {
+            const zip = new JSZip();
+            const split = DatasetSplitUtil.split(imagesData);
+
+            for (const [splitName, splitImages] of Object.entries(split)) {
+                const vggObj = VGGExporter.mapImagesDataToVGGObject(splitImages, labelNames);
+                zip.file(`${splitName}.json`, JSON.stringify(vggObj, null, 2));
+
+                for (const imageData of splitImages) {
+                    if (imageData.fileData) {
+                        zip.file(`images/${splitName}/${imageData.fileData.name}`, imageData.fileData);
+                    }
+                }
+            }
+
+            zip.generateAsync({type:'blob'}).then((content: Blob) => {
+                saveAs(content, `${ExporterUtil.getExportFileName()}.zip`);
+            });
+        } else {
+            const content: string = JSON.stringify(VGGExporter.mapImagesDataToVGGObject(imagesData, labelNames));
+            const fileName: string = `${ExporterUtil.getExportFileName()}.json`;
+            ExporterUtil.saveAs(content, fileName);
+        }
     }
 
     private static mapImagesDataToVGGObject(imagesData: ImageData[], labelNames: LabelName[]): VGGObject {

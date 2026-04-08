@@ -631,21 +631,21 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         // Format Options
         formats: {
             export: {
-                yoloRect: '包含YOLO格式文件的.zip压缩包。',
-                vocRect: '包含VOC XML格式文件的.zip压缩包。',
-                csvGeneric: '单个CSV文件。',
-                vggPolygon: 'VGG JSON格式的单个文件。',
-                cocoPolygon: 'COCO JSON格式的单个文件。',
-                jsonImageRecognition: '单个JSON文件。'
+                yoloRect: 'YOLO (.zip) — 每张图一个 .txt，归一化坐标',
+                vocRect: 'VOC XML (.zip) — 每张图一个 .xml，像素坐标',
+                csvGeneric: 'CSV — 所有标注合并为一个表格',
+                vggPolygon: 'VGG JSON — 多边形顶点坐标',
+                cocoPolygon: 'COCO JSON — 实例分割标准格式',
+                jsonImageRecognition: 'JSON — 图像分类标签'
             },
             import: {
-                cocoRect: 'COCO JSON格式的单个文件。',
-                cocoPolygon: 'COCO JSON格式的单个文件。',
-                yoloRect: 'YOLO格式的多个文件以及标签名称定义 - labels.txt文件。',
-                vocRect: 'VOC XML格式的多个文件。'
+                cocoRect: 'COCO JSON — 检测框标准格式',
+                cocoPolygon: 'COCO JSON — 实例分割标准格式',
+                yoloRect: 'YOLO (.txt + labels.txt) — 归一化坐标',
+                vocRect: 'VOC XML — 像素坐标'
             }
         },
-        
+
         // Feature In Progress
         featureInProgress: {
             newFeature: '新功能',
@@ -1063,21 +1063,21 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         // Format Options
         formats: {
             export: {
-                yoloRect: 'A .zip package containing files in YOLO format.',
-                vocRect: 'A .zip package containing files in VOC XML format.',
-                csvGeneric: 'Single CSV file.',
-                vggPolygon: 'Single file in VGG JSON format.',
-                cocoPolygon: 'Single file in COCO JSON format.',
-                jsonImageRecognition: 'Single JSON file.'
+                yoloRect: 'YOLO (.zip) — one .txt per image, normalized coords',
+                vocRect: 'VOC XML (.zip) — one .xml per image, pixel coords',
+                csvGeneric: 'CSV — all annotations in a single table',
+                vggPolygon: 'VGG JSON — polygon vertex coordinates',
+                cocoPolygon: 'COCO JSON — instance segmentation standard',
+                jsonImageRecognition: 'JSON — image classification labels'
             },
             import: {
-                cocoRect: 'Single file in COCO JSON format.',
-                cocoPolygon: 'Single file in COCO JSON format.',
-                yoloRect: 'Multiple files in YOLO format along with labels names definition - labels.txt file.',
-                vocRect: 'Multiple files in VOC XML format.'
+                cocoRect: 'COCO JSON — detection standard',
+                cocoPolygon: 'COCO JSON — instance segmentation standard',
+                yoloRect: 'YOLO (.txt + labels.txt) — normalized coords',
+                vocRect: 'VOC XML — pixel coords'
             }
         },
-        
+
         // Feature In Progress
         featureInProgress: {
             newFeature: 'new feature',
