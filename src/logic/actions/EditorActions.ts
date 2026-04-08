@@ -21,6 +21,7 @@ import {GeneralSelector} from "../../store/selectors/GeneralSelector";
 import {ViewPortHelper} from "../helpers/ViewPortHelper";
 import {CustomCursorStyle} from "../../data/enums/CustomCursorStyle";
 import {LineRenderEngine} from "../render/LineRenderEngine";
+import {PolygonRenderEngine} from "../render/PolygonRenderEngine";
 import {AllLabelsRenderEngine} from "../render/AllLabelsRenderEngine";
 
 export class EditorActions {
@@ -43,6 +44,9 @@ export class EditorActions {
                 break;
             case LabelType.LINE:
                 EditorModel.supportRenderingEngine = new LineRenderEngine(EditorModel.canvas);
+                break;
+            case LabelType.POLYGON:
+                EditorModel.supportRenderingEngine = new PolygonRenderEngine(EditorModel.canvas);
                 break;
             default:
                 EditorModel.supportRenderingEngine = null;

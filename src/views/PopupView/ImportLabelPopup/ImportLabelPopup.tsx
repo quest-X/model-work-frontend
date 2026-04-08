@@ -38,13 +38,15 @@ const ImportLabelPopup: React.FC<IProps> = (
         language
     }) => {
     const currentTexts = LanguageConfig[language];
+    const effectiveLabelType = activeLabelType === LabelType.ALL ? LabelType.RECT : activeLabelType;
+
     const resolveFormatType = (labelType: LabelType): AnnotationFormatType => {
         const possibleImportFormats = getImportFormatData(language)[labelType];
-        return possibleImportFormats.length === 1 ? possibleImportFormats[0].type : null;
+        return possibleImportFormats && possibleImportFormats.length === 1 ? possibleImportFormats[0].type : null;
     };
 
-    const [labelType, setLabelType] = useState(activeLabelType);
-    const [formatType, setFormatType] = useState(resolveFormatType(activeLabelType));
+    const [labelType, setLabelType] = useState(effectiveLabelType);
+    const [formatType, setFormatType] = useState(resolveFormatType(effectiveLabelType));
     const [loadedLabelNames, setLoadedLabelNames] = useState([]);
     const [loadedImageData, setLoadedImageData] = useState([]);
     const [annotationsLoadedError, setAnnotationsLoadedError] = useState(null);

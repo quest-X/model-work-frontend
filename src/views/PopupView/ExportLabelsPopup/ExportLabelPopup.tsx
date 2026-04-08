@@ -7,6 +7,7 @@ import { ILabelFormatData } from '../../../interfaces/ILabelFormatData';
 import { PointLabelsExporter } from '../../../logic/export/PointLabelsExport';
 import { PopupActions } from '../../../logic/actions/PopupActions';
 import { LineLabelsExporter } from '../../../logic/export/LineLabelExport';
+import { PolygonLabelsExporter } from '../../../logic/export/polygon/PolygonLabelsExporter';
 import { TagLabelsExporter } from '../../../logic/export/TagLabelsExport';
 import GenericLabelTypePopup from '../GenericLabelTypePopup/GenericLabelTypePopup';
 import { getExportFormatData } from '../../../data/ExportFormatData';
@@ -21,7 +22,8 @@ interface IProps {
 
 const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
     const currentTexts = LanguageConfig[language];
-    const [labelType, setLabelType] = useState(activeLabelType);
+    const effectiveLabelType = activeLabelType === LabelType.ALL ? LabelType.RECT : activeLabelType;
+    const [labelType, setLabelType] = useState(effectiveLabelType);
     const [exportFormatType, setExportFormatType] = useState(null);
 
     const onAccept = (type: LabelType) => {
@@ -34,6 +36,9 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
                 break;
             case LabelType.LINE:
                 LineLabelsExporter.export(exportFormatType);
+                break;
+            case LabelType.POLYGON:
+                PolygonLabelsExporter.export(exportFormatType);
                 break;
             case LabelType.IMAGE_RECOGNITION:
                 TagLabelsExporter.export(exportFormatType);

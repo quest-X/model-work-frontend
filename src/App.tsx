@@ -110,11 +110,10 @@ const App: React.FC<IProps> = (
         return (
             <div className="App restore-prompt">
                 <div className="restore-dialog">
-                    <h2>发现未完成的工作</h2>
+                    <h2>是否恢复之前的工作?</h2>
                     <p>
                         上次保存时间: {ProjectRestoreService.formatLastSavedTime(storedDataInfo.lastSaved)}
                     </p>
-                    <p>是否恢复之前的工作？</p>
                     <div className="restore-buttons">
                         <button onClick={handleRestoreCancel} className="btn-danger">
                             重新开始

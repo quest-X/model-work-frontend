@@ -49,6 +49,13 @@ export const getLabelToolkitData = (language: Language): ILabelToolkit[] => {
             imageAlt: 'line',
             projectType: ProjectType.OBJECT_DETECTION,
         },
+        {
+            labelType: LabelType.POLYGON,
+            headerText: texts.labelTypes.polygon,
+            imageSrc: 'ico/polygon.png',
+            imageAlt: 'polygon',
+            projectType: ProjectType.OBJECT_DETECTION,
+        },
     ];
 };
 

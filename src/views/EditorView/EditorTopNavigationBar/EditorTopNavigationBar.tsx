@@ -355,7 +355,6 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         () => onToolClick(LabelType.LINE)
                     )
                 }
-                {/* Polygon tool hidden - segmentation not available
                 {
                     getButtonWithTooltip(
                         'tool-polygon',
@@ -367,7 +366,6 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         () => onToolClick(LabelType.POLYGON)
                     )
                 }
-                */}
             </div>
             <div className='ButtonWrapper'>
 {useMemo(() => {
