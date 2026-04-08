@@ -14,6 +14,7 @@ import LabelInputField from '../LabelInputField/LabelInputField';
 import EmptyLabelList from '../EmptyLabelList/EmptyLabelList';
 import {LabelActions} from '../../../../logic/actions/LabelActions';
 import {findLast} from 'lodash';
+import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
 
 interface IProps {
     size: ISize;
@@ -24,6 +25,7 @@ interface IProps {
     updateActiveLabelNameIdAction: (activeLabelId: string) => any;
     labelNames: LabelName[];
     updateActiveLabelIdAction: (activeLabelId: string) => any;
+    language: Language;
 }
 
 const PolygonLabelsList: React.FC<IProps> = (
@@ -35,9 +37,11 @@ const PolygonLabelsList: React.FC<IProps> = (
         updateActiveLabelNameIdAction,
         activeLabelId,
         highlightedLabelId,
-        updateActiveLabelIdAction
+        updateActiveLabelIdAction,
+        language
     }
 ) => {
+    const currentTexts = LanguageConfig[language];
     const labelInputFieldHeight = 40;
     const listStyle: React.CSSProperties = {
         width: size.width,
@@ -106,8 +110,8 @@ const PolygonLabelsList: React.FC<IProps> = (
         >
             {imageData.labelPolygons.length === 0 ?
                 <EmptyLabelList
-                    labelBefore={'draw your first polygon'}
-                    labelAfter={'no labels created for this image yet'}
+                    labelBefore={currentTexts.drawFirstPolygon}
+                    labelAfter={currentTexts.noLabelsCreated}
                 /> :
                 <Scrollbars>
                     <div
@@ -131,7 +135,8 @@ const mapDispatchToProps = {
 const mapStateToProps = (state: AppState) => ({
     activeLabelId: state.labels.activeLabelId,
     highlightedLabelId: state.labels.highlightedLabelId,
-    labelNames : state.labels.labels
+    labelNames : state.labels.labels,
+    language: state.general.language
 });
 
 export default connect(

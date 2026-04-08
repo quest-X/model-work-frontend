@@ -16,6 +16,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.9.3',
+        date: '2026-04-08',
+        changes: [
+            { zh: '恢复多边形标注功能：从 origin 还原 PolygonRenderEngine、多边形导出器（VGG/COCO）及侧栏列表', en: 'Restore polygon annotation: bring back PolygonRenderEngine, polygon exporters (VGG/COCO) and sidebar list from origin' },
+            { zh: '修复导出/导入标注弹窗黑屏：当标签视图为"全部"时打开弹窗不再崩溃', en: 'Fix export/import popup black screen: opening popup in "ALL" label view no longer crashes' },
+            { zh: '修复多边形标签列表硬编码英文，改用 LanguageConfig 中英双语', en: 'Fix hardcoded English in PolygonLabelsList, now uses LanguageConfig for i18n' },
+            { zh: '恢复弹窗标题文案优化', en: 'Restore dialog title text refinement' },
+        ]
+    },
+    {
         version: '1.9.2',
         date: '2026-04-06',
         changes: [
