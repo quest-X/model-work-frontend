@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.9.7',
+        date: '2026-04-08',
+        changes: [
+            { zh: 'FFmpeg 帧提取超时改为无限制，支持 10GB+ 大视频', en: 'FFmpeg frame extraction timeout removed, supports 10GB+ videos' },
+            { zh: 'YOLO 导出自动包含 labels.txt（简单/完整模式均支持）', en: 'YOLO export now includes labels.txt in both Simple and Complete modes' },
+            { zh: '上传/导入文案调整：点击上传优先展示', en: 'Upload/import text adjusted: click-to-upload shown first' },
+        ]
+    },
+    {
         version: '1.9.6',
         date: '2026-04-08',
         changes: [

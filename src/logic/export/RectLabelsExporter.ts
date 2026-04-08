@@ -64,7 +64,9 @@ export class RectLabelsExporter {
                 `names: [${classNames.map(n => `'${n}'`).join(', ')}]`,
             ].join('\n');
             zip.file('data.yaml', yaml);
+            zip.file('labels.txt', classNames.join('\n'));
         } else {
+            const labelNames = LabelsSelector.getLabelNames();
             imagesData.forEach((imageData: ImageData) => {
                 const fileContent = RectLabelsExporter.wrapRectLabelsIntoYOLO(imageData);
                 if (fileContent) {
@@ -72,10 +74,11 @@ export class RectLabelsExporter {
                     zip.file(fileName, fileContent);
                 }
             });
+            zip.file('labels.txt', labelNames.map(l => l.name).join('\n'));
         }
 
         zip.generateAsync({type:'blob'}).then((content: Blob) => {
-            saveAs(content, `${ExporterUtil.getExportFileName()}.zip`);
+            saveAs(content, `${ExporterUtil.getExportFileName('yolo')}.zip`);
         });
     }
 
@@ -173,7 +176,7 @@ export class RectLabelsExporter {
         }
 
         zip.generateAsync({type:'blob'}).then(content => {
-            saveAs(content, `${ExporterUtil.getExportFileName()}.zip`);
+            saveAs(content, `${ExporterUtil.getExportFileName('voc')}.zip`);
         });
     }
 
@@ -252,7 +255,7 @@ export class RectLabelsExporter {
             }
 
             zip.generateAsync({type:'blob'}).then((content: Blob) => {
-                saveAs(content, `${ExporterUtil.getExportFileName()}.zip`);
+                saveAs(content, `${ExporterUtil.getExportFileName('csv')}.zip`);
             });
         } else {
             const contentEntries: string[] = imagesData
@@ -260,7 +263,7 @@ export class RectLabelsExporter {
                 .filter(Boolean);
             contentEntries.unshift(Settings.RECT_LABELS_EXPORT_CSV_COLUMN_NAMES);
             const content: string = contentEntries.join('\n');
-            const fileName: string = `${ExporterUtil.getExportFileName()}.csv`;
+            const fileName: string = `${ExporterUtil.getExportFileName('csv')}.csv`;
             ExporterUtil.saveAs(content, fileName);
         }
     }

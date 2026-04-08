@@ -42,12 +42,12 @@ export class COCOExporter {
             }
 
             zip.generateAsync({type:'blob'}).then((content: Blob) => {
-                saveAs(content, `${ExporterUtil.getExportFileName()}.zip`);
+                saveAs(content, `${ExporterUtil.getExportFileName('coco')}.zip`);
             });
         } else {
             const COCOObj = COCOExporter.mapImagesDataToCOCOObject(imagesData, labelNames, projectName);
             const content: string = JSON.stringify(COCOObj);
-            const fileName: string = `${ExporterUtil.getExportFileName()}.json`;
+            const fileName: string = `${ExporterUtil.getExportFileName('coco')}.json`;
             ExporterUtil.saveAs(content, fileName);
         }
     }

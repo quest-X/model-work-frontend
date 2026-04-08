@@ -26,7 +26,7 @@ export class TagLabelsExporter {
             .map((imageData: ImageData) => {
                 return TagLabelsExporter.wrapLabelNamesIntoCSV(imageData)})
             .join("\n");
-        const fileName: string = `${ExporterUtil.getExportFileName()}.csv`;
+        const fileName: string = `${ExporterUtil.getExportFileName('csv')}.csv`;
         ExporterUtil.saveAs(content, fileName);
     }
 
@@ -41,7 +41,7 @@ export class TagLabelsExporter {
                     "annotations": TagLabelsExporter.wrapLabelNamesIntoJSON(imageData)
                 }})
         const content: string = JSON.stringify(contentObjects);
-        const fileName: string = `${ExporterUtil.getExportFileName()}.json`;
+        const fileName: string = `${ExporterUtil.getExportFileName('json')}.json`;
         ExporterUtil.saveAs(content, fileName);
     }
 

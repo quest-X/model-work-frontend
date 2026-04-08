@@ -125,7 +125,7 @@ class Editor extends React.Component<IProps, IState> {
         window.addEventListener(EventType.MOUSE_MOVE, this.update);
         window.addEventListener(EventType.MOUSE_UP, this.update);
         this.mountedCanvas.addEventListener(EventType.MOUSE_DOWN, this.update);
-        this.mountedCanvas.addEventListener(EventType.MOUSE_WHEEL, this.handleZoom);
+        this.mountedCanvas.addEventListener(EventType.MOUSE_WHEEL, this.handleWheelEvent);
 
         // 中键拖拽事件监听器
         this.mountedCanvas.addEventListener(EventType.MOUSE_DOWN, this.handleMiddleMouseDown);
@@ -142,7 +142,7 @@ class Editor extends React.Component<IProps, IState> {
         const cvs = this.mountedCanvas || EditorModel.canvas;
         if (cvs) {
             cvs.removeEventListener(EventType.MOUSE_DOWN, this.update);
-            cvs.removeEventListener(EventType.MOUSE_WHEEL, this.handleZoom);
+            cvs.removeEventListener(EventType.MOUSE_WHEEL, this.handleWheelEvent);
             cvs.removeEventListener(EventType.MOUSE_DOWN, this.handleMiddleMouseDown);
         }
         this.mountedCanvas = null;
@@ -226,20 +226,24 @@ class Editor extends React.Component<IProps, IState> {
         EditorActions.fullRender();
     };
 
-    private handleZoom = (event: WheelEvent) => {
-        // 阻止默认的滚动行为
+    private handleWheelEvent = (event: WheelEvent) => {
         event.preventDefault();
-        
-        const scrollSign: number = Math.sign(event.deltaY);
-        if (scrollSign > 0) {
-            // 向下滚动 - 缩小
-            ViewPortActions.zoomOut();
-        } else if (scrollSign < 0) {
-            // 向上滚动 - 放大
-            ViewPortActions.zoomIn();
+
+        if (event.ctrlKey || event.metaKey) {
+            // 触控板捏合缩放 (pinch) — 浏览器将 pinch 转换为 ctrlKey + wheel
+            const zoomDelta = -event.deltaY * 0.01;
+            ViewPortActions.zoomByDelta(zoomDelta);
+            EditorModel.mousePositionOnViewPortContent =
+                CanvasUtil.getMousePositionOnCanvasFromEvent(event, EditorModel.canvas);
+        } else {
+            // 双指滑动 — 平移画布
+            if (EditorModel.viewPortScrollbars) {
+                const currentScrollLeft = EditorModel.viewPortScrollbars.getScrollLeft();
+                const currentScrollTop = EditorModel.viewPortScrollbars.getScrollTop();
+                EditorModel.viewPortScrollbars.scrollLeft(currentScrollLeft + event.deltaX);
+                EditorModel.viewPortScrollbars.scrollTop(currentScrollTop + event.deltaY);
+            }
         }
-        
-        EditorModel.mousePositionOnViewPortContent = CanvasUtil.getMousePositionOnCanvasFromEvent(event, EditorModel.canvas);
     };
 
     private handleMiddleMouseDown = (event: MouseEvent) => {

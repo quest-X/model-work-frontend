@@ -23,7 +23,7 @@ export class PointLabelsExporter {
             .filter((imageLabelData: string) => {
                 return !!imageLabelData})
             .join("\n");
-        const fileName: string = `${ExporterUtil.getExportFileName()}.csv`;
+        const fileName: string = `${ExporterUtil.getExportFileName('csv')}.csv`;
         ExporterUtil.saveAs(content, fileName);
     }
 

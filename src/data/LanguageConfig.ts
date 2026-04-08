@@ -445,7 +445,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         
         // EmptyProjectView
         welcomeTitle: '欢迎使用 OpenSight Platform',
-        welcomeDescription: '拖拽图像视频到此处或点击上传',
+        welcomeDescription: '点击上传或拖拽到此处释放',
         dragActiveMessage: '释放文件以上传图像',
         uploadHints: {
             dragSupport: '• 支持拖拽上传图像文件',
@@ -533,8 +533,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         popups: {
             uploadFiles: {
                 title: '上传文件',
-                addNewFiles: '拖拽图像视频到此处',
-                clickToSelect: '点击上传',
+                addNewFiles: '点击上传',
+                clickToSelect: '拖拽文件到此处释放',
                 oneFileLoaded: '已加载 1 个文件',
                 multipleFilesLoaded: '已加载 {count} 个文件',
                 loadButton: '上传',
@@ -564,8 +564,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 acceptButton: '导入',
                 rejectButton: '取消',
                 selectFileFormat: '选择您要用于导入标签的文件格式。',
-                dropZoneMessage: '拖拽标注文件到此处',
-                dropZoneActive: '释放文件以导入标注',
+                dropZoneMessage: '点击上传',
+                dropZoneActive: '拖拽到此处释放',
                 importError: '标注导入失败',
                 tryAgain: '请重试',
                 importReady: '标注已准备好导入',
@@ -723,7 +723,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             error: '错误',
         },
         queueEmpty: '队列为空',
-        queueEmptyHint: '拖拽图像视频到此处或点击上传',
+        queueEmptyHint: '点击上传或拖拽到此处释放',
 
         // Video
         video: {
@@ -877,7 +877,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         
         // EmptyProjectView
         welcomeTitle: 'Welcome to OpenSight Platform',
-        welcomeDescription: 'Drag images or videos here or click to upload',
+        welcomeDescription: 'Click to upload or drag here to release',
         dragActiveMessage: 'Drop files to upload images',
         uploadHints: {
             dragSupport: '• Support drag and drop image files',
@@ -965,8 +965,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         popups: {
             uploadFiles: {
                 title: 'Upload Files',
-                addNewFiles: 'Drop images or videos here',
-                clickToSelect: 'Click to upload',
+                addNewFiles: 'Click to upload',
+                clickToSelect: 'drag and drop here',
                 oneFileLoaded: '1 file loaded',
                 multipleFilesLoaded: '{count} files loaded',
                 loadButton: 'Upload',
@@ -996,8 +996,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 acceptButton: 'Import',
                 rejectButton: 'Cancel',
                 selectFileFormat: 'Select file format you would like to use to import labels.',
-                dropZoneMessage: 'Drop annotation files here',
-                dropZoneActive: 'Release files to import annotations',
+                dropZoneMessage: 'Click to upload',
+                dropZoneActive: 'or drag and drop here',
                 importError: 'Annotation import was unsuccessful',
                 tryAgain: 'Try again',
                 importReady: 'Annotation ready for import',
@@ -1155,7 +1155,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             error: 'Error',
         },
         queueEmpty: 'Queue is empty',
-        queueEmptyHint: 'Drag images or videos here or click to upload',
+        queueEmptyHint: 'Click to upload or drag here to release',
 
         // Video
         video: {

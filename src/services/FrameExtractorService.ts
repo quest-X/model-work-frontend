@@ -128,7 +128,7 @@ export class FrameExtractorService {
         const response = await axios.get(`${API_BASE}/frames/${sessionId}`, {
             params: { start, count },
             responseType: 'arraybuffer',
-            timeout: 60000,
+            timeout: 0,
         });
 
         // 解析 metadata

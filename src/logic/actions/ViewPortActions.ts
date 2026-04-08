@@ -160,7 +160,7 @@ export class ViewPortActions {
 
     public static zoomOut() {
         if (EditorModel.viewPortActionsDisabled) return;
-        
+
         // 检查是否有图像加载
         if (!EditorModel.viewPortSize || !EditorModel.image) return;
 
@@ -170,6 +170,19 @@ export class ViewPortActions {
         ViewPortActions.resizeViewPortContent();
         ViewPortActions.setScrollPosition(ViewPortActions
             .calculateAbsoluteScrollPosition(currentRelativeScrollPosition));
+        EditorActions.fullRender();
+    }
+
+    public static zoomByDelta(delta: number) {
+        if (EditorModel.viewPortActionsDisabled) return;
+        if (!EditorModel.viewPortSize || !EditorModel.image) return;
+
+        const currentZoom: number = GeneralSelector.getZoom();
+        const currentRelativeScrollPosition: IPoint = ViewPortActions.getRelativeScrollPosition();
+        const nextRelativeScrollPosition = currentZoom === 1 ? {x: 0.5, y: 0.5} : currentRelativeScrollPosition;
+        ViewPortActions.setZoom(currentZoom + delta);
+        ViewPortActions.resizeViewPortContent();
+        ViewPortActions.setScrollPosition(ViewPortActions.calculateAbsoluteScrollPosition(nextRelativeScrollPosition));
         EditorActions.fullRender();
     }
 
@@ -197,6 +210,20 @@ export class ViewPortActions {
         ViewPortActions.resizeViewPortContent();
         ViewPortActions.setScrollPosition(ViewPortActions.calculateAbsoluteScrollPosition(nextRelativeScrollPosition));
         EditorActions.fullRender();
+    }
+
+    public static toggleFitMaxZoom() {
+        if (EditorModel.viewPortActionsDisabled) return;
+        if (!EditorModel.viewPortSize || !EditorModel.image) return;
+
+        const currentZoom: number = GeneralSelector.getZoom();
+        if (currentZoom > ViewPointSettings.MIN_ZOOM) {
+            // 当前已放大 → 回到自适应
+            ViewPortActions.setDefaultZoom();
+        } else {
+            // 当前是自适应 → 放大到最大
+            ViewPortActions.setOneForOneZoom();
+        }
     }
 
     public static setZoom(value: number) {

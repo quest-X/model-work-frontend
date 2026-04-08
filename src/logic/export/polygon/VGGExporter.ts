@@ -30,11 +30,11 @@ export class VGGExporter {
             }
 
             zip.generateAsync({type:'blob'}).then((content: Blob) => {
-                saveAs(content, `${ExporterUtil.getExportFileName()}.zip`);
+                saveAs(content, `${ExporterUtil.getExportFileName('vgg')}.zip`);
             });
         } else {
             const content: string = JSON.stringify(VGGExporter.mapImagesDataToVGGObject(imagesData, labelNames));
-            const fileName: string = `${ExporterUtil.getExportFileName()}.json`;
+            const fileName: string = `${ExporterUtil.getExportFileName('vgg')}.json`;
             ExporterUtil.saveAs(content, fileName);
         }
     }

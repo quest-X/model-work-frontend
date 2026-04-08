@@ -3,10 +3,11 @@ import {GeneralSelector} from '../store/selectors/GeneralSelector';
 import {saveAs} from 'file-saver';
 
 export class ExporterUtil {
-    public static getExportFileName(): string {
+    public static getExportFileName(formatPrefix?: string): string {
         const projectName: string = GeneralSelector.getProjectName();
         const date: string = moment().format('YYYY-MM-DD-hh-mm-ss');
-        return `labels_${projectName}_${date}`
+        const prefix = formatPrefix ? `${formatPrefix}_` : '';
+        return `${prefix}labels_${projectName}_${date}`
     }
 
     public static saveAs(content: string, fileName: string): void {
