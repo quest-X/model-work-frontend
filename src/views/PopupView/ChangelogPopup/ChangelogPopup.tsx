@@ -25,6 +25,9 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '修复标注框颜色：按类别着色对所有标注生效，不再区分 AI/手动', en: 'Fix annotation box color: per-class coloring applies to all annotations, no longer AI/manual distinction' },
             { zh: '修复 YOLO labels.txt 解析：保留标签名空格（如 fire hydrant），只 trim 两端', en: 'Fix YOLO labels.txt parsing: preserve spaces in label names (e.g. fire hydrant), only trim edges' },
             { zh: '完整导入后自动选中第一张图', en: 'Auto-select first image after full import' },
+            { zh: '后台预拆帧：上传视频后自动预提取全部帧，batch 加载提速 100 倍', en: 'Background pre-extraction: auto-extract all frames after upload, 100x faster batch loading' },
+            { zh: '工具栏精简：隐藏拖拽和缩放按钮，重排为 原尺寸→自适应→十字线 | 标注工具 | 推理', en: 'Toolbar cleanup: hide drag/zoom buttons, reorder to Original→Fit→Crosshair | Tools | Inference' },
+            { zh: '统一 tooltip 文案：检测→推理，标注→十字线辅助', en: 'Unify tooltip text: Detection→Inference, Annotation→Crosshair' },
         ]
     },
     {
