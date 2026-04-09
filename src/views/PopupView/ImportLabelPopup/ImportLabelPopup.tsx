@@ -2,9 +2,6 @@ import React, { useState } from 'react';
 import './ImportLabelPopup.scss';
 import { LabelType } from '../../../data/enums/LabelType';
 import { PopupActions } from '../../../logic/actions/PopupActions';
-import GenericLabelTypePopup from '../GenericLabelTypePopup/GenericLabelTypePopup';
-import { getImportFormatData } from '../../../data/ImportFormatData';
-import FeatureInProgress from '../../EditorView/FeatureInProgress/FeatureInProgress';
 import { AppState } from '../../../store';
 import { connect } from 'react-redux';
 import { useDropzone } from 'react-dropzone';
@@ -12,152 +9,190 @@ import { ImageData, LabelName } from '../../../store/labels/types';
 import { updateActiveLabelType, updateImageData, updateLabelNames } from '../../../store/labels/actionCreators';
 import { ImporterSpecData } from '../../../data/ImporterSpecData';
 import { AnnotationFormatType } from '../../../data/enums/AnnotationFormatType';
-import { ILabelFormatData } from '../../../interfaces/ILabelFormatData';
 import { submitNewNotification } from '../../../store/notifications/actionCreators';
 import { NotificationUtil } from '../../../utils/NotificationUtil';
 import { NotificationsDataMap } from '../../../data/info/NotificationsData';
 import { DocumentParsingError } from '../../../logic/import/voc/VOCImporter';
 import { Notification } from '../../../data/enums/Notification';
-import {LabelNamesNotUniqueError} from '../../../logic/import/yolo/YOLOErrors';
-import {Language, LanguageConfig} from '../../../data/LanguageConfig';
+import { LabelNamesNotUniqueError } from '../../../logic/import/yolo/YOLOErrors';
+import { Language, LanguageConfig } from '../../../data/LanguageConfig';
+import { GenericYesNoPopup } from '../GenericYesNoPopup/GenericYesNoPopup';
+import JSZip from 'jszip';
 
 interface IProps {
-    activeLabelType: LabelType,
-    updateImageDataAction: (imageData: ImageData[]) => any,
-    updateLabelNamesAction: (labels: LabelName[]) => any,
+    activeLabelType: LabelType;
+    updateImageDataAction: (imageData: ImageData[]) => any;
+    updateLabelNamesAction: (labels: LabelName[]) => any;
     updateActiveLabelTypeAction: (activeLabelType: LabelType) => any;
     language: Language;
 }
 
-const ImportLabelPopup: React.FC<IProps> = (
-    {
-        activeLabelType,
-        updateImageDataAction,
-        updateLabelNamesAction,
-        updateActiveLabelTypeAction,
-        language
-    }) => {
+const ImportLabelPopup: React.FC<IProps> = ({
+    activeLabelType,
+    updateImageDataAction,
+    updateLabelNamesAction,
+    updateActiveLabelTypeAction,
+    language
+}) => {
     const currentTexts = LanguageConfig[language];
-    const effectiveLabelType = activeLabelType === LabelType.ALL ? LabelType.RECT : activeLabelType;
+    const labelType = activeLabelType === LabelType.ALL ? LabelType.RECT : activeLabelType;
 
-    const resolveFormatType = (labelType: LabelType): AnnotationFormatType => {
-        const possibleImportFormats = getImportFormatData(language)[labelType];
-        return possibleImportFormats && possibleImportFormats.length === 1 ? possibleImportFormats[0].type : null;
-    };
-
-    const [labelType, setLabelType] = useState(effectiveLabelType);
-    const [formatType, setFormatType] = useState(resolveFormatType(effectiveLabelType));
-    const [loadedLabelNames, setLoadedLabelNames] = useState([]);
-    const [loadedImageData, setLoadedImageData] = useState([]);
-    const [annotationsLoadedError, setAnnotationsLoadedError] = useState(null);
+    const [loadedLabelNames, setLoadedLabelNames] = useState<LabelName[]>([]);
+    const [loadedImageData, setLoadedImageData] = useState<ImageData[]>([]);
+    const [annotationsLoadedError, setAnnotationsLoadedError] = useState<Error | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const resolveNotification = (error: Error): Notification => {
-        if (error instanceof DocumentParsingError) {
-            return Notification.ANNOTATION_FILE_PARSE_ERROR
-        }
-        if (error instanceof LabelNamesNotUniqueError) {
-            return Notification.NON_UNIQUE_LABEL_NAMES_ERROR
-        }
-        return Notification.ANNOTATION_IMPORT_ASSERTION_ERROR
-    }
-
-    const onLabelTypeChange = (type: LabelType) => {
-        setLabelType(type);
-        setFormatType(resolveFormatType(type));
-        setLoadedLabelNames([]);
-        setLoadedImageData([]);
-        setAnnotationsLoadedError(null);
+        if (error instanceof DocumentParsingError) return Notification.ANNOTATION_FILE_PARSE_ERROR;
+        if (error instanceof LabelNamesNotUniqueError) return Notification.NON_UNIQUE_LABEL_NAMES_ERROR;
+        return Notification.ANNOTATION_IMPORT_ASSERTION_ERROR;
     };
 
     const onAnnotationLoadSuccess = (imagesData: ImageData[], labelNames: LabelName[]) => {
         setLoadedLabelNames(labelNames);
         setLoadedImageData(imagesData);
         setAnnotationsLoadedError(null);
+        setIsProcessing(false);
     };
 
     const onAnnotationsLoadFailure = (error?: Error) => {
         setLoadedLabelNames([]);
         setLoadedImageData([]);
         setAnnotationsLoadedError(error);
-        const notification = resolveNotification(error)
+        setIsProcessing(false);
+        const notification = resolveNotification(error);
         submitNewNotification(NotificationUtil.createErrorNotification(NotificationsDataMap[notification]));
     };
 
-    const detectFormatFromFiles = (files: File[]): AnnotationFormatType | null => {
-        const extensions = files.map(f => f.name.split('.').pop()?.toLowerCase());
-        if (extensions.some(e => e === 'json')) return AnnotationFormatType.COCO;
-        if (extensions.some(e => e === 'xml')) return AnnotationFormatType.VOC;
-        if (extensions.some(e => e === 'txt')) return AnnotationFormatType.YOLO;
+    // Detect format from zip filename prefix: yolo_labels_*.zip → YOLO
+    const detectFormatFromZipName = (name: string): AnnotationFormatType | null => {
+        const lower = name.toLowerCase();
+        if (lower.startsWith('yolo_')) return AnnotationFormatType.YOLO;
+        if (lower.startsWith('voc_')) return AnnotationFormatType.VOC;
+        if (lower.startsWith('coco_')) return AnnotationFormatType.COCO;
+        if (lower.startsWith('vgg_')) return AnnotationFormatType.VGG;
         return null;
     };
 
-    const { getRootProps, getInputProps } = useDropzone({
+    // Detect format from file contents/extensions
+    const detectFormatFromFiles = (files: File[]): AnnotationFormatType | null => {
+        const names = files.map(f => f.name.toLowerCase());
+        if (names.some(n => n === 'labels.txt')) return AnnotationFormatType.YOLO;
+        const exts = names.map(n => n.split('.').pop());
+        if (exts.some(e => e === 'xml')) return AnnotationFormatType.VOC;
+        if (exts.some(e => e === 'json')) return AnnotationFormatType.COCO;
+        if (exts.some(e => e === 'txt')) return AnnotationFormatType.YOLO;
+        return null;
+    };
+
+    const doImport = (files: File[], format: AnnotationFormatType) => {
+        if (!ImporterSpecData[format]) {
+            onAnnotationsLoadFailure(new Error('Unsupported file format'));
+            return;
+        }
+        const importer = new (ImporterSpecData[format])([labelType]);
+        importer.import(files, onAnnotationLoadSuccess, onAnnotationsLoadFailure);
+    };
+
+    const { acceptedFiles, getRootProps, getInputProps } = useDropzone({
         accept: {
-            "application/json": [".json" ],
-            "text/plain": [".txt"],
-            "application/xml": [".xml"],
+            'application/json': ['.json'],
+            'text/plain': ['.txt'],
+            'application/xml': ['.xml'],
+            'text/xml': ['.xml'],
+            'application/zip': ['.zip'],
+            'application/x-zip-compressed': ['.zip'],
+            'application/octet-stream': ['.zip'],
         },
         multiple: true,
-        onDrop: (acceptedFiles) => {
-            const detectedFormat = formatType || detectFormatFromFiles(acceptedFiles);
-            if (!detectedFormat || !ImporterSpecData[detectedFormat]) {
-                onAnnotationsLoadFailure(new Error('Unsupported file format'));
-                return;
+        onDrop: (accepted) => {
+            if (accepted.length === 0) return;
+            setIsProcessing(true);
+            setAnnotationsLoadedError(null);
+
+            const zipFile = accepted.find(f => f.name.toLowerCase().endsWith('.zip'));
+            if (zipFile) {
+                const zipFormat = detectFormatFromZipName(zipFile.name);
+                JSZip.loadAsync(zipFile)
+                    .then((zip) => {
+                        const validExts = ['.json', '.txt', '.xml'];
+                        const mimeMap: Record<string, string> = {
+                            '.json': 'application/json',
+                            '.txt': 'text/plain',
+                            '.xml': 'application/xml',
+                        };
+                        const promises: Promise<File>[] = [];
+                        zip.forEach((path, entry) => {
+                            if (entry.dir) return;
+                            const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
+                            if (!validExts.includes(ext)) return;
+                            promises.push(
+                                entry.async('arraybuffer').then(buf => {
+                                    const fileName = path.split('/').pop();
+                                    return new File([buf], fileName, { type: mimeMap[ext] || 'text/plain' });
+                                })
+                            );
+                        });
+                        return Promise.all(promises).then(files => {
+                            const format = zipFormat || detectFormatFromFiles(files);
+                            if (!format) {
+                                onAnnotationsLoadFailure(new Error('Cannot detect annotation format'));
+                                return;
+                            }
+                            doImport(files, format);
+                        });
+                    })
+                    .catch(err => {
+                        onAnnotationsLoadFailure(err instanceof Error ? err : new Error(String(err)));
+                    });
+            } else {
+                const format = detectFormatFromFiles(accepted);
+                if (!format) {
+                    onAnnotationsLoadFailure(new Error('Cannot detect annotation format'));
+                    return;
+                }
+                doImport(accepted, format);
             }
-            setFormatType(detectedFormat);
-            const importer = new (ImporterSpecData[detectedFormat])([labelType]);
-            importer.import(acceptedFiles, onAnnotationLoadSuccess, onAnnotationsLoadFailure);
         }
     });
 
-    const onAccept = (type: LabelType) => {
+    const onAccept = () => {
         if (loadedLabelNames.length !== 0 && loadedImageData.length !== 0) {
             updateImageDataAction(loadedImageData);
             updateLabelNamesAction(loadedLabelNames);
-            updateActiveLabelTypeAction(type);
+            updateActiveLabelTypeAction(labelType);
             PopupActions.close();
         }
     };
 
-    const onReject = (_: LabelType) => {
+    const onReject = () => {
         PopupActions.close();
     };
 
-    const onAnnotationFormatChange = (format: AnnotationFormatType) => {
-        setFormatType(format);
-    };
-
     const getDropZoneContent = () => {
-        if (annotationsLoadedError) {
+        if (isProcessing) {
+            return <>
+                <img draggable={false} alt={'processing'} src={'ico/box-opened.png'} />
+                <p className='extraBold'>{language === Language.CHINESE ? '正在解析...' : 'Processing...'}</p>
+            </>;
+        } else if (annotationsLoadedError) {
             return <>
                 <input {...getInputProps()} />
-                <img
-                    draggable={false}
-                    alt={'upload'}
-                    src={'ico/box-opened.png'}
-                />
+                <img draggable={false} alt={'error'} src={'ico/box-opened.png'} />
                 <p className='extraBold'>{currentTexts.popups.importAnnotations.importError}</p>
-                {annotationsLoadedError.message}
+                <p className='errorMessage'>{annotationsLoadedError.message}</p>
                 <p className='extraBold'>{currentTexts.popups.importAnnotations.tryAgain}</p>
             </>;
         } else if (loadedImageData.length !== 0 && loadedLabelNames.length !== 0) {
             return <>
-                <img
-                    draggable={false}
-                    alt={'uploaded'}
-                    src={'ico/box-closed.png'}
-                />
+                <img draggable={false} alt={'success'} src={'ico/box-closed.png'} />
                 <p className='extraBold'>{currentTexts.popups.importAnnotations.importReady}</p>
-                {currentTexts.popups.importAnnotations.importWarning}
+                <p>{currentTexts.popups.importAnnotations.importWarning}</p>
             </>;
         } else {
             return <>
                 <input {...getInputProps()} />
-                <img
-                    draggable={false}
-                    alt={'upload'}
-                    src={'ico/box-opened.png'}
-                />
+                <img draggable={false} alt={'upload'} src={'ico/box-opened.png'} />
                 <p className='extraBold'>{currentTexts.popups.importAnnotations.dropZoneMessage}</p>
                 <p>{currentTexts.or}</p>
                 <p className='extraBold'>{currentTexts.popups.importAnnotations.dropZoneActive}</p>
@@ -165,47 +200,23 @@ const ImportLabelPopup: React.FC<IProps> = (
         }
     };
 
-    const getOptions = (exportFormatData: ILabelFormatData[]) => {
-        return exportFormatData.map((entry: ILabelFormatData) => {
-            return <div
-                className='OptionsItem'
-                onClick={() => onAnnotationFormatChange(entry.type)}
-                key={entry.type}
-            >
-                {entry.type === formatType ?
-                    <img
-                        draggable={false}
-                        src={'ico/checkbox-checked.png'}
-                        alt={'checked'}
-                    /> :
-                    <img
-                        draggable={false}
-                        src={'ico/checkbox-unchecked.png'}
-                        alt={'unchecked'}
-                    />}
-                {entry.label}
-            </div>;
-        });
-    };
-
-    const renderInternalContent = (type: LabelType) => {
-        return <div {...getRootProps({ className: 'DropZone' })}>
-            {getDropZoneContent()}
-        </div>;
+    const renderContent = () => {
+        return (<div className='ImportLabelPopupContent'>
+            <div {...getRootProps({ className: 'DropZone' })}>
+                {getDropZoneContent()}
+            </div>
+        </div>);
     };
 
     return (
-        <GenericLabelTypePopup
-            activeLabelType={labelType}
+        <GenericYesNoPopup
             title={currentTexts.popups.importAnnotations.title}
-            onLabelTypeChange={onLabelTypeChange}
+            renderContent={renderContent}
             acceptLabel={currentTexts.popups.importAnnotations.acceptButton}
+            disableAcceptButton={loadedImageData.length === 0 || loadedLabelNames.length === 0 || !!annotationsLoadedError || isProcessing}
             onAccept={onAccept}
-            skipAcceptButton={false}
-            disableAcceptButton={loadedImageData.length === 0 || loadedLabelNames.length === 0 || !!annotationsLoadedError}
             rejectLabel={currentTexts.popups.importAnnotations.rejectButton}
             onReject={onReject}
-            renderInternalContent={renderInternalContent}
         />
     );
 };

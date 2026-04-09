@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.9.8',
+        date: '2026-04-09',
+        changes: [
+            { zh: '重构导入标注弹窗：去掉 GenericLabelTypePopup 包裹，改用 GenericYesNoPopup 直接渲染，修复 dropzone 事件失效', en: 'Rewrite import popup: remove GenericLabelTypePopup wrapper, use GenericYesNoPopup directly, fix dropzone events' },
+            { zh: '支持 .zip 文件直接导入：自动解压并根据文件名前缀识别格式（yolo_/voc_/coco_/vgg_）', en: 'Support .zip file import: auto-unzip and detect format from filename prefix (yolo_/voc_/coco_/vgg_)' },
+            { zh: '自动格式检测回退：labels.txt→YOLO, .xml→VOC, .json→COCO', en: 'Auto format detection fallback: labels.txt→YOLO, .xml→VOC, .json→COCO' },
+        ]
+    },
+    {
         version: '1.9.7',
         date: '2026-04-08',
         changes: [
