@@ -254,8 +254,12 @@ class Editor extends React.Component<IProps, IState> {
                 isMiddleMouseDragging: true,
                 lastMiddleMousePosition: { x: event.clientX, y: event.clientY }
             });
-            // 设置拖拽光标
-            document.body.style.cursor = 'grabbing';
+            // Show grab cursor via DOM (bypass Redux to avoid circular import)
+            if (EditorModel.cursor) {
+                EditorModel.cursor.className = 'Cursor grabbing';
+                const img = EditorModel.cursor.querySelector('img');
+                if (img) img.src = 'ico/hand-fill-grab.png';
+            }
         }
     };
 
@@ -290,8 +294,12 @@ class Editor extends React.Component<IProps, IState> {
                 isMiddleMouseDragging: false,
                 lastMiddleMousePosition: null
             });
-            // 恢复默认光标
-            document.body.style.cursor = '';
+            // Restore default cursor
+            if (EditorModel.cursor) {
+                EditorModel.cursor.className = 'Cursor';
+                const img = EditorModel.cursor.querySelector('img');
+                if (img) img.src = '';
+            }
         }
     };
 

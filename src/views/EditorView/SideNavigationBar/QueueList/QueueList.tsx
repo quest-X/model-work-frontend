@@ -142,7 +142,6 @@ const QueueList: React.FC<IProps> = ({
                 <div className='queue-list-empty'>
                     <img src='/ico/box-opened.png' alt='empty' draggable={false} />
                     <p>{texts.queueEmpty}</p>
-                    <p className='queue-list-empty-hint'>{texts.queueEmptyHint}</p>
                 </div>
             ) : (
                 <div className='queue-list-scroll'>

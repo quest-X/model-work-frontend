@@ -10,6 +10,7 @@ import {Direction} from "../../data/enums/Direction";
 import {PlatformUtil} from "../../utils/PlatformUtil";
 import {LabelActions} from "../actions/LabelActions";
 import {LineRenderEngine} from "../render/LineRenderEngine";
+import {PolygonRenderEngine} from "../render/PolygonRenderEngine";
 
 export class EditorContext extends BaseContext {
     public static actions: HotKeyAction[] = [
@@ -24,8 +25,14 @@ export class EditorContext extends BaseContext {
             action: (event: KeyboardEvent) => {
                 if (EditorModel.supportRenderingEngine) {
                     switch (EditorModel.supportRenderingEngine.labelType) {
+                        case LabelType.RECT:
+                            (EditorModel.supportRenderingEngine as any).startCreateRectPoint = null;
+                            break;
                         case LabelType.LINE:
                             (EditorModel.supportRenderingEngine as LineRenderEngine).cancelLabelCreation();
+                            break;
+                        case LabelType.POLYGON:
+                            (EditorModel.supportRenderingEngine as PolygonRenderEngine).cancelLabelCreation();
                             break;
                     }
                 }

@@ -16,6 +16,18 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '1.9.9',
+        date: '2026-04-09',
+        changes: [
+            { zh: '完整 YOLO 包导入：支持 yolo_full_*.zip 一键导入图像+标注到空项目', en: 'Full YOLO package import: yolo_full_*.zip imports images + annotations into empty project' },
+            { zh: '导出文件名区分模式：简单 yolo_simple_*、完整 yolo_full_*（所有格式同理）', en: 'Export filenames distinguish mode: yolo_simple_* vs yolo_full_* (all formats)' },
+            { zh: '修复视频帧导出缺失：去掉 loadStatus 检查，未加载帧用 fallback 宽高', en: 'Fix video frame export missing: remove loadStatus check, use fallback dimensions for unloaded frames' },
+            { zh: '修复标注框颜色：按类别着色对所有标注生效，不再区分 AI/手动', en: 'Fix annotation box color: per-class coloring applies to all annotations, no longer AI/manual distinction' },
+            { zh: '修复 YOLO labels.txt 解析：保留标签名空格（如 fire hydrant），只 trim 两端', en: 'Fix YOLO labels.txt parsing: preserve spaces in label names (e.g. fire hydrant), only trim edges' },
+            { zh: '完整导入后自动选中第一张图', en: 'Auto-select first image after full import' },
+        ]
+    },
+    {
         version: '1.9.8',
         date: '2026-04-09',
         changes: [

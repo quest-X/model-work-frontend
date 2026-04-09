@@ -44,22 +44,17 @@ export abstract class BaseRenderEngine {
 
     protected static resolveLabelLineColor(labelId: string, isActive: boolean, isCreatedByAI?: boolean): string {
         const perClassColor: boolean = GeneralSelector.getEnablePerClassColorationStatus();
-        
-        // 如果明确是手动创建的标注框，始终使用白色
-        if (isCreatedByAI === false) {
-            return '#ffffff'; // 手动标注框始终使用白色，无论活跃状态
-        }
-        
-        // 只有AI创建的标注框才使用按类别着色
-        if (isCreatedByAI === true && perClassColor && labelId) {
+
+        // 按类别着色开启时，所有标注框都用标签颜色
+        if (perClassColor && labelId) {
             const labelName: LabelName | null = LabelsSelector.getLabelNameById(labelId);
             if (labelName && labelName.color) {
                 return labelName.color;
             }
         }
-        
-        // 默认情况（临时预览框等），使用默认白色
-        return '#ffffff'; // 临时预览框也使用白色
+
+        // 默认白色
+        return '#ffffff';
     }
 
     protected static resolveLabelAnchorColor(isActive: boolean): string {

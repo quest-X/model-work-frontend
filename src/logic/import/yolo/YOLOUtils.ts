@@ -9,7 +9,7 @@ export class YOLOUtils {
         const labelNames: string[] = content
             .split(/[\r\n]/)
             .filter(Boolean)
-            .map((name: string) => name.replace(/\s/g, ''))
+            .map((name: string) => name.trim())
 
         if (uniq(labelNames).length !== labelNames.length) {
             throw new LabelNamesNotUniqueError()

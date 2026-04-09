@@ -77,8 +77,9 @@ export class RectLabelsExporter {
             zip.file('labels.txt', labelNames.map(l => l.name).join('\n'));
         }
 
+        const prefix = mode === 'complete' ? 'yolo_full' : 'yolo_simple';
         zip.generateAsync({type:'blob'}).then((content: Blob) => {
-            saveAs(content, `${ExporterUtil.getExportFileName('yolo')}.zip`);
+            saveAs(content, `${ExporterUtil.getExportFileName(prefix)}.zip`);
         });
     }
 
@@ -127,12 +128,21 @@ export class RectLabelsExporter {
     }
 
     private static wrapRectLabelsIntoYOLO(imageData: ImageData): string {
-        if (imageData.labelRects.length === 0 || !imageData.loadStatus)
+        if (imageData.labelRects.length === 0)
             return null;
 
         const labelNames: LabelName[] = LabelsSelector.getLabelNames();
         const image: HTMLImageElement = ImageRepository.getById(imageData.id);
-        const imageSize: ISize = {width: image.width, height: image.height}
+        let imageSize: ISize;
+        if (image) {
+            imageSize = {width: image.width, height: image.height};
+        } else {
+            // Fallback for video frames not loaded in DOM: use first loaded image's size
+            const fallback = LabelsSelector.getImagesData().find(d => d.loadStatus);
+            const fallbackImg = fallback ? ImageRepository.getById(fallback.id) : null;
+            if (!fallbackImg) return null;
+            imageSize = {width: fallbackImg.width, height: fallbackImg.height};
+        }
         const labelRectsString: string[] = imageData.labelRects
             .filter((labelRect: LabelRect) => labelRect.labelId !== null)
             .map((labelRect: LabelRect) => {
@@ -175,13 +185,14 @@ export class RectLabelsExporter {
             });
         }
 
+        const vocPrefix = mode === 'complete' ? 'voc_full' : 'voc_simple';
         zip.generateAsync({type:'blob'}).then(content => {
-            saveAs(content, `${ExporterUtil.getExportFileName('voc')}.zip`);
+            saveAs(content, `${ExporterUtil.getExportFileName(vocPrefix)}.zip`);
         });
     }
 
     private static wrapRectLabelsIntoVOC(imageData: ImageData): string {
-        if (imageData.labelRects.length === 0 || !imageData.loadStatus)
+        if (imageData.labelRects.length === 0)
             return null;
 
         const labelNamesList: LabelName[] = LabelsSelector.getLabelNames();
@@ -211,7 +222,15 @@ export class RectLabelsExporter {
         const projectName: string = XMLSanitizerUtil.sanitize(GeneralSelector.getProjectName());
 
         if (labels) {
+            let imgW = 0, imgH = 0;
             const image: HTMLImageElement = ImageRepository.getById(imageData.id);
+            if (image) {
+                imgW = image.width; imgH = image.height;
+            } else {
+                const fallback = LabelsSelector.getImagesData().find(d => d.loadStatus);
+                const fb = fallback ? ImageRepository.getById(fallback.id) : null;
+                if (fb) { imgW = fb.width; imgH = fb.height; }
+            }
             return [
                 `<annotation>`,
                 `\t<folder>${projectName}</folder>`,
@@ -221,8 +240,8 @@ export class RectLabelsExporter {
                 `\t\t<database>Unspecified</database>`,
                 `\t</source>`,
                 `\t<size>`,
-                `\t\t<width>${image.width}</width>`,
-                `\t\t<height>${image.height}</height>`,
+                `\t\t<width>${imgW}</width>`,
+                `\t\t<height>${imgH}</height>`,
                 `\t\t<depth>3</depth>`,
                 `\t</size>`,
                 labels,
@@ -255,7 +274,7 @@ export class RectLabelsExporter {
             }
 
             zip.generateAsync({type:'blob'}).then((content: Blob) => {
-                saveAs(content, `${ExporterUtil.getExportFileName('csv')}.zip`);
+                saveAs(content, `${ExporterUtil.getExportFileName('csv_full')}.zip`);
             });
         } else {
             const contentEntries: string[] = imagesData
