@@ -656,22 +656,22 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         editorTopNavBar: {
             zoomIn: '放大',
             zoomOut: '缩小',
-            fitImage: '适应图像到可用空间',
-            maxZoom: '最大允许图像缩放',
+            fitImage: '自适应画布',
+            maxZoom: '原尺寸大小',
             imageDragModeOn: '开启拖拽',
             imageDragModeOff: '关闭拖拽',
-            crossHairOn: '开启标注', 
-            crossHairOff: '关闭标注',
+            crossHairOn: '关闭十字线辅助',
+            crossHairOff: '开启十字线辅助',
             acceptAllDetections: '接受所有建议的检测',
             rejectAllDetections: '拒绝所有建议的检测',
             enableSegmentation: '开启分割',
             disableSegmentation: '关闭分割',
             segmentationInProgress: '分割中...',
-            enableDetection: '开启检测',
-            disableDetection: '关闭检测',
-            detectionInProgress: '检测中...',
+            enableDetection: '开启推理',
+            disableDetection: '关闭推理',
+            detectionInProgress: '推理中...',
             cannotSegment: '无法分割',
-            cannotDetect: '无法检测'
+            cannotDetect: '无法推理'
         },
         
         // Keyboard Shortcuts Popup
@@ -1088,22 +1088,22 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         editorTopNavBar: {
             zoomIn: 'zoom in',
             zoomOut: 'zoom out',
-            fitImage: 'fit image to available space',
-            maxZoom: 'maximum allowed image zoom',
+            fitImage: 'Fit to Canvas',
+            maxZoom: 'Original Size',
             imageDragModeOn: 'Enable Drag',
             imageDragModeOff: 'Disable Drag',
-            crossHairOn: 'Enable Annotation',
-            crossHairOff: 'Disable Annotation',
+            crossHairOn: 'Disable Crosshair',
+            crossHairOff: 'Enable Crosshair',
             acceptAllDetections: 'accept all proposed detections',
             rejectAllDetections: 'reject all proposed detections',
             enableSegmentation: 'Enable Segmentation',
             disableSegmentation: 'Disable Segmentation',
             segmentationInProgress: 'Segmentation in progress...',
-            enableDetection: 'Enable Detection',
-            disableDetection: 'Disable Detection',
-            detectionInProgress: 'Detection in progress...',
+            enableDetection: 'Enable Inference',
+            disableDetection: 'Disable Inference',
+            detectionInProgress: 'Inference in progress...',
             cannotSegment: 'Cannot Segment',
-            cannotDetect: 'Cannot Detect'
+            cannotDetect: 'Cannot Infer'
         },
         
         // Keyboard Shortcuts Popup

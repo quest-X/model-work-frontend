@@ -34,12 +34,11 @@ const LARGE_VIDEO_SIZE_MB = 1024;  // >1GB 按需加载，≤1GB 全量加载
 
 export class FrameExtractorService {
 
-    // ── 入口：自动选择模式 ──────────────────────────────────────────────────
+    // ── 入口：always on-demand ─────────────────────────────────────────────
 
     /**
-     * 上传视频并提取帧。
-     * 短视频（< 500 帧）：全量拆帧返回所有帧。
-     * 长视频（≥ 500 帧）：上传后只返回 metadata + sessionId，帧按需获取。
+     * 上传视频并返回 sessionId，帧由 FramePlayer 滑动窗口按需获取。
+     * 所有视频统一走 on-demand 模式，避免大视频 JSZip OOM。
      */
     static async extractFrames(
         videoFile: File,
@@ -47,45 +46,23 @@ export class FrameExtractorService {
         onProgress?: ProgressCallback,
     ): Promise<FrameExtractionResult> {
 
-        // 1. 先上传视频到后端，获取 metadata
         onProgress?.('上传视频', 0, 100);
         console.log(`[FrameExtractor] 上传视频: ${videoFile.name} (${(videoFile.size / 1024 / 1024).toFixed(1)}MB)`);
 
         const uploadResult = await this.uploadVideo(videoFile, targetFps, onProgress);
         const { sessionId, metadata } = uploadResult;
 
-        console.log(`[FrameExtractor] 上传完成, 会话=${sessionId}, 总帧数=${metadata.totalFrames}`);
+        console.log(`[FrameExtractor] fast_ffmpeg_mode (on-demand): sessionId=${sessionId}, 总帧数=${metadata.totalFrames}`);
 
-        // 2. 根据文件大小决定模式（≤1GB 全量，>1GB 按需）
-        const fileSizeMB = videoFile.size / 1024 / 1024;
-        if (fileSizeMB <= LARGE_VIDEO_SIZE_MB) {
-            // 小视频：全量拆帧
-            console.log(`[FrameExtractor] fast_ffmpeg_mode (full-load): ${metadata.totalFrames} frames (${fileSizeMB.toFixed(0)}MB)`);
-            onProgress?.('解压帧', 0, metadata.totalFrames);
-            const frames = await this.fetchFrameRange(sessionId, 0, metadata.totalFrames, onProgress);
-
-            return {
-                frames,
-                fps: metadata.fps,
-                duration: metadata.duration,
-                totalFrames: metadata.totalFrames,
-                width: metadata.width,
-                height: metadata.height,
-            };
-        } else {
-            // Large video: fast_ffmpeg_mode (on-demand), frames fetched in batches via sessionId
-            console.log(`[FrameExtractor] fast_ffmpeg_mode (on-demand): sessionId=${sessionId}`);
-
-            return {
-                frames: [],  // 不预加载
-                fps: metadata.fps,
-                duration: metadata.duration,
-                totalFrames: metadata.totalFrames,
-                width: metadata.width,
-                height: metadata.height,
-                sessionId,
-            };
-        }
+        return {
+            frames: [],
+            fps: metadata.fps,
+            duration: metadata.duration,
+            totalFrames: metadata.totalFrames,
+            width: metadata.width,
+            height: metadata.height,
+            sessionId,
+        };
     }
 
     // ── 上传视频 ────────────────────────────────────────────────────────────

@@ -42,7 +42,7 @@ interface IProps {
 }
 
 const THUMBNAIL_SIZE = 150;
-const BATCH_SIZE = 30;
+const BATCH_SIZE = 100;
 
 // === available_frames 滑动窗口（基于秒数 × fps 动态计算） ===
 const MIN_AHEAD_SECONDS = 15;   // 前方保持 15 秒可播放

@@ -265,17 +265,6 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 }
                 {
                     getButtonWithTooltip(
-                        'zoom-fit',
-                        currentTexts.editorTopNavBar.fitImage,
-                        'ico/zoom-fit.png',
-                        'zoom-fit',
-                        false,
-                        undefined,
-                        () => ViewPortActions.setDefaultZoom()
-                    )
-                }
-                {
-                    getButtonWithTooltip(
                         'zoom-max',
                         currentTexts.editorTopNavBar.maxZoom,
                         'ico/zoom-max.png',
@@ -285,19 +274,20 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         () => ViewPortActions.setOneForOneZoom()
                     )
                 }
-            </div>
-            <div className='ButtonWrapper'>
                 {
                     getButtonWithTooltip(
-                        'label-drag-mode',
-                        imageDragMode ? currentTexts.editorTopNavBar.imageDragModeOn : currentTexts.editorTopNavBar.imageDragModeOff,
-                        'ico/hand.png',
-                        'label-drag-mode',
-                        imageDragMode,
+                        'zoom-fit',
+                        currentTexts.editorTopNavBar.fitImage,
+                        'ico/zoom-fit.png',
+                        'zoom-fit',
+                        false,
                         undefined,
-                        imageDragOnClick
+                        () => ViewPortActions.setDefaultZoom()
                     )
                 }
+            </div>
+            <div className='ButtonWrapper'>
+                {/* Hand/drag mode hidden — edit mode already supports edge-drag */}
                 {
                     getButtonWithTooltip(
                         'cursor-cross-hair',
