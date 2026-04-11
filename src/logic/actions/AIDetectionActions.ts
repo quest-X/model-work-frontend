@@ -245,10 +245,13 @@ export class AIDetectionActions {
         const sessionId = activeVideo?.sessionId || EditorModel.videoSessionId;
 
         if (isVideo && (preFrames || sessionId || EditorModel.videoElement)) {
-            // Video mode: detect ALL frames (capture strategy depends on active playback mode)
+            // Video mode: only detect selected frames (not all frames)
+            const selectedIds = new Set(imagesToDetect.map(img => img.id));
             const frameQueue: { frameIdx: number; imageData: ImageData }[] = [];
             for (let frameIdx = 0; frameIdx < allImagesData.length; frameIdx++) {
-                frameQueue.push({ frameIdx, imageData: allImagesData[frameIdx] });
+                if (selectedIds.has(allImagesData[frameIdx].id)) {
+                    frameQueue.push({ frameIdx, imageData: allImagesData[frameIdx] });
+                }
             }
 
             const captureTotal = frameQueue.length;
@@ -355,68 +358,47 @@ export class AIDetectionActions {
                 });
             }
 
-            // === Phase 2: 4路并发推理 ===
+            // === 流式推理：4路并发，每张完成立即写入 ===
             const inferStartTime = Date.now();
-            console.log('[Inference] Phase 2 starting', { captureTotal, concurrency: 4 });
+            console.log('[Inference] Streaming start', { captureTotal, concurrency: 4 });
 
             const tasks = capturedBlobs.map((blob, i) => {
                 return async (): Promise<DetectionResult[] | null> => {
                     if (!blob) {
-                        console.warn(`[Inference] Skipping frame ${frameQueue[i].frameIdx} — no blob`);
+                        failCount++;
+                        store.dispatch(addInferenceHistory(frameQueue[i].imageData.id, 0, false, 'detection'));
                         return null;
                     }
                     try {
                         const results = await DetectionAPIDetector.predictFromBlob(
                             blob, `frame_${frameQueue[i].frameIdx}.jpg`
                         );
-                        console.log(`[Inference] Frame ${frameQueue[i].frameIdx}: ${results.length} objects`);
+                        // 立即写入 Redux
+                        this.applySingleResult(frameQueue[i].imageData, results);
+                        totalObjects += results.length;
+                        successCount++;
                         return results;
                     } catch (err) {
                         console.error(`[Inference] Frame ${frameQueue[i].frameIdx} FAILED:`, (err as Error).message);
+                        failCount++;
+                        store.dispatch(addInferenceHistory(frameQueue[i].imageData.id, 0, false, 'detection'));
                         return null;
                     }
                 };
             });
 
-            const inferenceResults = await this.withConcurrency(tasks, 4, (done, ttl) => {
+            await this.withConcurrency(tasks, 4, (done, ttl) => {
                 const pct = preFrames ? Math.round((done / ttl) * 90) : 33 + Math.round((done / ttl) * 55);
                 notify(2, `${texts.aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${texts.frame} ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
             });
 
             const inferElapsed = ((Date.now() - inferStartTime) / 1000).toFixed(1);
-            const inferSuccess = inferenceResults.filter(r => r !== null).length;
-            console.log('[Inference] Phase 2 complete', {
-                success: inferSuccess,
-                failed: captureTotal - inferSuccess,
-                elapsed: inferElapsed + 's'
+            console.log('[Inference] Streaming complete', {
+                success: successCount, failed: failCount, elapsed: inferElapsed + 's'
             });
 
-            // === Phase 3: 批量写入 Redux ===
-            notify(3, `写入标注数据 (${captureTotal} 帧)`, '即将完成...', true);
-            await this.yieldToUI();
-
-            console.log('[Apply] Phase 3 starting');
-            this.batchApplyResults(frameQueue, inferenceResults);
-
-            for (let i = 0; i < captureTotal; i++) {
-                const r = inferenceResults[i];
-                if (r !== null) {
-                    // 按图像ID存储推理结果，确保持久化
-                    const segResults = DetectionAPIDetector.convertToSegmentationFormat(r);
-                    store.dispatch(updateSegmentationResults(segResults, frameQueue[i].imageData.id));
-                    store.dispatch(addInferenceHistory(frameQueue[i].imageData.id, r.length, true, 'detection'));
-                    totalObjects += r.length;
-                    successCount++;
-                } else {
-                    store.dispatch(addInferenceHistory(frameQueue[i].imageData.id, 0, false, 'detection'));
-                    failCount++;
-                }
-            }
-
-            console.log('[Apply] Phase 3 complete', { totalObjects, successCount, failCount });
-
         } else {
-            // ======== 普通图像模式：4路并发 ========
+            // ======== 普通图像模式：4路并发流式推理 ========
             const imageQueue = imagesToDetect.filter(
                 img => !img.labelRects.some((r: LabelRect) => r.isCreatedByAI)
             );
@@ -424,48 +406,30 @@ export class AIDetectionActions {
 
             const imageTasks = imageQueue.map((imageData) => async (): Promise<DetectionResult[] | null> => {
                 try {
-                    return await new Promise((resolve, reject) => {
+                    const results = await new Promise<DetectionResult[]>((resolve, reject) => {
                         DetectionAPIDetector.predict(imageData, resolve, reject);
                     });
+                    // 立即写入 Redux
+                    this.applySingleResult(imageData, results);
+                    totalObjects += results.length;
+                    successCount++;
+                    return results;
                 } catch (err) {
                     console.error(`[Inference] Image ${imageData.fileData?.name} FAILED:`, (err as Error).message);
+                    failCount++;
+                    store.dispatch(addInferenceHistory(imageData.id, 0, false, 'detection'));
                     return null;
                 }
             });
 
-            const imageResults = await this.withConcurrency(imageTasks, 4, (done, ttl) => {
+            await this.withConcurrency(imageTasks, 4, (done, ttl) => {
                 const pct = Math.round((done / ttl) * 100);
                 notify(2, `${texts.aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${imageQueue[done - 1]?.fileData?.name || `Image ${done}`}`);
             });
-
-            this.batchApplyResults(
-                imageQueue.map((imageData, i) => ({ frameIdx: i, imageData })),
-                imageResults
-            );
-
-            for (let i = 0; i < imageQueue.length; i++) {
-                const results = imageResults[i];
-                if (results !== null) {
-                    // 按图像ID存储推理结果，确保持久化
-                    const segResults = DetectionAPIDetector.convertToSegmentationFormat(results);
-                    store.dispatch(updateSegmentationResults(segResults, imageQueue[i].id));
-                    store.dispatch(addInferenceHistory(imageQueue[i].id, results.length, true, 'detection'));
-                    totalObjects += results.length;
-                    successCount++;
-                } else {
-                    store.dispatch(addInferenceHistory(imageQueue[i].id, 0, false, 'detection'));
-                    failCount++;
-                }
-            }
         }
 
         // ── 完成 ──
-        // 视频模式：检测完成后同步到第一帧，确保画面和检测结果一致
-        if (isVideo && activeVideo) {
-            store.dispatch(updateVideoCurrentFrame(activeVideo.id, 0, 0));
-            store.dispatch(updateActiveImageIndex(0));
-        }
-
+        // 流式推理：结果已实时写入，无需跳回第一帧，保持用户当前位置
         store.dispatch(deleteNotificationById(progressNotification.id));
         store.dispatch(updateFullImageInferenceStatus(false));
 
@@ -490,8 +454,91 @@ export class AIDetectionActions {
     }
 
     /**
+     * 流式写入：单张图推理完成后立即写入 Redux 并刷新 UI
+     */
+    private static applySingleResult(
+        imageData: ImageData,
+        results: DetectionResult[]
+    ): void {
+        if (!results || results.length === 0) return;
+
+        // 创建缺失标签
+        this.createMissingLabelsIfNeeded(results);
+
+        const updatedLabels: LabelName[] = store.getState().labels.labels;
+        // 重新读取最新的 imageData（可能已被其他并发写入更新）
+        const currentImagesData: ImageData[] = store.getState().labels.imagesData;
+        const currentImg = currentImagesData.find(img => img.id === imageData.id);
+        if (!currentImg) return;
+
+        const newRects: LabelRect[] = [];
+        for (const result of results) {
+            const [x1, y1, x2, y2] = result.bbox;
+            const rect: IRect = { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+
+            if (this.checkDuplicateLabelRect(currentImg.labelRects, rect, result.info.name, updatedLabels)) {
+                continue;
+            }
+
+            const matchingLabel = updatedLabels.find(l =>
+                l.name.toLowerCase() === result.info.name.toLowerCase()
+            );
+            const labelId = matchingLabel?.id || null;
+
+            newRects.push({
+                id: uuidv4(),
+                labelId,
+                rect,
+                isCreatedByAI: true,
+                isVisible: true,
+                status: LabelStatus.ACCEPTED,
+                suggestedLabel: labelId ? null : result.info.name,
+                confidence: result.info.confidence ?? 0
+            });
+        }
+
+        if (newRects.length > 0) {
+            const updatedImg = {
+                ...currentImg,
+                labelRects: [...currentImg.labelRects, ...newRects]
+            };
+            store.dispatch(updateImageDataById(imageData.id, updatedImg));
+            // 同步缓存 + playbackImageData
+            const latestData = store.getState().labels.imagesData;
+            EditorModel.latestImagesData = latestData;
+            // 如果当前帧就是刚推理的帧，同步 playbackImageData
+            const videoState = store.getState().video;
+            if (videoState.isVideoMode && videoState.activeVideo) {
+                const curFrame = videoState.activeVideo.currentFrame;
+                const latestImg = latestData.find(img => img.id === imageData.id);
+                if (latestImg) {
+                    const imgIdx = latestData.indexOf(latestImg);
+                    if (imgIdx === curFrame) {
+                        EditorModel.playbackImageData = latestImg;
+                    }
+                }
+            }
+        }
+
+        // 设置 AI 标签可见 + 记录推理历史
+        const segResults = DetectionAPIDetector.convertToSegmentationFormat(results);
+        store.dispatch(updateSegmentationResults(segResults, imageData.id));
+        store.dispatch(addInferenceHistory(imageData.id, results.length, true, 'detection'));
+
+        // 关键：设置 aiLabelsVisible = true，否则渲染引擎会跳过 AI 标签
+        const aiState = store.getState().ai.imageAIStates.get(imageData.id);
+        if (!aiState || !aiState.aiLabelsVisible) {
+            store.dispatch(toggleImageAILabelsVisibility(imageData.id));
+        }
+
+        // 刷新画布
+        EditorActions.fullRender();
+    }
+
+    /**
      * 批量将推理结果写入 Redux — 单次 dispatch 更新所有图像
      * 避免 N 次 updateImageDataById 触发 N 次 React 重渲染
+     * (保留供 detectObjects 单张模式使用)
      */
     private static batchApplyResults(
         frameQueue: { frameIdx: number; imageData: ImageData }[],

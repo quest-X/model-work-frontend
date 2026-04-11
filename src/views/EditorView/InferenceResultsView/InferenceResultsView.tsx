@@ -132,13 +132,23 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
             /\.(mp4|webm|mov|avi|mkv)$/i.test(fileData.name || '');
 
         if (isVideo) {
-            // 视频帧：直接从 EditorModel.videoElement 截取（已 seek 到当前帧）
+            // 视频帧缩略图：需要原始分辨率的图像源（检测坐标在原始分辨率空间）
+            // 优先级：videoFrameImage（原始分辨率 Image）→ VideoCanvas（FramePlayer canvas，原始分辨率）→ <video>
             return new Promise<string>((resolve) => {
-                const video = EditorModel.videoElement || document.querySelector('video');
-                if (video && video.readyState >= 2) {
-                    cropAndResolve(video, resolve);
+                if (EditorModel.videoFrameImage) {
+                    cropAndResolve(EditorModel.videoFrameImage, resolve);
                 } else {
-                    resolve('');
+                    const videoCanvas = document.querySelector('.VideoCanvas') as HTMLCanvasElement;
+                    if (videoCanvas && videoCanvas.width > 0) {
+                        cropAndResolve(videoCanvas, resolve);
+                    } else {
+                        const video = EditorModel.videoElement || document.querySelector('video');
+                        if (video && video.readyState >= 2) {
+                            cropAndResolve(video, resolve);
+                        } else {
+                            resolve('');
+                        }
+                    }
                 }
             });
         }
@@ -168,11 +178,11 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         if (!activeImageData) return [];
         const aiRects = activeImageData.labelRects.filter(r => r.isCreatedByAI);
         if (aiRects.length === 0) return [];
-        return aiRects.map(rect => {
+        return aiRects.map((rect, idx) => {
             const labelName = labelNames.find(ln => ln.id === rect.labelId);
             const name = labelName?.name || rect.suggestedLabel || 'unknown';
             return {
-                class_id: 0,
+                class_id: idx,
                 class_name: name,
                 confidence: rect.confidence || 0,
                 bbox: {
@@ -190,18 +200,63 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
     }, [segmentationResults, activeImageData, labelNames, isVideoMode]);
 
     const [thumbnails, setThumbnails] = React.useState<{[key: number]: string}>({});
+    const generatedSetRef = React.useRef(new Set<string>()); // 已生成的 key: "imageId_index"
+    const lastImageIdRef = React.useRef<string | null>(null);
+
+    // 切帧时清空
+    if (activeImageData?.id !== lastImageIdRef.current) {
+        lastImageIdRef.current = activeImageData?.id || null;
+        generatedSetRef.current = new Set();
+        // 会在下次渲染时 setThumbnails({}) 通过下面的 effect
+    }
 
     React.useEffect(() => {
-        if (displayResults.length > 0 && activeImageData?.fileData) {
-            setThumbnails({}); // 切帧时清空
-            displayResults.forEach(async (result, index) => {
+        setThumbnails({});
+        generatedSetRef.current = new Set();
+    }, [activeImageData?.id]);
+
+    // 为新增结果生成缩略图
+    const resultCount = displayResults.length;
+    const imageId = activeImageData?.id;
+    React.useEffect(() => {
+        if (resultCount === 0 || !imageId) return;
+
+        const currentResults = displayResults;
+        currentResults.forEach(async (result, index) => {
+            const key = `${imageId}_${index}`;
+            if (generatedSetRef.current.has(key)) return;
+            generatedSetRef.current.add(key); // 标记为正在生成，避免重复
+
+            // 直接用 VideoCanvas 裁剪（绕过 generateThumbnail 的复杂逻辑）
+            const vc = document.querySelector('.VideoCanvas') as HTMLCanvasElement;
+            const source: CanvasImageSource | null = EditorModel.videoFrameImage || (vc && vc.width > 0 ? vc : null);
+
+            if (!source) {
+                // 非视频模式：走原有 generateThumbnail
                 const url = await generateThumbnail(result);
-                setThumbnails(prev => ({...prev, [index]: url}));
-            });
-        } else {
-            setThumbnails({});
-        }
-    }, [displayResults, activeImageData?.id]);
+                if (url && imageId === lastImageIdRef.current) {
+                    setThumbnails(prev => ({...prev, [index]: url}));
+                }
+                return;
+            }
+
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const size = 60;
+                canvas.width = size;
+                canvas.height = size;
+                const {x1, y1, x2, y2} = result.bbox;
+                ctx.drawImage(source, x1, y1, x2 - x1, y2 - y1, 0, 0, size, size);
+                const url = canvas.toDataURL();
+                if (url && imageId === lastImageIdRef.current) {
+                    setThumbnails(prev => ({...prev, [index]: url}));
+                }
+            } catch {
+                // 裁剪失败，静默忽略
+            }
+        });
+    }, [resultCount, imageId]);
 
     return (
         <div className="InferenceResultsView">

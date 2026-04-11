@@ -3,6 +3,7 @@
 .EditorTopNavigationBar {
   align-self: stretch;
   height: $editorTopNavigationBarHeight;
+  box-sizing: border-box;
   border-bottom: solid 1px $darkThemeFirstColor;
   background-color: $darkThemeSecondColor;
   user-select: none;

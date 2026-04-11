@@ -16,6 +16,23 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.0.0',
+        date: '2026-04-11',
+        changes: [
+            { zh: '修复暂停时点时间轴跳帧：AI 框不再画在错帧上（stale videoFrameImage 导致的底图/标签错位）', en: 'Fix paused timeline seek: AI boxes no longer drawn on wrong frame (stale videoFrameImage caused image/label mismatch)' },
+            { zh: 'FramePlayer 外部 seek 先试 drawFrameSync，缓存命中零闪烁，未命中异步补一次 fullRender', en: 'FramePlayer external seek tries drawFrameSync first, zero-flash on cache hit; async drawFrame triggers fullRender fallback on miss' },
+            { zh: 'VideoTimeline 合并 onSeek / onFrameChange 为单一入口，消除双 dispatch + currentTime 踩踏', en: 'VideoTimeline merges onSeek / onFrameChange into single entry, eliminates double dispatch + currentTime race' },
+            { zh: '时间轴同帧点击跳过，拖动/键盘快捷键统一走 onFrameChange', en: 'Timeline same-frame click is skipped; drag/keyboard shortcuts use onFrameChange only' },
+            { zh: 'AI 推理改为只处理选中帧（而非全部帧）', en: 'AI inference now processes selected frames only (not all frames)' },
+            { zh: 'AI 推理流式写入：每帧推完立即刷新 UI，取消 Phase 2/3 分段', en: 'Streaming AI inference: each frame writes to UI immediately, Phase 2/3 batching removed' },
+            { zh: '工具栏新增"推理结果显隐"开关（eye 按钮 + IOS Switch）', en: 'Toolbar: add AI labels visibility toggle (eye button + IOS switch)' },
+            { zh: '推理结果面板缩略图改用原分辨率源（videoFrameImage / VideoCanvas）裁剪，不再走低清 <video>', en: 'Inference results thumbnails crop from native resolution (videoFrameImage / VideoCanvas), no longer low-res <video>' },
+            { zh: '侧栏缩略图按标注来源着色：手动/AI/混合/未标注', en: 'Sidebar thumbnails colored by label origin: manual / AI / mixed / unannotated' },
+            { zh: '侧栏缩略图多选高亮', en: 'Sidebar thumbnails show multi-select highlight' },
+            { zh: '修复切帧后推理结果缩略图不刷新的问题（去重 + activeImage id 校验）', en: 'Fix inference result thumbnails not refreshing after frame change (dedupe + activeImage id check)' },
+        ]
+    },
+    {
         version: '1.9.9',
         date: '2026-04-09',
         changes: [

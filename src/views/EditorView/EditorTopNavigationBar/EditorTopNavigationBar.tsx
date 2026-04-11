@@ -16,7 +16,7 @@ import { AISelector } from '../../../store/selectors/AISelector';
 import { updateActiveLabelType, updateActiveLabelViewType } from '../../../store/labels/actionCreators';
 import { ISize } from '../../../interfaces/ISize';
 import { AIActions } from '../../../logic/actions/AIActions';
-import { Fade, styled, Tooltip, tooltipClasses, TooltipProps } from '@mui/material';
+import { Fade, styled, Switch, Tooltip, tooltipClasses, TooltipProps } from '@mui/material';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {EditorModel} from '../../../staticModels/EditorModel';
 import { ImageUtil } from '../../../utils/ImageUtil';
@@ -41,6 +41,41 @@ const StyledTooltip = styled(({ className, ...props }: TooltipProps) => (
         textAlign: 'center'
     },
   }));
+
+const IOSSwitch = styled(Switch)(() => ({
+    width: 36,
+    height: 20,
+    padding: 0,
+    '& .MuiSwitch-switchBase': {
+        padding: 2,
+        color: '#bbb',
+        '&.Mui-checked': {
+            transform: 'translateX(16px)',
+            color: '#fff',
+            '& + .MuiSwitch-track': {
+                backgroundColor: '#2196f3',
+                opacity: 1,
+            },
+        },
+        '&.Mui-disabled': {
+            color: '#555',
+            '& + .MuiSwitch-track': {
+                backgroundColor: '#333',
+                opacity: 0.5,
+            },
+        },
+    },
+    '& .MuiSwitch-thumb': {
+        width: 16,
+        height: 16,
+        boxShadow: 'none',
+    },
+    '& .MuiSwitch-track': {
+        borderRadius: 10,
+        backgroundColor: '#555',
+        opacity: 1,
+    },
+}));
 
 const getButtonWithTooltip = (
     key: string,
@@ -230,6 +265,13 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         updateActiveLabelViewType(toolType);
     }, [updateActiveLabelType, updateActiveLabelViewType]);
 
+    // 推理结果显示/隐藏（eye 按钮）
+    const toggleAILabelsOnClick = useCallback(() => {
+        const activeImageData = LabelsSelector.getActiveImageData();
+        if (!activeImageData) return;
+        toggleImageAILabelsVisibility(activeImageData.id);
+        queueMicrotask(() => { EditorActions.fullRender(); });
+    }, [toggleImageAILabelsVisibility]);
 
     const withAI = (
         ((activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isAISSDObjectDetectorModelLoaded()) ||
@@ -360,89 +402,82 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 }
             </div>
             <div className='ButtonWrapper'>
-{useMemo(() => {
+                {useMemo(() => {
                     const activeImageData = LabelsSelector.getActiveImageData();
-                    const detectionAvailable = hasDetectionModel;
-
-                    // 检测按钮状态完全独立，不依赖分割功能
-                    let buttonText, buttonIcon, isActive, isDisabled;
-
-                    if (!detectionAvailable) {
-                        // 没有检测模型时
-                        buttonText = currentTexts.editorTopNavBar.cannotDetect;
-                        buttonIcon = 'ico/eye-slash.png';
-                        isActive = false;
-                        isDisabled = true;
-                    } else if (isFullImageInferenceInProgress) {
-                        // 检测进行中
-                        buttonText = currentTexts.editorTopNavBar.detectionInProgress;
-                        buttonIcon = 'ico/eye.png';
-                        isActive = true;
-                        isDisabled = false;
-                    } else {
-                        // 检测可用时，检查多选/单选图片状态
-                        const selectedImages = imagesData.filter((img: ImageData) => img.isSelected);
-                        const isBatchMode = selectedImages.length > 1;
-                        const imagesToCheck = isBatchMode ? selectedImages : (activeImageData ? [activeImageData] : []);
-
-                        if (imagesToCheck.length > 0) {
-                            // 检查所有目标图片是否都已推理且标签可见
-                            const allInferredAndVisible = imagesToCheck.every((img: ImageData) => {
-                                const imgAIState = imageAIStates.get(img.id) || {
-                                    aiLabelsVisible: false,
-                                    inferenceHistory: []
-                                };
-                                const hasDetectionLabels = img.labelRects?.some((rect: any) => rect.isCreatedByAI) ||
-                                                           img.labelPoints?.some((point: any) => point.isCreatedByAI) ||
-                                                           img.labelLines?.some((line: any) => line.isCreatedByAI);
-                                return imgAIState.aiLabelsVisible && hasDetectionLabels;
-                            });
-
-                            // 检查是否存在任一图片未推理过
-                            const anyNotInferred = imagesToCheck.some((img: ImageData) => {
-                                const hasDetectionLabels = img.labelRects?.some((rect: any) => rect.isCreatedByAI) ||
-                                                           img.labelPoints?.some((point: any) => point.isCreatedByAI) ||
-                                                           img.labelLines?.some((line: any) => line.isCreatedByAI);
-                                return !hasDetectionLabels;
-                            });
-
-                            if (allInferredAndVisible) {
-                                // 所有图片都已推理且标签可见，按钮为"关闭"状态
-                                buttonText = currentTexts.editorTopNavBar.disableDetection;
-                                buttonIcon = 'ico/eye.png';
-                                isActive = true;
-                            } else if (anyNotInferred) {
-                                // 存在未推理的图片，按钮为闭眼状态
-                                buttonText = currentTexts.editorTopNavBar.enableDetection;
-                                buttonIcon = 'ico/eye-off.png';
-                                isActive = false;
-                            } else {
-                                // 所有图片都已推理但标签未显示
-                                buttonText = currentTexts.editorTopNavBar.enableDetection;
-                                buttonIcon = 'ico/eye-off.png';
-                                isActive = false;
-                            }
-                        } else {
-                            // 没有活动图片时
-                            buttonText = currentTexts.editorTopNavBar.enableDetection;
-                            buttonIcon = 'ico/eye-off.png';
-                            isActive = false;
-                        }
-                        isDisabled = false;
-                    }
+                    const hasImage = imagesData.length > 0;
+                    const aiState = activeImageData ? imageAIStates.get(activeImageData.id) : null;
+                    const aiLabelsVisible = aiState?.aiLabelsVisible ?? false;
+                    const hasAI = hasImage && (activeImageData?.labelRects?.some((r: any) => r.isCreatedByAI) || false);
+                    const isDisabled = !hasImage || !hasAI;
+                    const icon = isDisabled ? 'ico/eye-slash.png'
+                        : aiLabelsVisible ? 'ico/eye.png' : 'ico/eye-off.png';
 
                     return getButtonWithTooltip(
-                        'full-image-detection',
-                        buttonText,
-                        buttonIcon,
-                        'full-image-detection',
-                        isActive,
+                        'toggle-ai-labels',
+                        isDisabled ? '无推理结果' : aiLabelsVisible ? '隐藏推理结果' : '显示推理结果',
+                        icon,
+                        'toggle-ai-labels',
+                        aiLabelsVisible,
                         undefined,
-                        isDisabled ? undefined : fullImageDetectionOnClick,
+                        isDisabled ? undefined : toggleAILabelsOnClick,
                         isDisabled
                     );
-                }, [hasDetectionModel, isFullImageInferenceInProgress, imageAIStates, imagesData, activeImageIndex, currentTexts, fullImageDetectionOnClick])}
+                }, [imageAIStates, imagesData, activeImageIndex, toggleAILabelsOnClick])}
             </div>
+            {useMemo(() => {
+                const activeImageData = LabelsSelector.getActiveImageData();
+                const detectionAvailable = hasDetectionModel;
+
+                const hasImage = imagesData.length > 0;
+                let isOn = false;
+                let isDisabled = !detectionAvailable || !hasImage;
+                let label = currentTexts.editorTopNavBar.enableDetection;
+
+                if (!detectionAvailable) {
+                    label = currentTexts.editorTopNavBar.cannotDetect;
+                } else if (isFullImageInferenceInProgress) {
+                    label = currentTexts.editorTopNavBar.detectionInProgress;
+                    isOn = true;
+                } else {
+                    const selectedImages = imagesData.filter((img: ImageData) => img.isSelected);
+                    const isBatchMode = selectedImages.length > 1;
+                    const imagesToCheck = isBatchMode ? selectedImages : (activeImageData ? [activeImageData] : []);
+
+                    if (imagesToCheck.length > 0) {
+                        const allInferredAndVisible = imagesToCheck.every((img: ImageData) => {
+                            const imgAIState = imageAIStates.get(img.id) || { aiLabelsVisible: false, inferenceHistory: [] };
+                            const hasDetectionLabels = img.labelRects?.some((rect: any) => rect.isCreatedByAI) ||
+                                                       img.labelPoints?.some((point: any) => point.isCreatedByAI) ||
+                                                       img.labelLines?.some((line: any) => line.isCreatedByAI);
+                            return imgAIState.aiLabelsVisible && hasDetectionLabels;
+                        });
+                        isOn = allInferredAndVisible;
+                        label = isOn ? currentTexts.editorTopNavBar.disableDetection : currentTexts.editorTopNavBar.enableDetection;
+                    }
+                }
+
+                return (
+                    <StyledTooltip
+                        key="inference-toggle"
+                        disableFocusListener={true}
+                        title={label}
+                        TransitionComponent={Fade}
+                        TransitionProps={{ timeout: 600 }}
+                        placement='bottom'
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 6, height: '100%' }}>
+                            <span style={{ color: '#aaa', fontSize: 12, whiteSpace: 'nowrap' }}>
+                                {isOn ? currentTexts.editorTopNavBar.disableDetection : currentTexts.editorTopNavBar.enableDetection}
+                            </span>
+                            <IOSSwitch
+                                checked={isOn}
+                                disabled={isDisabled}
+                                onChange={fullImageDetectionOnClick}
+                            />
+                        </div>
+                    </StyledTooltip>
+                );
+            }, [hasDetectionModel, isFullImageInferenceInProgress, imageAIStates, imagesData, activeImageIndex, currentTexts, fullImageDetectionOnClick])}
             {withAI && <div className='ButtonWrapper'>
                     {
                         getButtonWithTooltip(

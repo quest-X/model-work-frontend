@@ -11,8 +11,7 @@ interface IProps {
     frames: number; // 总帧数
     currentFrame: number; // 当前帧
     fps: number; // 帧率
-    onSeek: (time: number) => void; // 拖动时间轴时的回调
-    onFrameChange: (frame: number) => void; // 帧变化时的回调
+    onFrameChange: (frame: number) => void; // 跳转到指定帧（point/drag/键盘统一入口）
     size?: ISize; // 时间轴大小
     isPlaying?: boolean; // 是否正在播放
     keyframes?: number[]; // 关键帧位置数组
@@ -29,7 +28,6 @@ const VideoTimeline: React.FC<IProps> = ({
     frames,
     currentFrame,
     fps,
-    onSeek,
     onFrameChange,
     size,
     isPlaying = false,
@@ -230,7 +228,8 @@ const VideoTimeline: React.FC<IProps> = ({
         setHoverTime(null);
     };
 
-    // 处理时间跳转
+    // 处理时间跳转：统一走 onFrameChange（VideoEditor 内部从 frame 回算 time，
+    // 避免双 dispatch 引起的 currentTime 互相踩踏和重复 render）
     const handleSeek = (e: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -239,10 +238,8 @@ const VideoTimeline: React.FC<IProps> = ({
         const x = e.clientX - rect.left;
         const time = (x / rect.width) * duration;
         const clampedTime = Math.max(0, Math.min(duration, time));
-        
-        onSeek(clampedTime);
-        
         const frame = Math.min(Math.round(clampedTime * fps), frames - 1);
+        if (frame === currentFrame) return; // 同帧点击不触发
         onFrameChange(frame);
     };
 
@@ -257,41 +254,33 @@ const VideoTimeline: React.FC<IProps> = ({
                 case 'ArrowLeft':
                     e.preventDefault();
                     // 后退1帧
-                    const prevFrame = Math.max(0, currentFrame - 1);
-                    onFrameChange(prevFrame);
-                    onSeek(prevFrame / fps);
+                    onFrameChange(Math.max(0, currentFrame - 1));
                     break;
                 case 'ArrowRight':
                     e.preventDefault();
                     // 前进1帧
-                    const nextFrame = Math.min(frames - 1, currentFrame + 1);
-                    onFrameChange(nextFrame);
-                    onSeek(nextFrame / fps);
+                    onFrameChange(Math.min(frames - 1, currentFrame + 1));
                     break;
                 case 'a':
                 case 'A':
                 case ',':
                     e.preventDefault();
                     // 后退10帧
-                    const prevFrame10 = Math.max(0, currentFrame - 10);
-                    onFrameChange(prevFrame10);
-                    onSeek(prevFrame10 / fps);
+                    onFrameChange(Math.max(0, currentFrame - 10));
                     break;
                 case 'd':
                 case 'D':
                 case '.':
                     e.preventDefault();
                     // 前进10帧
-                    const nextFrame10 = Math.min(frames - 1, currentFrame + 10);
-                    onFrameChange(nextFrame10);
-                    onSeek(nextFrame10 / fps);
+                    onFrameChange(Math.min(frames - 1, currentFrame + 10));
                     break;
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [currentFrame, frames, fps, onFrameChange, onSeek]);
+    }, [currentFrame, frames, fps, onFrameChange]);
 
     // 重绘时间轴
     useEffect(() => {

@@ -30,86 +30,60 @@
       user-select: none;
     }
 
-    .CheckBox {
-      position: absolute;
-      z-index: 1000;
-      max-width: 20px;
-      max-height: 20px;
-      bottom: -10px;
-      left: -10px;
-      filter: invert(1) brightness(35%) sepia(100%) hue-rotate(172deg) saturate(2000%);
-      filter: invert(1) brightness(35%) sepia(100%) hue-rotate(var(--hue-value)) saturate(2000%);
-
-      &.inferred {
-        filter: invert(1) brightness(35%) sepia(100%) hue-rotate(120deg) saturate(2000%);
-      }
-    }
-
-    .MultiSelectIndicator {
+    .ManualLabelIndicator,
+    .AILabelIndicator {
       position: absolute;
       z-index: 1001;
-      width: 20px;
-      height: 20px;
-      top: -8px;
-      right: -8px;
-      background-color: #009AFF;
-      border: 2px solid white;
+      width: 14px;
+      height: 14px;
+      bottom: -5px;
+      left: -5px;
+      border: 1.5px solid white;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 10px;
+      font-size: 8px;
       color: white;
       font-weight: bold;
-      box-shadow: 0 2px 4px rgba(0, 154, 255, 0.3);
       transition: all 0.2s ease-in-out;
+    }
+
+    .ManualLabelIndicator {
+      background-color: #009AFF;
+      box-shadow: 0 1px 3px rgba(0, 154, 255, 0.3);
+    }
+
+    .AILabelIndicator {
+      background-color: #009944;
+      box-shadow: 0 1px 3px rgba(0, 153, 68, 0.3);
     }
 
     .DeleteButton {
       position: absolute;
       z-index: 1002;
-      width: 20px;
-      height: 20px;
-      top: -8px;
-      left: -8px;
+      width: 14px;
+      height: 14px;
+      top: -5px;
+      left: -5px;
       background-color: #e53935;
-      border: 2px solid white;
+      border: 1.5px solid white;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 10px;
+      font-size: 8px;
       color: white;
       font-weight: bold;
       cursor: pointer;
       opacity: 0;
       transition: opacity 0.2s ease-in-out;
-      box-shadow: 0 2px 4px rgba(229, 57, 53, 0.3);
+      box-shadow: 0 1px 3px rgba(229, 57, 53, 0.3);
 
       &:hover {
         background-color: #c62828;
         transform: scale(1.1);
       }
-    }
-
-    .AIProcessedIndicator {
-      position: absolute;
-      z-index: 1001;
-      width: 24px;
-      height: 24px;
-      top: -12px;
-      right: -12px;
-      background-color: #4CAF50;
-      border: 2px solid white;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      color: white;
-      font-weight: bold;
-      box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
-      transition: all 0.2s ease-in-out;
     }
   }
 
@@ -127,6 +101,14 @@
     .Background {
       transform: translate(2px, -2px);
       background-color: #009AFF;
+
+      &.has-manual-labels {
+        background-color: #009AFF;
+      }
+
+      &.has-ai-labels {
+        background-color: #009944;
+      }
     }
   }
 

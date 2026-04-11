@@ -126,19 +126,31 @@ const VideoEditor: React.FC<IProps> = ({
         }
     }, [activeVideo, imagesData.length, activeImageIndex, updateActiveImageIndex, updateVideoCurrentFrame]);
 
-    // 确保当前帧的图像被设置为活动图像
-    // 视频模式下优先使用 videoFrameImage（全分辨率，坐标映射准确）
+    // 确保当前帧的图像和标注数据始终同步
+    // 关键：playbackImageData 必须始终指向 currentFrame 对应的 imageData，
+    // 这样渲染引擎无论在播放还是暂停 seek 时都能读到正确帧的标签
     const lastFrameForImageRef = React.useRef<number>(-1);
+    const lastIsPlayingRef = React.useRef<boolean>(false);
     useEffect(() => {
         if (activeVideo && imagesData.length > 0) {
-            if (activeVideo.currentFrame !== lastFrameForImageRef.current) {
+            // 始终同步 playbackImageData 到当前帧
+            const frameData = imagesData[activeVideo.currentFrame];
+            EditorModel.playbackImageData = frameData || null;
+
+            const frameChanged = activeVideo.currentFrame !== lastFrameForImageRef.current;
+            const playStateChanged = isPlaying !== lastIsPlayingRef.current;
+            // 暂停 → 播放 或 播放 → 暂停 时，必须重绘 Editor canvas
+            // （因为 VideoPrimaryRenderEngine 在播放时跳过 drawImage，暂停时才绘制）
+            const needsRedraw = frameChanged || playStateChanged;
+
+            if (needsRedraw) {
                 lastFrameForImageRef.current = activeVideo.currentFrame;
+                lastIsPlayingRef.current = isPlaying;
 
                 // 视频模式：始终使用缓存的 videoFrameImage，避免用 150x150 缩略图
                 if (EditorModel.videoFrameImage) {
                     EditorActions.setActiveImage(EditorModel.videoFrameImage);
                 } else {
-                    // 回退：videoFrameImage 还没生成时用 ImageRepository 的图像
                     const currentImageData = imagesData[activeVideo.currentFrame];
                     if (currentImageData && currentImageData.id) {
                         const image = ImageRepository.getById(currentImageData.id);
@@ -146,6 +158,24 @@ const VideoEditor: React.FC<IProps> = ({
                             EditorActions.setActiveImage(image);
                         }
                     }
+                }
+
+                // [DBG-END] 追踪暂停瞬间 VideoEditor effect 设置的图像
+                if (!isPlaying && frameChanged) {
+                    const vfi = EditorModel.videoFrameImage;
+                    const em = EditorModel.image;
+                    console.log('[DBG-END] VideoEditor frame-sync (post-pause)', {
+                        currentFrame: activeVideo.currentFrame,
+                        videoFrameImageSrcPrefix: vfi?.src?.slice(0, 80),
+                        videoFrameImageWH: vfi ? `${vfi.naturalWidth}x${vfi.naturalHeight}` : 'null',
+                        editorModelImageSrcPrefix: em?.src?.slice(0, 80),
+                        editorModelImageWH: em ? `${em.naturalWidth}x${em.naturalHeight}` : 'null'
+                    });
+                }
+
+                // canvas 可能还未挂载，仅在已挂载时刷新
+                if (EditorModel.canvas) {
+                    EditorActions.fullRender();
                 }
             }
         }
@@ -386,29 +416,27 @@ const VideoEditor: React.FC<IProps> = ({
         [activeVideo, updateVideoMetadata, addImageData, updateVideoCurrentFrame, updateActiveImageIndex, updateImageDataById]
     );
 
-    // 处理时间轴拖动
-    const handleTimelineSeek = useCallback(
-        (time: number) => {
-            if (!activeVideo) return;
-            const frameNumber = Math.min(Math.round(time * activeVideo.fps), activeVideo.totalFrames - 1);
-            updateVideoCurrentFrame(activeVideo.id, frameNumber, time);
-        },
-        [activeVideo, updateVideoCurrentFrame]
-    );
-
-    // 处理帧变化
+    // 跳转到指定帧的统一入口：time 从 frame 推导，避免双 dispatch 互相踩踏
+    // 使用场景：时间轴点击/拖动、方向键快捷键、缩略图点击
     const handleFrameChange = useCallback(
         (frameNumber: number) => {
             if (!activeVideo) return;
+            // 同帧跳过，不触发 Redux 更新和 effect 级联
+            if (frameNumber === activeVideo.currentFrame) return;
             const timestamp = frameNumber / activeVideo.fps;
-            updateVideoCurrentFrame(activeVideo.id, frameNumber, timestamp);
-            
-            // 更新活动图像索引以匹配当前帧
-            if (frameNumber !== activeImageIndex) {
-                updateActiveImageIndex(frameNumber);
+            // 同步设置 playbackImageData，确保标签与帧一致（fallback 到 latestImagesData 以抗 AI 批量推理时的 ref 滞后）
+            let frameImageData = imagesDataRef.current[frameNumber];
+            if (frameImageData && frameImageData.labelRects.length === 0 && EditorModel.latestImagesData) {
+                const latestData = EditorModel.latestImagesData[frameNumber];
+                if (latestData && latestData.labelRects.length > 0) {
+                    frameImageData = latestData;
+                }
             }
+            EditorModel.playbackImageData = frameImageData || null;
+            updateVideoCurrentFrame(activeVideo.id, frameNumber, timestamp);
+            updateActiveImageIndex(frameNumber);
         },
-        [activeVideo, activeImageIndex, updateVideoCurrentFrame, updateActiveImageIndex]
+        [activeVideo, updateVideoCurrentFrame, updateActiveImageIndex]
     );
 
     // 处理播放/暂停
@@ -424,7 +452,7 @@ const VideoEditor: React.FC<IProps> = ({
             lastFrameRef.current = -1;
         } else {
             // 暂停：用 lastFrameRef（实时值）而非闭包中过时的 activeVideo.currentFrame
-            EditorModel.playbackImageData = null;
+            // 注意：不清除 playbackImageData，由 currentFrame effect 统一管理
             const finalFrame = lastFrameRef.current >= 0 ? lastFrameRef.current : activeVideo.currentFrame;
             const safeFps = activeVideo.fps || 30;
             updateVideoCurrentFrame(activeVideo.id, finalFrame, finalFrame / safeFps);
@@ -617,7 +645,7 @@ const VideoEditor: React.FC<IProps> = ({
                                     updateVideoCurrentFrame(activeVideo.id, finalFrame, finalFrame / safeFps);
                                     updateActiveImageIndex(finalFrame);
                                 }
-                                EditorModel.playbackImageData = null;
+                                // playbackImageData 由 currentFrame effect 统一管理
                             }}
                             onPlayPause={handlePlayPause}
                             isPlaying={isPlaying}
@@ -646,7 +674,6 @@ const VideoEditor: React.FC<IProps> = ({
                     frames={activeVideo.totalFrames}
                     currentFrame={activeVideo.currentFrame}
                     fps={activeVideo.fps}
-                    onSeek={handleTimelineSeek}
                     onFrameChange={handleFrameChange}
                     size={timelineSize}
                     isPlaying={isPlaying}

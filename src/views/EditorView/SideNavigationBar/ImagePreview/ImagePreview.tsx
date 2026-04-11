@@ -72,6 +72,8 @@ class ImagePreview extends React.Component<IProps, IState> {
             this.props.imageData.isVisitedBySSDObjectDetector !== nextProps.imageData.isVisitedBySSDObjectDetector ||
             this.props.imageData.isVisitedByPoseDetector !== nextProps.imageData.isVisitedByPoseDetector ||
             this.props.imageData.isVisitedByRoboflowAPI !== nextProps.imageData.isVisitedByRoboflowAPI ||
+            this.props.imageData.labelRects?.length !== nextProps.imageData.labelRects?.length ||
+            this.props.imageData.labelPolygons?.length !== nextProps.imageData.labelPolygons?.length ||
             this.state.image !== nextState.image ||
             this.props.isSelected !== nextProps.isSelected ||
             this.props.isChecked !== nextProps.isChecked ||
@@ -150,6 +152,30 @@ class ImagePreview extends React.Component<IProps, IState> {
 
     private handleLoadImageError = () => { };
 
+    private hasAnyLabels = (): boolean => {
+        const { imageData } = this.props;
+        return (imageData.labelRects?.length > 0) ||
+               (imageData.labelPoints?.length > 0) ||
+               (imageData.labelPolygons?.length > 0) ||
+               (imageData.labelLines?.length > 0);
+    };
+
+    // 返回 'manual' | 'ai' | 'none'
+    // 混合标注优先 manual（蓝色）
+    private getLabelOrigin = (): 'manual' | 'ai' | 'none' => {
+        const { imageData } = this.props;
+        const allLabels = [
+            ...(imageData.labelRects || []),
+            ...(imageData.labelPoints || []),
+            ...(imageData.labelPolygons || []),
+            ...(imageData.labelLines || []),
+        ];
+        if (allLabels.length === 0) return 'none';
+        const hasManual = allLabels.some((l: any) => !l.isCreatedByAI);
+        if (hasManual) return 'manual';
+        return 'ai';
+    };
+
     private isAIProcessedImage = (): boolean => {
         const { imageData } = this.props;
         return imageData.isVisitedByYOLOObjectDetector ||
@@ -162,7 +188,7 @@ class ImagePreview extends React.Component<IProps, IState> {
         return classNames(
             "ImagePreview",
             {
-                "selected": this.props.isSelected,
+                "selected": this.props.isSelected || this.props.isMultiSelected,
             }
         );
     };
@@ -207,22 +233,16 @@ class ImagePreview extends React.Component<IProps, IState> {
                             >
                                 ✕
                             </div>
-                            {isChecked && <img
-                                className={`CheckBox${this.props.isInferred ? ' inferred' : ''}`}
-                                draggable={false}
-                                src={"ico/ok.png"}
-                                alt={"checkbox"}
-                            />}
-                            {this.props.isMultiSelected && (
+                            {this.getLabelOrigin() !== 'none' && (
                                 <div className={
-                                    this.isAIProcessedImage() ? "AIProcessedIndicator" : "MultiSelectIndicator"
+                                    this.getLabelOrigin() === 'manual' ? "ManualLabelIndicator" : "AILabelIndicator"
                                 }>
                                     ✓
                                 </div>
                             )}
                         </div>,
                         <div
-                            className="Background"
+                            className={`Background${this.getLabelOrigin() === 'manual' ? ' has-manual-labels' : this.getLabelOrigin() === 'ai' ? ' has-ai-labels' : ''}`}
                             key={"Background"}
                             style={this.getStyle()}
                         />

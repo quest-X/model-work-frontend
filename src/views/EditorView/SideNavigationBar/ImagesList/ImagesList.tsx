@@ -90,11 +90,16 @@ class ImagesList extends React.Component<IProps, IState> {
     };
 
     private handleKeyDown = (event: KeyboardEvent) => {
+        // 输入框中不拦截快捷键
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+            return;
+        }
+
         if (event.ctrlKey || event.metaKey) { // Support both Ctrl and Cmd (for Mac)
             this.setState({ isCtrlPressed: true });
-            
-            // Handle Ctrl+A for select all
-            if (event.key === 'a' || event.key === 'A') {
+
+            // Handle Ctrl+A for select all (only when images exist)
+            if ((event.key === 'a' || event.key === 'A') && this.props.imagesData.length > 0) {
                 event.preventDefault(); // Prevent browser's default select all
                 this.handleSelectAll();
                 return;

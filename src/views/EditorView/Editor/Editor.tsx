@@ -98,6 +98,21 @@ class Editor extends React.Component<IProps, IState> {
             if (VideoSelector.isVideoPlaying() && EditorModel.videoFrameImage) {
                 return;
             }
+            // [DBG-END] 追踪切帧瞬间 Editor 的状态
+            if (VideoSelector.isVideoMode() && !VideoSelector.isVideoPlaying()) {
+                const vfi = EditorModel.videoFrameImage;
+                const em = EditorModel.image;
+                console.log('[DBG-END] Editor.componentDidUpdate (paused video)', {
+                    prevImageDataId: prevProps.imageData.id?.slice(0, 8),
+                    newImageDataId: imageData.id?.slice(0, 8),
+                    newLoadStatus: imageData.loadStatus,
+                    newFileDataName: imageData.fileData?.name,
+                    videoFrameImageSrcPrefix: vfi?.src?.slice(0, 80),
+                    videoFrameImageWH: vfi ? `${vfi.naturalWidth}x${vfi.naturalHeight}` : 'null',
+                    editorModelImageSrcPrefix: em?.src?.slice(0, 80),
+                    editorModelImageWH: em ? `${em.naturalWidth}x${em.naturalHeight}` : 'null'
+                });
+            }
             EditorActions.setLoadingStatus(false);
             ImageLoadManager.addAndRun(this.loadImage(imageData));
         }

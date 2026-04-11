@@ -20,6 +20,7 @@ import '../VideoPlayer/VideoPlayer.scss';
 import { ISize } from '../../../interfaces/ISize';
 import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { EditorModel } from '../../../staticModels/EditorModel';
+import { EditorActions } from '../../../logic/actions/EditorActions';
 import { FrameExtractorService } from '../../../services/FrameExtractorService';
 
 interface IProps {
@@ -194,6 +195,13 @@ const FramePlayer: React.FC<IProps> = ({
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             EditorModel.videoFrameImage = img;
+            // 暂停中的 seek cache-miss 路径：videoFrameImage 异步到手后，
+            // VideoEditor 的 sync effect 已经用旧图跑过一次 fullRender 了，
+            // 这里主动补一次，把 Editor canvas 刷到正确的底图。
+            if (!isPlayingRef.current && EditorModel.canvas) {
+                EditorActions.setActiveImage(img);
+                EditorActions.fullRender();
+            }
         } catch (err) {
             console.error(`[FramePlayer] drawFrame(${frameIdx}) failed:`, err);
         }
@@ -444,15 +452,39 @@ const FramePlayer: React.FC<IProps> = ({
                 if (targetFrame >= totalFrames - 1) {
                     onTimeUpdateRef.current?.(duration, totalFrames - 1);
 
-                    if (!frameCacheRef.current.has(totalFrames - 1)) {
+                    const cacheHit = frameCacheRef.current.has(totalFrames - 1);
+                    const vfiBefore = EditorModel.videoFrameImage;
+                    console.log('[DBG-END] tick reached last frame', {
+                        totalFrames,
+                        lastFrameCached: cacheHit,
+                        videoFrameImageNaturalWH: vfiBefore
+                            ? `${vfiBefore.naturalWidth}x${vfiBefore.naturalHeight}`
+                            : 'null',
+                        videoFrameImageSrcPrefix: vfiBefore?.src?.slice(0, 80),
+                        frameCacheSize: frameCacheRef.current.size,
+                        frameCacheKeys: Array.from(frameCacheRef.current.keys()).slice(-5)
+                    });
+
+                    if (!cacheHit) {
                         // 最后一帧不在缓存 → 异步加载，画完再暂停
                         drawFrame(totalFrames - 1).then(() => {
+                            const vfi = EditorModel.videoFrameImage;
+                            console.log('[DBG-END] drawFrame(last) resolved', {
+                                videoFrameImageSrcPrefix: vfi?.src?.slice(0, 80),
+                                videoFrameImageWH: vfi ? `${vfi.naturalWidth}x${vfi.naturalHeight}` : 'null'
+                            });
                             isVideoEndedRef.current = true;
                             onPlayPauseRef.current?.();
                         });
                     } else {
                         // 最后一帧在缓存 → 确保画上再暂停
-                        drawFrameSync(totalFrames - 1);
+                        const ok = drawFrameSync(totalFrames - 1);
+                        const vfi = EditorModel.videoFrameImage;
+                        console.log('[DBG-END] drawFrameSync(last) sync path', {
+                            ok,
+                            videoFrameImageSrcPrefix: vfi?.src?.slice(0, 80),
+                            videoFrameImageWH: vfi ? `${vfi.naturalWidth}x${vfi.naturalHeight}` : 'null'
+                        });
                         isVideoEndedRef.current = true;
                         onPlayPauseRef.current?.();
                     }
@@ -490,10 +522,15 @@ const FramePlayer: React.FC<IProps> = ({
         if (targetFrame === lastSeekFrameRef.current) return;
         lastSeekFrameRef.current = targetFrame;
 
-        drawFrame(targetFrame);
+        // 先试 drawFrameSync（缓存命中零闪烁）：同步更新 videoFrameImage，
+        // 随后 VideoEditor 的 sync effect 跑 setActiveImage 时就能读到新底图。
+        // 缓存未命中才 fall back 到 async drawFrame（完成后会自动补一次 fullRender）。
+        if (!drawFrameSync(targetFrame)) {
+            drawFrame(targetFrame);
+        }
         // 重启滑动窗口维护，从新位置开始填充
         maintainRef.current();
-    }, [currentTime, isLoaded, isPlaying, fps, totalFrames, drawFrame]);
+    }, [currentTime, isLoaded, isPlaying, fps, totalFrames, drawFrame, drawFrameSync]);
 
     // 键盘快捷键
     useEffect(() => {
