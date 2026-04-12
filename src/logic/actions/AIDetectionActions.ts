@@ -10,7 +10,6 @@ import {updatePerClassColorationStatus} from "../../store/general/actionCreators
 import {updateVideoCurrentFrame} from "../../store/video/actionCreators";
 import {NotificationUtil} from "../../utils/NotificationUtil";
 import {LabelUtil} from "../../utils/LabelUtil";
-import {RectUtil} from "../../utils/RectUtil";
 import {IRect} from "../../interfaces/IRect";
 import {AISelector} from "../../store/selectors/AISelector";
 import {LanguageConfig} from "../../data/LanguageConfig";
@@ -319,7 +318,7 @@ export class AIDetectionActions {
 
                     if (i % 5 === 0 || i === captureTotal - 1) {
                         const pct = Math.round((i / captureTotal) * 33);
-                        notify(1, `${texts.aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`, `${pct}% — ${texts.frame} ${frameIdx}`);
+                        notify(1, `${texts.aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`, `${pct}% — ${texts.video.frame} ${frameIdx}`);
                     }
                     if (i % 8 === 0 && i > 0) await this.yieldToUI();
 
@@ -389,7 +388,7 @@ export class AIDetectionActions {
 
             await this.withConcurrency(tasks, 4, (done, ttl) => {
                 const pct = preFrames ? Math.round((done / ttl) * 90) : 33 + Math.round((done / ttl) * 55);
-                notify(2, `${texts.aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${texts.frame} ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
+                notify(2, `${texts.aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${texts.video.frame} ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
             });
 
             const inferElapsed = ((Date.now() - inferStartTime) / 1000).toFixed(1);
@@ -471,21 +470,18 @@ export class AIDetectionActions {
         const currentImg = currentImagesData.find(img => img.id === imageData.id);
         if (!currentImg) return;
 
-        const newRects: LabelRect[] = [];
-        for (const result of results) {
+        // 保持原生推理结果：不做任何去重/过滤，所有模型输出的框原样入库。
+        // 重复框（包括同帧高 IOU 重叠、手动框被覆盖、多次推理叠加）由用户自行决定如何处理。
+        const newRects: LabelRect[] = results.map(result => {
             const [x1, y1, x2, y2] = result.bbox;
             const rect: IRect = { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
-
-            if (this.checkDuplicateLabelRect(currentImg.labelRects, rect, result.info.name, updatedLabels)) {
-                continue;
-            }
 
             const matchingLabel = updatedLabels.find(l =>
                 l.name.toLowerCase() === result.info.name.toLowerCase()
             );
             const labelId = matchingLabel?.id || null;
 
-            newRects.push({
+            return {
                 id: uuidv4(),
                 labelId,
                 rect,
@@ -494,8 +490,8 @@ export class AIDetectionActions {
                 status: LabelStatus.ACCEPTED,
                 suggestedLabel: labelId ? null : result.info.name,
                 confidence: result.info.confidence ?? 0
-            });
-        }
+            };
+        });
 
         if (newRects.length > 0) {
             const updatedImg = {
@@ -577,22 +573,17 @@ export class AIDetectionActions {
             if (arrIdx === undefined) { continue; }
 
             const currentImg = currentImagesData[arrIdx];
-            const newRects: LabelRect[] = [];
-
-            for (const result of results) {
+            // 保持原生推理结果：不做任何去重/过滤，所有模型输出的框原样入库
+            const newRects: LabelRect[] = results.map(result => {
                 const [x1, y1, x2, y2] = result.bbox;
                 const rect: IRect = { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
-
-                if (this.checkDuplicateLabelRect(currentImg.labelRects, rect, result.info.name, updatedLabels)) {
-                    continue;
-                }
 
                 const matchingLabel = updatedLabels.find(l =>
                     l.name.toLowerCase() === result.info.name.toLowerCase()
                 );
                 const labelId = matchingLabel?.id || null;
 
-                newRects.push({
+                return {
                     id: uuidv4(),
                     labelId,
                     rect,
@@ -601,8 +592,8 @@ export class AIDetectionActions {
                     status: LabelStatus.ACCEPTED,
                     suggestedLabel: labelId ? null : result.info.name,
                     confidence: result.info.confidence ?? 0
-                });
-            }
+                };
+            });
 
             if (newRects.length > 0) {
                 currentImagesData[arrIdx] = {
@@ -702,41 +693,6 @@ export class AIDetectionActions {
         
         store.dispatch(updateLabelNames(updatedLabels));
         // 创建了AI标签，跳过重复标签（性能优化：移除日志）
-    }
-
-    /**
-     * 检查是否为重复的标注框
-     */
-    private static checkDuplicateLabelRect(
-        existingLabelRects: LabelRect[], 
-        detectionRect: IRect, 
-        className: string,
-        existingLabels: LabelName[]
-    ): boolean {
-        const IOU_THRESHOLD = 0.7; // IOU阈值，大于此值认为是相同位置
-        
-        for (const existingRect of existingLabelRects) {
-            const iou = RectUtil.calculateIOU(existingRect.rect, detectionRect);
-            
-            if (iou > IOU_THRESHOLD) {
-                let isSameLabel = false;
-                
-                if (existingRect.labelId) {
-                    const existingLabelName = existingLabels.find(label => label.id === existingRect.labelId);
-                    if (existingLabelName) {
-                        isSameLabel = existingLabelName.name.toLowerCase() === className.toLowerCase();
-                    }
-                } else if (existingRect.suggestedLabel) {
-                    isSameLabel = existingRect.suggestedLabel.toLowerCase() === className.toLowerCase();
-                }
-                
-                if (isSameLabel) {
-                    console.log(`🔍 检测到重复标注框: ${className} (IOU: ${iou.toFixed(3)})`);
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     /**

@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.0.2',
+        date: '2026-04-12',
+        changes: [
+            { zh: '移除推理结果入库时的重复框过滤（IOU>0.7 + 同类名的 rect 不再被静默丢弃）', en: 'Remove duplicate box filtering at inference write-time (rects with IOU>0.7 + same class name are no longer silently dropped)' },
+            { zh: '保持模型原生输出：所有 AI 检测结果原样入库，包括同帧高重叠框、与手动框重叠、多次推理叠加', en: 'Preserve raw model output: all AI detection results are stored as-is, including high-IOU overlaps within a frame, overlaps with manual boxes, and multi-pass inference accumulation' },
+            { zh: '删除 AIDetectionActions.checkDuplicateLabelRect 方法 + 未使用的 RectUtil import', en: 'Delete AIDetectionActions.checkDuplicateLabelRect method and unused RectUtil import' },
+        ]
+    },
+    {
         version: '2.0.1',
         date: '2026-04-12',
         changes: [
