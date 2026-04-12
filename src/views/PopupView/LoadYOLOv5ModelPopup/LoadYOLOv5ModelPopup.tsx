@@ -17,10 +17,12 @@ import {CSSHelper} from '../../../logic/helpers/CSSHelper';
 import {ClipLoader} from 'react-spinners';
 import {useDropzone} from 'react-dropzone';
 import {DetectionAPIDetector} from '../../../ai/DetectionAPIDetector';
+import {SegmentationAPIDetector} from '../../../ai/SegmentationAPIDetector';
 import {AIDetectionActions} from '../../../logic/actions/AIDetectionActions';
 import {ImageData} from '../../../store/labels/types';
 import {LabelsSelector} from '../../../store/selectors/LabelsSelector';
-import {getSelectedModelFamily, getServerUrl} from '../LoadModelPopup/LoadModelPopup';
+import {EditorModel} from '../../../staticModels/EditorModel';
+import {getSelectedModelFamily, getServerUrl, SEG_MODEL_FAMILIES} from '../LoadModelPopup/LoadModelPopup';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 enum ModelSource {
@@ -101,18 +103,18 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
 
     const {getRootProps, getInputProps} = useDropzone({onDrop});
 
+    const isSegModel = modelFamily && SEG_MODEL_FAMILIES.some(f => f.id === modelFamily.id);
+
     const triggerDetection = () => {
-        const detectUrl = serverUrl.replace(/\/+$/, '') + '/detect';
-        DetectionAPIDetector.setConfig({ url: detectUrl, enabled: true });
-        PopupActions.close();
-        try {
-            const activeImageData: ImageData = LabelsSelector.getActiveImageData();
-            if (activeImageData) {
-                AIDetectionActions.detectObjects(activeImageData);
-            }
-        } catch {
-            // No active image
+        const baseUrl = serverUrl.replace(/\/+$/, '');
+        if (isSegModel) {
+            SegmentationAPIDetector.setConfig({ url: baseUrl + '/segment', enabled: true });
+            EditorModel.lastLoadedModelService = 'segmentation';
+        } else {
+            DetectionAPIDetector.setConfig({ url: baseUrl + '/detect', enabled: true });
+            EditorModel.lastLoadedModelService = 'detection';
         }
+        PopupActions.close();
     };
 
     const onAccept = async () => {
@@ -125,7 +127,10 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                 const res = await fetch(`${serverUrl}/load-model`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model: `${selectedVariant}.pt` })
+                    body: JSON.stringify({
+                        model: `${selectedVariant}.pt`,
+                        service: modelFamily && SEG_MODEL_FAMILIES.some(f => f.id === modelFamily.id) ? 'segmentation' : 'detection'
+                    })
                 });
                 if (!res.ok) {
                     const data = await res.json().catch(() => ({}));
@@ -154,7 +159,18 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                     throw new Error(data.detail || res.statusText);
                 }
                 setLoadProgress(100);
-                triggerDetection();
+                // 根据文件名自动识别模型类型：seg_/SAM/sam → 分割，其他 → 检测
+                const data = await res.json().catch(() => ({}));
+                const uploadedService = data.service || 'detection';
+                const baseUrl = serverUrl.replace(/\/+$/, '');
+                if (uploadedService === 'segmentation') {
+                    SegmentationAPIDetector.setConfig({ url: baseUrl + '/segment', enabled: true });
+                    EditorModel.lastLoadedModelService = 'segmentation';
+                } else {
+                    DetectionAPIDetector.setConfig({ url: baseUrl + '/detect', enabled: true });
+                    EditorModel.lastLoadedModelService = 'detection';
+                }
+                PopupActions.close();
             } catch (e) {
                 setIsLoading(false);
                 setLoadState('');

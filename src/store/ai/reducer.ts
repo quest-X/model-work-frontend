@@ -114,6 +114,7 @@ export function aiReducer(
             const { imageId } = action.payload;
             const currentState = state.imageAIStates.get(imageId) || {
                 aiLabelsVisible: false,
+                segmentationLabelsVisible: false,
                 inferenceHistory: []
             };
             
@@ -139,6 +140,33 @@ export function aiReducer(
             debouncedSave(newState.imageAIStates);
             return newState;
         }
+        case Action.TOGGLE_IMAGE_SEGMENTATION_LABELS_VISIBILITY: {
+            const { imageId } = action.payload;
+            const currentState = state.imageAIStates.get(imageId) || {
+                aiLabelsVisible: false,
+                segmentationLabelsVisible: false,
+                inferenceHistory: []
+            };
+
+            const newVisibility = !currentState.segmentationLabelsVisible;
+            if (currentState.segmentationLabelsVisible === newVisibility) {
+                return state;
+            }
+
+            const newImageAIStates = new Map(state.imageAIStates);
+            newImageAIStates.set(imageId, {
+                ...currentState,
+                segmentationLabelsVisible: newVisibility
+            });
+
+            const newState = {
+                ...state,
+                imageAIStates: newImageAIStates
+            };
+
+            debouncedSave(newState.imageAIStates);
+            return newState;
+        }
         case Action.UPDATE_SEGMENTATION_RESULTS: {
             const { segmentationResults, imageId } = action.payload;
             const newImageSegmentationResults = new Map(state.imageSegmentationResults);
@@ -158,6 +186,7 @@ export function aiReducer(
             const newImageAIStates = new Map(state.imageAIStates);
             const currentState = newImageAIStates.get(imageId) || {
                 aiLabelsVisible: false,
+                segmentationLabelsVisible: false,
                 inferenceHistory: []
             };
 
@@ -172,7 +201,11 @@ export function aiReducer(
             const newState_inner = { ...currentState, inferenceHistory: newHistory };
 
             if (success && detectedCount > 0) {
-                newState_inner.aiLabelsVisible = true;
+                if (type === 'segmentation') {
+                    newState_inner.segmentationLabelsVisible = true;
+                } else {
+                    newState_inner.aiLabelsVisible = true;
+                }
             }
 
             newImageAIStates.set(imageId, newState_inner);

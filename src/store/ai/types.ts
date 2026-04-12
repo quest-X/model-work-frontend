@@ -58,11 +58,12 @@ export type AIState = {
     // AI LABELS VISIBILITY STATE - 每张图片���立
     imageAIStates: Map<string, {
         aiLabelsVisible: boolean; // 检测标签是否显示（默认false闭眼）
+        segmentationLabelsVisible: boolean; // 分割标签是否显示
         inferenceHistory: Array<{
             timestamp: number;    // 推理时间戳
             detectedCount: number; // 检测到的对象数量
             success: boolean;     // 推理是否成功
-            type: 'detection'; // 推理类型
+            type: 'detection' | 'segmentation'; // 推理类型
         }>;
     }>;
 }
@@ -130,6 +131,13 @@ interface ToggleImageAILabelsVisibility {
     }
 }
 
+interface ToggleImageSegmentationLabelsVisibility {
+    type: typeof Action.TOGGLE_IMAGE_SEGMENTATION_LABELS_VISIBILITY;
+    payload: {
+        imageId: string;
+    }
+}
+
 interface AddInferenceHistory {
     type: typeof Action.ADD_INFERENCE_HISTORY;
     payload: {
@@ -137,7 +145,7 @@ interface AddInferenceHistory {
         timestamp: number;
         detectedCount: number;
         success: boolean;
-        type: 'detection';
+        type: 'detection' | 'segmentation';
     }
 }
 
@@ -158,5 +166,6 @@ export type AIActionTypes = UpdateSuggestedLabelList
     | UpdateRoboflowAPIDetails
     | UpdateFullImageInferenceStatus
     | ToggleImageAILabelsVisibility
+    | ToggleImageSegmentationLabelsVisibility
     | AddInferenceHistory
     | UpdateSegmentationResults

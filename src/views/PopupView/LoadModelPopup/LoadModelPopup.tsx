@@ -25,6 +25,14 @@ export const YOLO_MODEL_FAMILIES: YOLOModelFamily[] = [
     { id: 'yolov8', name: 'ultralytics/yolov8', variants: ['yolov8n', 'yolov8s', 'yolov8m', 'yolov8l', 'yolov8x'] },
 ];
 
+export const SEG_MODEL_FAMILIES: YOLOModelFamily[] = [
+    { id: 'yolov8-seg', name: 'ultralytics/yolov8-seg', variants: ['yolov8n-seg', 'yolov8s-seg', 'yolov8m-seg', 'yolov8l-seg', 'yolov8x-seg'] },
+    { id: 'yolo11-seg', name: 'ultralytics/yolo11-seg', variants: ['yolo11n-seg', 'yolo11s-seg', 'yolo11m-seg', 'yolo11l-seg', 'yolo11x-seg'] },
+    { id: 'sam2', name: 'ultralytics/SAM 2', variants: ['sam2.1_t', 'sam2.1_s', 'sam2.1_b', 'sam2.1_l'] },
+    { id: 'mobile-sam', name: 'ultralytics/MobileSAM', variants: ['mobile_sam'] },
+    { id: 'fast-sam', name: 'ultralytics/FastSAM', variants: ['FastSAM-s', 'FastSAM-x'] },
+];
+
 // Module-level state shared between LoadModelPopup and LoadYOLOModelPopup
 let _selectedModelFamily: YOLOModelFamily | null = null;
 let _serverUrl: string = 'http://localhost:8000';
@@ -44,6 +52,7 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
 
     const [availableModels, setAvailableModels] = useState<string[]>([]);
     const [currentModelName, setCurrentModelName] = useState<string>('');
+    const [currentSegModelName, setCurrentSegModelName] = useState<string>('');
 
     useEffect(() => {
         fetch(`${serverUrl}/available-models`)
@@ -52,7 +61,10 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
             .catch(() => {});
         fetch(`${serverUrl}/health`)
             .then(r => r.json())
-            .then(data => { if (data.model && data.model !== 'none') setCurrentModelName(data.model); })
+            .then(data => {
+                if (data.model && data.model !== 'none') setCurrentModelName(data.model);
+                if (data.segmentation_model) setCurrentSegModelName(data.segmentation_model);
+            })
             .catch(() => {});
     }, [serverUrl]);
 
@@ -71,7 +83,8 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
             updateActivePopupType(PopupWindowType.LOAD_YOLO_V5_MODEL);
             return;
         }
-        const family = YOLO_MODEL_FAMILIES.find(f => f.id === selectedId);
+        const family = YOLO_MODEL_FAMILIES.find(f => f.id === selectedId)
+            || SEG_MODEL_FAMILIES.find(f => f.id === selectedId);
         if (!family) return;
         _selectedModelFamily = family;
         _serverUrl = serverUrl;
@@ -83,8 +96,10 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
     };
 
     const isActiveFamily = (family: YOLOModelFamily): boolean => {
-        if (!currentModelName) return false;
-        const baseName = currentModelName.replace('.pt', '');
+        const isSeg = SEG_MODEL_FAMILIES.some(f => f.id === family.id);
+        const modelName = isSeg ? currentSegModelName : currentModelName;
+        if (!modelName) return false;
+        const baseName = modelName.replace('.pt', '');
         return family.variants.some(v => v === baseName);
     };
 
@@ -105,7 +120,7 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
             />
             {family.name}
             {downloaded > 0 && <span className='model-count'> ({downloaded}/{total})</span>}
-            {isActive && <span className='active-badge'>✓ {currentModelName.replace('.pt', '')}</span>}
+            {isActive && <span className='active-badge'>✓ {(SEG_MODEL_FAMILIES.some(f => f.id === family.id) ? currentSegModelName : currentModelName).replace('.pt', '')}</span>}
         </div>
     };
 
@@ -143,14 +158,10 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
                     {YOLO_MODEL_FAMILIES.map(f => renderFamilyOption(f))}
                 </div>
             </div>
-            <div className='ModelSection disabled'>
-                <div className='SectionHeader'>{zhTexts ? '分割模型（即将推出）' : 'Segmentation Models (coming soon)'}</div>
+            <div className='ModelSection'>
+                <div className='SectionHeader'>{zhTexts ? '分割模型' : 'Segmentation Models'}</div>
                 <div className='Options'>
-                    <div className='OptionsItem'><img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />SAM (Segment Anything Model)</div>
-                    <div className='OptionsItem'><img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />SAM 2 (Segment Anything Model 2)</div>
-                    <div className='OptionsItem'><img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />SAM 3 (Segment Anything Model 3)</div>
-                    <div className='OptionsItem'><img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />MobileSAM</div>
-                    <div className='OptionsItem'><img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />FastSAM</div>
+                    {SEG_MODEL_FAMILIES.map(f => renderFamilyOption(f))}
                 </div>
             </div>
             <div className='ServerConfig'>

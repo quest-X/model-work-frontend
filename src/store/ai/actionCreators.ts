@@ -92,7 +92,16 @@ export function updateSegmentationResults(segmentationResults: SegmentationResul
     }
 }
 
-export function addInferenceHistory(imageId: string, detectedCount: number, success: boolean = true, type: 'detection' = 'detection'): AIActionTypes {
+export function toggleImageSegmentationLabelsVisibility(imageId: string): AIActionTypes {
+    return {
+        type: Action.TOGGLE_IMAGE_SEGMENTATION_LABELS_VISIBILITY,
+        payload: {
+            imageId
+        }
+    }
+}
+
+export function addInferenceHistory(imageId: string, detectedCount: number, success: boolean = true, type: 'detection' | 'segmentation' = 'detection'): AIActionTypes {
     return {
         type: Action.ADD_INFERENCE_HISTORY,
         payload: {

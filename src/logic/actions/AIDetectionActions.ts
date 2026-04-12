@@ -203,8 +203,7 @@ export class AIDetectionActions {
         if (!DetectionAPIDetector.isEnabled() || imagesToDetect.length === 0) return;
 
         const startTime = Date.now();
-        const language = store.getState().general.language;
-        const texts = LanguageConfig[language];
+        const t = () => LanguageConfig[store.getState().general.language]; // 实时读语言
         const total = imagesToDetect.length;
         let totalObjects = 0;
         let successCount = 0;
@@ -280,7 +279,7 @@ export class AIDetectionActions {
                     const count = Math.min(FETCH_BATCH, captureTotal - i);
                     const pct = Math.round((i / captureTotal) * 33);
                     notify(1,
-                        `${texts.aiInference.steps.captureFrame} (${i + count}/${captureTotal})`,
+                        `${t().aiInference.steps.captureFrame} (${i + count}/${captureTotal})`,
                         `${pct}%`
                     );
                     try {
@@ -318,7 +317,7 @@ export class AIDetectionActions {
 
                     if (i % 5 === 0 || i === captureTotal - 1) {
                         const pct = Math.round((i / captureTotal) * 33);
-                        notify(1, `${texts.aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`, `${pct}% — ${texts.video.frame} ${frameIdx}`);
+                        notify(1, `${t().aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`, `${pct}% — ${t().video.frame} ${frameIdx}`);
                     }
                     if (i % 8 === 0 && i > 0) await this.yieldToUI();
 
@@ -388,7 +387,7 @@ export class AIDetectionActions {
 
             await this.withConcurrency(tasks, 4, (done, ttl) => {
                 const pct = preFrames ? Math.round((done / ttl) * 90) : 33 + Math.round((done / ttl) * 55);
-                notify(2, `${texts.aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${texts.video.frame} ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
+                notify(2, `${t().aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${t().video.frame} ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
             });
 
             const inferElapsed = ((Date.now() - inferStartTime) / 1000).toFixed(1);
@@ -423,7 +422,7 @@ export class AIDetectionActions {
 
             await this.withConcurrency(imageTasks, 4, (done, ttl) => {
                 const pct = Math.round((done / ttl) * 100);
-                notify(2, `${texts.aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${imageQueue[done - 1]?.fileData?.name || `Image ${done}`}`);
+                notify(2, `${t().aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${imageQueue[done - 1]?.fileData?.name || `Image ${done}`}`);
             });
         }
 
@@ -435,11 +434,10 @@ export class AIDetectionActions {
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log('[BatchDetect] Complete', { totalTime: totalTime + 's', successCount, failCount, totalObjects });
 
-        const lang = store.getState().general.language;
-        const t = LanguageConfig[lang];
+        const doneTexts = t();
         store.dispatch(submitNewNotification(NotificationUtil.createSuccessNotification({
-            header: t.notifications.batchDetectionCompleted,
-            description: t.notifications.batchDetectionCompletedMessage
+            header: doneTexts.notifications.batchDetectionCompleted,
+            description: doneTexts.notifications.batchDetectionCompletedMessage
                 .replace('{total}', String(successCount))
                 .replace('{count}', String(totalObjects))
                 .replace('{time}', totalTime)

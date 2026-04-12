@@ -1,6 +1,6 @@
 import { ContextType } from '../../../data/enums/ContextType';
 import './EditorTopNavigationBar.scss';
-import React, { useEffect, useMemo, useCallback } from 'react';
+import React, { useEffect, useMemo, useCallback, useState, useRef } from 'react';
 import classNames from 'classnames';
 import { AppState } from '../../../store';
 import { connect } from 'react-redux';
@@ -22,7 +22,9 @@ import {EditorModel} from '../../../staticModels/EditorModel';
 import { ImageUtil } from '../../../utils/ImageUtil';
 import { updateFullImageInferenceStatus, toggleImageAILabelsVisibility, addInferenceHistory } from '../../../store/ai/actionCreators';
 import { AIDetectionActions } from '../../../logic/actions/AIDetectionActions';
+import { AISegmentationActions } from '../../../logic/actions/AISegmentationActions';
 import { DetectionAPIDetector } from '../../../ai/DetectionAPIDetector';
+import { SegmentationAPIDetector } from '../../../ai/SegmentationAPIDetector';
 import { AIStateStorageManager } from '../../../utils/AIStateStorageManager';
 import { AIModelsSelector } from '../../../store/selectors/AIModelsSelector';
 import { EditorActions } from '../../../logic/actions/EditorActions';
@@ -273,6 +275,82 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         queueMicrotask(() => { EditorActions.fullRender(); });
     }, [toggleImageAILabelsVisibility]);
 
+    // ── 推理下拉菜单 ──
+    const [inferenceMode, setInferenceMode] = useState<'detection' | 'segmentation' | 'both'>('detection');
+    const [showInferenceMenu, setShowInferenceMenu] = useState(false);
+    const inferenceMenuRef = useRef<HTMLDivElement>(null);
+    const [detModelName, setDetModelName] = useState('');
+    const [segModelName, setSegModelName] = useState('');
+
+    // 轮询后端获取当前模型名 + 自动切换推理模式
+    useEffect(() => {
+        const fetchModels = () => {
+            const url = DetectionAPIDetector.getConfig().url.replace('/detect', '/health');
+            fetch(url).then(r => r.json()).then(data => {
+                if (data.model) setDetModelName(data.model.replace('.pt', ''));
+                if (data.segmentation_model) setSegModelName(data.segmentation_model.replace('.pt', ''));
+                // 自动切换：当 LoadYOLOv5ModelPopup 加载了新模型后
+                if (EditorModel.lastLoadedModelService) {
+                    setInferenceMode(EditorModel.lastLoadedModelService);
+                    EditorModel.lastLoadedModelService = null;
+                }
+            }).catch(() => {});
+        };
+        fetchModels();
+        const timer = setInterval(fetchModels, 5000);
+        return () => clearInterval(timer);
+    }, []);
+
+    // 点击外部关闭下拉
+    useEffect(() => {
+        if (!showInferenceMenu) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (inferenceMenuRef.current && !inferenceMenuRef.current.contains(e.target as Node)) {
+                setShowInferenceMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showInferenceMenu]);
+
+    const runInference = useCallback((mode: 'detection' | 'segmentation' | 'both') => {
+        setShowInferenceMenu(false);
+        if (isFullImageInferenceInProgress) return;
+
+        const activeImageData = LabelsSelector.getActiveImageData();
+        if (!activeImageData) return;
+
+        const selectedImages = imagesData.filter((img: ImageData) => img.isSelected);
+        const isBatchMode = selectedImages.length > 1;
+        const targets = isBatchMode ? selectedImages : [activeImageData];
+
+        updateFullImageInferenceStatus(true);
+
+        if (mode === 'detection') {
+            if (isBatchMode) {
+                AIDetectionActions.detectBatch(targets);
+            } else {
+                AIDetectionActions.detectObjects(activeImageData);
+            }
+        } else if (mode === 'segmentation') {
+            AISegmentationActions.segmentBatch(targets);
+        } else {
+            // 检测+分割：先检测再分割
+            (async () => {
+                if (isBatchMode) {
+                    await AIDetectionActions.detectBatch(targets);
+                } else {
+                    await new Promise<void>(resolve => {
+                        AIDetectionActions.detectObjects(activeImageData);
+                        // detectObjects 没有返回 Promise，用 setTimeout 等待
+                        setTimeout(resolve, 500);
+                    });
+                }
+                await AISegmentationActions.segmentBatch(targets);
+            })();
+        }
+    }, [imagesData, isFullImageInferenceInProgress, updateFullImageInferenceStatus]);
+
     const withAI = (
         ((activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isAISSDObjectDetectorModelLoaded()) ||
         ((activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isAIYOLOObjectDetectorModelLoaded()) ||
@@ -424,60 +502,50 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                     );
                 }, [imageAIStates, imagesData, activeImageIndex, toggleAILabelsOnClick])}
             </div>
-            {useMemo(() => {
-                const activeImageData = LabelsSelector.getActiveImageData();
-                const detectionAvailable = hasDetectionModel;
-
-                const hasImage = imagesData.length > 0;
-                let isOn = false;
-                let isDisabled = !detectionAvailable || !hasImage;
-                let label = currentTexts.editorTopNavBar.enableDetection;
-
-                if (!detectionAvailable) {
-                    label = currentTexts.editorTopNavBar.cannotDetect;
-                } else if (isFullImageInferenceInProgress) {
-                    label = currentTexts.editorTopNavBar.detectionInProgress;
-                    isOn = true;
-                } else {
-                    const selectedImages = imagesData.filter((img: ImageData) => img.isSelected);
-                    const isBatchMode = selectedImages.length > 1;
-                    const imagesToCheck = isBatchMode ? selectedImages : (activeImageData ? [activeImageData] : []);
-
-                    if (imagesToCheck.length > 0) {
-                        const allInferredAndVisible = imagesToCheck.every((img: ImageData) => {
-                            const imgAIState = imageAIStates.get(img.id) || { aiLabelsVisible: false, inferenceHistory: [] };
-                            const hasDetectionLabels = img.labelRects?.some((rect: any) => rect.isCreatedByAI) ||
-                                                       img.labelPoints?.some((point: any) => point.isCreatedByAI) ||
-                                                       img.labelLines?.some((line: any) => line.isCreatedByAI);
-                            return imgAIState.aiLabelsVisible && hasDetectionLabels;
-                        });
-                        isOn = allInferredAndVisible;
-                        label = isOn ? currentTexts.editorTopNavBar.disableDetection : currentTexts.editorTopNavBar.enableDetection;
-                    }
-                }
-
-                return (
-                    <StyledTooltip
-                        key="inference-toggle"
-                        disableFocusListener={true}
-                        title={label}
-                        TransitionComponent={Fade}
-                        TransitionProps={{ timeout: 600 }}
-                        placement='bottom'
-                    >
-                        <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 6, height: '100%' }}>
-                            <span style={{ color: '#aaa', fontSize: 12, whiteSpace: 'nowrap' }}>
-                                {isOn ? currentTexts.editorTopNavBar.disableDetection : currentTexts.editorTopNavBar.enableDetection}
-                            </span>
-                            <IOSSwitch
-                                checked={isOn}
-                                disabled={isDisabled}
-                                onChange={fullImageDetectionOnClick}
-                            />
-                        </div>
-                    </StyledTooltip>
-                );
-            }, [hasDetectionModel, isFullImageInferenceInProgress, imageAIStates, imagesData, activeImageIndex, currentTexts, fullImageDetectionOnClick])}
+            <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 6, height: '100%' }}>
+                <select
+                    value={inferenceMode}
+                    onChange={e => setInferenceMode(e.target.value as any)}
+                    disabled={isFullImageInferenceInProgress}
+                    style={{
+                        background: '#333',
+                        color: imagesData.length === 0 ? '#666' : '#ccc',
+                        border: '1px solid #555',
+                        borderRadius: 4,
+                        fontSize: 11,
+                        padding: '2px 4px',
+                        cursor: 'pointer',
+                        outline: 'none',
+                    }}
+                >
+                    <option value="detection">{`${language === 'zh' ? '检测整图' : 'Detect All'}${detModelName ? ` (${detModelName})` : ''}`}</option>
+                    <option value="segmentation">{`${language === 'zh' ? '分割整图' : 'Segment All'}${segModelName ? ` (${segModelName})` : ''}`}</option>
+                    <option value="both">{language === 'zh' ? '自定义' : 'Custom'}</option>
+                </select>
+                <button
+                    disabled={imagesData.length === 0}
+                    onClick={() => isFullImageInferenceInProgress ? updateFullImageInferenceStatus(false) : runInference(inferenceMode)}
+                    style={{
+                        background: isFullImageInferenceInProgress ? '#c62828' : '#333',
+                        color: imagesData.length === 0 ? '#666' : isFullImageInferenceInProgress ? '#fff' : '#ccc',
+                        border: '1px solid #555',
+                        borderRadius: 4,
+                        padding: '2px 10px',
+                        fontSize: 11,
+                        cursor: imagesData.length === 0 ? 'not-allowed' : 'pointer',
+                        whiteSpace: 'nowrap',
+                    }}
+                >
+                    {isFullImageInferenceInProgress
+                        ? (language === 'zh' ? '停止' : 'Stop')
+                        : (() => {
+                            const selected = imagesData.filter((img: ImageData) => img.isSelected);
+                            const count = selected.length > 1 ? selected.length : imagesData.length > 0 ? 1 : 0;
+                            const label = language === 'zh' ? '推理' : 'Infer';
+                            return count > 1 ? `${label} x${count}` : label;
+                        })()}
+                </button>
+            </div>
             {withAI && <div className='ButtonWrapper'>
                     {
                         getButtonWithTooltip(

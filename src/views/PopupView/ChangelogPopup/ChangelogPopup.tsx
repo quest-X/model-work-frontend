@@ -16,6 +16,19 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.0.3',
+        date: '2026-04-12',
+        changes: [
+            { zh: '新增分割模型推理：支持 YOLOv8-seg / YOLO11-seg / SAM 2 / MobileSAM / FastSAM 全图批量分割', en: 'Add segmentation inference: batch full-image segmentation with YOLOv8-seg / YOLO11-seg / SAM 2 / MobileSAM / FastSAM' },
+            { zh: '分割结果以填充半透明多边形渲染，segmentationLabelsVisible 独立控制显隐', en: 'Segmentation results rendered as semi-transparent filled polygons, segmentationLabelsVisible toggle independent from detection' },
+            { zh: '工具栏推理控件重构：下拉菜单选择推理模式（检测整图/分割整图/自定义）+ 推理按钮（显示选中帧数 x174）', en: 'Toolbar inference controls refactored: dropdown to select mode (Detect All / Segment All / Custom) + Infer button showing selected frame count' },
+            { zh: '本地模型弹窗：分割模型区从"即将推出"变为可选，支持 5 个模型家族 + 变体选择 + 下载/加载', en: 'Local model popup: segmentation section now selectable with 5 model families, variant selection, download and load' },
+            { zh: '后端分割模型热切换：/load-model 支持 service 参数，SAM 模型用 SAM() 构造器加载', en: 'Backend segmentation model hot-swap: /load-model supports service parameter, SAM models loaded via SAM() constructor' },
+            { zh: '自定义模型按文件名前缀自动识别类型：seg_/det_ 前缀或含 seg/sam 关键词', en: 'Custom model type auto-detection by filename prefix: seg_/det_ prefix or seg/sam keyword' },
+            { zh: '修复推理通知中 texts.frame 未定义：改为 texts.video.frame', en: 'Fix undefined texts.frame in inference notifications: use texts.video.frame' },
+        ]
+    },
+    {
         version: '2.0.2',
         date: '2026-04-12',
         changes: [
