@@ -452,39 +452,15 @@ const FramePlayer: React.FC<IProps> = ({
                 if (targetFrame >= totalFrames - 1) {
                     onTimeUpdateRef.current?.(duration, totalFrames - 1);
 
-                    const cacheHit = frameCacheRef.current.has(totalFrames - 1);
-                    const vfiBefore = EditorModel.videoFrameImage;
-                    console.log('[DBG-END] tick reached last frame', {
-                        totalFrames,
-                        lastFrameCached: cacheHit,
-                        videoFrameImageNaturalWH: vfiBefore
-                            ? `${vfiBefore.naturalWidth}x${vfiBefore.naturalHeight}`
-                            : 'null',
-                        videoFrameImageSrcPrefix: vfiBefore?.src?.slice(0, 80),
-                        frameCacheSize: frameCacheRef.current.size,
-                        frameCacheKeys: Array.from(frameCacheRef.current.keys()).slice(-5)
-                    });
-
-                    if (!cacheHit) {
+                    if (!frameCacheRef.current.has(totalFrames - 1)) {
                         // 最后一帧不在缓存 → 异步加载，画完再暂停
                         drawFrame(totalFrames - 1).then(() => {
-                            const vfi = EditorModel.videoFrameImage;
-                            console.log('[DBG-END] drawFrame(last) resolved', {
-                                videoFrameImageSrcPrefix: vfi?.src?.slice(0, 80),
-                                videoFrameImageWH: vfi ? `${vfi.naturalWidth}x${vfi.naturalHeight}` : 'null'
-                            });
                             isVideoEndedRef.current = true;
                             onPlayPauseRef.current?.();
                         });
                     } else {
                         // 最后一帧在缓存 → 确保画上再暂停
-                        const ok = drawFrameSync(totalFrames - 1);
-                        const vfi = EditorModel.videoFrameImage;
-                        console.log('[DBG-END] drawFrameSync(last) sync path', {
-                            ok,
-                            videoFrameImageSrcPrefix: vfi?.src?.slice(0, 80),
-                            videoFrameImageWH: vfi ? `${vfi.naturalWidth}x${vfi.naturalHeight}` : 'null'
-                        });
+                        drawFrameSync(totalFrames - 1);
                         isVideoEndedRef.current = true;
                         onPlayPauseRef.current?.();
                     }

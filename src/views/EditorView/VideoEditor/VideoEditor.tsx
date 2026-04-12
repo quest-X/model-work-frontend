@@ -21,6 +21,13 @@ import { EditorActions } from '../../../logic/actions/EditorActions';
 import { EditorModel } from '../../../staticModels/EditorModel';
 import { Language } from '../../../data/LanguageConfig';
 
+// Module-level stable empty array used as fallback for `frames` prop when
+// fast_ffmpeg_mode runs in on-demand mode (sessionId only, preExtractedFrames undefined).
+// CRITICAL: must be a stable reference — inline `[]` creates a new reference per render,
+// causing FramePlayer's useCallback chain (loadFrameImage → drawFrame → play effect)
+// to churn and re-run the play effect per frame, triggering end-of-play frame 0 reset bug.
+const EMPTY_FRAMES: File[] = [];
+
 interface IProps {
     activeVideo: VideoData | null;
     imagesData: ImageData[];
@@ -158,19 +165,6 @@ const VideoEditor: React.FC<IProps> = ({
                             EditorActions.setActiveImage(image);
                         }
                     }
-                }
-
-                // [DBG-END] 追踪暂停瞬间 VideoEditor effect 设置的图像
-                if (!isPlaying && frameChanged) {
-                    const vfi = EditorModel.videoFrameImage;
-                    const em = EditorModel.image;
-                    console.log('[DBG-END] VideoEditor frame-sync (post-pause)', {
-                        currentFrame: activeVideo.currentFrame,
-                        videoFrameImageSrcPrefix: vfi?.src?.slice(0, 80),
-                        videoFrameImageWH: vfi ? `${vfi.naturalWidth}x${vfi.naturalHeight}` : 'null',
-                        editorModelImageSrcPrefix: em?.src?.slice(0, 80),
-                        editorModelImageWH: em ? `${em.naturalWidth}x${em.naturalHeight}` : 'null'
-                    });
                 }
 
                 // canvas 可能还未挂载，仅在已挂载时刷新
@@ -607,7 +601,7 @@ const VideoEditor: React.FC<IProps> = ({
                     {(activeVideo.preExtractedFrames || activeVideo.sessionId) ? (
                         <FramePlayer
                             language={language}
-                            frames={activeVideo.preExtractedFrames || []}
+                            frames={activeVideo.preExtractedFrames || EMPTY_FRAMES}
                             sessionId={activeVideo.sessionId}
                             fps={activeVideo.fps}
                             duration={activeVideo.duration}

@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.0.1',
+        date: '2026-04-12',
+        changes: [
+            { zh: '修复视频播放到最后一帧时画面回弹到帧 0 的闪帧问题', en: 'Fix end-of-play frame flash: picture briefly jumped back to frame 0 before correcting to last frame' },
+            { zh: '根因：VideoEditor 传给 FramePlayer 的 frames prop 在 on-demand 模式下 fallback 成新 `[]` 引用，导致 loadFrameImage / drawFrame useCallback 每帧重建、play effect 每帧 re-run，末帧时 isPlaying 的 React state 更新落后于 Redux commit，play effect 在中间 commit 读到 stale `isPlaying=true` + `isVideoEndedRef=true` 错误进入 RESET 分支，dispatch `onTimeUpdate(0, 0)`', en: 'Root cause: `frames={preExtractedFrames || []}` created a new empty array per render, churning the useCallback chain and re-running the play effect every frame. At end-of-play, a split React commit (Redux dispatch before setIsPlaying) let the play effect run with stale `isPlaying=true` after `isVideoEndedRef=true` was set, wrongly triggering the replay reset block' },
+            { zh: '修复：模块级 EMPTY_FRAMES 稳定空数组常量，play effect 只在 isPlaying 状态真正变化时 re-run', en: 'Fix: module-level EMPTY_FRAMES stable constant; play effect only re-runs on actual isPlaying transitions' },
+        ]
+    },
+    {
         version: '2.0.0',
         date: '2026-04-11',
         changes: [
