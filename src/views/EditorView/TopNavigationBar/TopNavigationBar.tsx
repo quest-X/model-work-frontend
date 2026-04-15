@@ -63,7 +63,7 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
     
     const showKeyboardShortcuts = () => props.updateActivePopupTypeAction(PopupWindowType.KEYBOARD_SHORTCUTS)
     
-    const openLoadMoreImagesPopup = () => props.updateActivePopupTypeAction(PopupWindowType.IMPORT_IMAGES)
+    const openLoadMoreMediaPopup = () => props.updateActivePopupTypeAction(PopupWindowType.IMPORT_IMAGES)
 
     const toggleModelsDropdown = () => {
         setShowModelsDropdown(!showModelsDropdown);

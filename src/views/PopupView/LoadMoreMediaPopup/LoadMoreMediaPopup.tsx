@@ -1,5 +1,5 @@
 import React from 'react';
-import './LoadMoreImagesPopup.scss';
+import './LoadMoreMediaPopup.scss';
 import { AppState } from '../../../store';
 import { connect } from 'react-redux';
 import { addImageData } from '../../../store/labels/actionCreators';
@@ -22,7 +22,7 @@ interface IProps {
     language: Language;
 }
 
-const LoadMoreImagesPopup: React.FC<IProps> = ({ addImageData, addQueueItems, imagesData, language }) => {
+const LoadMoreMediaPopup: React.FC<IProps> = ({ addImageData, addQueueItems, imagesData, language }) => {
     const currentTexts = LanguageConfig[language];
     const { acceptedFiles, getRootProps, getInputProps } = useDropzone({
         accept: {
@@ -165,7 +165,7 @@ const LoadMoreImagesPopup: React.FC<IProps> = ({ addImageData, addQueueItems, im
     };
 
     const renderContent = () => {
-        return (<div className='LoadMoreImagesPopupContent'>
+        return (<div className='LoadMoreMediaPopupContent'>
             <div {...getRootProps({ className: 'DropZone' })}>
                 {getDropZoneContent()}
             </div>
@@ -198,4 +198,4 @@ const mapStateToProps = (state: AppState) => ({
 export default connect(
     mapStateToProps,
     mapDispatchToProps
-)(LoadMoreImagesPopup);
+)(LoadMoreMediaPopup);

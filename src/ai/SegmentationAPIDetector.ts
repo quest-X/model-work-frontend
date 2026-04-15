@@ -75,7 +75,7 @@ export class SegmentationAPIDetector {
         prompt?: { bbox?: [number, number, number, number]; point?: [number, number] }
     ): Promise<SegmentationResult[]> {
         // 当没有 prompt 时(批量分割路径)才从 store 同步 activeModel;
-        // 带 prompt 的 SAM 智能标注保持走 config(由 LoadYOLOv5ModelPopup 设置)。
+        // 带 prompt 的 SAM 智能标注保持走 config(由 LoadDetectionModelPopup 设置)。
         if (!prompt) {
             const sync = this.syncFromActiveModel();
             if (!sync.ok) {

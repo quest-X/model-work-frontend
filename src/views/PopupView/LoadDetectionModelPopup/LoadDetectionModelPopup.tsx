@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import './LoadYOLOv5ModelPopup.scss'
+import './LoadDetectionModelPopup.scss'
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
 import {PopupActions} from '../../../logic/actions/PopupActions';
 import {ImageButton} from '../../Common/ImageButton/ImageButton';
@@ -46,7 +46,7 @@ interface IProps {
     language: Language;
 }
 
-const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, submitNewNotificationAction, language }) => {
+const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, submitNewNotificationAction, language }) => {
     const texts = LanguageConfig[language];
     const modelFamily = getSelectedModelFamily();
     const serverUrl = getServerUrl();
@@ -301,7 +301,7 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
     const renderContent = () => {
         const shouldRenderDropZone = !isLoading && modelSource === ModelSource.UPLOAD;
         const shouldRenderOptions = !isLoading && modelSource === ModelSource.OFFICIAL;
-        return (<div className='load-yolo-v5-model-popup'>
+        return (<div className='load-detection-model-popup'>
             {renderMenu()}
             <div className='right-container'>
                 {isLoading && renderLoader()}
@@ -345,4 +345,4 @@ const mapStateToProps = (state: AppState) => ({
 export default connect(
     mapStateToProps,
     mapDispatchToProps
-)(LoadYOLOv5ModelPopup);
+)(LoadDetectionModelPopup);

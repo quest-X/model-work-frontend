@@ -34,7 +34,7 @@ export class EditorModel {
     public static videoSessionId: string = ''; // fast_ffmpeg_mode (on-demand): backend session ID
     public static preloadedImageCache: Map<number, HTMLImageElement> = new Map(); // Pre-decoded Image cache from parsing phase
     public static isLoading: boolean = false;
-    public static lastLoadedModelService: 'detection' | 'segmentation' | null = null; // set by LoadYOLOv5ModelPopup after model load
+    public static lastLoadedModelService: 'detection' | 'segmentation' | null = null; // set by LoadDetectionModelPopup after model load
     public static viewPortActionsDisabled: boolean = false;
     public static mousePositionOnViewPortContent: IPoint;
     public static viewPortSize: ISize;

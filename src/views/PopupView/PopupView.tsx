@@ -7,14 +7,14 @@ import { PopupActions } from '../../logic/actions/PopupActions';
 import LoadLabelsPopup from './LoadLabelNamesPopup/LoadLabelNamesPopup';
 import InsertLabelNamesPopup from './InsertLabelNamesPopup/InsertLabelNamesPopup';
 import ExitProjectPopup from './ExitProjectPopup/ExitProjectPopup';
-import LoadMoreImagesPopup from './LoadMoreImagesPopup/LoadMoreImagesPopup';
+import LoadMoreMediaPopup from './LoadMoreMediaPopup/LoadMoreMediaPopup';
 import SuggestLabelNamesPopup from './SuggestLabelNamesPopup/SuggestLabelNamesPopup';
 import { CSSHelper } from '../../logic/helpers/CSSHelper';
 import { ClipLoader } from 'react-spinners';
 import ImportLabelPopup from './ImportLabelPopup/ImportLabelPopup';
 import ExportLabelPopup from './ExportLabelsPopup/ExportLabelPopup';
 import LoadModelPopup from './LoadModelPopup/LoadModelPopup';
-import LoadYOLOv5ModelPopup from './LoadYOLOv5ModelPopup/LoadYOLOv5ModelPopup';
+import LoadDetectionModelPopup from './LoadDetectionModelPopup/LoadDetectionModelPopup';
 import ConnectInferenceServerPopup from './ConnectInferenceServerPopup/ConnectInferenceServerPopup';
 import IntegrateModelPopup from './IntegrateModelPopup/IntegrateModelPopup';
 import ManageAIModelsPopup from './ManageAIModelsPopup/ManageAIModelsPopup';
@@ -69,11 +69,11 @@ const PopupView: React.FC<IProps> = ({ activePopupType }) => {
             case PopupWindowType.EXIT_PROJECT:
                 return <ExitProjectPopup />;
             case PopupWindowType.IMPORT_IMAGES:
-                return <LoadMoreImagesPopup />;
+                return <LoadMoreMediaPopup />;
             case PopupWindowType.LOAD_AI_MODEL:
                 return <LoadModelPopup />;
-            case PopupWindowType.LOAD_YOLO_V5_MODEL:
-                return <LoadYOLOv5ModelPopup />;
+            case PopupWindowType.LOAD_DETECTION_MODEL:
+                return <LoadDetectionModelPopup />;
             case PopupWindowType.CONNECT_AI_MODEL_VIA_API:
                 return <ConnectInferenceServerPopup />;
             case PopupWindowType.INTEGRATE_AI_MODEL:

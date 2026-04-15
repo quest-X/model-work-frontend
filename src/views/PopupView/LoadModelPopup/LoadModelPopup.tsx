@@ -83,7 +83,7 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
             _selectedModelFamily = null;
             _serverUrl = serverUrl;
             _selectedCustomExt = selectedId === 'custom-onnx' ? 'onnx' : 'pt';
-            updateActivePopupType(PopupWindowType.LOAD_YOLO_V5_MODEL);
+            updateActivePopupType(PopupWindowType.LOAD_DETECTION_MODEL);
             return;
         }
         const family = YOLO_MODEL_FAMILIES.find(f => f.id === selectedId)
@@ -92,7 +92,7 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
         _selectedModelFamily = family;
         _serverUrl = serverUrl;
         _selectedCustomExt = null;
-        updateActivePopupType(PopupWindowType.LOAD_YOLO_V5_MODEL);
+        updateActivePopupType(PopupWindowType.LOAD_DETECTION_MODEL);
     };
 
     const onReject = () => {
