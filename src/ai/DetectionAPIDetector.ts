@@ -4,6 +4,7 @@ import {ImageData} from '../store/labels/types';
 import {EditorModel} from '../staticModels/EditorModel';
 import {store} from '../index';
 import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
+import {getDefaultBackendUrl} from '../utils/DefaultBackendUrl';
 
 export interface InferenceParams {
     conf: number;
@@ -72,7 +73,8 @@ export interface DetectionAPIResponse {
 
 export class DetectionAPIDetector {
     private static config: DetectionAPIConfig = {
-        url: 'http://localhost:8000/detect', // 默认检测API地址
+        // 默认检测 API:跟随 window.location.hostname,支持局域网跨机访问
+        url: getDefaultBackendUrl('/detect'),
         enabled: true
     };
 

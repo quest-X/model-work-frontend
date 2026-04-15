@@ -1,6 +1,7 @@
 import axios from 'axios';
 import {store} from '../index';
 import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
+import {getDefaultBackendUrl} from '../utils/DefaultBackendUrl';
 
 export interface SegmentationObjectInfo {
     id: number;
@@ -22,7 +23,8 @@ export interface SegmentationAPIResponse {
 
 export class SegmentationAPIDetector {
     private static config = {
-        url: 'http://localhost:8000/segment',
+        // 默认分割 API:跟随 window.location.hostname,支持局域网跨机访问
+        url: getDefaultBackendUrl('/segment'),
         enabled: true
     };
 

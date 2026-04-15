@@ -27,6 +27,7 @@ import { DetectionAPIDetector } from '../../../ai/DetectionAPIDetector';
 import { InferenceParamsFields } from './InferenceParamsFields';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import { FormControl, InputLabel, Select, MenuItem, SelectChangeEvent } from '@mui/material';
+import { getDefaultBackendBase } from '../../../utils/DefaultBackendUrl';
 
 interface IProps {
     roboflowAPIDetails: RoboflowAPIDetails;
@@ -57,8 +58,8 @@ const ConnectInferenceServerPopup: React.FC<IProps> = (
     const [modelTaskType, setModelTaskType] = useState('detection');
     const [modelApiKey, setModelApiKey] = useState('');
 
-    // local yolo
-    const [localYoloUrl, setLocalYoloUrl] = useState('http://localhost:8000');
+    // local yolo —— 默认跟随浏览器 host,支持局域网跨机访问
+    const [localYoloUrl, setLocalYoloUrl] = useState(getDefaultBackendBase());
 
     // inference params (conf/iou/imgsz/max_det) — persisted in DetectionAPIDetector
     const [inferenceParams, setInferenceParams] = useState(DetectionAPIDetector.getInferenceParams());

@@ -19,6 +19,7 @@ import { CSSHelper } from '../../../logic/helpers/CSSHelper';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import { v4 as uuidv4 } from 'uuid';
 import { FormControl, InputLabel, Select, MenuItem, SelectChangeEvent } from '@mui/material';
+import { getDefaultBackendUrl } from '../../../utils/DefaultBackendUrl';
 
 interface IProps {
     submitNewNotificationAction: (notification: INotification) => NotificationsActionType;
@@ -37,14 +38,15 @@ const ModelEnginePopup: React.FC<IProps> = (
 ) => {
     const currentTexts = LanguageConfig[language];
     
-    // 默认预填本地推理引擎的检测接口 —— 用户打开弹窗就能一键接入 localhost,
-    // 改接远程服务器时只需改 URL (接口路径和类型都已填好)
+    // 默认预填本地推理引擎的检测接口 —— 用户打开弹窗就能一键接入当前 host 的 backend,
+    // 改接远程服务器时只需改 URL (接口路径和类型都已填好)。URL 跟随浏览器 host,
+    // 支持局域网跨机访问:.151 浏览器加载 .205 前端时会自动得到 http://192.168.x.205:8000/detect。
     // 每种模型类型预置一个默认密钥,切换类型时 apiKey 自动更新。
     const DEFAULT_API_KEY_BY_TYPE: Record<'detection' | 'segmentation', string> = {
         detection: '123456',
         segmentation: 'baosight@ABC123!',
     };
-    const [modelUrl, setModelUrl] = useState('http://localhost:8000/detect');
+    const [modelUrl, setModelUrl] = useState(getDefaultBackendUrl('/detect'));
     const [modelType, setModelType] = useState<'detection' | 'segmentation'>('detection');
     const [apiKey, setApiKey] = useState(DEFAULT_API_KEY_BY_TYPE.detection);
     const [isConnecting, setIsConnecting] = useState(false);
@@ -132,8 +134,9 @@ const ModelEnginePopup: React.FC<IProps> = (
     const modelTypeOnChangeCallback = (event: SelectChangeEvent) => {
         const newType = event.target.value as 'detection' | 'segmentation';
         setModelType(newType);
-        // 切换类型时把密钥同步到该类型的默认值;用户可以再手改覆盖
+        // 切换类型时把密钥 + URL 同步到该类型的默认值,用户可以再手改覆盖
         setApiKey(DEFAULT_API_KEY_BY_TYPE[newType]);
+        setModelUrl(getDefaultBackendUrl(newType === 'detection' ? '/detect' : '/segment'));
     }
 
     const apiKeyOnChangeCallback = (event: React.ChangeEvent<HTMLInputElement>) => {

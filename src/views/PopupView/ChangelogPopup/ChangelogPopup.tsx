@@ -16,6 +16,18 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.1.4',
+        date: '2026-04-15',
+        changes: [
+            { zh: '【严重】修复局域网跨机访问时上传模型 / 推理 / 取帧全部失败的 bug:前端 6 处硬编码了 `http://localhost:8000`,导致浏览器在 .151 访问部署在 .205 的前端时,所有后端请求被浏览器解析为 .151 自己的 8000 端口(localhost 永远是浏览器所在机),跨机必然失败', en: '[Critical] Fix all cross-machine LAN failures (upload model / inference / frame extraction): the frontend had 6 hardcoded `http://localhost:8000` URLs. When a browser on machine B loaded the frontend served from machine A, every fetch resolved "localhost" to B itself (browsers always resolve localhost to the local machine), so nothing worked across machines' },
+            { zh: '【修复】新增 src/utils/DefaultBackendUrl.ts 共享 helper:getDefaultBackendBase() / getDefaultBackendUrl(path) 通过 window.location.hostname + protocol 派生 backend 地址,本地开发得 localhost:8000,局域网得 192.168.x.y:8000,生产得当前域名:8000', en: '[Fix] New shared helper src/utils/DefaultBackendUrl.ts: getDefaultBackendBase() / getDefaultBackendUrl(path) derive the backend URL from window.location.hostname + protocol. Local dev → localhost:8000, LAN → 192.168.x.y:8000, prod → same hostname:8000' },
+            { zh: '【修复】替换 6 处 localhost 硬编码:DetectionAPIDetector config / SegmentationAPIDetector config / CallModelPopup _serverUrl + derivedBaseUrl 兜底 / ModelEnginePopup 预填 URL + modelType 切换时同步 / ConnectInferenceServerPopup localYoloUrl / FrameExtractorService API_BASE', en: '[Fix] Replaced 6 localhost hardcodes: DetectionAPIDetector config, SegmentationAPIDetector config, CallModelPopup _serverUrl + derivedBaseUrl fallback, ModelEnginePopup prefilled URL + modelType switch sync, ConnectInferenceServerPopup localYoloUrl, FrameExtractorService API_BASE' },
+            { zh: '【模型引擎】切换 modelType 时同步更新 URL 路径:detection → /detect,segmentation → /segment,省得用户自己改', en: '[Model Engine] When switching modelType, URL path auto-updates: detection → /detect, segmentation → /segment — saves the user a manual edit' },
+            { zh: '【deploy/start.sh】banner 显示 LAN IP:原来只显示 127.0.0.1 误导用户,现在通过 ifconfig 取第一个非回环 IPv4 地址,同时显示 0.0.0.0 和 LAN IP 两个 URL,方便跨机访问', en: '[deploy/start.sh] Banner now shows LAN IP: used to display misleading 127.0.0.1; now extracts the first non-loopback IPv4 via ifconfig and shows both 0.0.0.0 and the LAN IP for cross-machine access' },
+            { zh: '【无后端变更】backend CORS 已经是 allow_origins=["*"] + uvicorn bind 0.0.0.0,跨机访问在网络层本就畅通,问题纯粹是前端 URL', en: '[No backend changes] Backend CORS is already allow_origins=["*"] and uvicorn binds 0.0.0.0, so cross-machine access was always fine at the network layer — the bug was purely in frontend URL derivation' },
+        ]
+    },
+    {
         version: '2.1.3',
         date: '2026-04-15',
         changes: [

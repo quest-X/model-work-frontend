@@ -15,6 +15,7 @@
  */
 import axios from 'axios';
 import JSZip from 'jszip';
+import {getDefaultBackendBase} from '../utils/DefaultBackendUrl';
 
 export interface FrameExtractionResult {
     fps: number;
@@ -27,7 +28,9 @@ export interface FrameExtractionResult {
 
 export type ProgressCallback = (phase: string, current: number, total: number) => void;
 
-const API_BASE = 'http://localhost:8000';
+// API_BASE 跟随浏览器 host:.151 浏览器访问 .205 前端时,会自动得到 http://192.168.x.205:8000
+// 而不是 localhost:8000(后者会被浏览器解析到 .151 自己的机器,跨机必失败)。
+const API_BASE = getDefaultBackendBase();
 
 export class FrameExtractorService {
 

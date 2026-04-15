@@ -9,6 +9,7 @@ import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {GeneralActionTypes} from '../../../store/general/types';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {AIModel} from '../../../store/aimodels/types';
+import {getDefaultBackendBase} from '../../../utils/DefaultBackendUrl';
 
 export interface YOLOModelFamily {
     id: string;
@@ -35,7 +36,8 @@ export const SEG_MODEL_FAMILIES: YOLOModelFamily[] = [
 
 // Module-level state shared between CallModelPopup and LoadDetectionModelPopup
 let _selectedModelFamily: YOLOModelFamily | null = null;
-let _serverUrl: string = 'http://localhost:8000';
+// 默认跟随浏览器当前 host —— 跨机访问时直接打到前端所在机器的 :8000
+let _serverUrl: string = getDefaultBackendBase();
 let _selectedCustomExt: 'pt' | 'onnx' | null = null;
 
 export const getSelectedModelFamily = (): YOLOModelFamily | null => _selectedModelFamily;
@@ -68,11 +70,11 @@ const CallModelPopup: React.FC<IProps> = ({
     const [currentSegModelName, setCurrentSegModelName] = useState<string>('');
 
     // 推理基础地址从已注册的引擎推导 —— 不再让用户在这个弹窗里填 URL。
-    // 优先 active 引擎,退化到第一个注册的,最后兜底 localhost:8000。
+    // 优先 active 引擎,退化到第一个注册的,最后兜底用浏览器 host 推导的默认地址。
     const activeEngine = aiModels.find(m => m.id === activeAIModelId) || aiModels[0] || null;
     const derivedBaseUrl = activeEngine
         ? stripInferenceSuffix(activeEngine.url)
-        : 'http://localhost:8000';
+        : getDefaultBackendBase();
 
     useEffect(() => {
         fetch(`${derivedBaseUrl}/available-models`)
