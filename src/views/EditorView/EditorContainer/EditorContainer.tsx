@@ -14,7 +14,7 @@ import {VerticalEditorButton} from '../VerticalEditorButton/VerticalEditorButton
 import './EditorContainer.scss';
 import Editor from '../Editor/Editor';
 import VideoEditor from '../VideoEditor/VideoEditor';
-import {ContextManager} from '../../../logic/context/ContextManager';
+import {ContextManager} from '../../../logic/hotkey/ContextManager';
 import {ContextType} from '../../../data/enums/ContextType';
 import EditorBottomNavigationBar from '../EditorBottomNavigationBar/EditorBottomNavigationBar';
 import EditorTopNavigationBar from '../EditorTopNavigationBar/EditorTopNavigationBar';

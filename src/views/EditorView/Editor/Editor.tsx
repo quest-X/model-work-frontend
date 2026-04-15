@@ -17,7 +17,7 @@ import {EditorData} from '../../../data/EditorData';
 import {EditorModel} from '../../../staticModels/EditorModel';
 import {EditorActions} from '../../../logic/actions/EditorActions';
 import {EditorUtil} from '../../../utils/EditorUtil';
-import {ContextManager} from '../../../logic/context/ContextManager';
+import {ContextManager} from '../../../logic/hotkey/ContextManager';
 import {ContextType} from '../../../data/enums/ContextType';
 import Scrollbars from 'react-custom-scrollbars-2';
 import {ViewPortActions} from '../../../logic/actions/ViewPortActions';

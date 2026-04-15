@@ -19,7 +19,7 @@ import AllLabelsList from "../AllLabelsList/AllLabelsList";
 import RectLabelsList from "../RectLabelsList/RectLabelsList";
 import PointLabelsList from "../PointLabelsList/PointLabelsList";
 import PolygonLabelsList from "../PolygonLabelsList/PolygonLabelsList";
-import {ContextManager} from "../../../../logic/context/ContextManager";
+import {ContextManager} from "../../../../logic/hotkey/ContextManager";
 import {ContextType} from "../../../../data/enums/ContextType";
 import {EventType} from "../../../../data/enums/EventType";
 import LineLabelsList from "../LineLabelsList/LineLabelsList";

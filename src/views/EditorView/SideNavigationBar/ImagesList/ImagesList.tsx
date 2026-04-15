@@ -7,7 +7,7 @@ import {ImageData, LabelPoint, LabelRect} from "../../../../store/labels/types";
 import {VirtualList} from "../../../Common/VirtualList/VirtualList";
 import ImagePreview from "../ImagePreview/ImagePreview";
 import './ImagesList.scss';
-import {ContextManager} from "../../../../logic/context/ContextManager";
+import {ContextManager} from "../../../../logic/hotkey/ContextManager";
 import {ContextType} from "../../../../data/enums/ContextType";
 import {ImageActions} from "../../../../logic/actions/ImageActions";
 import {EventType} from "../../../../data/enums/EventType";

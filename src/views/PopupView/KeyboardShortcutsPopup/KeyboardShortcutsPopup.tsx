@@ -2,7 +2,7 @@ import React, {useEffect, useState} from 'react';
 import './KeyboardShortcutsPopup.scss';
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
 import {PopupActions} from '../../../logic/actions/PopupActions';
-import {ContextManager} from '../../../logic/context/ContextManager';
+import {ContextManager} from '../../../logic/hotkey/ContextManager';
 import {ContextType} from '../../../data/enums/ContextType';
 import {AppState} from '../../../store';
 import {connect} from 'react-redux';

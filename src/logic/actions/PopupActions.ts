@@ -1,4 +1,4 @@
-import {ContextManager} from '../context/ContextManager';
+import {ContextManager} from '../hotkey/ContextManager';
 import {store} from '../../index';
 import {updateActivePopupType} from '../../store/general/actionCreators';
 

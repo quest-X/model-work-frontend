@@ -1,5 +1,5 @@
 import {updateWindowSize} from '../../store/general/actionCreators';
-import {ContextManager} from '../context/ContextManager';
+import {ContextManager} from '../hotkey/ContextManager';
 import {store} from '../../index';
 import {PlatformUtil} from '../../utils/PlatformUtil';
 import {PlatformModel} from '../../staticModels/PlatformModel';

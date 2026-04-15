@@ -12,7 +12,7 @@ import {DrawUtil} from "../../utils/DrawUtil";
 import {PrimaryEditorRenderEngine} from "../render/PrimaryEditorRenderEngine";
 import {VideoPrimaryRenderEngine} from "../render/VideoPrimaryRenderEngine";
 import {VideoSelector} from "../../store/selectors/VideoSelector";
-import {ContextManager} from "../context/ContextManager";
+import {ContextManager} from "../hotkey/ContextManager";
 import {PointUtil} from "../../utils/PointUtil";
 import {ViewPortActions} from "./ViewPortActions";
 import {ISize} from "../../interfaces/ISize";
