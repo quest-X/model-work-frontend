@@ -3,7 +3,7 @@ import {DetectionAPIDetector, DetectionResult} from "../../ai/DetectionAPIDetect
 import {ImageData, LabelName, LabelRect} from "../../store/labels/types";
 import {LabelStatus} from "../../data/enums/LabelStatus";
 import {v4 as uuidv4} from "uuid";
-import {updateImageDataById, updateImageData, updateLabelNames, updateActiveImageIndex, updateActiveLabelViewType} from "../../store/labels/actionCreators";
+import {updateImageDataById, updateImageData, updateLabelNames, updateActiveImageIndex, updateActiveLabelType, updateActiveLabelViewType} from "../../store/labels/actionCreators";
 import {LabelType} from "../../data/enums/LabelType";
 import {updateFullImageInferenceStatus, addInferenceHistory, toggleImageAILabelsVisibility, updateSegmentationResults} from "../../store/ai/actionCreators";
 import {submitNewNotification, deleteNotificationById, updateNotificationById} from "../../store/notifications/actionCreators";
@@ -508,8 +508,12 @@ export class AIDetectionActions {
                 labelRects: [...currentImg.labelRects, ...newRects]
             };
             store.dispatch(updateImageDataById(imageData.id, updatedImg));
-            // 推理结果落地后自动切到检测标签页
+            // 推理结果落地后自动切到检测标签页（view + tool 同步，这样渲染引擎一起切过去，
+            // 画布只显示检测框而不会泄漏分割 mask）
             store.dispatch(updateActiveLabelViewType(LabelType.RECT));
+            if (!store.getState().general.smartAnnotationActive) {
+                store.dispatch(updateActiveLabelType(LabelType.RECT));
+            }
             // 同步缓存 + playbackImageData
             const latestData = store.getState().labels.imagesData;
             EditorModel.latestImagesData = latestData;
@@ -618,8 +622,11 @@ export class AIDetectionActions {
         // 单次 dispatch 更新全部图像数据
         if (modified) {
             store.dispatch(updateImageData(currentImagesData));
-            // 批量推理出检测框后自动切到检测标签页
+            // 批量推理出检测框后自动切到检测标签页（view + tool 同步）
             store.dispatch(updateActiveLabelViewType(LabelType.RECT));
+            if (!store.getState().general.smartAnnotationActive) {
+                store.dispatch(updateActiveLabelType(LabelType.RECT));
+            }
             // 同步缓存到 EditorModel，供播放时 handleVideoTimeUpdate 立即读取
             // （避免 imagesDataRef 在 React 重渲染前读到旧数据导致 rects=0）
             EditorModel.latestImagesData = currentImagesData;

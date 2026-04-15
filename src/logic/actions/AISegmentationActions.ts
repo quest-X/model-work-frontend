@@ -3,7 +3,7 @@ import {SegmentationAPIDetector, SegmentationResult} from "../../ai/Segmentation
 import {ImageData, LabelName, LabelPolygon} from "../../store/labels/types";
 import {LabelStatus} from "../../data/enums/LabelStatus";
 import {v4 as uuidv4} from "uuid";
-import {updateImageDataById, updateLabelNames, updateActiveLabelViewType} from "../../store/labels/actionCreators";
+import {updateImageDataById, updateLabelNames, updateActiveLabelType, updateActiveLabelViewType} from "../../store/labels/actionCreators";
 import {LabelType} from "../../data/enums/LabelType";
 import {updateFullImageInferenceStatus, addInferenceHistory, updateSegmentationResults} from "../../store/ai/actionCreators";
 import {submitNewNotification, deleteNotificationById, updateNotificationById} from "../../store/notifications/actionCreators";
@@ -294,8 +294,14 @@ export class AISegmentationActions {
                 labelPolygons: [...currentImg.labelPolygons, ...newPolygons]
             };
             store.dispatch(updateImageDataById(imageData.id, updatedImg));
-            // 推理结果落地后自动切到分割标签页
-            store.dispatch(updateActiveLabelViewType(LabelType.POLYGON));
+            // 批量推理后自动切到分割视图（view + tool 同步）；智能标注路径让用户自己控制视图
+            // （智能标注是连续交互，每次点击都抢视图会打断用户的节奏）
+            if (source === 'batch') {
+                store.dispatch(updateActiveLabelViewType(LabelType.POLYGON));
+                if (!store.getState().general.smartAnnotationActive) {
+                    store.dispatch(updateActiveLabelType(LabelType.POLYGON));
+                }
+            }
         }
 
         // 智能标注是一次性 prompt 推理，不该污染推理结果面板和历史

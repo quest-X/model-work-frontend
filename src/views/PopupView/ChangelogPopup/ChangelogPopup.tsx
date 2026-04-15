@@ -16,6 +16,22 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.0.8',
+        date: '2026-04-15',
+        changes: [
+            { zh: '【严重】修复后端推理通道顺序错误：PIL → np.array 得到 RGB，但 ultralytics 8.x LoadPilAndNumpy 的 NumPy 分支「按 BGR 原样保留不翻转」，随后 BasePredictor.preprocess 再无条件 ::-1 BGR→RGB flip，结果模型看到的是 BGR 而不是 RGB，R/B 通道互换。所有检测/分割模型的结果都偏离用 cv2 加载文件路径的参考实现。现在后端改用 cv2.imdecode 直出 BGR numpy，与 ultralytics 文件路径加载行为完全一致', en: '[Critical] Fix backend inference channel-order bug: PIL → np.array produces RGB, but ultralytics 8.x LoadPilAndNumpy\'s NumPy branch keeps it "as-is assuming BGR", then BasePredictor.preprocess unconditionally does ::-1 BGR→RGB flip — so the model saw BGR instead of RGB, with R/B channels swapped. All detection/segmentation results diverged from the reference path (cv2 load from file). Backend now uses cv2.imdecode to produce BGR numpy directly, matching ultralytics\' file-path loader exactly' },
+            { zh: '左侧栏标签 tab 和顶部工具栏彻底解耦：左侧 查看全部/检测标签/分割标签 = 视图过滤器 (activeLabelViewType)，决定侧栏列表和画布渲染显示哪类标签；顶部 查看所有标签/绘制矩形框/绘制多边形/智能标注 = 编辑工具 (activeLabelType)，决定画布鼠标行为', en: 'Left-sidebar label tabs fully decoupled from the top toolbar: sidebar 查看全部/检测标签/分割标签 = view filter (activeLabelViewType) deciding what\'s shown in the sidebar list and on the canvas; top toolbar 查看所有标签/绘制矩形框/绘制多边形/智能标注 = editing tool (activeLabelType) deciding canvas mouse behaviour' },
+            { zh: 'AllLabelsRenderEngine.render 按 activeLabelViewType 过滤画什么：RECT 视图只画矩形框，POLYGON 视图只画分割 mask，ALL 视图都画。解决智能标注激活后切到检测视图却仍看到分割 mask 泄漏的问题', en: 'AllLabelsRenderEngine.render filters drawing by activeLabelViewType: RECT view draws only rects, POLYGON view draws only masks, ALL view draws both. Fixes the issue where after smart-annotation you switched to detection view but still saw segmentation masks leaking through' },
+            { zh: '批量推理（全图检测 / 全图分割）自动切视图时同步 activeLabelType：智能标注未激活时 view 和 tool 一起切，渲染引擎也一并 swap，不再出现 labelType/viewType 不一致导致的画面泄漏', en: 'Batch inference (full-image detection / segmentation) now syncs activeLabelType alongside activeLabelViewType when auto-switching view: when smart annotation is off, view and tool swap together so the render engine follows, eliminating leakage caused by labelType/viewType divergence' },
+            { zh: '侧栏 tab 点击行为区分智能标注状态：智能标注激活时只切视图过滤器（工具保持智能标注），未激活时同时切视图 + 工具（检测标签→绘制矩形框、分割标签→绘制多边形、查看全部→ALL 手拖模式）', en: 'Sidebar tab click is now smart-annotation aware: while active, it only changes the view filter (tool stays at Smart Annotation); while inactive, it syncs tool to view (检测标签 → draw rect, 分割标签 → draw polygon, 查看全部 → ALL hand-pan)' },
+            { zh: '智能标注关闭时工具跟随当前侧栏视图落地：用户在分割视图里关掉就变成绘制多边形，在检测视图里关掉就变成绘制矩形框，不再用记忆的激活前工具', en: 'Deactivating Smart Annotation now lands on the tool matching the current sidebar view: exiting in the polygon view → draw polygon, exiting in the detection view → draw rect; no longer restores the pre-activation tool' },
+            { zh: '顶部工具栏 onToolClick 只改 activeLabelType，不再顺带改 activeLabelViewType（改动方向单向）；点击任一工具会关闭智能标注，三者互斥', en: 'Top toolbar onToolClick now only updates activeLabelType (no longer touches activeLabelViewType); clicking any tool deactivates Smart Annotation, making the three tools mutually exclusive' },
+            { zh: '智能标注激活 → 推理下拉自动切到「分割整图」；取消 → 自动切回「检测整图」。推理按钮按当前工具天然适配', en: 'Activating Smart Annotation auto-switches the inference dropdown to "Full Segmentation"; deactivating switches it back to "Full Detection" — the 推理 button naturally matches the current tool' },
+            { zh: '智能标注连续交互路径 (source="smart") 不再每次点击都自动抢走视图：用户在 检测标签 视图里点智能标注不会被拽回 分割标签。批量推理 (source="batch") 保留一次性视图切换', en: 'Smart annotation interactive path (source="smart") no longer hijacks the sidebar view on every click — clicking a point while in 检测标签 no longer yanks you back to 分割标签. Batch inference (source="batch") still one-shot switches view' },
+            { zh: 'LabelsToolkit (侧栏组件) 清理：移除不再使用的 updateActiveLabelType 依赖，新增 smartAnnotationActive state 映射，headerClickHandler 仅在非智能标注时才同步工具', en: 'LabelsToolkit sidebar component cleanup: removed unused updateActiveLabelType dependency, added smartAnnotationActive state mapping, headerClickHandler only syncs tool when not in smart annotation' },
+        ]
+    },
+    {
         version: '2.0.7',
         date: '2026-04-15',
         changes: [

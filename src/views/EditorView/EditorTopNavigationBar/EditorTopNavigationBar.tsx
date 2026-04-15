@@ -195,17 +195,18 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         }
     }, [imageDragMode, smartAnnotationActive, updateImageDragModeStatusAction, updateSmartAnnotationActiveStatusAction]);
 
-    // 标注工具点击处理 - 统一的处理函数
-    // 绘制矩形框 / 绘制多边形 / 智能标注 三者互斥：点击任一 tab 都会关闭智能标注
+    // 顶部工具栏点击 —— 只切换「编辑工具」(activeLabelType → 渲染引擎)
+    // 侧栏视图 (activeLabelViewType) 由左侧 LabelsToolkit tab 独立控制，两者解耦
+    // 绘制矩形框 / 绘制多边形 / 智能标注 / 查看所有标签 四个工具互斥
     const onToolClick = useCallback((toolType: LabelType) => {
         if (smartAnnotationActive) {
+            // 点击其他工具 → 关掉智能标注
             updateSmartAnnotationActiveStatusAction(false);
         }
         updateActiveLabelType(toolType);
-        updateActiveLabelViewType(toolType);
         // 切换工具时重置 cursor 到 DEFAULT —— 避免从 ALL 视图切过来时 GRAB 光标残留
         store.dispatch(updateCustomCursorStyle(CustomCursorStyle.DEFAULT));
-    }, [smartAnnotationActive, updateSmartAnnotationActiveStatusAction, updateActiveLabelType, updateActiveLabelViewType]);
+    }, [smartAnnotationActive, updateSmartAnnotationActiveStatusAction, updateActiveLabelType]);
 
     // 显示/隐藏标签按钮 —— 同时控制矩形框和多边形
     // 默认可见：未被显式隐藏前两个 flag 都是 true
@@ -251,17 +252,23 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         const willActivate = !smartAnnotationActive;
         updateSmartAnnotationActiveStatusAction(willActivate);
         if (willActivate) {
-            // 激活：挂 AllLabelsRenderEngine（ALL 工具类型），侧栏视图保持不变
+            // 激活：挂 AllLabelsRenderEngine（smart 劫持走 rectEngine）
             updateActiveLabelType(LabelType.ALL);
             if (imageDragMode) {
                 updateImageDragModeStatusAction(false);
             }
         } else {
-            // 关闭：把 activeLabelType 对齐到当前 viewType，这样用户看到的 tab
-            // 对应的渲染引擎也被挂上（检测→RECT 引擎 / 分割→POLYGON 引擎 / 全部→ALL 只读）
+            // 关闭：工具跟随当前侧栏视图 —— 用户在分割视图里就落到绘制多边形，
+            // 在检测视图里就落到绘制矩形框，查看全部里就落到 ALL 手拖模式。
             updateActiveLabelType(activeLabelViewType);
         }
     }, [isSAMLoaded, smartAnnotationActive, imageDragMode, activeLabelViewType, updateSmartAnnotationActiveStatusAction, updateImageDragModeStatusAction, updateActiveLabelType, updateActivePopupTypeAction]);
+
+    // 智能标注激活时自动把推理下拉切到「分割整图」—— 智能标注本就是用 SAM 分割，
+    // 推理按钮同步到分割模式才能一键跑全图 SAM 作为起点；取消时回到默认「检测整图」
+    useEffect(() => {
+        setInferenceMode(smartAnnotationActive ? 'segmentation' : 'detection');
+    }, [smartAnnotationActive]);
 
     // 轮询后端获取当前模型名 + 自动切换推理模式
     useEffect(() => {
@@ -394,7 +401,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         currentTexts.labelTypes?.toolAll || '查看所有标签',
                         'ico/all.png',
                         'tool-all',
-                        !smartAnnotationActive && activeLabelViewType === LabelType.ALL,
+                        !smartAnnotationActive && activeLabelType === LabelType.ALL,
                         undefined,
                         () => onToolClick(LabelType.ALL)
                     )
@@ -405,7 +412,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         currentTexts.labelTypes?.toolRect || '绘制矩形框',
                         'ico/rectangle.png',
                         'tool-rect',
-                        !smartAnnotationActive && activeLabelViewType === LabelType.RECT,
+                        !smartAnnotationActive && activeLabelType === LabelType.RECT,
                         undefined,
                         () => onToolClick(LabelType.RECT)
                     )
@@ -440,7 +447,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         currentTexts.labelTypes?.toolPolygon || '绘制多边形',
                         'ico/polygon.png',
                         'tool-polygon',
-                        !smartAnnotationActive && activeLabelViewType === LabelType.POLYGON,
+                        !smartAnnotationActive && activeLabelType === LabelType.POLYGON,
                         undefined,
                         () => onToolClick(LabelType.POLYGON)
                     )

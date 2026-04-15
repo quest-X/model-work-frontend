@@ -53,18 +53,24 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
 
     public render(data: EditorData): void {
         const isSmart = GeneralSelector.getSmartAnnotationActiveStatus();
+        // 按 viewType 过滤：检测标签只画矩形，分割标签只画多边形，查看全部都画
+        const viewType = LabelsSelector.getActiveLabelViewType();
+        const showRects = viewType === LabelType.ALL || viewType === LabelType.RECT;
+        const showPolygons = viewType === LabelType.ALL || viewType === LabelType.POLYGON;
 
-        if (isSmart) {
-            // 智能标注模式：完整 rectEngine.render（带 cursor 逻辑 + in-progress 矩形）
-            this.rectEngine.render(data);
-        } else {
-            // 非智能标注 ALL 视图：纯绘制 rect + polygon，不 dispatch cursor
-            // —— 避免 rectEngine.updateCursorStyle 与 hand-cursor dispatch 互相翻转造成无限循环
-            this.rectEngine.drawExistingRects(data);
+        if (showRects) {
+            if (isSmart) {
+                // 智能标注模式：完整 rectEngine.render（带 cursor 逻辑 + in-progress 矩形）
+                this.rectEngine.render(data);
+            } else {
+                // 非智能标注 ALL 视图：纯绘制 rect，不 dispatch cursor
+                // —— 避免 rectEngine.updateCursorStyle 与 hand-cursor dispatch 互相翻转造成无限循环
+                this.rectEngine.drawExistingRects(data);
+            }
         }
 
         // 只读绘制多边形（不 dispatch 任何 action），保证 SAM / 全图分割结果在 ALL 视图下可见
-        if (LabelsSelector.getActiveImageData()) {
+        if (showPolygons && LabelsSelector.getActiveImageData()) {
             this.polygonEngine.drawExistingLabels(data);
         }
 

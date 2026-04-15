@@ -2,6 +2,9 @@ import React from "react";
 import './LabelsToolkit.scss';
 import {ImageData} from "../../../../store/labels/types";
 import {updateActiveLabelId, updateActiveLabelType, updateActiveLabelViewType, updateImageDataById} from "../../../../store/labels/actionCreators";
+import {updateCustomCursorStyle} from "../../../../store/general/actionCreators";
+import {CustomCursorStyle} from "../../../../data/enums/CustomCursorStyle";
+import {store} from "../../../../index";
 import {AppState} from "../../../../store";
 import {connect} from "react-redux";
 import {LabelType} from "../../../../data/enums/LabelType";
@@ -24,8 +27,8 @@ import TagLabelsList from "../TagLabelsList/TagLabelsList";
 
 interface IProps {
     activeImageIndex:number,
-    activeLabelType: LabelType;
     activeLabelViewType: LabelType;
+    smartAnnotationActive: boolean;
     imagesData: ImageData[];
     projectType: ProjectType;
     updateImageDataById: (id: string, newImageData: ImageData) => any;
@@ -86,10 +89,18 @@ class LabelsToolkit extends React.Component<IProps, IState> {
     };
 
     private headerClickHandler = (activeTab: LabelType) => {
-        // 实现工具与标签页的完全绑定：同时切换工具类型和视图类型
-        this.props.updateActiveLabelType(activeTab);
+        // 侧栏 tab 总是更新视图过滤器
         this.props.updateActiveLabelViewType(activeTab);
         this.props.updateActiveLabelId(null);
+        // 智能标注未激活时：顺带把顶部工具也切到对应视图的编辑模式
+        //   查看全部 → ALL 手拖模式
+        //   检测标签 → 绘制矩形框
+        //   分割标签 → 绘制多边形
+        // 智能标注激活时：只改视图，工具保持智能标注
+        if (!this.props.smartAnnotationActive) {
+            this.props.updateActiveLabelType(activeTab);
+            store.dispatch(updateCustomCursorStyle(CustomCursorStyle.DEFAULT));
+        }
     };
 
     private renderChildren = () => {
@@ -211,8 +222,8 @@ const mapDispatchToProps = {
 
 const mapStateToProps = (state: AppState) => ({
     activeImageIndex: state.labels.activeImageIndex,
-    activeLabelType: state.labels.activeLabelType,
     activeLabelViewType: state.labels.activeLabelViewType,
+    smartAnnotationActive: state.general.smartAnnotationActive,
     imagesData: state.labels.imagesData,
     projectType: state.general.projectData.type,
     language: state.general.language
