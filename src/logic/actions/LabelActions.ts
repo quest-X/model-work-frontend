@@ -100,33 +100,43 @@ export class LabelActions {
         return {
             ...imageData,
             labelRects: imageData.labelRects.map((labelRect: LabelRect) => {
-                if (labelNamesIds.includes(labelRect.id)) {
+                if (labelNamesIds.includes(labelRect.labelId)) {
                     return {
                         ...labelRect,
-                        id: null
+                        labelId: null
                     }
                 } else {
                     return labelRect
                 }
             }),
             labelPoints: imageData.labelPoints.map((labelPoint: LabelPoint) => {
-                if (labelNamesIds.includes(labelPoint.id)) {
+                if (labelNamesIds.includes(labelPoint.labelId)) {
                     return {
                         ...labelPoint,
-                        id: null
+                        labelId: null
                     }
                 } else {
                     return labelPoint
                 }
             }),
             labelPolygons: imageData.labelPolygons.map((labelPolygon: LabelPolygon) => {
-                if (labelNamesIds.includes(labelPolygon.id)) {
+                if (labelNamesIds.includes(labelPolygon.labelId)) {
                     return {
                         ...labelPolygon,
-                        id: null
+                        labelId: null
                     }
                 } else {
                     return labelPolygon
+                }
+            }),
+            labelLines: imageData.labelLines.map((labelLine: LabelLine) => {
+                if (labelNamesIds.includes(labelLine.labelId)) {
+                    return {
+                        ...labelLine,
+                        labelId: null
+                    }
+                } else {
+                    return labelLine
                 }
             }),
             labelNameIds: imageData.labelNameIds.filter((labelNameId: string) => {
