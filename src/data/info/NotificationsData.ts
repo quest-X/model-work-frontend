@@ -6,9 +6,9 @@ export type NotificationContent = {
     description: string;
 }
 
-export type ExportFormatDataMap = Record<Notification, NotificationContent>;
+export type NotificationDataMap = Record<Notification, NotificationContent>;
 
-function buildMap(texts: LanguageTexts): ExportFormatDataMap {
+function buildMap(texts: LanguageTexts): NotificationDataMap {
     const n = texts.notifications;
     return {
         [Notification.EMPTY_LABEL_NAME_ERROR]: n.emptyLabelName,
@@ -21,14 +21,14 @@ function buildMap(texts: LanguageTexts): ExportFormatDataMap {
         [Notification.ANNOTATION_IMPORT_ASSERTION_ERROR]: n.annotationImportAssertionError,
         [Notification.UNSUPPORTED_INFERENCE_SERVER_MESSAGE]: n.unsupportedInferenceServer,
         [Notification.ROBOFLOW_INFERENCE_SERVER_ERROR]: n.roboflowInferenceServerError,
-    } as ExportFormatDataMap;
+    } as NotificationDataMap;
 }
 
 /**
  * Get notification data map for the given language.
  * Use this instead of NotificationsDataMap when you have access to the language.
  */
-export function getNotificationsData(language: Language): ExportFormatDataMap {
+export function getNotificationsData(language: Language): NotificationDataMap {
     return buildMap(LanguageConfig[language]);
 }
 
@@ -36,4 +36,4 @@ export function getNotificationsData(language: Language): ExportFormatDataMap {
  * Legacy compatibility: static map using Chinese as default.
  * Consumers that access the store should prefer getNotificationsData(language) instead.
  */
-export const NotificationsDataMap: ExportFormatDataMap = buildMap(LanguageConfig[Language.CHINESE]);
+export const NotificationsDataMap: NotificationDataMap = buildMap(LanguageConfig[Language.CHINESE]);

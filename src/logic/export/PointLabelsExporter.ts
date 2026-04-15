@@ -19,7 +19,7 @@ export class PointLabelsExporter {
     private static exportAsCSV(): void {
         const content: string = LabelsSelector.getImagesData()
             .map((imageData: ImageData) => {
-                return PointLabelsExporter.wrapRectLabelsIntoCSV(imageData)})
+                return PointLabelsExporter.wrapPointLabelsIntoCSV(imageData)})
             .filter((imageLabelData: string) => {
                 return !!imageLabelData})
             .join("\n");
@@ -27,13 +27,13 @@ export class PointLabelsExporter {
         ExporterUtil.saveAs(content, fileName);
     }
 
-    private static wrapRectLabelsIntoCSV(imageData: ImageData): string {
+    private static wrapPointLabelsIntoCSV(imageData: ImageData): string {
         if (imageData.labelPoints.length === 0 || !imageData.loadStatus)
             return null;
 
         const image: HTMLImageElement = ImageRepository.getById(imageData.id);
         const labelNames: LabelName[] = LabelsSelector.getLabelNames();
-        const labelRectsString: string[] = imageData.labelPoints.map((labelPoint: LabelPoint) => {
+        const labelPointsString: string[] = imageData.labelPoints.map((labelPoint: LabelPoint) => {
             const labelName: LabelName = findLast(labelNames, {id: labelPoint.labelId});
             const labelFields = !!labelName ? [
                 labelName.name,
@@ -45,6 +45,6 @@ export class PointLabelsExporter {
             ] : [];
             return labelFields.join(",")
         });
-        return labelRectsString.join("\n");
+        return labelPointsString.join("\n");
     }
 }

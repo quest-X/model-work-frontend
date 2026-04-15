@@ -31,7 +31,7 @@ export class VirtualListUtil {
             const columnCount: number = i % gridSize.width;
 
             const anchor: IPoint = {
-                x: rowCount * horizontalMargin + columnCount * childSize.width,
+                x: columnCount * (horizontalMargin + childSize.width),
                 y: rowCount * childSize.height
             };
             anchors.push(anchor);
