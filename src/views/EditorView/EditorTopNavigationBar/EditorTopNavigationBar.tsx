@@ -134,7 +134,7 @@ interface IProps {
     isAIDisabled: boolean;
     activeImageIndex: number;
     imagesData: ImageData[];
-    aiModels: any;
+    hasDetectionModel: boolean;
     updateActiveLabelType: (activeLabelType: LabelType) => any;
     updateActiveLabelViewType: (activeLabelViewType: LabelType) => any;
 }
@@ -159,16 +159,12 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         isAIDisabled,
         activeImageIndex,
         imagesData,
-        aiModels,
+        hasDetectionModel,
         updateActiveLabelType,
         updateActiveLabelViewType,
     }) => {
     const currentTexts = useMemo(() => LanguageConfig[language], [language]);
     
-    // 缓存的辅助函数：检查是否有可用的检测模型（只检查用户接入的模型）
-    const hasDetectionModel = useMemo(() => {
-        return AIModelsSelector.hasModelsOfType(aiModels, 'detection') || DetectionAPIDetector.isEnabled();
-    }, [aiModels]);
     
     // 辅助函数：检查图片是否真的有AI生成的标签
     const hasAILabels = (imageData: any): boolean => {
@@ -264,8 +260,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         }
     }, [isSAMLoaded, smartAnnotationActive, imageDragMode, activeLabelViewType, updateSmartAnnotationActiveStatusAction, updateImageDragModeStatusAction, updateActiveLabelType, updateActivePopupTypeAction]);
 
-    // 智能标注激活时自动把推理下拉切到「分割整图」—— 智能标注本就是用 SAM 分割，
-    // 推理按钮同步到分割模式才能一键跑全图 SAM 作为起点；取消时回到默认「检测整图」
+    // 智能标注激活时自动把推理下拉切到「分割模型」—— 智能标注本就是用 SAM 分割，
+    // 推理按钮同步到分割模式才能一键跑全图 SAM 作为起点；取消时回到默认「检测模型」
     useEffect(() => {
         setInferenceMode(smartAnnotationActive ? 'segmentation' : 'detection');
     }, [smartAnnotationActive]);
@@ -509,9 +505,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         outline: 'none',
                     }}
                 >
-                    <option value="detection">{`${language === 'zh' ? '检测整图' : 'Detect All'}${detModelName ? ` (${detModelName})` : ''}`}</option>
-                    <option value="segmentation">{`${language === 'zh' ? '分割整图' : 'Segment All'}${segModelName ? ` (${segModelName})` : ''}`}</option>
                     <option value="both">{language === 'zh' ? '自定义' : 'Custom'}</option>
+                    <option value="detection">{`${language === 'zh' ? '检测模型' : 'Detection'}${detModelName ? ` (${detModelName})` : ''}`}</option>
+                    <option value="segmentation">{`${language === 'zh' ? '分割模型' : 'Segmentation'}${segModelName ? ` (${segModelName})` : ''}`}</option>
                 </select>
                 <button
                     disabled={imagesData.length === 0}
@@ -591,7 +587,7 @@ const mapStateToProps = (state: AppState) => ({
     isAIDisabled: state.ai.isAIDisabled,
     activeImageIndex: state.labels.activeImageIndex,
     imagesData: state.labels.imagesData,
-    aiModels: state
+    hasDetectionModel: AIModelsSelector.hasModelsOfType(state, 'detection') || DetectionAPIDetector.isEnabled()
 });
 
 export default connect(
