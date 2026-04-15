@@ -16,7 +16,8 @@ export class PlatformUtil {
     }
 
     public static isSafari(userAgent: string): boolean {
-        return !!userAgent.toLowerCase().match("safari");
+        const ua = userAgent.toLowerCase();
+        return ua.includes("safari") && !ua.includes("chrome") && !ua.includes("chromium") && !ua.includes("android");
     }
 
     public static isFirefox(userAgent: string): boolean {
