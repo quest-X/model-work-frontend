@@ -42,13 +42,13 @@ export class EditorContext extends BaseContext {
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "ArrowLeft"] : ["Control", "ArrowLeft"],
             action: (event: KeyboardEvent) => {
-                ImageActions.getPreviousImage()
+                ImageActions.goToPreviousImage()
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "ArrowRight"] : ["Control", "ArrowRight"],
             action: (event: KeyboardEvent) => {
-                ImageActions.getNextImage();
+                ImageActions.goToNextImage();
             }
         },
         {
@@ -67,14 +67,14 @@ export class EditorContext extends BaseContext {
             keyCombo: ["ArrowRight"],
             action: (event: KeyboardEvent) => {
                 event.preventDefault();
-                ImageActions.getNextImage();
+                ImageActions.goToNextImage();
             }
         },
         {
             keyCombo: ["ArrowLeft"],
             action: (event: KeyboardEvent) => {
                 event.preventDefault();
-                ImageActions.getPreviousImage();
+                ImageActions.goToPreviousImage();
             }
         },
         {

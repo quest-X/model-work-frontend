@@ -84,7 +84,7 @@ const EditorBottomNavigationBar: React.FC<IProps> = ({size, imageData, totalImag
                     image={"ico/left.png"}
                     imageAlt={"previous"}
                     buttonSize={{width: 25, height: 25}}
-                    onClick={() => ImageActions.getPreviousImage()}
+                    onClick={() => ImageActions.goToPreviousImage()}
                     isDisabled={activeImageIndex === 0}
                     externalClassName={"left"}
                 />
@@ -109,7 +109,7 @@ const EditorBottomNavigationBar: React.FC<IProps> = ({size, imageData, totalImag
                     image={"ico/right.png"}
                     imageAlt={"next"}
                     buttonSize={{width: 25, height: 25}}
-                    onClick={() => ImageActions.getNextImage()}
+                    onClick={() => ImageActions.goToNextImage()}
                     isDisabled={activeImageIndex === totalImageCount - 1}
                     externalClassName={"right"}
                 />

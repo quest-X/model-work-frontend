@@ -20,17 +20,17 @@ import { LabelStatus } from "../../data/enums/LabelStatus";
 import { remove } from "lodash";
 
 export class ImageActions {
-  public static getPreviousImage(): void {
+  public static goToPreviousImage(): void {
     const currentImageIndex: number = LabelsSelector.getActiveImageIndex();
-    ImageActions.getImageByIndex(currentImageIndex - 1);
+    ImageActions.goToImageByIndex(currentImageIndex - 1);
   }
 
-  public static getNextImage(): void {
+  public static goToNextImage(): void {
     const currentImageIndex: number = LabelsSelector.getActiveImageIndex();
-    ImageActions.getImageByIndex(currentImageIndex + 1);
+    ImageActions.goToImageByIndex(currentImageIndex + 1);
   }
 
-  public static getImageByIndex(index: number): void {
+  public static goToImageByIndex(index: number): void {
     if (EditorModel.viewPortActionsDisabled) return;
 
     const imageCount: number = LabelsSelector.getImagesData().length;

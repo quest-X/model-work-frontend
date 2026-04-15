@@ -132,7 +132,7 @@ class ImagesList extends React.Component<IProps, IState> {
             this.setState({ lastClickedIndex: index });
         } else {
             // Normal click: change active image and clear other selections
-            ImageActions.getImageByIndex(index);
+            ImageActions.goToImageByIndex(index);
             // Clear all selections first, then select only the clicked image
             this.props.imagesData.forEach((img, idx) => {
                 if (img.isSelected && idx !== index) {
