@@ -38,7 +38,7 @@ export class Settings {
         PopupWindowType.IMPORT_ANNOTATIONS,
         PopupWindowType.EXIT_PROJECT,
         PopupWindowType.UPDATE_LABEL,
-        PopupWindowType.LOAD_AI_MODEL,
+        PopupWindowType.CALL_MODEL,
         PopupWindowType.LOAD_DETECTION_MODEL
     ];
 

@@ -230,8 +230,29 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     const inferenceMenuRef = useRef<HTMLDivElement>(null);
     const [detModelName, setDetModelName] = useState('');
     const [segModelName, setSegModelName] = useState('');
+    // 后端权威：/health 返回 model_type / segmentation_model_type 字段
+    // 'custom' 表示用户上传的自定义模型；'detection' / 'segmentation' 表示内置权重。
+    // 前端不再用正则自己猜，而是信任后端分类。
+    type BackendModelType = 'custom' | 'detection' | 'segmentation' | '';
+    const [detModelType, setDetModelType] = useState<BackendModelType>('');
+    const [segModelType, setSegModelType] = useState<BackendModelType>('');
 
-    // 智能标注需要 SAM 系列分割模型；非 SAM 时按钮置灰并提示加载
+    // built-in 展示时剥掉扩展名 (.pt/.onnx)，自定义保留扩展名让用户一眼分辨
+    const formatName = (name: string, isCustom: boolean) => {
+        if (!name) return '';
+        return isCustom ? name : name.replace(/\.(pt|onnx)$/i, '');
+    };
+    const detIsCustom = detModelType === 'custom';
+    const segIsCustom = segModelType === 'custom';
+    // 自定义 label：可能同时有 det 和 seg 都是自定义 → 用 " + " 连起来
+    const customLabel = useMemo(() => {
+        const parts: string[] = [];
+        if (detIsCustom && detModelName) parts.push(detModelName);
+        if (segIsCustom && segModelName) parts.push(segModelName);
+        return parts.join(' + ');
+    }, [detIsCustom, segIsCustom, detModelName, segModelName]);
+
+    // 智能标注需要 SAM 系列分割模型；后端 segmentation_model_type === 'segmentation' 且名字匹配 SAM 家族
     const isSAMLoaded = useMemo(
         () => /^(sam2|sam_|mobile_sam|FastSAM)/i.test(segModelName),
         [segModelName]
@@ -242,7 +263,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     const smartAnnotationOnClick = useCallback(() => {
         if (!isSAMLoaded) {
             // 引导用户去加载 SAM 模型
-            updateActivePopupTypeAction(PopupWindowType.LOAD_AI_MODEL);
+            updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
             return;
         }
         const willActivate = !smartAnnotationActive;
@@ -266,14 +287,22 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         setInferenceMode(smartAnnotationActive ? 'segmentation' : 'detection');
     }, [smartAnnotationActive]);
 
-    // 轮询后端获取当前模型名 + 自动切换推理模式
+    // 轮询后端获取当前模型名 / 类型 + 自动切换推理模式
+    // 保留扩展名 (.pt / .onnx)，built-in 模型在渲染下拉时通过 formatName 剥离。
+    // model_type / segmentation_model_type 来自后端 /health (v2.1.1+)。
     useEffect(() => {
         const fetchModels = () => {
             const url = DetectionAPIDetector.getConfig().url.replace('/detect', '/health');
             fetch(url).then(r => r.json()).then(data => {
-                if (data.model) setDetModelName(data.model.replace('.pt', ''));
-                if (data.segmentation_model) setSegModelName(data.segmentation_model.replace('.pt', ''));
-                // 自动切换：当 LoadYOLOv5ModelPopup 加载了新模型后
+                if (data.model) setDetModelName(data.model);
+                if (data.segmentation_model) setSegModelName(data.segmentation_model);
+                if (data.model_type === 'custom' || data.model_type === 'detection' || data.model_type === 'segmentation') {
+                    setDetModelType(data.model_type);
+                }
+                if (data.segmentation_model_type === 'custom' || data.segmentation_model_type === 'detection' || data.segmentation_model_type === 'segmentation') {
+                    setSegModelType(data.segmentation_model_type);
+                }
+                // 自动切换：当 LoadDetectionModelPopup 加载了新模型后
                 if (EditorModel.lastLoadedModelService) {
                     setInferenceMode(EditorModel.lastLoadedModelService);
                     EditorModel.lastLoadedModelService = null;
@@ -310,30 +339,43 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 
         updateFullImageInferenceStatus(true);
 
-        if (mode === 'detection') {
+        const runDetection = async () => {
             if (isBatchMode) {
-                AIDetectionActions.detectBatch(targets);
+                await AIDetectionActions.detectBatch(targets);
             } else {
-                AIDetectionActions.detectObjects(activeImageData);
+                await new Promise<void>(resolve => {
+                    AIDetectionActions.detectObjects(activeImageData);
+                    // detectObjects 没返回 Promise，用 setTimeout 兜底
+                    setTimeout(resolve, 500);
+                });
             }
+        };
+        const runSegmentation = async () => {
+            await AISegmentationActions.segmentBatch(targets);
+        };
+
+        if (mode === 'detection') {
+            runDetection();
         } else if (mode === 'segmentation') {
-            AISegmentationActions.segmentBatch(targets);
+            runSegmentation();
         } else {
-            // 检测+分割：先检测再分割
+            // 'both' = 自定义模式：按后端返回的 model_type 实际类型路由
+            //   - 仅 det slot 是自定义 → 跑 detection
+            //   - 仅 seg slot 是自定义 → 跑 segmentation
+            //   - 两边都是自定义 → 先 det 再 seg
+            //   - 都不是自定义 → 兜底跑 det+seg（用户当前加载的内置模型）
             (async () => {
-                if (isBatchMode) {
-                    await AIDetectionActions.detectBatch(targets);
+                if (detIsCustom && !segIsCustom) {
+                    await runDetection();
+                } else if (!detIsCustom && segIsCustom) {
+                    await runSegmentation();
                 } else {
-                    await new Promise<void>(resolve => {
-                        AIDetectionActions.detectObjects(activeImageData);
-                        // detectObjects 没有返回 Promise，用 setTimeout 等待
-                        setTimeout(resolve, 500);
-                    });
+                    await runDetection();
+                    await runSegmentation();
                 }
-                await AISegmentationActions.segmentBatch(targets);
             })();
         }
-    }, [imagesData, isFullImageInferenceInProgress, updateFullImageInferenceStatus]);
+    }, [imagesData, isFullImageInferenceInProgress, updateFullImageInferenceStatus, detIsCustom, segIsCustom]);
 
     const withAI = (
         ((activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isAISSDObjectDetectorModelLoaded()) ||
@@ -505,9 +547,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         outline: 'none',
                     }}
                 >
-                    <option value="both">{language === 'zh' ? '自定义' : 'Custom'}</option>
-                    <option value="detection">{`${language === 'zh' ? '检测模型' : 'Detection'}${detModelName ? ` (${detModelName})` : ''}`}</option>
-                    <option value="segmentation">{`${language === 'zh' ? '分割模型' : 'Segmentation'}${segModelName ? ` (${segModelName})` : ''}`}</option>
+                    <option value="both">{`${language === 'zh' ? '自定义' : 'Custom'}${customLabel ? ` (${customLabel})` : ''}`}</option>
+                    <option value="detection">{`${language === 'zh' ? '检测模型' : 'Detection'}${detModelName && !detIsCustom ? ` (${formatName(detModelName, false)})` : ''}`}</option>
+                    <option value="segmentation">{`${language === 'zh' ? '分割模型' : 'Segmentation'}${segModelName && !segIsCustom ? ` (${formatName(segModelName, false)})` : ''}`}</option>
                 </select>
                 <button
                     disabled={imagesData.length === 0}

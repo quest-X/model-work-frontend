@@ -147,7 +147,7 @@ export interface LanguageTexts {
             acceptButton: string;
             rejectButton: string;
         };
-        loadModel: {
+        callModel: {
             title: string;
             selectModel: string;
             acceptButton: string;
@@ -184,7 +184,7 @@ export interface LanguageTexts {
             localYoloMessage: string;
             localYoloUrl: string;
         };
-        integrateModel: {
+        modelEngine: {
             title: string;
             acceptButton: string;
             rejectButton: string;
@@ -313,8 +313,8 @@ export interface LanguageTexts {
 
     // AI Model Management
     modelManagement: {
-        localModels: string;
-        remoteModels: string;
+        callModels: string;   // 原 localModels —— 调用模型
+        modelEngines: string; // 原 remoteModels —— 模型引擎
         manage: string;
         noModels: string;
         noModelsHint: string;
@@ -586,8 +586,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 acceptButton: '退出',
                 rejectButton: '取消'
             },
-            loadModel: {
-                title: '本地模型',
+            callModel: {
+                title: '调用模型',
                 selectModel: '选择要加载的模型：',
                 acceptButton: '进入',
                 rejectButton: '取消',
@@ -623,8 +623,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 localYoloMessage: '连接本地 YOLO 推理服务（python detect_server.py）',
                 localYoloUrl: '服务地址'
             },
-            integrateModel: {
-                title: '远程模型',
+            modelEngine: {
+                title: '模型引擎',
                 acceptButton: '接入',
                 rejectButton: '取消',
                 modelUrl: '模型地址',
@@ -773,8 +773,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
 
         // AI Model Management
         modelManagement: {
-            localModels: '本地模型',
-            remoteModels: '远程模型',
+            callModels: '调用模型',
+            modelEngines: '模型引擎',
             manage: '管理',
             noModels: '暂无AI模型',
             noModelsHint: '点击添加第一个AI模型',
@@ -1023,8 +1023,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 acceptButton: 'Exit',
                 rejectButton: 'Cancel'
             },
-            loadModel: {
-                title: 'Local Model',
+            callModel: {
+                title: 'Call Model',
                 selectModel: 'Select model to load:',
                 acceptButton: 'Enter',
                 rejectButton: 'Cancel',
@@ -1060,8 +1060,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 localYoloMessage: 'Connect to local YOLO inference server (python detect_server.py)',
                 localYoloUrl: 'Server URL'
             },
-            integrateModel: {
-                title: 'Remote Model',
+            modelEngine: {
+                title: 'Model Engine',
                 acceptButton: 'Integrate',
                 rejectButton: 'Cancel',
                 modelUrl: 'Model URL',
@@ -1210,8 +1210,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
 
         // AI Model Management
         modelManagement: {
-            localModels: 'Local Models',
-            remoteModels: 'Remote Models',
+            callModels: 'Call Models',
+            modelEngines: 'Model Engines',
             manage: 'Manage',
             noModels: 'No AI Models',
             noModelsHint: 'Click to add your first AI model',

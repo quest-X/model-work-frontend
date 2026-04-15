@@ -12,7 +12,7 @@ import { NotificationUtil } from '../../../utils/NotificationUtil';
 import { NotificationsDataMap } from '../../../data/info/NotificationsData';
 import { Notification } from '../../../data/enums/Notification';
 import { PopupWindowType } from '../../../data/enums/PopupWindowType';
-import './IntegrateModelPopup.scss'
+import './ModelEnginePopup.scss'
 import { StyledTextField } from '../../Common/StyledTextField/StyledTextField';
 import { ClipLoader } from 'react-spinners';
 import { CSSHelper } from '../../../logic/helpers/CSSHelper';
@@ -27,7 +27,7 @@ interface IProps {
     language: Language;
 }
 
-const IntegrateModelPopup: React.FC<IProps> = (
+const ModelEnginePopup: React.FC<IProps> = (
     {
         submitNewNotificationAction,
         updateActivePopupTypeAction,
@@ -128,7 +128,7 @@ const IntegrateModelPopup: React.FC<IProps> = (
     const renderContent = (): JSX.Element => {
         if (isConnecting) {
             return (
-                <div className='integrate-model-popup-content'>
+                <div className='model-engine-popup-content'>
                     <div className='message'>
                         {language === Language.CHINESE ? '正在接入模型...' : 'Integrating model...'}
                     </div>
@@ -144,9 +144,9 @@ const IntegrateModelPopup: React.FC<IProps> = (
         }
 
         return (
-            <div className='integrate-model-popup-content'>
+            <div className='model-engine-popup-content'>
                 <div className='message'>
-                    {currentTexts.popups.integrateModel.integrationMessage}
+                    {currentTexts.popups.modelEngine.integrationMessage}
                 </div>
                 <div className='details'>
                     <StyledTextField
@@ -156,7 +156,7 @@ const IntegrateModelPopup: React.FC<IProps> = (
                         autoFocus={true}
                         type={'text'}
                         margin={'dense'}
-                        label={currentTexts.popups.integrateModel.modelUrl}
+                        label={currentTexts.popups.modelEngine.modelUrl}
                         value={modelUrl}
                         onChange={modelUrlOnChangeCallback}
                         style={{ width: '100%', marginBottom: '20px' }}
@@ -184,7 +184,7 @@ const IntegrateModelPopup: React.FC<IProps> = (
                             autoComplete={'off'}
                             type={'password'}
                             margin={'dense'}
-                            label={currentTexts.popups.integrateModel.apiKey + (language === Language.CHINESE ? " (可选)" : " (optional)")}
+                            label={currentTexts.popups.modelEngine.apiKey + (language === Language.CHINESE ? " (可选)" : " (optional)")}
                             value={apiKey}
                             onChange={apiKeyOnChangeCallback}
                             style={{ flex: 6 }}
@@ -239,14 +239,14 @@ const IntegrateModelPopup: React.FC<IProps> = (
                                 id="model-type-label"
                                 shrink={true}
                             >
-                                {currentTexts.popups.integrateModel.modelType}
+                                {currentTexts.popups.modelEngine.modelType}
                             </InputLabel>
                             <Select
                                 labelId="model-type-label"
                                 id="model-type"
                                 value={modelType}
                                 onChange={modelTypeOnChangeCallback}
-                                label={currentTexts.popups.integrateModel.modelType}
+                                label={currentTexts.popups.modelEngine.modelType}
                                 sx={{
                                     color: 'white',
                                     '& .MuiSelect-icon': {
@@ -255,10 +255,10 @@ const IntegrateModelPopup: React.FC<IProps> = (
                                 }}
                             >
                                 <MenuItem value="detection">
-                                    {currentTexts.popups.integrateModel.taskTypeDetection}
+                                    {currentTexts.popups.modelEngine.taskTypeDetection}
                                 </MenuItem>
                                 <MenuItem value="segmentation">
-                                    {currentTexts.popups.integrateModel.taskTypeSegmentation}
+                                    {currentTexts.popups.modelEngine.taskTypeSegmentation}
                                 </MenuItem>
                             </Select>
                         </FormControl>
@@ -270,12 +270,12 @@ const IntegrateModelPopup: React.FC<IProps> = (
 
     return (
         <GenericYesNoPopup
-            title={currentTexts.popups.integrateModel.title}
+            title={currentTexts.popups.modelEngine.title}
             renderContent={renderContent}
-            acceptLabel={currentTexts.popups.integrateModel.acceptButton}
+            acceptLabel={currentTexts.popups.modelEngine.acceptButton}
             onAccept={onAccept}
             disableAcceptButton={disableAcceptButton()}
-            rejectLabel={currentTexts.popups.integrateModel.rejectButton}
+            rejectLabel={currentTexts.popups.modelEngine.rejectButton}
             onReject={onReject}
         />
     );
@@ -294,4 +294,4 @@ const mapStateToProps = (state: AppState) => ({
 export default connect(
     mapStateToProps,
     mapDispatchToProps
-)(IntegrateModelPopup);
+)(ModelEnginePopup);

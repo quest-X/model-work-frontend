@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import {PopupActions} from '../../../logic/actions/PopupActions';
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
-import './LoadModelPopup.scss'
+import './CallModelPopup.scss'
 import {updateActivePopupType as storeUpdateActivePopupType} from '../../../store/general/actionCreators';
 import {AppState} from '../../../store';
 import {connect} from 'react-redux';
@@ -33,7 +33,7 @@ export const SEG_MODEL_FAMILIES: YOLOModelFamily[] = [
     { id: 'fast-sam', name: 'ultralytics/FastSAM', variants: ['FastSAM-s', 'FastSAM-x'] },
 ];
 
-// Module-level state shared between LoadModelPopup and LoadYOLOModelPopup
+// Module-level state shared between CallModelPopup and LoadDetectionModelPopup
 let _selectedModelFamily: YOLOModelFamily | null = null;
 let _serverUrl: string = 'http://localhost:8000';
 let _selectedCustomExt: 'pt' | 'onnx' | null = null;
@@ -47,7 +47,7 @@ interface IProps {
     language: Language;
 }
 
-const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) => {
+const CallModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) => {
     const currentTexts = LanguageConfig[language];
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [serverUrl, setServerUrl] = useState(_serverUrl);
@@ -131,7 +131,7 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
     const zhTexts = language === Language.CHINESE;
 
     const renderContent = () => {
-        return <div className='LoadModelPopupContent'>
+        return <div className='CallModelPopupContent'>
             <div className='ModelSection'>
                 <div className='SectionHeader'>{zhTexts ? '自定义' : 'Custom'}</div>
                 <div className='Options'>
@@ -194,12 +194,12 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
 
     return (
         <GenericYesNoPopup
-            title={currentTexts.popups.loadModel.title}
+            title={currentTexts.popups.callModel.title}
             renderContent={renderContent}
-            acceptLabel={currentTexts.popups.loadModel.acceptButton}
+            acceptLabel={currentTexts.popups.callModel.acceptButton}
             onAccept={onAccept}
             disableAcceptButton={!selectedId || serverUrl === ''}
-            rejectLabel={currentTexts.popups.loadModel.rejectButton}
+            rejectLabel={currentTexts.popups.callModel.rejectButton}
             onReject={onReject}
         />
     );
@@ -216,4 +216,4 @@ const mapStateToProps = (state: AppState) => ({
 export default connect(
     mapStateToProps,
     mapDispatchToProps
-)(LoadModelPopup);
+)(CallModelPopup);

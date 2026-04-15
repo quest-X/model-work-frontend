@@ -1,6 +1,6 @@
 @import '../../../settings/Settings';
 
-.integrate-model-popup-content {
+.model-engine-popup-content {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -87,7 +87,7 @@
 
 // 响应式设计
 @media (max-width: 768px) {
-  .integrate-model-popup-content {
+  .model-engine-popup-content {
     padding: 20px;
     
     .details {

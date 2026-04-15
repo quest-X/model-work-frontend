@@ -22,7 +22,7 @@ import {AIDetectionActions} from '../../../logic/actions/AIDetectionActions';
 import {ImageData} from '../../../store/labels/types';
 import {LabelsSelector} from '../../../store/selectors/LabelsSelector';
 import {EditorModel} from '../../../staticModels/EditorModel';
-import {getSelectedCustomExt, getSelectedModelFamily, getServerUrl, SEG_MODEL_FAMILIES} from '../LoadModelPopup/LoadModelPopup';
+import {getSelectedCustomExt, getSelectedModelFamily, getServerUrl, SEG_MODEL_FAMILIES} from '../CallModelPopup/CallModelPopup';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 enum ModelSource {
@@ -188,7 +188,7 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
     };
 
     const onReject = () => {
-        updateActivePopupTypeAction(PopupWindowType.LOAD_AI_MODEL);
+        updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
     };
 
     const changeModelSource = (source: ModelSource) => {

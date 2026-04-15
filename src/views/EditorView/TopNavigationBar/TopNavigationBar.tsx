@@ -69,15 +69,17 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
         setShowModelsDropdown(!showModelsDropdown);
     };
 
+    // 「模型引擎」按钮：有已接入的远程模型 → 打开管理弹窗，否则直接进入新增弹窗
     const openRemoteModelManager = () => {
         setShowModelsDropdown(false);
-        const popupType = props.hasAIModels ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.INTEGRATE_AI_MODEL;
+        const popupType = props.hasAIModels ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.MODEL_ENGINE;
         props.updateActivePopupTypeAction(popupType);
     };
 
+    // 「调用模型」按钮：打开本地模型挑选 / 加载弹窗
     const openLocalModelManager = () => {
         setShowModelsDropdown(false);
-        props.updateActivePopupTypeAction(PopupWindowType.LOAD_AI_MODEL);
+        props.updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
     };
 
     const toggleLanguage = () => {
@@ -160,13 +162,13 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                                     onClick={openLocalModelManager}>
                                     <div className='Marker'/>
                                     <img src='ico/ai.png' alt='local-models'/>
-                                    {currentTexts.modelManagement.localModels}
+                                    {currentTexts.modelManagement.callModels}
                                 </div>
                                 <div className='DropDownMenuContentOption active'
                                     onClick={openRemoteModelManager}>
                                     <div className='Marker'/>
                                     <img src='ico/api.png' alt='remote-models'/>
-                                    {currentTexts.modelManagement.remoteModels}
+                                    {currentTexts.modelManagement.modelEngines}
                                 </div>
                             </div>
                         )}

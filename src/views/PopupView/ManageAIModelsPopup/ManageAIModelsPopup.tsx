@@ -12,7 +12,7 @@ import { AIModel } from '../../../store/aimodels/types';
 import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { v4 as uuidv4 } from 'uuid';
 import { StyledTextField } from '../../Common/StyledTextField/StyledTextField';
-import { YOLO_MODEL_FAMILIES, getServerUrl } from '../LoadModelPopup/LoadModelPopup';
+import { YOLO_MODEL_FAMILIES, getServerUrl } from '../CallModelPopup/CallModelPopup';
 
 interface IProps {
     updateActivePopupTypeAction: (activePopupType: PopupWindowType) => any;
@@ -56,7 +56,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
     };
 
     const addNewModel = () => {
-        updateActivePopupTypeAction(PopupWindowType.INTEGRATE_AI_MODEL);
+        updateActivePopupTypeAction(PopupWindowType.MODEL_ENGINE);
     };
 
     const selectModel = (modelId: string) => {
@@ -91,19 +91,26 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
         setEditingModel(null);
     };
 
-    // 本地模型状态
+    // 调用模型 — 可供选中 / 加载的本地模型清单
     const [availableLocalModels, setAvailableLocalModels] = useState<string[]>([]);
 
     useEffect(() => {
         const serverUrl = getServerUrl();
         fetch(`${serverUrl}/available-models`)
             .then(r => r.json())
-            .then(data => { if (data.models) setAvailableLocalModels(data.models); })
+            .then(data => {
+                if (!data.models) return;
+                // Backend v2.1.1+ returns [{name, type}]; earlier returned string[]. 两兼容。
+                const names: string[] = data.models.map((m: unknown) =>
+                    typeof m === 'string' ? m : (m as { name: string }).name
+                );
+                setAvailableLocalModels(names);
+            })
             .catch(() => {});
     }, []);
 
     const openLocalModelManager = () => {
-        updateActivePopupTypeAction(PopupWindowType.LOAD_AI_MODEL);
+        updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
     };
 
     const getLocalDownloadedCount = (familyId: string): number => {
@@ -116,7 +123,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
         return (
             <div className='LocalModelsSection'>
                 <div className='SectionTitle'>
-                    {currentTexts.modelManagement.localModels}
+                    {currentTexts.modelManagement.callModels}
                     <span className='ManageLink' onClick={openLocalModelManager}>
                         {currentTexts.modelManagement.manage}
                     </span>
@@ -330,7 +337,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                         <div className='ModelsListContainer'>
                             {renderLocalModels()}
                             <div className='SectionTitle'>
-                                {currentTexts.modelManagement.remoteModels}
+                                {currentTexts.modelManagement.modelEngines}
                             </div>
                             <div className='ModelsContainer'>
                                 {renderModelList()}

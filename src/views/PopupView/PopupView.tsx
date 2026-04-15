@@ -13,10 +13,10 @@ import { CSSHelper } from '../../logic/helpers/CSSHelper';
 import { ClipLoader } from 'react-spinners';
 import ImportLabelPopup from './ImportLabelPopup/ImportLabelPopup';
 import ExportLabelPopup from './ExportLabelsPopup/ExportLabelPopup';
-import LoadModelPopup from './LoadModelPopup/LoadModelPopup';
+import CallModelPopup from './CallModelPopup/CallModelPopup';
 import LoadDetectionModelPopup from './LoadDetectionModelPopup/LoadDetectionModelPopup';
 import ConnectInferenceServerPopup from './ConnectInferenceServerPopup/ConnectInferenceServerPopup';
-import IntegrateModelPopup from './IntegrateModelPopup/IntegrateModelPopup';
+import ModelEnginePopup from './ModelEnginePopup/ModelEnginePopup';
 import ManageAIModelsPopup from './ManageAIModelsPopup/ManageAIModelsPopup';
 import KeyboardShortcutsPopup from './KeyboardShortcutsPopup/KeyboardShortcutsPopup';
 import ChangelogPopup from './ChangelogPopup/ChangelogPopup';
@@ -70,14 +70,14 @@ const PopupView: React.FC<IProps> = ({ activePopupType }) => {
                 return <ExitProjectPopup />;
             case PopupWindowType.IMPORT_IMAGES:
                 return <LoadMoreMediaPopup />;
-            case PopupWindowType.LOAD_AI_MODEL:
-                return <LoadModelPopup />;
+            case PopupWindowType.CALL_MODEL:
+                return <CallModelPopup />;
             case PopupWindowType.LOAD_DETECTION_MODEL:
                 return <LoadDetectionModelPopup />;
             case PopupWindowType.CONNECT_AI_MODEL_VIA_API:
                 return <ConnectInferenceServerPopup />;
-            case PopupWindowType.INTEGRATE_AI_MODEL:
-                return <IntegrateModelPopup />;
+            case PopupWindowType.MODEL_ENGINE:
+                return <ModelEnginePopup />;
             case PopupWindowType.MANAGE_AI_MODELS:
                 return <ManageAIModelsPopup />;
             case PopupWindowType.SUGGEST_LABEL_NAMES:

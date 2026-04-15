@@ -1,11 +1,11 @@
 @import '../../../settings/Settings';
 
 // Override popup width for this specific popup
-.GenericYesNoPopup:has(.LoadModelPopupContent) {
+.GenericYesNoPopup:has(.CallModelPopupContent) {
   width: 700px;
 }
 
-.LoadModelPopupContent {
+.CallModelPopupContent {
   display: flex;
   flex-direction: column;
   flex-wrap: nowrap;
