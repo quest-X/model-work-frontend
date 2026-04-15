@@ -8,7 +8,7 @@ export class YOLOAnnotationsLoadingError extends Error {
 export class YOLOLabelsReadingError extends YOLOAnnotationsLoadingError {
     constructor() {
         super('Unexpected error occurred during reading label names from labels.txt file');
-        this.name = 'YOLOLabelsLoadingError';
+        this.name = 'YOLOLabelsReadingError';
     }
 }
 
