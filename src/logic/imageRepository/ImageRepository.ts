@@ -7,22 +7,16 @@ export type ImageMap = { [s: string]: HTMLImageElement; };
 interface FileCache {
     imagesData: ImageData[];  // 该文件的所有 ImageData（包括标注信息）
     imageMap: ImageMap;        // 该文件的所有缩略图
-    lastAccessed: number;      // 最后访问时间，用于LRU
 }
 
 export class ImageRepository {
     private static repository: ImageMap = {};
-    
+
     // 新增：文件级别的缓存
     private static fileCache: { [fileId: string]: FileCache } = {};
-    
+
     // 新增：当前活动的文件ID
     private static activeFileId: string | null = null;
-    
-    // LRU缓存限制配置
-    private static readonly MAX_CACHE_FILES = 10; // 最多缓存10个文件
-    private static readonly MAX_CACHE_SIZE_MB = 100; // 最多缓存100MB（估算值）
-    private static readonly BYTES_PER_PIXEL = 4; // RGBA = 4 bytes
 
     public static storeImage(id: string, image: HTMLImageElement) {
         ImageRepository.repository[id] = image;
@@ -73,8 +67,7 @@ export class ImageRepository {
         
         ImageRepository.fileCache[fileId] = {
             imagesData: imagesData.map(data => ({...data})), // 深拷贝
-            imageMap,
-            lastAccessed: Date.now()
+            imageMap
         };
         
         console.log(`[ImageRepository] 2. 文件缓存已保存: ${Object.keys(imageMap).length} 个缩略图`);
@@ -94,15 +87,12 @@ export class ImageRepository {
         }
         
         console.log(`[ImageRepository] 4. 恢复文件 ${fileId.substring(0, 8)} 的缓存，共 ${cache.imagesData.length} 张图像`);
-        
+
         // 恢复 ImageRepository 中的缩略图
         Object.entries(cache.imageMap).forEach(([id, image]) => {
             ImageRepository.repository[id] = image;
         });
-        
-        // 更新最后访问时间
-        cache.lastAccessed = Date.now();
-        
+
         console.log(`[ImageRepository] 5. 文件缓存已恢复: ${Object.keys(cache.imageMap).length} 个缩略图`);
         
         // 返回深拷贝，避免外部修改影响缓存

@@ -17,11 +17,6 @@ export class LabelUtil {
         }
     }
 
-    // 已弃用：AI推理现在可以使用完整调色板
-    // public static createAILabelName(name: string): LabelName {
-    //     // 不再需要专用方法，AI推理使用 createLabelName() 即可
-    // }
-
     public static createLabelRect(labelId: string, rect: IRect): LabelRect {
         return {
             id: uuidv4(),
