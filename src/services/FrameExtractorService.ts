@@ -2,12 +2,11 @@
  * FrameExtractorService — v1.9.1
  *
  * This service powers the "fast_ffmpeg_mode" playback path. It uploads the
- * video to the backend FFmpeg server and retrieves extracted JPEG frames.
+ * video to the backend FFmpeg server and exposes on-demand frame fetching.
  *
- * Two sub-modes within fast_ffmpeg_mode:
- *   1. Full-load (small videos, <=1 GB): all frames downloaded at once.
- *   2. On-demand  (large videos, >1 GB): upload once, fetch frames in
- *      batches via sessionId (sliding-window in FramePlayer).
+ * Flow: openSession() uploads the video and returns a sessionId + metadata.
+ * Frames are then fetched in batches via fetchFrameRange(sessionId, ...)
+ * (sliding-window in FramePlayer).
  *
  * If this service fails (backend unreachable), EditorContainer falls back
  * to raw_browser_mode (browser-native <video> element via VideoPlayer).
@@ -18,7 +17,6 @@ import axios from 'axios';
 import JSZip from 'jszip';
 
 export interface FrameExtractionResult {
-    frames: File[];
     fps: number;
     duration: number;
     totalFrames: number;
@@ -30,7 +28,6 @@ export interface FrameExtractionResult {
 export type ProgressCallback = (phase: string, current: number, total: number) => void;
 
 const API_BASE = 'http://localhost:8000';
-const LARGE_VIDEO_SIZE_MB = 1024;  // >1GB 按需加载，≤1GB 全量加载
 
 export class FrameExtractorService {
 
@@ -40,7 +37,7 @@ export class FrameExtractorService {
      * 上传视频并返回 sessionId，帧由 FramePlayer 滑动窗口按需获取。
      * 所有视频统一走 on-demand 模式，避免大视频 JSZip OOM。
      */
-    static async extractFrames(
+    static async openSession(
         videoFile: File,
         targetFps: number = 0,
         onProgress?: ProgressCallback,
@@ -55,7 +52,6 @@ export class FrameExtractorService {
         console.log(`[FrameExtractor] fast_ffmpeg_mode (on-demand): sessionId=${sessionId}, 总帧数=${metadata.totalFrames}`);
 
         return {
-            frames: [],
             fps: metadata.fps,
             duration: metadata.duration,
             totalFrames: metadata.totalFrames,

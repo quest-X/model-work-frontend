@@ -284,7 +284,7 @@ const EditorContainer: React.FC<IProps> = (
                         console.log(`[FFmpeg] 开始拆帧: ${videoFile.name}`);
                         setVideoProcessing({ phase: '上传视频...', progress: 0, fileName: videoFile.name });
 
-                        const result = await FrameExtractorService.extractFrames(
+                        const result = await FrameExtractorService.openSession(
                             videoFile, 0,
                             (phase, current, total) => {
                                 const pct = total > 0 ? Math.round((current / total) * 100) : 0;
@@ -302,12 +302,10 @@ const EditorContainer: React.FC<IProps> = (
 
                         // Initialize global frame pool for fast_ffmpeg_mode (FramePlayer handles decoding)
                         EditorModel.preloadedImageCache = new Map();
-                        if (!isOnDemand) {
-                            EditorModel.videoFrameFiles = [...result.frames];
-                        } else {
+                        if (isOnDemand) {
                             EditorModel.videoSessionId = result.sessionId!;
-                            EditorModel.videoFrameFiles = [];
                         }
+                        EditorModel.videoFrameFiles = [];
 
                         // 缩略图从第 0 帧文件生成
                         let thumbnail: string | undefined;
@@ -329,7 +327,7 @@ const EditorContainer: React.FC<IProps> = (
                             name: videoFile.name,
                             type: QueueItemType.VIDEO,
                             file: videoFile,
-                            extractedFrames: isOnDemand ? undefined : result.frames,
+                            extractedFrames: undefined,
                             extractionMetadata: {
                                 fps: result.fps,
                                 duration: result.duration,
