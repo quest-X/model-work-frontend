@@ -24,6 +24,7 @@ import { ImageRepository } from '../../../logic/imageRepository/ImageRepository'
 import { ImageData } from '../../../store/labels/types';
 import { LabelsSelector } from '../../../store/selectors/LabelsSelector';
 import { DetectionAPIDetector } from '../../../ai/DetectionAPIDetector';
+import { InferenceParamsFields } from './InferenceParamsFields';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import { FormControl, InputLabel, Select, MenuItem, SelectChangeEvent } from '@mui/material';
 
@@ -59,6 +60,9 @@ const ConnectInferenceServerPopup: React.FC<IProps> = (
     // local yolo
     const [localYoloUrl, setLocalYoloUrl] = useState('http://localhost:8000');
 
+    // inference params (conf/iou/imgsz/max_det) — persisted in DetectionAPIDetector
+    const [inferenceParams, setInferenceParams] = useState(DetectionAPIDetector.getInferenceParams());
+
     const wrapServerOnClick = (newServerType: InferenceServerType) => {
         return () => {
             if (!InferenceServerDataMap[newServerType].isDisabled) {
@@ -91,6 +95,7 @@ const ConnectInferenceServerPopup: React.FC<IProps> = (
 
         if (currentServerType === InferenceServerType.LOCAL_YOLO) {
             DetectionAPIDetector.setConfig({ url: localYoloUrl, enabled: true });
+            DetectionAPIDetector.setInferenceParams(inferenceParams);
             PopupActions.close();
             const activeImageData: ImageData = LabelsSelector.getActiveImageData();
             AIDetectionActions.detectObjects(activeImageData);
@@ -101,6 +106,7 @@ const ConnectInferenceServerPopup: React.FC<IProps> = (
             // 配置并触发自定义推理服务
             if (modelTaskType === 'detection') {
                 DetectionAPIDetector.setConfig({ url: modelServiceUrl, enabled: true });
+                DetectionAPIDetector.setInferenceParams(inferenceParams);
             }
             PopupActions.close();
             const activeImageData: ImageData = LabelsSelector.getActiveImageData();
@@ -258,6 +264,9 @@ const ConnectInferenceServerPopup: React.FC<IProps> = (
                     style={{ width: 280 }}
                     InputLabelProps={{ shrink: true }}
                 />
+                {modelTaskType === 'detection' && (
+                    <InferenceParamsFields params={inferenceParams} onChange={setInferenceParams} />
+                )}
             </div>
         </>;
     }
@@ -281,6 +290,7 @@ const ConnectInferenceServerPopup: React.FC<IProps> = (
                     style={{ width: 280 }}
                     InputLabelProps={{ shrink: true }}
                 />
+                <InferenceParamsFields params={inferenceParams} onChange={setInferenceParams} />
             </div>
         </>;
     }

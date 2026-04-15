@@ -22,7 +22,7 @@ import {AIDetectionActions} from '../../../logic/actions/AIDetectionActions';
 import {ImageData} from '../../../store/labels/types';
 import {LabelsSelector} from '../../../store/selectors/LabelsSelector';
 import {EditorModel} from '../../../staticModels/EditorModel';
-import {getSelectedModelFamily, getServerUrl, SEG_MODEL_FAMILIES} from '../LoadModelPopup/LoadModelPopup';
+import {getSelectedCustomExt, getSelectedModelFamily, getServerUrl, SEG_MODEL_FAMILIES} from '../LoadModelPopup/LoadModelPopup';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 enum ModelSource {
@@ -50,6 +50,8 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
     const texts = LanguageConfig[language];
     const modelFamily = getSelectedModelFamily();
     const serverUrl = getServerUrl();
+    const customExt = getSelectedCustomExt() || 'pt';   // 'pt' | 'onnx', defaults to .pt
+    const customExtDot = `.${customExt}`;
     const variants = modelFamily?.variants || [];
 
     const [modelSource, setModelSource] = useState(modelFamily ? ModelSource.OFFICIAL : ModelSource.UPLOAD);
@@ -63,7 +65,7 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
 
     useEffect(() => {
         fetch(`${serverUrl}/health`).then(r => r.json())
-            .then(data => { if (data.model) setLoadedModel(data.model.replace(/\.pt$/, '')); })
+            .then(data => { if (data.model) setLoadedModel(data.model.replace(/\.(pt|onnx)$/, '')); })
             .catch(() => {});
         fetch(`${serverUrl}/available-models`).then(r => r.json())
             .then(data => { if (data.models) setDownloadedModels(data.models); })
@@ -80,7 +82,7 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                     setLoadState(data.state || '');
                     if (data.state === 'ready') {
                         clearInterval(interval);
-                        setLoadedModel(data.model?.replace(/\.pt$/, '') || '');
+                        setLoadedModel(data.model?.replace(/\.(pt|onnx)$/, '') || '');
                         resolve();
                     } else if (data.state === 'error') {
                         clearInterval(interval);
@@ -95,13 +97,18 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
     };
 
     const onDrop = (accepted: File[]) => {
-        const ptFiles = accepted.filter((f: File) => f.name.endsWith('.pt'));
-        if (ptFiles.length > 0) {
-            setModelFile(ptFiles[0]);
+        const modelFiles = accepted.filter((f: File) => f.name.toLowerCase().endsWith(customExtDot));
+        if (modelFiles.length > 0) {
+            setModelFile(modelFiles[0]);
         }
     };
 
-    const {getRootProps, getInputProps} = useDropzone({onDrop});
+    const {getRootProps, getInputProps} = useDropzone({
+        onDrop,
+        accept: {
+            'application/octet-stream': [customExtDot]
+        }
+    });
 
     const isSegModel = modelFamily && SEG_MODEL_FAMILIES.some(f => f.id === modelFamily.id);
 
@@ -241,7 +248,7 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
     };
 
     const renderMessage = () => {
-        const uploadMessage = texts.loadYoloModel.uploadMessage;
+        const uploadMessage = texts.loadYoloModel.uploadMessage.replace('{ext}', customExtDot);
         const officialMessage = texts.loadYoloModel.officialMessage.replace('{name}', modelFamily?.name || 'YOLO');
         return(<div className='message'>
             {modelSource === ModelSource.OFFICIAL ? officialMessage : uploadMessage}
@@ -284,7 +291,7 @@ const LoadYOLOv5ModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction, s
                 <p className='extraBold'>{modelFile.name}</p>
                 <p>{(modelFile.size / 1024 / 1024).toFixed(1)} MB</p>
             </> : <>
-                <p className='extraBold'>{texts.loadYoloModel.dragModel}</p>
+                <p className='extraBold'>{texts.loadYoloModel.dragModel.replace('{ext}', customExtDot)}</p>
                 <p>{texts.or}</p>
                 <p className='extraBold'>{texts.loadYoloModel.clickToSelect}</p>
             </>}

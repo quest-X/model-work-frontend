@@ -3,7 +3,8 @@ import {DetectionAPIDetector, DetectionResult} from "../../ai/DetectionAPIDetect
 import {ImageData, LabelName, LabelRect} from "../../store/labels/types";
 import {LabelStatus} from "../../data/enums/LabelStatus";
 import {v4 as uuidv4} from "uuid";
-import {updateImageDataById, updateImageData, updateLabelNames, updateActiveImageIndex} from "../../store/labels/actionCreators";
+import {updateImageDataById, updateImageData, updateLabelNames, updateActiveImageIndex, updateActiveLabelViewType} from "../../store/labels/actionCreators";
+import {LabelType} from "../../data/enums/LabelType";
 import {updateFullImageInferenceStatus, addInferenceHistory, toggleImageAILabelsVisibility, updateSegmentationResults} from "../../store/ai/actionCreators";
 import {submitNewNotification, deleteNotificationById, updateNotificationById} from "../../store/notifications/actionCreators";
 import {updatePerClassColorationStatus} from "../../store/general/actionCreators";
@@ -156,8 +157,14 @@ export class AIDetectionActions {
         return new Promise(r => setTimeout(r, 0));
     }
 
+    /** 用户是否已按下停止按钮(即把 isFullImageInferenceInProgress 翻成 false) */
+    private static isCancelled(): boolean {
+        return !store.getState().ai.isFullImageInferenceInProgress;
+    }
+
     /**
-     * 并发信号量：限制同时进行的 async 任务数
+     * 并发信号量：限制同时进行的 async 任务数。
+     * 每次 dispatch 新任务前都检查取消标志,用户按停止后不再启动新任务。
      */
     private static async withConcurrency<T>(
         tasks: Array<() => Promise<T>>,
@@ -170,6 +177,7 @@ export class AIDetectionActions {
 
         const worker = async () => {
             while (nextIdx < tasks.length) {
+                if (this.isCancelled()) return;
                 const i = nextIdx++;
                 try {
                     results[i] = await tasks[i]();
@@ -276,6 +284,7 @@ export class AIDetectionActions {
                 capturedBlobs = new Array(captureTotal).fill(null);
                 const FETCH_BATCH = 10;
                 for (let i = 0; i < captureTotal; i += FETCH_BATCH) {
+                    if (this.isCancelled()) { console.log('[Capture] 用户取消,中止按需取帧'); break; }
                     const count = Math.min(FETCH_BATCH, captureTotal - i);
                     const pct = Math.round((i / captureTotal) * 33);
                     notify(1,
@@ -312,6 +321,7 @@ export class AIDetectionActions {
                 });
 
                 for (let i = 0; i < captureTotal; i++) {
+                    if (this.isCancelled()) { console.log('[Capture] 用户取消,中止 raw_browser_mode 取帧'); break; }
                     const { frameIdx } = frameQueue[i];
                     const targetTime = frameIdx / fps;
 
@@ -426,17 +436,18 @@ export class AIDetectionActions {
             });
         }
 
-        // ── 完成 ──
+        // ── 完成 / 取消 ──
         // 流式推理：结果已实时写入，无需跳回第一帧，保持用户当前位置
+        const wasCancelled = this.isCancelled();
         store.dispatch(deleteNotificationById(progressNotification.id));
         store.dispatch(updateFullImageInferenceStatus(false));
 
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
-        console.log('[BatchDetect] Complete', { totalTime: totalTime + 's', successCount, failCount, totalObjects });
+        console.log(`[BatchDetect] ${wasCancelled ? 'Cancelled' : 'Complete'}`, { totalTime: totalTime + 's', successCount, failCount, totalObjects });
 
         const doneTexts = t();
         store.dispatch(submitNewNotification(NotificationUtil.createSuccessNotification({
-            header: doneTexts.notifications.batchDetectionCompleted,
+            header: wasCancelled ? '推理已停止' : doneTexts.notifications.batchDetectionCompleted,
             description: doneTexts.notifications.batchDetectionCompletedMessage
                 .replace('{total}', String(successCount))
                 .replace('{count}', String(totalObjects))
@@ -497,6 +508,8 @@ export class AIDetectionActions {
                 labelRects: [...currentImg.labelRects, ...newRects]
             };
             store.dispatch(updateImageDataById(imageData.id, updatedImg));
+            // 推理结果落地后自动切到检测标签页
+            store.dispatch(updateActiveLabelViewType(LabelType.RECT));
             // 同步缓存 + playbackImageData
             const latestData = store.getState().labels.imagesData;
             EditorModel.latestImagesData = latestData;
@@ -605,6 +618,8 @@ export class AIDetectionActions {
         // 单次 dispatch 更新全部图像数据
         if (modified) {
             store.dispatch(updateImageData(currentImagesData));
+            // 批量推理出检测框后自动切到检测标签页
+            store.dispatch(updateActiveLabelViewType(LabelType.RECT));
             // 同步缓存到 EditorModel，供播放时 handleVideoTimeUpdate 立即读取
             // （避免 imagesDataRef 在 React 重渲染前读到旧数据导致 rects=0）
             EditorModel.latestImagesData = currentImagesData;
@@ -632,8 +647,9 @@ export class AIDetectionActions {
     ): Promise<Blob> {
         if (video.readyState < 2) throw new Error('Video not ready');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // 用 PNG 无损编码避免小目标因 JPEG 压缩丢失(体积更大,但保证推理输入与原帧一致)
         const blob: Blob = await new Promise((resolve, reject) => {
-            canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/jpeg', 0.92);
+            canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png');
         });
         const bmp = await createImageBitmap(blob);
         bmp.close();
@@ -645,13 +661,12 @@ export class AIDetectionActions {
      */
     private static convertDetectionResultsToLabelRects(imageData: ImageData, results: DetectionResult[]): void {
         this.createMissingLabelsIfNeeded(results);
-        queueMicrotask(() => {
-            // 单张检测走 batchApplyResults 同样的逻辑
-            this.batchApplyResults(
-                [{ frameIdx: 0, imageData }],
-                [results]
-            );
-        });
+        // 同步写入:调用方紧接着会 addInferenceHistory + fullRender,
+        // 若用 queueMicrotask 会导致 fullRender 时 rects 还没进 store,出现渲染竞态。
+        this.batchApplyResults(
+            [{ frameIdx: 0, imageData }],
+            [results]
+        );
     }
 
     /** 如果检测结果中有未知标签，先创建 */

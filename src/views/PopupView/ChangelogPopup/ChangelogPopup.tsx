@@ -16,6 +16,70 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.0.7',
+        date: '2026-04-15',
+        changes: [
+            { zh: '修复 FastSAM 模型加载失败 ("FastSAM-x.pt is not a supported SAM model")：ultralytics 的 SAM() 类不接受 FastSAM 权重，需要单独的 FastSAM() 类。后端 _create_model 现在按前缀分流：FastSAM-* → FastSAM()，sam_/sam2/mobile_sam → SAM()，其他 → YOLO()', en: 'Fix FastSAM model loading failure ("FastSAM-x.pt is not a supported SAM model"): ultralytics\' SAM() class does not accept FastSAM weights — it has a dedicated FastSAM() class. Backend _create_model now dispatches by prefix: FastSAM-* → FastSAM(), sam_/sam2/mobile_sam → SAM(), others → YOLO()' },
+            { zh: '_is_sam_family() 同时识别 SAM 家族和 FastSAM 家族两套前缀，所有 prompt 路径 (point / bbox / 自动) 对 FastSAM 同样生效', en: '_is_sam_family() now recognises both SAM and FastSAM prefix families, so all prompt paths (point / bbox / automatic) work for FastSAM as well' },
+            { zh: '修复 FastSAM 智能标注遇到边界坐标时 HTTP 500 ("index N is out of bounds for dimension X with size N")：ultralytics FastSAM 的 point/bbox prompt 路径用 mask[y,x] 做过滤但没 clip 坐标，前端浮点→整数偶尔命中正好等于 W 或 H 的 off-by-one 像素直接抛 IndexError。后端 segment() 现在在调模型前先把 point/bbox clip 到 [0, W-1] × [0, H-1]', en: 'Fix FastSAM smart-annotation HTTP 500 at edge coordinates ("index N is out of bounds for dimension X with size N"): ultralytics FastSAM\'s prompt path indexes mask[y,x] without clipping, and frontend float→int rounding occasionally lands exactly on W or H, hitting IndexError. Backend segment() now clips point/bbox to [0, W-1] × [0, H-1] before calling the model' },
+            { zh: '澄清 FastSAM 工作原理：不同于 SAM (真 prompt-driven transformer)，FastSAM 先跑 segment-everything 再用 prompt 过滤包含它的 mask，点不落在分割对象上会返回 0 结果，是 FastSAM 本身的设计 (不是 bug)。推荐交互式点击用 mobile_sam.pt / sam2.1_b.pt', en: 'Clarify FastSAM semantics: unlike SAM (true prompt-driven transformer), FastSAM runs segment-everything first and filters masks by prompt — a point not on any segmented object returns 0 results (FastSAM by design, not a bug). Interactive clicking is best served by mobile_sam.pt / sam2.1_b.pt' },
+        ]
+    },
+    {
+        version: '2.0.6',
+        date: '2026-04-15',
+        changes: [
+            { zh: '「查看所有标签」视图改为 hand 拖拽平移模式：鼠标显示手型光标，按下拖动平移画布 (ViewPortHelper 接管 mouseDown/Move/Up)', en: '"View all labels" now enters hand/pan mode: cursor shows a grab hand, mouse drag pans the canvas via ViewPortHelper' },
+            { zh: '切换标签 tab 时自动重置 cursor 到 DEFAULT，避免从 ALL 视图切过来时 hand 光标残留让用户以为无法编辑', en: 'Switching label tabs now resets the cursor to DEFAULT, so the hand cursor from the ALL view no longer lingers and confuses users into thinking editing is disabled' },
+            { zh: '绘制矩形框 / 绘制多边形 / 智能标注 三者完全互斥：点击任一 tab 会自动停用其他两个，确保用户意图明确', en: 'Draw rect / draw polygon / smart annotation are fully mutually exclusive: clicking any of the three deactivates the others so the active mode is never ambiguous' },
+            { zh: '智能标注 tab 在非 SAM 模式下切换到「分割」tab 会关闭智能标注并回到多边形编辑模式；关闭智能标注时把 activeLabelType 同步到当前 viewType，避免引擎错位', en: 'Exiting smart annotation via a tab click now correctly switches the drawing engine to match the current sidebar view (e.g. polygon editor after clicking 分割 tab)' },
+            { zh: '智能标注点击容差：起止点位移小于 5px 视为点击 → 发单点 prompt；更大位移才发 bbox prompt。避免手抖产生 1×0 的退化 bbox 让 SAM 返回空结果', en: 'Smart annotation click-vs-drag tolerance: <5px movement is treated as a click (point prompt), larger movement as a drag (bbox prompt). Prevents degenerate 1×0 boxes from mouse jitter that SAM returns no mask for' },
+            { zh: '智能标注 pending bbox 指示器改为「半透明白色填充 + 白色描边」一起闪烁，不再只是描边', en: 'Pending bbox indicator now fills with a translucent white AND strokes the outline — both blink together instead of stroke-only' },
+            { zh: '「显示/隐藏标签」按钮重构为真·全局开关：隐藏时矩形框和多边形一起消失（包括 AI 生成和手动创建的）；默认可见状态改为 true（reducer lazy-init + 各 RenderEngine 的 fallback 统一）', en: 'Show/Hide Labels toggle refactored into a true global switch: hiding removes both rects and polygons (AI + manual). Default visibility state flipped to true across reducer lazy-init and all render engine fallbacks' },
+            { zh: '修复 RectRenderEngine 的 ALL 分支忽略 segmentationLabelsVisible 的 bug（切到其他视图再切回隐藏状态会失效）', en: 'Fix: RectRenderEngine\'s ALL-view branch previously ignored segmentationLabelsVisible, making the Hide toggle leak polygons in ALL mode' },
+            { zh: '修复 ALL 视图下多边形填充变深的问题：之前 RectRenderEngine 的 ALL 分支和 AllLabelsRenderEngine 的 polygonEngine 都画了一次多边形，两层 0.2 α 叠加成 0.36。现在只由 polygonEngine.drawExistingLabels 画一次', en: 'Fix darker polygon fill in ALL view: previously both RectRenderEngine\'s ALL branch and AllLabelsRenderEngine\'s polygonEngine drew polygons, stacking 0.2α into ~0.36α. Now polygonEngine.drawExistingLabels is the single source' },
+            { zh: '修复 ALL 视图启用 hand 光标引起的 Maximum update depth 无限渲染循环：新增 RectRenderEngine.drawExistingRects 纯绘制方法，AllLabelsRenderEngine 非智能标注分支调用它，避免 rectEngine.render 的 updateCursorStyle 与 GRAB dispatch 互相翻转', en: 'Fix Maximum-update-depth loop caused by enabling hand cursor in ALL view: added RectRenderEngine.drawExistingRects (pure-draw, no cursor dispatch); AllLabelsRenderEngine calls it in non-smart branches instead of rectEngine.render, breaking the GRAB ↔ updateCursorStyle oscillation' },
+            { zh: '侧栏分组标题与顶栏工具 tooltip 拆分成两组 i18n 键：labelTypes.all/rect/polygon 给侧栏 (查看全部 / 检测标签 / 分割标签)，labelTypes.toolAll/toolRect/toolPolygon 给工具按钮 (查看所有标签 / 绘制矩形框 / 绘制多边形)', en: 'Split sidebar group headers from toolbar tooltips into two i18n key sets: labelTypes.{all,rect,polygon} for sidebar (noun phrases), labelTypes.tool{All,Rect,Polygon} for toolbar tooltips (imperative verb phrases)' },
+            { zh: 'Changelog 弹窗改为固定高度 (max-height 65vh) + 自定义滚动条 + 滚到底部自动懒加载更多条目 (每次加载 3 条)', en: 'Changelog popup uses a fixed height (max-height 65vh), custom scrollbar, and lazy-loads more entries (3 at a time) when scrolled near the bottom' },
+        ]
+    },
+    {
+        version: '2.0.5',
+        date: '2026-04-14',
+        changes: [
+            { zh: '智能标注按钮改为 SAM 家族模型加载时才显示 (未加载直接隐藏，不再 disabled 占位)；tooltip 简化为「智能标注」', en: 'Smart Annotation button is now only shown when a SAM-family model is loaded (hidden instead of disabled when absent); tooltip simplified to "Smart Annotation"' },
+            { zh: 'SAM 推理期间显示进度通知卡片：预处理 → SAM 推理 → 生成多边形 三阶段 (与检测/批量分割通知一致)', en: 'Show a 3-step progress notification during SAM inference: preprocessing → SAM inference → polygon write-back (matches detection / batch-segmentation style)' },
+            { zh: 'Pending prompt 视觉反馈：SAM 推理期间在画布上闪烁显示白色圆点 (point prompt) 或白色半透明填充矩形 (bbox prompt)；推理返回后自动消失', en: 'Pending prompt visual feedback: while SAM is running, a blinking white dot (point prompt) or translucent filled rect (bbox prompt) is rendered on the canvas; cleared when the mask lands' },
+            { zh: '智能标注按钮位置从 zoom 旁移至「显示/隐藏标签」眼睛按钮旁，形成 AI-工具分组', en: 'Smart Annotation button moved from next to zoom controls to beside the Show/Hide Labels (eye) button, forming an AI-tool grouping' },
+            { zh: '智能标注按钮与「全部标签 / 检测标签 / 分割标签」互斥：激活一方自动停用另一方；点击 tab 会自动关闭智能标注', en: 'Smart Annotation toggle is mutually exclusive with the label tabs (All / Rect / Polygon): activating one deactivates the other; clicking any tab auto-deactivates Smart Annotation' },
+            { zh: '智能标注结果落地后自动切换到「分割标签」视图；批量检测推理结果落地后自动切到「检测标签」视图', en: 'Smart-annotation results auto-switch the sidebar to the Polygon view; batch detection results auto-switch to the Rect view' },
+            { zh: '「显示/隐藏标签」按钮现在同时控制检测框 (labelRects) 与分割 mask (labelPolygons)：任一类型有 AI 标签即启用，点击同步翻转两个可见性', en: 'The Show/Hide Labels toggle now controls both detection rects and segmentation masks simultaneously: enabled when either has AI labels, click flips both visibility flags' },
+            { zh: '眼睛按钮 tooltip 简化为「显示标签 / 隐藏标签」', en: 'Eye-toggle tooltip simplified to "Show Labels" / "Hide Labels"' },
+            { zh: '「全部标签」视图改为只读浏览：可看见所有类型标签，但不响应鼠标事件 (不能在此视图创建/编辑)；要编辑请切到「检测标签」或「分割标签」', en: '"All Labels" view is now read-only: shows every label type but does not route mouse events; switch to Rect or Polygon tab to edit' },
+            { zh: 'AllLabelsRenderEngine 在 mountSupportRenderingEngine(ALL) 里真正挂上 (之前被直接替换为 RectRenderEngine)；内部组合 rect/point/line/polygon 四个引擎', en: 'AllLabelsRenderEngine is now actually mounted for ALL view in mountSupportRenderingEngine(ALL) — previously silently substituted with RectRenderEngine; it composes rect / point / line / polygon engines internally' },
+            { zh: 'AllLabelsRenderEngine 现在也渲染多边形 (polygonEngine.drawExistingLabels)，SAM mask 和全图分割结果在 ALL 视图下直接可见', en: 'AllLabelsRenderEngine now also renders polygons via polygonEngine.drawExistingLabels; SAM masks and full-image segmentation results are directly visible in ALL view' },
+            { zh: '多边形渲染改为「始终填充」：不再仅在 active/highlighted 时填充，AI mask 在任何视图下都可见', en: 'Polygon rendering always fills (not just when active/highlighted): AI masks are visible in any view' },
+            { zh: 'PolygonRenderEngine.drawExistingLabels 尊重 segmentationLabelsVisible：AI 多边形受显示/隐藏标签开关控制，手动画的多边形不受影响', en: 'PolygonRenderEngine.drawExistingLabels now respects segmentationLabelsVisible: AI-created polygons follow the Show/Hide Labels toggle, manually drawn polygons are unaffected' },
+            { zh: '智能标注 (source=\'smart\') 路径保证 segmentationLabelsVisible 为 true，避免 SAM mask 刚生成就被隐藏开关干掉', en: 'Smart-annotation (source=\'smart\') path ensures segmentationLabelsVisible=true so freshly generated SAM masks are not immediately hidden by the visibility toggle' },
+            { zh: '视频帧支持：智能标注在 video 项目下通过 FrameExtractorService.fetchFrameRange 实时从 FFmpeg session 取当前帧发送给 SAM', en: 'Video-frame support: in a video project, smart annotation extracts the current frame on demand via FrameExtractorService.fetchFrameRange from the backend FFmpeg session' },
+            { zh: '修复 PolygonRenderEngine.render 在 AllLabelsRenderEngine 里触发的 Maximum update depth 无限渲染循环：改为只调用 drawExistingLabels (无 dispatch 副作用)', en: 'Fix "Maximum update depth exceeded" infinite render loop triggered by PolygonRenderEngine.render inside AllLabelsRenderEngine: switched to drawExistingLabels (no dispatch side-effects)' },
+            { zh: 'SmartAnnotationActions 使用动态 import 引用 AISegmentationActions，打破 EditorActions → RectRenderEngine → SmartAnnotationActions → AISegmentationActions 的循环依赖 (原本导致 ContextManager 初始化失败)', en: 'SmartAnnotationActions dynamically imports AISegmentationActions to break the EditorActions → RectRenderEngine → SmartAnnotationActions → AISegmentationActions import cycle (previously crashed ContextManager init)' },
+            { zh: '智能标注激活时重置到「全部标签」视图，不再强制切换到矩形框工具', en: 'Activating Smart Annotation resets the view to "All Labels"; no longer forces the Rect tool' },
+        ]
+    },
+    {
+        version: '2.0.4',
+        date: '2026-04-14',
+        changes: [
+            { zh: '新增智能标注模式：矩形框工具下点击画布发送 SAM 单点前景 prompt，拖框发送 bbox prompt，返回的 mask 作为多边形标签直接渲染', en: 'Add smart annotation mode: under the rect tool, single click sends a SAM foreground point prompt and drag sends a bbox prompt; returned mask renders as a polygon label' },
+            { zh: '十字线辅助按钮重构为智能标注开关：开启时强制切到矩形工具，十字线作为视觉准星保留', en: 'Crosshair button rebranded as smart annotation toggle: turning it on forces the rect tool active and keeps the crosshair as a visual targeting reticle' },
+            { zh: '未加载 SAM 家族模型时按钮 disabled + tooltip 提示，点击直接打开本地模型加载弹窗引导加载', en: 'Button disabled with tooltip when no SAM-family segmentation model is loaded; clicking it opens the local model popup to guide the user to load SAM' },
+            { zh: '后端 /segment 接口新增 point 参数 ("x,y") 与 bbox 并列支持 SAM 单点 prompt；YOLO-seg 路径忽略 point', en: 'Backend /segment now accepts a point form param ("x,y") alongside bbox to support SAM single-point prompts; YOLO-seg path ignores point' },
+            { zh: '智能标注的结果只追加到 labelPolygons，不写入推理历史和推理结果面板（不污染 batch inference 的视图）', en: 'Smart annotation results are only appended to labelPolygons; they bypass the inference history and results-panel writes used by batch inference' },
+            { zh: 'Redux state general.crossHairVisible 重命名为 smartAnnotationActive 以匹配新语义；持久化字段同步重命名', en: 'Redux state general.crossHairVisible renamed to smartAnnotationActive; persistence (LocalStorage / AutoSave / ProjectRestore) field renamed in sync' },
+        ]
+    },
+    {
         version: '2.0.3',
         date: '2026-04-12',
         changes: [
@@ -35,6 +99,10 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '移除推理结果入库时的重复框过滤（IOU>0.7 + 同类名的 rect 不再被静默丢弃）', en: 'Remove duplicate box filtering at inference write-time (rects with IOU>0.7 + same class name are no longer silently dropped)' },
             { zh: '保持模型原生输出：所有 AI 检测结果原样入库，包括同帧高重叠框、与手动框重叠、多次推理叠加', en: 'Preserve raw model output: all AI detection results are stored as-is, including high-IOU overlaps within a frame, overlaps with manual boxes, and multi-pass inference accumulation' },
             { zh: '删除 AIDetectionActions.checkDuplicateLabelRect 方法 + 未使用的 RectUtil import', en: 'Delete AIDetectionActions.checkDuplicateLabelRect method and unused RectUtil import' },
+            { zh: '新增 ONNX 模型加载：检测/分割服务都支持 .onnx 权重，自动跳过 torch device 迁移交由 onnxruntime 托管', en: 'Add ONNX model loading: both detection and segmentation services accept .onnx weights, automatically skipping torch device placement and delegating to onnxruntime' },
+            { zh: '后端 /upload 接口白名单扩展为 (.pt, .onnx)，/available-models 同时返回缓存目录与 backend/ 下的 .onnx 文件（带后缀以区分运行时）', en: 'Backend /upload now whitelists (.pt, .onnx); /available-models also returns .onnx files from cache and backend/ (with extension preserved to disambiguate runtime)' },
+            { zh: '"加载模型"弹窗的"自定义"分组：".onnx 模型文件"从"即将推出"变为可点击，复用同一上传流程；拖拽区域接受 .pt / .onnx', en: 'Load Model popup "Custom" section: ".onnx model file" entry is now clickable (no longer "coming soon"), reusing the same upload flow; dropzone accepts both .pt and .onnx' },
+            { zh: '后端依赖新增 onnxruntime 1.19.2 + onnx 1.19.1（用于 ultralytics 内部的 ONNX 推理与导出）', en: 'Backend dependencies: onnxruntime 1.19.2 + onnx 1.19.1 added (used by ultralytics for ONNX inference and export)' },
         ]
     },
     {
@@ -639,20 +707,22 @@ interface IProps {
 }
 
 const INITIAL_SHOW_COUNT = 3;
+const LOAD_STEP = 3;
+const SCROLL_BOTTOM_THRESHOLD = 80; // px
 
 const ChangelogPopup: React.FC<IProps> = ({language}) => {
     const currentTexts = LanguageConfig[language];
     const [status, setMountStatus] = useState(false);
-    const [showAll, setShowAll] = useState(false);
-    const [lockedHeight, setLockedHeight] = useState<number | null>(null);
+    const [visibleCount, setVisibleCount] = useState(INITIAL_SHOW_COUNT);
     const bodyRef = React.useRef<HTMLDivElement>(null);
     const isZh = language === Language.CHINESE;
 
-    const handleLoadMore = () => {
-        if (bodyRef.current) {
-            setLockedHeight(bodyRef.current.offsetHeight);
+    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+        const el = e.currentTarget;
+        // 距离底部小于阈值时自动加载更多条目
+        if (el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD) {
+            setVisibleCount(c => Math.min(c + LOAD_STEP, CHANGELOG_DATA.length));
         }
-        setShowAll(true);
     };
 
     useEffect(() => {
@@ -666,8 +736,8 @@ const ChangelogPopup: React.FC<IProps> = ({language}) => {
         PopupActions.close();
     };
 
-    const visibleEntries = showAll ? CHANGELOG_DATA : CHANGELOG_DATA.slice(0, INITIAL_SHOW_COUNT);
-    const hasMore = CHANGELOG_DATA.length > INITIAL_SHOW_COUNT;
+    const visibleEntries = CHANGELOG_DATA.slice(0, visibleCount);
+    const hasMore = visibleCount < CHANGELOG_DATA.length;
 
     const renderContent = () => {
         return (
@@ -685,9 +755,9 @@ const ChangelogPopup: React.FC<IProps> = ({language}) => {
                         </ul>
                     </div>
                 ))}
-                {hasMore && !showAll && (
-                    <div className="LoadMoreButton" onClick={handleLoadMore}>
-                        {isZh ? `加载更多日志 (${CHANGELOG_DATA.length - INITIAL_SHOW_COUNT})` : `Load more (${CHANGELOG_DATA.length - INITIAL_SHOW_COUNT})`}
+                {hasMore && (
+                    <div className="LoadMoreHint">
+                        {isZh ? `继续滚动加载更多 (剩余 ${CHANGELOG_DATA.length - visibleCount})` : `Scroll for more (${CHANGELOG_DATA.length - visibleCount} remaining)`}
                     </div>
                 )}
             </div>
@@ -704,7 +774,7 @@ const ChangelogPopup: React.FC<IProps> = ({language}) => {
                 <div
                     className="PanelBody"
                     ref={bodyRef}
-                    style={lockedHeight ? { height: lockedHeight, overflowY: 'auto' } : undefined}
+                    onScroll={handleScroll}
                 >
                     {renderContent()}
                 </div>

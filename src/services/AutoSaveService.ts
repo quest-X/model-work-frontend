@@ -83,11 +83,11 @@ export class AutoSaveService {
             projectName: state.general.projectData.name,
             zoom: state.general.zoom,
             imageDragMode: state.general.imageDragMode,
-            crossHairVisible: state.general.crossHairVisible,
+            smartAnnotationActive: state.general.smartAnnotationActive,
             currentImageIndex: state.labels.activeImageIndex,
             activeLabelType: state.labels.activeLabelType
         };
-        
+
         LocalStorageManager.saveSettings(settings);
     }
     
@@ -180,7 +180,7 @@ export class AutoSaveService {
                 projectName: state.general.projectData.name,
                 zoom: state.general.zoom,
                 imageDragMode: state.general.imageDragMode,
-                crossHairVisible: state.general.crossHairVisible,
+                smartAnnotationActive: state.general.smartAnnotationActive,
                 currentImageIndex: state.labels.activeImageIndex,
                 activeLabelType: state.labels.activeLabelType
             };

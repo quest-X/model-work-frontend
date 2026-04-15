@@ -27,6 +27,7 @@ import {GeneralSelector} from '../../store/selectors/GeneralSelector';
 import {LabelStatus} from '../../data/enums/LabelStatus';
 import {LabelUtil} from '../../utils/LabelUtil';
 import {Settings} from '../../settings/Settings';
+import {SmartAnnotationActions} from '../actions/SmartAnnotationActions';
 
 export class RectRenderEngine extends BaseRenderEngine {
 
@@ -94,6 +95,14 @@ export class RectRenderEngine extends BaseRenderEngine {
                     }
                 }
             } else {
+                // 智能标注模式：跳过已有矩形的命中测试，永远开启新的 prompt-creation
+                // 这样 click/drag 都会被 mouseUpHandler 的智能标注分支接管
+                if (GeneralSelector.getSmartAnnotationActiveStatus()) {
+                    if (isMouseOverImage) {
+                        this.startRectCreation(data.mousePositionOnViewPortContent);
+                    }
+                    return;
+                }
                 // 编辑模式：先检查锚点，然后只在边缘可以拖拽，内部可以创建新矩形
                 const rectUnderMouseEdge: LabelRect = this.getRectUnderMouse(data);
                 if (!!rectUnderMouseEdge) {
@@ -121,6 +130,29 @@ export class RectRenderEngine extends BaseRenderEngine {
         if (!!data.viewPortContentImageRect) {
             const mousePositionSnapped: IPoint = RectUtil.snapPointToRect(data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
             const activeLabelRect: LabelRect = LabelsSelector.getActiveRectLabel();
+
+            // ── 智能标注劫持：click → SAM 单点 prompt；drag → SAM bbox prompt ──
+            if (GeneralSelector.getSmartAnnotationActiveStatus() && !!this.startCreateRectPoint) {
+                const startInImage: IPoint = RenderEngineUtil.transferPointFromViewPortContentToImage(this.startCreateRectPoint, data);
+                const endInImage: IPoint = RenderEngineUtil.transferPointFromViewPortContentToImage(mousePositionSnapped, data);
+                // 容差判断：起止点在视口空间内小于 5px 的位移视为点击（避免 1-2px 鼠标抖动被当成拖框）
+                const dxView = this.startCreateRectPoint.x - mousePositionSnapped.x;
+                const dyView = this.startCreateRectPoint.y - mousePositionSnapped.y;
+                const isClick = (dxView * dxView + dyView * dyView) < 25; // 5px 半径
+                if (isClick) {
+                    SmartAnnotationActions.firePoint(startInImage);
+                } else {
+                    const rectInImage: IRect = {
+                        x: Math.min(startInImage.x, endInImage.x),
+                        y: Math.min(startInImage.y, endInImage.y),
+                        width: Math.abs(endInImage.x - startInImage.x),
+                        height: Math.abs(endInImage.y - startInImage.y),
+                    };
+                    SmartAnnotationActions.fireBbox(rectInImage);
+                }
+                this.endRectTransformation();
+                return;  // 阻断后续 addRectLabel 路径
+            }
 
             if (!!this.startCreateRectPoint && !PointUtil.equals(this.startCreateRectPoint, mousePositionSnapped)) {
 
@@ -211,33 +243,56 @@ export class RectRenderEngine extends BaseRenderEngine {
     // RENDERING
     // =================================================================================================================
 
+    /**
+     * 纯绘制矩形框（不更新 cursor，不处理在建矩形）。
+     * 供 AllLabelsRenderEngine 在非智能标注模式下调用 —— 避免 updateCursorStyle
+     * 每帧 dispatch cursor 触发 React 无限渲染。
+     */
+    public drawExistingRects(data: EditorData): void {
+        if (!data.viewPortContentImageRect || !data.realImageSize) return;
+        const imageData: ImageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
+        if (!imageData || !imageData.labelRects) return;
+        let aiLabelsVisible = true;
+        const aiState = store.getState().ai.imageAIStates.get(imageData.id);
+        if (aiState) aiLabelsVisible = aiState.aiLabelsVisible;
+        if (!aiLabelsVisible) return;
+        const activeLabelId: string = LabelsSelector.getActiveLabelId();
+        imageData.labelRects.forEach((labelRect: LabelRect) => {
+            if (!labelRect.isVisible) return;
+            if (labelRect.status === LabelStatus.ACCEPTED && labelRect.id === activeLabelId) {
+                this.drawActiveRect(labelRect, data);
+            } else {
+                this.drawInactiveRect(labelRect, data);
+            }
+        });
+    }
+
     public render(data: EditorData) {
         // 确保基础数据完整才开始渲染
         if (!data.viewPortContentImageRect || !data.realImageSize) {
             return; // 图像还没有加载完成，跳过渲染
         }
-        
+
         const activeLabelId: string = LabelsSelector.getActiveLabelId();
         // 播放时直接使用预设的帧数据，绕过 Redux activeImageIndex 查找
         const imageData: ImageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
         
-        // 获取当前图片的AI标签显示状态（高性能缓存优化）
-        let aiLabelsVisible = false;
-        let segmentationLabelsVisible = false;
+        // 获取当前图片的AI标签显示状态（默认可见）
+        let aiLabelsVisible = true;
+        let segmentationLabelsVisible = true;
         let currentImageAIState = null;
         if (imageData) {
             const imageAIStates = store.getState().ai.imageAIStates;
             currentImageAIState = imageAIStates.get(imageData.id);
-            aiLabelsVisible = currentImageAIState ? currentImageAIState.aiLabelsVisible : false;
-            segmentationLabelsVisible = currentImageAIState ? currentImageAIState.segmentationLabelsVisible : false;
+            aiLabelsVisible = currentImageAIState ? currentImageAIState.aiLabelsVisible : true;
+            segmentationLabelsVisible = currentImageAIState ? currentImageAIState.segmentationLabelsVisible : true;
         }
-        
+
         // 渲染矩形框标签
         if (imageData && imageData.labelRects) {
             imageData.labelRects.forEach((labelRect: LabelRect) => {
-                // 检查标签是否应该显示
-                const shouldShow = labelRect.isVisible &&
-                    (labelRect.isCreatedByAI ? aiLabelsVisible : true);
+                // 显示/隐藏标签开关：aiLabelsVisible 为 false 时隐藏所有矩形框（不分 AI 或手动）
+                const shouldShow = labelRect.isVisible && aiLabelsVisible;
 
                 if (shouldShow) {
                     if (labelRect.status === LabelStatus.ACCEPTED && labelRect.id === activeLabelId) {
@@ -254,55 +309,16 @@ export class RectRenderEngine extends BaseRenderEngine {
         // 只有在"全部标签"视图时才渲染其他类型的标签
         const activeLabelViewType = LabelsSelector.getActiveLabelViewType();
         if (imageData && activeLabelViewType === LabelType.ALL) {
-            
-            // 渲染多边形标签
-            if (imageData.labelPolygons) {
-                imageData.labelPolygons.forEach((labelPolygon) => {
-                    let shouldShow = false;
-                    
-                    if (activeLabelViewType === LabelType.ALL) {
-                        // 全部标签视图：显示所有可见的多边形标签
-                        shouldShow = labelPolygon.isVisible && 
-                                   labelPolygon.status === LabelStatus.ACCEPTED;
-                    } else {
-                        // 其他视图：只显示AI生成的多边形标签（如果分割标签可见）
-                        shouldShow = labelPolygon.isVisible && 
-                                   labelPolygon.status === LabelStatus.ACCEPTED &&
-                                   labelPolygon.isCreatedByAI &&
-                                   segmentationLabelsVisible;
-                    }
-                    
-                    if (shouldShow && labelPolygon.vertices && labelPolygon.vertices.length >= 3) {
-                        const lineColor = BaseRenderEngine.resolveLabelLineColor(labelPolygon.labelId, true, labelPolygon.isCreatedByAI);
-                        // 需要将多边形顶点从图像坐标转换为画布坐标
-                        const transformedPoints = labelPolygon.vertices.map((point) => 
-                            RenderEngineUtil.transferPointFromImageToViewPortContent(point, data)
-                        );
-                        const standardizedPoints = transformedPoints.map((point) => RenderEngineUtil.setPointBetweenPixels(point));
-                        
-                        DrawUtil.drawPolygonWithFill(this.canvas, standardizedPoints, DrawUtil.hexToRGB(lineColor, 0.2));
-                        DrawUtil.drawPolygon(this.canvas, standardizedPoints, lineColor, RenderEngineSettings.LINE_THICKNESS);
-                    }
-                });
-            }
-            
-            // 渲染点标签
-            if (imageData.labelPoints) {
+
+            // 注：多边形由 AllLabelsRenderEngine 通过 polygonEngine.drawExistingLabels 渲染，
+            // 这里不再重复画（否则 ALL 视图下会出现两次填充，透明度叠加变浓）
+
+            // 渲染点标签（受 aiLabelsVisible 控制，与矩形框一致）
+            if (imageData.labelPoints && aiLabelsVisible) {
                 imageData.labelPoints.forEach((labelPoint) => {
-                    let shouldShow = false;
-                    
-                    if (activeLabelViewType === LabelType.ALL) {
-                        // 全部标签视图：显示所有可见的点标签
-                        shouldShow = labelPoint.isVisible && 
-                                   labelPoint.status === LabelStatus.ACCEPTED;
-                    } else {
-                        // 其他视图：只显示AI生成的点标签（如果AI标签可见）
-                        shouldShow = labelPoint.isVisible && 
-                                   labelPoint.status === LabelStatus.ACCEPTED &&
-                                   labelPoint.isCreatedByAI &&
-                                   aiLabelsVisible;
-                    }
-                    
+                    const shouldShow = labelPoint.isVisible &&
+                                       labelPoint.status === LabelStatus.ACCEPTED;
+
                     if (shouldShow) {
                         const pointColor = BaseRenderEngine.resolveLabelLineColor(labelPoint.labelId, true, labelPoint.isCreatedByAI);
                         const transformedPoint = RenderEngineUtil.transferPointFromImageToViewPortContent(labelPoint.point, data);
@@ -315,20 +331,11 @@ export class RectRenderEngine extends BaseRenderEngine {
             // 渲染线条标签
             if (imageData.labelLines) {
                 imageData.labelLines.forEach((labelLine) => {
-                    let shouldShow = false;
-                    
-                    if (activeLabelViewType === LabelType.ALL) {
-                        // 全部标签视图：显示所有可见的线条标签
-                        shouldShow = labelLine.isVisible && 
-                                   labelLine.status === LabelStatus.ACCEPTED;
-                    } else {
-                        // 其他视图：只显示AI生成的线条标签（如果AI标签可见）
-                        shouldShow = labelLine.isVisible && 
-                                   labelLine.status === LabelStatus.ACCEPTED &&
-                                   labelLine.isCreatedByAI &&
-                                   aiLabelsVisible;
-                    }
-                    
+                    // 受 aiLabelsVisible 控制
+                    const shouldShow = aiLabelsVisible &&
+                                       labelLine.isVisible &&
+                                       labelLine.status === LabelStatus.ACCEPTED;
+
                     if (shouldShow) {
                         const lineColor = BaseRenderEngine.resolveLabelLineColor(labelLine.labelId, true, labelLine.isCreatedByAI);
                         const transformedStart = RenderEngineUtil.transferPointFromImageToViewPortContent(labelLine.line.start, data);

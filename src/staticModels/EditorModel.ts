@@ -6,6 +6,13 @@ import { ISize } from "../interfaces/ISize";
 import Scrollbars from "react-custom-scrollbars-2";
 import { ViewPortHelper } from "../logic/helpers/ViewPortHelper";
 
+export interface PendingPrompt {
+    id: string;
+    kind: 'point' | 'bbox';
+    point?: IPoint;
+    bbox?: IRect;
+}
+
 export class EditorModel {
     public static editor: HTMLDivElement;
     public static canvas: HTMLCanvasElement;
@@ -35,4 +42,8 @@ export class EditorModel {
     // x and y describe the dimension of the margin that remains constant regardless of the scale of the image
     // width and height describes the render image size for 100% scale
     public static defaultRenderImageRect: IRect;
+
+    // Smart annotation pending prompts (white blinking indicators while SAM is running)
+    public static pendingPrompts: PendingPrompt[] = [];
+    public static pendingPromptsRafId: number | null = null;
 }

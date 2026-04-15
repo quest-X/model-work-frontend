@@ -3,8 +3,11 @@ import './EditorTopNavigationBar.scss';
 import React, { useEffect, useMemo, useCallback, useState, useRef } from 'react';
 import classNames from 'classnames';
 import { AppState } from '../../../store';
+import { store } from '../../../index';
 import { connect } from 'react-redux';
-import { updateCrossHairVisibleStatus, updateImageDragModeStatus } from '../../../store/general/actionCreators';
+import { updateSmartAnnotationActiveStatus, updateImageDragModeStatus, updateActivePopupType, updateCustomCursorStyle } from '../../../store/general/actionCreators';
+import { PopupWindowType } from '../../../data/enums/PopupWindowType';
+import { CustomCursorStyle } from '../../../data/enums/CustomCursorStyle';
 import { GeneralSelector } from '../../../store/selectors/GeneralSelector';
 import { ViewPointSettings } from '../../../settings/ViewPointSettings';
 import { ImageButton } from '../../Common/ImageButton/ImageButton';
@@ -20,7 +23,7 @@ import { Fade, styled, Switch, Tooltip, tooltipClasses, TooltipProps } from '@mu
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {EditorModel} from '../../../staticModels/EditorModel';
 import { ImageUtil } from '../../../utils/ImageUtil';
-import { updateFullImageInferenceStatus, toggleImageAILabelsVisibility, addInferenceHistory } from '../../../store/ai/actionCreators';
+import { updateFullImageInferenceStatus, toggleImageAILabelsVisibility, toggleImageSegmentationLabelsVisibility, addInferenceHistory } from '../../../store/ai/actionCreators';
 import { AIDetectionActions } from '../../../logic/actions/AIDetectionActions';
 import { AISegmentationActions } from '../../../logic/actions/AISegmentationActions';
 import { DetectionAPIDetector } from '../../../ai/DetectionAPIDetector';
@@ -115,15 +118,18 @@ const getButtonWithTooltip = (
 interface IProps {
     activeContext: ContextType;
     updateImageDragModeStatusAction: (imageDragMode: boolean) => any;
-    updateCrossHairVisibleStatusAction: (crossHairVisible: boolean) => any;
+    updateSmartAnnotationActiveStatusAction: (smartAnnotationActive: boolean) => any;
+    updateActivePopupTypeAction: (popupType: PopupWindowType) => any;
     updateFullImageInferenceStatus: (isInProgress: boolean) => any;
     toggleImageAILabelsVisibility: (imageId: string) => any;
+    toggleImageSegmentationLabelsVisibility: (imageId: string) => any;
     addInferenceHistory: (imageId: string, detectedCount: number, success?: boolean) => any;
     imageDragMode: boolean;
-    crossHairVisible: boolean;
+    smartAnnotationActive: boolean;
     isFullImageInferenceInProgress: boolean;
     imageAIStates: Map<string, { aiLabelsVisible: boolean; segmentationLabelsVisible: boolean; inferenceHistory: Array<any> }>;
     activeLabelType: LabelType;
+    activeLabelViewType: LabelType;
     language: Language;
     isAIDisabled: boolean;
     activeImageIndex: number;
@@ -137,15 +143,18 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     {
         activeContext,
         updateImageDragModeStatusAction,
-        updateCrossHairVisibleStatusAction,
+        updateSmartAnnotationActiveStatusAction,
+        updateActivePopupTypeAction,
         updateFullImageInferenceStatus,
         toggleImageAILabelsVisibility,
+        toggleImageSegmentationLabelsVisibility,
         addInferenceHistory,
         imageDragMode,
-        crossHairVisible,
+        smartAnnotationActive,
         isFullImageInferenceInProgress,
         imageAIStates,
         activeLabelType,
+        activeLabelViewType,
         language,
         isAIDisabled,
         activeImageIndex,
@@ -155,15 +164,6 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         updateActiveLabelViewType,
     }) => {
     const currentTexts = useMemo(() => LanguageConfig[language], [language]);
-    
-    // 缓存的辅助函数：根据模型类型获取可用的AI模型
-    const getModelByType = useCallback((modelType: 'detection' | 'segmentation') => {
-        const modelOfType = AIModelsSelector.getActiveModelByType(aiModels, modelType);
-        if (modelOfType) {
-            return modelOfType;
-        }
-        return null;
-    }, [aiModels]);
     
     // 缓存的辅助函数：检查是否有可用的检测模型（只检查用户接入的模型）
     const hasDetectionModel = useMemo(() => {
@@ -189,91 +189,43 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     const imageDragOnClick = useCallback(() => {
         // 切换标签拖拽模式
         updateImageDragModeStatusAction(!imageDragMode);
-        // 如果开启拖拽模式，自动关闭十字光标
-        if (!imageDragMode && crossHairVisible) {
-            updateCrossHairVisibleStatusAction(false);
+        // 开启拖拽模式时自动关闭智能标注
+        if (!imageDragMode && smartAnnotationActive) {
+            updateSmartAnnotationActiveStatusAction(false);
         }
-    }, [imageDragMode, crossHairVisible, updateImageDragModeStatusAction, updateCrossHairVisibleStatusAction]);
-
-    const crossHairOnClick = useCallback(() => {
-        // 切换十字光标
-        updateCrossHairVisibleStatusAction(!crossHairVisible);
-        // 如果开启十字光标，自动关闭拖拽模式
-        if (!crossHairVisible && imageDragMode) {
-            updateImageDragModeStatusAction(false);
-        }
-    }, [crossHairVisible, imageDragMode, updateCrossHairVisibleStatusAction, updateImageDragModeStatusAction]);
-
-    // 确保检测模型可用的辅助函数
-    const ensureDetectionModel = useCallback((): boolean => {
-        const detectionModel = getModelByType('detection');
-        if (detectionModel === null) {
-            return DetectionAPIDetector.isEnabled();
-        }
-        const aiModel = detectionModel as any;
-        if (!aiModel.url) return false;
-        DetectionAPIDetector.setConfig({ url: aiModel.url, enabled: true });
-        return true;
-    }, [getModelByType]);
-
-    // 缓存的目标检测调用函数
-    const fullImageDetectionOnClick = useCallback(() => {
-        const activeImageData = LabelsSelector.getActiveImageData();
-
-        if (!activeImageData) return;
-        if (isFullImageInferenceInProgress) return;
-
-        // 检查是否有多选图像（选中数量 > 1）
-        const selectedImages = imagesData.filter((img: ImageData) => img.isSelected);
-        const isBatchMode = selectedImages.length > 1;
-
-        if (isBatchMode) {
-            // 批量模式：对所有选中的图像进行检测
-            if (!ensureDetectionModel()) return;
-            updateFullImageInferenceStatus(true);
-            AIDetectionActions.detectBatch(selectedImages);
-            return;
-        }
-
-        // 单张模式：原有逻辑
-        const imageAIState = imageAIStates.get(activeImageData.id) || {
-            aiLabelsVisible: false,
-            inferenceHistory: []
-        };
-
-        const currentHasAILabels = activeImageData.labelRects.some((rect: any) => rect.isCreatedByAI);
-
-        if (!imageAIState.aiLabelsVisible) {
-            if (!currentHasAILabels) {
-                if (!ensureDetectionModel()) return;
-                updateFullImageInferenceStatus(true);
-                queueMicrotask(() => {
-                    AIDetectionActions.detectObjects(activeImageData);
-                });
-            } else {
-                toggleImageAILabelsVisibility(activeImageData.id);
-                queueMicrotask(() => { EditorActions.fullRender(); });
-            }
-        } else {
-            toggleImageAILabelsVisibility(activeImageData.id);
-            queueMicrotask(() => { EditorActions.fullRender(); });
-        }
-    }, [imageAIStates, imagesData, isFullImageInferenceInProgress, ensureDetectionModel, updateFullImageInferenceStatus, toggleImageAILabelsVisibility]);
+    }, [imageDragMode, smartAnnotationActive, updateImageDragModeStatusAction, updateSmartAnnotationActiveStatusAction]);
 
     // 标注工具点击处理 - 统一的处理函数
+    // 绘制矩形框 / 绘制多边形 / 智能标注 三者互斥：点击任一 tab 都会关闭智能标注
     const onToolClick = useCallback((toolType: LabelType) => {
-        // 同时切换工具类型和视图类型，实现工具与标签页的完全绑定
+        if (smartAnnotationActive) {
+            updateSmartAnnotationActiveStatusAction(false);
+        }
         updateActiveLabelType(toolType);
         updateActiveLabelViewType(toolType);
-    }, [updateActiveLabelType, updateActiveLabelViewType]);
+        // 切换工具时重置 cursor 到 DEFAULT —— 避免从 ALL 视图切过来时 GRAB 光标残留
+        store.dispatch(updateCustomCursorStyle(CustomCursorStyle.DEFAULT));
+    }, [smartAnnotationActive, updateSmartAnnotationActiveStatusAction, updateActiveLabelType, updateActiveLabelViewType]);
 
-    // 推理结果显示/隐藏（eye 按钮）
+    // 显示/隐藏标签按钮 —— 同时控制矩形框和多边形
+    // 默认可见：未被显式隐藏前两个 flag 都是 true
     const toggleAILabelsOnClick = useCallback(() => {
         const activeImageData = LabelsSelector.getActiveImageData();
         if (!activeImageData) return;
-        toggleImageAILabelsVisibility(activeImageData.id);
+        const aiState = imageAIStates.get(activeImageData.id);
+        const rectsVisible = aiState?.aiLabelsVisible ?? true;
+        const polysVisible = aiState?.segmentationLabelsVisible ?? true;
+        const anyVisible = rectsVisible || polysVisible;
+        // 若任一可见 → 全部隐藏；若都不可见 → 全部显示
+        const target = !anyVisible;
+        if (rectsVisible !== target) {
+            toggleImageAILabelsVisibility(activeImageData.id);
+        }
+        if (polysVisible !== target) {
+            toggleImageSegmentationLabelsVisibility(activeImageData.id);
+        }
         queueMicrotask(() => { EditorActions.fullRender(); });
-    }, [toggleImageAILabelsVisibility]);
+    }, [toggleImageAILabelsVisibility, toggleImageSegmentationLabelsVisibility, imageAIStates]);
 
     // ── 推理下拉菜单 ──
     const [inferenceMode, setInferenceMode] = useState<'detection' | 'segmentation' | 'both'>('detection');
@@ -281,6 +233,35 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     const inferenceMenuRef = useRef<HTMLDivElement>(null);
     const [detModelName, setDetModelName] = useState('');
     const [segModelName, setSegModelName] = useState('');
+
+    // 智能标注需要 SAM 系列分割模型；非 SAM 时按钮置灰并提示加载
+    const isSAMLoaded = useMemo(
+        () => /^(sam2|sam_|mobile_sam|FastSAM)/i.test(segModelName),
+        [segModelName]
+    );
+
+    // 智能标注按钮的点击：未加载 SAM 时打开模型加载弹窗，否则切换模式
+    // 事件路由由 AllLabelsRenderEngine → rectEngine 负责，SAM 劫持在 rectEngine 里
+    const smartAnnotationOnClick = useCallback(() => {
+        if (!isSAMLoaded) {
+            // 引导用户去加载 SAM 模型
+            updateActivePopupTypeAction(PopupWindowType.LOAD_AI_MODEL);
+            return;
+        }
+        const willActivate = !smartAnnotationActive;
+        updateSmartAnnotationActiveStatusAction(willActivate);
+        if (willActivate) {
+            // 激活：挂 AllLabelsRenderEngine（ALL 工具类型），侧栏视图保持不变
+            updateActiveLabelType(LabelType.ALL);
+            if (imageDragMode) {
+                updateImageDragModeStatusAction(false);
+            }
+        } else {
+            // 关闭：把 activeLabelType 对齐到当前 viewType，这样用户看到的 tab
+            // 对应的渲染引擎也被挂上（检测→RECT 引擎 / 分割→POLYGON 引擎 / 全部→ALL 只读）
+            updateActiveLabelType(activeLabelViewType);
+        }
+    }, [isSAMLoaded, smartAnnotationActive, imageDragMode, activeLabelViewType, updateSmartAnnotationActiveStatusAction, updateImageDragModeStatusAction, updateActiveLabelType, updateActivePopupTypeAction]);
 
     // 轮询后端获取当前模型名 + 自动切换推理模式
     useEffect(() => {
@@ -407,27 +388,13 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 }
             </div>
             <div className='ButtonWrapper'>
-                {/* Hand/drag mode hidden — edit mode already supports edge-drag */}
-                {
-                    getButtonWithTooltip(
-                        'cursor-cross-hair',
-                        crossHairVisible ? currentTexts.editorTopNavBar.crossHairOn : currentTexts.editorTopNavBar.crossHairOff,
-                        'ico/cross-hair.png',
-                        'cross-hair',
-                        crossHairVisible,
-                        undefined,
-                        crossHairOnClick
-                    )
-                }
-            </div>
-            <div className='ButtonWrapper'>
                 {
                     getButtonWithTooltip(
                         'tool-all',
-                        currentTexts.labelTypes?.all || '全部标签',
+                        currentTexts.labelTypes?.toolAll || '查看所有标签',
                         'ico/all.png',
                         'tool-all',
-                        activeLabelType === LabelType.ALL,
+                        !smartAnnotationActive && activeLabelViewType === LabelType.ALL,
                         undefined,
                         () => onToolClick(LabelType.ALL)
                     )
@@ -435,10 +402,10 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 {
                     getButtonWithTooltip(
                         'tool-rect',
-                        currentTexts.labelTypes?.rect || '矩形框',
+                        currentTexts.labelTypes?.toolRect || '绘制矩形框',
                         'ico/rectangle.png',
                         'tool-rect',
-                        activeLabelType === LabelType.RECT,
+                        !smartAnnotationActive && activeLabelViewType === LabelType.RECT,
                         undefined,
                         () => onToolClick(LabelType.RECT)
                     )
@@ -470,32 +437,49 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 {
                     getButtonWithTooltip(
                         'tool-polygon',
-                        currentTexts.labelTypes?.polygon || '多边形',
+                        currentTexts.labelTypes?.toolPolygon || '绘制多边形',
                         'ico/polygon.png',
                         'tool-polygon',
-                        activeLabelType === LabelType.POLYGON,
+                        !smartAnnotationActive && activeLabelViewType === LabelType.POLYGON,
                         undefined,
                         () => onToolClick(LabelType.POLYGON)
                     )
                 }
             </div>
             <div className='ButtonWrapper'>
+                {/* 智能标注按钮：只有加载了 SAM 家族模型才显示 */}
+                {isSAMLoaded && getButtonWithTooltip(
+                    'smart-annotation',
+                    currentTexts.editorTopNavBar.smartAnnotationOn,
+                    'ico/cross-hair.png',
+                    'smart-annotation',
+                    smartAnnotationActive,
+                    undefined,
+                    smartAnnotationOnClick
+                )}
                 {useMemo(() => {
                     const activeImageData = LabelsSelector.getActiveImageData();
                     const hasImage = imagesData.length > 0;
                     const aiState = activeImageData ? imageAIStates.get(activeImageData.id) : null;
-                    const aiLabelsVisible = aiState?.aiLabelsVisible ?? false;
-                    const hasAI = hasImage && (activeImageData?.labelRects?.some((r: any) => r.isCreatedByAI) || false);
-                    const isDisabled = !hasImage || !hasAI;
+                    // 默认可见（reducer lazy-init 也是 true）
+                    const rectsVisible = aiState?.aiLabelsVisible ?? true;
+                    const polysVisible = aiState?.segmentationLabelsVisible ?? true;
+                    const anyVisible = rectsVisible || polysVisible;
+                    // 图像上有任何标签（rect 或 polygon，AI 或手动）就可以用切换按钮
+                    const hasAnyLabel = hasImage && (
+                        (activeImageData?.labelRects?.length || 0) > 0 ||
+                        (activeImageData?.labelPolygons?.length || 0) > 0
+                    );
+                    const isDisabled = !hasImage || !hasAnyLabel;
                     const icon = isDisabled ? 'ico/eye-slash.png'
-                        : aiLabelsVisible ? 'ico/eye.png' : 'ico/eye-off.png';
+                        : anyVisible ? 'ico/eye.png' : 'ico/eye-off.png';
 
                     return getButtonWithTooltip(
                         'toggle-ai-labels',
-                        isDisabled ? '无推理结果' : aiLabelsVisible ? '隐藏推理结果' : '显示推理结果',
+                        anyVisible ? '隐藏标签' : '显示标签',
                         icon,
                         'toggle-ai-labels',
-                        aiLabelsVisible,
+                        anyVisible,
                         undefined,
                         isDisabled ? undefined : toggleAILabelsOnClick,
                         isDisabled
@@ -578,9 +562,11 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 
 const mapDispatchToProps = {
     updateImageDragModeStatusAction: updateImageDragModeStatus,
-    updateCrossHairVisibleStatusAction: updateCrossHairVisibleStatus,
+    updateSmartAnnotationActiveStatusAction: updateSmartAnnotationActiveStatus,
+    updateActivePopupTypeAction: updateActivePopupType,
     updateFullImageInferenceStatus,
     toggleImageAILabelsVisibility,
+    toggleImageSegmentationLabelsVisibility,
     addInferenceHistory,
     updateActiveLabelType,
     updateActiveLabelViewType
@@ -589,10 +575,11 @@ const mapDispatchToProps = {
 const mapStateToProps = (state: AppState) => ({
     activeContext: state.general.activeContext,
     imageDragMode: state.general.imageDragMode,
-    crossHairVisible: state.general.crossHairVisible,
+    smartAnnotationActive: state.general.smartAnnotationActive,
     isFullImageInferenceInProgress: state.ai.isFullImageInferenceInProgress,
     imageAIStates: state.ai.imageAIStates,
     activeLabelType: state.labels.activeLabelType,
+    activeLabelViewType: state.labels.activeLabelViewType,
     language: state.general.language,
     isAIDisabled: state.ai.isAIDisabled,
     activeImageIndex: state.labels.activeImageIndex,

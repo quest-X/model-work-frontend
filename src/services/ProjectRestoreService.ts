@@ -1,7 +1,7 @@
 import { store } from '../index';
 import { LocalStorageManager } from '../utils/LocalStorageManager';
 import { IndexedDBManager, StoredProjectData } from '../utils/IndexedDBManager';
-import { updateLanguage, updateZoom, updateImageDragModeStatus, updateCrossHairVisibleStatus } from '../store/general/actionCreators';
+import { updateLanguage, updateZoom, updateImageDragModeStatus, updateSmartAnnotationActiveStatus } from '../store/general/actionCreators';
 import { updateActiveImageIndex, updateActiveLabelType, updateLabelNames, updateImageDataById, addImageData, updateImageData } from '../store/labels/actionCreators';
 import { updateSegmentationResults } from '../store/ai/actionCreators';
 import { updateVideoMode, addVideoData } from '../store/video/actionCreators';
@@ -38,7 +38,7 @@ export class ProjectRestoreService {
             store.dispatch(updateLanguage(settings.language));
             store.dispatch(updateZoom(settings.zoom));
             store.dispatch(updateImageDragModeStatus(settings.imageDragMode));
-            store.dispatch(updateCrossHairVisibleStatus(settings.crossHairVisible));
+            store.dispatch(updateSmartAnnotationActiveStatus(settings.smartAnnotationActive));
             store.dispatch(updateActiveImageIndex(settings.currentImageIndex));
             store.dispatch(updateActiveLabelType(settings.activeLabelType as LabelType));
             

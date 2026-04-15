@@ -93,6 +93,10 @@ export interface LanguageTexts {
         point: string;
         line: string;
         polygon: string;
+        // Tool-button tooltip variants (imperative verbs) — differ from sidebar header labels
+        toolAll: string;
+        toolRect: string;
+        toolPolygon: string;
     };
     
     // Popup Windows
@@ -226,8 +230,9 @@ export interface LanguageTexts {
         maxZoom: string;
         imageDragModeOn: string;
         imageDragModeOff: string;
-        crossHairOn: string;
-        crossHairOff: string;
+        smartAnnotationOn: string;
+        smartAnnotationOff: string;
+        smartAnnotationNeedsSAM: string;
         acceptAllDetections: string;
         rejectAllDetections: string;
         enableSegmentation: string;
@@ -521,12 +526,16 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         
         // Label Toolkit
         labelTypes: {
-            all: '全部标签',
+            all: '查看全部',
             imageRecognition: '图像识别',
             rect: '检测标签',
             point: '点',
             line: '线条',
-            polygon: '分割标签'
+            polygon: '分割标签',
+            // 顶栏工具按钮 tooltip：祈使句式
+            toolAll: '查看所有标签',
+            toolRect: '绘制矩形框',
+            toolPolygon: '绘制多边形',
         },
         
         // Popup Windows
@@ -660,8 +669,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             maxZoom: '原尺寸大小',
             imageDragModeOn: '开启拖拽',
             imageDragModeOff: '关闭拖拽',
-            crossHairOn: '关闭十字线辅助',
-            crossHairOff: '开启十字线辅助',
+            smartAnnotationOn: '智能标注',
+            smartAnnotationOff: '智能标注',
+            smartAnnotationNeedsSAM: '请先加载 SAM 模型',
             acceptAllDetections: '接受所有建议的检测',
             rejectAllDetections: '拒绝所有建议的检测',
             enableSegmentation: '开启分割',
@@ -702,7 +712,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             rejectLabel: '返回',
             active: '使用中',
             downloaded: '已下载',
-            uploadMessage: '拖拽自定义 .pt 模型文件到下方区域，上传到推理服务器使用。',
+            uploadMessage: '拖拽自定义 {ext} 模型文件到下方区域，上传到推理服务器使用。',
             officialMessage: '选择 {name} 官方预训练模型变体，服务器将自动下载并加载。',
             downloading: '正在下载模型...',
             loading: '正在加载模型...',
@@ -711,7 +721,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             preparing: '准备中...',
             loadFailed: '加载失败',
             connectionFailed: '无法连接服务器',
-            dragModel: '拖拽 .pt 模型文件',
+            dragModel: '拖拽 {ext} 模型文件',
             clickToSelect: '点击上传',
         },
 
@@ -953,12 +963,16 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         
         // Label Toolkit
         labelTypes: {
-            all: 'All Labels',
+            all: 'All labels',
             imageRecognition: 'Image recognition',
-            rect: 'Detection',
+            rect: 'Detection labels',
             point: 'Point',
             line: 'Line',
-            polygon: 'Segmentation'
+            polygon: 'Segmentation labels',
+            // Top-nav tool-button tooltips (imperative)
+            toolAll: 'View all labels',
+            toolRect: 'Draw rectangles',
+            toolPolygon: 'Draw polygons',
         },
         
         // Popup Windows
@@ -1092,8 +1106,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             maxZoom: 'Original Size',
             imageDragModeOn: 'Enable Drag',
             imageDragModeOff: 'Disable Drag',
-            crossHairOn: 'Disable Crosshair',
-            crossHairOff: 'Enable Crosshair',
+            smartAnnotationOn: 'Smart annotation',
+            smartAnnotationOff: 'Smart annotation',
+            smartAnnotationNeedsSAM: 'Load a SAM model first',
             acceptAllDetections: 'accept all proposed detections',
             rejectAllDetections: 'reject all proposed detections',
             enableSegmentation: 'Enable Segmentation',
@@ -1134,7 +1149,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             rejectLabel: 'Back',
             active: 'Active',
             downloaded: 'Downloaded',
-            uploadMessage: 'Drag and drop a custom .pt model file to the area below to upload to the inference server.',
+            uploadMessage: 'Drag and drop a custom {ext} model file to the area below to upload to the inference server.',
             officialMessage: 'Select {name} official pretrained model variant, the server will automatically download and load it.',
             downloading: 'Downloading model...',
             loading: 'Loading model...',
@@ -1143,7 +1158,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             preparing: 'Preparing...',
             loadFailed: 'Load failed',
             connectionFailed: 'Cannot connect to server',
-            dragModel: 'Drag .pt model file',
+            dragModel: 'Drag {ext} model file',
             clickToSelect: 'Click to upload',
         },
 

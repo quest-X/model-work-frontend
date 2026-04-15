@@ -217,28 +217,87 @@ export class PolygonRenderEngine extends BaseRenderEngine {
         }
     }
 
-    private drawExistingLabels(data: EditorData) {
+    public drawExistingLabels(data: EditorData) {
         const activeLabelId: string = LabelsSelector.getActiveLabelId();
         const highlightedLabelId: string = LabelsSelector.getHighlightedLabelId();
         const imageData: ImageData = LabelsSelector.getActiveImageData();
+        if (!imageData) return;
+        // 显示/隐藏标签开关：segmentationLabelsVisible 为 false 时隐藏所有多边形
+        // 默认可见，与 reducer lazy-init 对齐
+        const aiState = store.getState().ai.imageAIStates.get(imageData.id);
+        const segmentationLabelsVisible: boolean = aiState?.segmentationLabelsVisible ?? true;
+        if (!segmentationLabelsVisible) return;
         imageData.labelPolygons.forEach((labelPolygon: LabelPolygon) => {
-            if (labelPolygon.isVisible) {
-                const isActive: boolean = labelPolygon.id === activeLabelId || labelPolygon.id === highlightedLabelId;
-                const pathOnCanvas: IPoint[] = RenderEngineUtil.transferPolygonFromImageToViewPortContent(labelPolygon.vertices, data);
-                if (!(labelPolygon.id === activeLabelId && this.isResizeInProgress())) {
-                    this.drawPolygon(labelPolygon.labelId, pathOnCanvas, isActive);
-                }
+            if (!labelPolygon.isVisible) return;
+            const isActive: boolean = labelPolygon.id === activeLabelId || labelPolygon.id === highlightedLabelId;
+            const pathOnCanvas: IPoint[] = RenderEngineUtil.transferPolygonFromImageToViewPortContent(labelPolygon.vertices, data);
+            if (!(labelPolygon.id === activeLabelId && this.isResizeInProgress())) {
+                this.drawPolygon(labelPolygon.labelId, pathOnCanvas, isActive);
             }
+            this.drawLabelText(labelPolygon, pathOnCanvas);
         });
+    }
+
+    private drawLabelText(labelPolygon: LabelPolygon, pathOnCanvas: IPoint[]): void {
+        let labelText = '';
+        if (labelPolygon.labelId) {
+            const labelName = LabelsSelector.getLabelNameById(labelPolygon.labelId);
+            if (labelName) labelText = labelName.name;
+        } else if ((labelPolygon as any).suggestedLabel) {
+            labelText = (labelPolygon as any).suggestedLabel;
+        }
+        if (!labelText || pathOnCanvas.length === 0) return;
+
+        const center: IPoint = pathOnCanvas.reduce(
+            (acc: IPoint, p: IPoint) => ({x: acc.x + p.x, y: acc.y + p.y}),
+            {x: 0, y: 0}
+        );
+        center.x /= pathOnCanvas.length;
+        center.y /= pathOnCanvas.length;
+
+        const fontSize = 12;
+        const textWidth = labelText.length * fontSize * 0.6;
+        const bgWidth = textWidth + 8;
+        const bgHeight = 16;
+        const labelBg: IRect = {
+            x: center.x - bgWidth / 2,
+            y: center.y - bgHeight / 2,
+            width: bgWidth,
+            height: bgHeight
+        };
+
+        let bgColor = 'rgba(255, 255, 255, 0.8)';
+        const perClassColor = GeneralSelector.getEnablePerClassColorationStatus();
+        if (perClassColor && labelPolygon.labelId) {
+            const labelName = LabelsSelector.getLabelNameById(labelPolygon.labelId);
+            if (labelName && labelName.color) {
+                const hex = labelName.color.replace('#', '');
+                const r = parseInt(hex.substring(0, 2), 16);
+                const g = parseInt(hex.substring(2, 4), 16);
+                const b = parseInt(hex.substring(4, 6), 16);
+                bgColor = `rgba(${r}, ${g}, ${b}, 0.8)`;
+            }
+        }
+
+        DrawUtil.drawRectWithFill(this.canvas, labelBg, bgColor);
+        DrawUtil.drawText(
+            this.canvas,
+            labelText,
+            fontSize,
+            {x: labelBg.x + labelBg.width / 2, y: labelBg.y + labelBg.height / 2},
+            perClassColor ? '#FFFFFF' : '#000000',
+            true,
+            'center'
+        );
     }
 
     private drawPolygon(labelId: string | null, polygon: IPoint[], isActive: boolean) {
         const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelId, true)
         const anchorColor: string = BaseRenderEngine.resolveLabelAnchorColor(true)
         const standardizedPoints: IPoint[] = polygon.map((point: IPoint) => RenderEngineUtil.setPointBetweenPixels(point));
-        if (isActive) {
-            DrawUtil.drawPolygonWithFill(this.canvas, standardizedPoints, DrawUtil.hexToRGB(lineColor, 0.2));
-        }
+        // 始终填充多边形（半透明 20%），active 时颜色加深到 30% 以做视觉区分
+        const fillAlpha = isActive ? 0.3 : 0.2;
+        DrawUtil.drawPolygonWithFill(this.canvas, standardizedPoints, DrawUtil.hexToRGB(lineColor, fillAlpha));
         DrawUtil.drawPolygon(this.canvas, standardizedPoints, lineColor, RenderEngineSettings.LINE_THICKNESS);
         if (isActive) {
             standardizedPoints.forEach((point: IPoint) => {

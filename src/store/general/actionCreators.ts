@@ -60,11 +60,11 @@ export function updateImageDragModeStatus(imageDragMode: boolean): GeneralAction
     };
 }
 
-export function updateCrossHairVisibleStatus(crossHairVisible: boolean): GeneralActionTypes {
+export function updateSmartAnnotationActiveStatus(smartAnnotationActive: boolean): GeneralActionTypes {
     return {
-        type: Action.UPDATE_CROSS_HAIR_VISIBLE_STATUS,
+        type: Action.UPDATE_SMART_ANNOTATION_ACTIVE_STATUS,
         payload: {
-            crossHairVisible,
+            smartAnnotationActive,
         },
     };
 }

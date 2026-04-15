@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 from pydantic import BaseModel
@@ -126,7 +126,13 @@ def available_models():
 
 
 @app.post("/detect")
-async def detect(file: UploadFile = File(...)):
+async def detect(
+    file: UploadFile = File(...),
+    conf: Optional[float] = Form(None),
+    iou: Optional[float] = Form(None),
+    imgsz: Optional[int] = Form(None),
+    max_det: Optional[int] = Form(None),
+):
     if _model is None:
         raise HTTPException(status_code=503, detail="没有加载的模型，请先加载模型")
 
@@ -136,12 +142,19 @@ async def detect(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"无法解析图片: {e}")
 
-    results = _model.predict(
-        source=image,
-        conf=_conf_threshold,
-        iou=_iou_threshold,
-        verbose=False,
-    )
+    # 请求级参数覆盖服务级默认值
+    predict_kwargs = {
+        "source": image,
+        "conf": conf if conf is not None else _conf_threshold,
+        "iou": iou if iou is not None else _iou_threshold,
+        "verbose": False,
+    }
+    if imgsz is not None:
+        predict_kwargs["imgsz"] = imgsz
+    if max_det is not None:
+        predict_kwargs["max_det"] = max_det
+
+    results = _model.predict(**predict_kwargs)
 
     detections = []
     if results and len(results) > 0:

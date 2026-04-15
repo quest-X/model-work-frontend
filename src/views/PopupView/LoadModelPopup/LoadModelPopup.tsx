@@ -36,9 +36,11 @@ export const SEG_MODEL_FAMILIES: YOLOModelFamily[] = [
 // Module-level state shared between LoadModelPopup and LoadYOLOModelPopup
 let _selectedModelFamily: YOLOModelFamily | null = null;
 let _serverUrl: string = 'http://localhost:8000';
+let _selectedCustomExt: 'pt' | 'onnx' | null = null;
 
 export const getSelectedModelFamily = (): YOLOModelFamily | null => _selectedModelFamily;
 export const getServerUrl = (): string => _serverUrl;
+export const getSelectedCustomExt = (): 'pt' | 'onnx' | null => _selectedCustomExt;
 
 interface IProps {
     updateActivePopupType: (activePopupType: PopupWindowType) => GeneralActionTypes;
@@ -77,9 +79,10 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
     };
 
     const onAccept = () => {
-        if (selectedId === 'custom-pt') {
+        if (selectedId === 'custom-pt' || selectedId === 'custom-onnx') {
             _selectedModelFamily = null;
             _serverUrl = serverUrl;
+            _selectedCustomExt = selectedId === 'custom-onnx' ? 'onnx' : 'pt';
             updateActivePopupType(PopupWindowType.LOAD_YOLO_V5_MODEL);
             return;
         }
@@ -88,6 +91,7 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
         if (!family) return;
         _selectedModelFamily = family;
         _serverUrl = serverUrl;
+        _selectedCustomExt = null;
         updateActivePopupType(PopupWindowType.LOAD_YOLO_V5_MODEL);
     };
 
@@ -142,9 +146,16 @@ const LoadModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
                         />
                         {zhTexts ? '模型 .pt 文件' : '.pt model file'}
                     </div>
-                    <div className='OptionsItem disabled'>
-                        <img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />
-                        {zhTexts ? '模型 .onnx 文件（即将推出）' : '.onnx model file (coming soon)'}
+                    <div
+                        className='OptionsItem'
+                        onClick={() => onSelect('custom-onnx')}
+                    >
+                        <img
+                            draggable={false}
+                            src={selectedId === 'custom-onnx' ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'}
+                            alt={selectedId === 'custom-onnx' ? 'checked' : 'unchecked'}
+                        />
+                        {zhTexts ? '模型 .onnx 文件' : '.onnx model file'}
                     </div>
                     <div className='OptionsItem disabled'>
                         <img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />

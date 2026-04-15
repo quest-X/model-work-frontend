@@ -2,10 +2,46 @@ import axios from 'axios';
 import {IRect} from '../interfaces/IRect';
 import {ImageData} from '../store/labels/types';
 import {EditorModel} from '../staticModels/EditorModel';
+import {store} from '../index';
+import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
+
+export interface InferenceParams {
+    conf: number;
+    iou: number;
+    imgsz: number;
+    max_det: number;
+}
 
 export interface DetectionAPIConfig {
     url: string;
     enabled: boolean;
+}
+
+const INFERENCE_PARAMS_STORAGE_KEY = 'detectionAPI.inferenceParams';
+
+// 默认与 ultralytics v8+ 保持一致(iou=0.7,不是 YOLOv5 的 0.45);
+// 前端发 0.45 会让 NMS 比后端原行为更激进,结果更少。
+export const DEFAULT_INFERENCE_PARAMS: InferenceParams = {
+    conf: 0.25,
+    iou: 0.7,
+    imgsz: 640,
+    max_det: 300
+};
+
+function loadInferenceParams(): InferenceParams {
+    try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(INFERENCE_PARAMS_STORAGE_KEY) : null;
+        if (!raw) return { ...DEFAULT_INFERENCE_PARAMS };
+        const parsed = JSON.parse(raw);
+        return {
+            conf: typeof parsed.conf === 'number' ? parsed.conf : DEFAULT_INFERENCE_PARAMS.conf,
+            iou: typeof parsed.iou === 'number' ? parsed.iou : DEFAULT_INFERENCE_PARAMS.iou,
+            imgsz: typeof parsed.imgsz === 'number' ? parsed.imgsz : DEFAULT_INFERENCE_PARAMS.imgsz,
+            max_det: typeof parsed.max_det === 'number' ? parsed.max_det : DEFAULT_INFERENCE_PARAMS.max_det
+        };
+    } catch {
+        return { ...DEFAULT_INFERENCE_PARAMS };
+    }
 }
 
 export interface DetectionBbox {
@@ -40,6 +76,8 @@ export class DetectionAPIDetector {
         enabled: true
     };
 
+    private static inferenceParams: InferenceParams = loadInferenceParams();
+
     public static setConfig(config: DetectionAPIConfig) {
         this.config = config;
     }
@@ -50,6 +88,57 @@ export class DetectionAPIDetector {
 
     public static isEnabled(): boolean {
         return this.config.enabled;
+    }
+
+    public static getInferenceParams(): InferenceParams {
+        return { ...this.inferenceParams };
+    }
+
+    public static setInferenceParams(params: Partial<InferenceParams>) {
+        this.inferenceParams = {
+            ...this.inferenceParams,
+            ...params
+        };
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(INFERENCE_PARAMS_STORAGE_KEY, JSON.stringify(this.inferenceParams));
+            }
+        } catch { /* ignore */ }
+    }
+
+    /**
+     * 从 store 里拉最新的 activeModel,同步到静态 config。
+     * 返回 true 表示可以继续推理(有可用 detection 模型或 config 仍有效),false 表示应中止。
+     */
+    private static syncFromActiveModel(): { ok: boolean; reason?: string } {
+        try {
+            const state = store.getState();
+            const active = AIModelsSelector.getActiveAIModel(state);
+            if (active) {
+                if (active.modelType !== 'detection') {
+                    return { ok: false, reason: `Active model "${active.name}" is ${active.modelType}, not detection` };
+                }
+                if (!active.url) {
+                    return { ok: false, reason: `Active model "${active.name}" has no url` };
+                }
+                this.config = { url: active.url, enabled: true };
+                return { ok: true };
+            }
+            // 没有 activeModel 时回退到 config(由老弹窗设置的 URL)
+            if (this.config.enabled && this.config.url) return { ok: true };
+            return { ok: false, reason: 'No active AI model and detection API not configured' };
+        } catch (e) {
+            // store 读取失败不阻塞,沿用 config
+            return this.config.enabled ? { ok: true } : { ok: false, reason: 'Detection API disabled' };
+        }
+    }
+
+    private static appendInferenceParams(formData: FormData) {
+        const p = this.inferenceParams;
+        formData.append('conf', String(p.conf));
+        formData.append('iou', String(p.iou));
+        formData.append('imgsz', String(p.imgsz));
+        formData.append('max_det', String(p.max_det));
     }
 
     /**
@@ -63,9 +152,10 @@ export class DetectionAPIDetector {
         onSuccess?: (results: DetectionResult[]) => void,
         onFailure?: (error: any) => void
     ): Promise<void> {
-        if (!this.config.enabled) {
-            console.warn('Detection API is disabled');
-            if (onFailure) onFailure(new Error('Detection API is disabled'));
+        const sync = this.syncFromActiveModel();
+        if (!sync.ok) {
+            console.warn('Detection API unavailable:', sync.reason);
+            if (onFailure) onFailure(new Error(sync.reason || 'Detection API is disabled'));
             return;
         }
 
@@ -93,9 +183,9 @@ export class DetectionAPIDetector {
                     canvas.toBlob((b) => {
                         if (b) resolve(b);
                         else reject(new Error('Failed to capture video frame'));
-                    }, 'image/jpeg', 0.95);
+                    }, 'image/png');
                 });
-                formData.append('file', blob, 'video_frame.jpg');
+                formData.append('file', blob, 'video_frame.png');
             } else if (EditorModel.videoFrameImage) {
                 // fast_ffmpeg_mode (full-load or on-demand): capture pixels from the decoded frame Image
                 const img = EditorModel.videoFrameImage;
@@ -108,15 +198,17 @@ export class DetectionAPIDetector {
                     canvas.toBlob((b) => {
                         if (b) resolve(b);
                         else reject(new Error('Failed to capture frame image'));
-                    }, 'image/jpeg', 0.95);
+                    }, 'image/png');
                 });
-                formData.append('file', blob, 'frame.jpg');
+                formData.append('file', blob, 'frame.png');
             } else if (imageData.fileData && imageData.fileData.size > 0) {
                 // 图像模式：直接发送原始文件
                 formData.append('file', imageData.fileData, imageData.fileData.name || 'image.jpg');
             } else {
                 throw new Error('No image file data available');
             }
+
+            this.appendInferenceParams(formData);
 
             console.log('Calling detection API...');
 
@@ -205,12 +297,14 @@ export class DetectionAPIDetector {
      * @param filename 文件名
      */
     public static async predictFromBlob(blob: Blob, filename: string = 'frame.jpg'): Promise<DetectionResult[]> {
-        if (!this.config.enabled) {
-            throw new Error('Detection API is disabled');
+        const sync = this.syncFromActiveModel();
+        if (!sync.ok) {
+            throw new Error(sync.reason || 'Detection API is disabled');
         }
 
         const formData = new FormData();
         formData.append('file', blob, filename);
+        this.appendInferenceParams(formData);
 
         const response = await axios.post<DetectionAPIResponse>(
             this.config.url,

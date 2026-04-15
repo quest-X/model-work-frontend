@@ -43,16 +43,21 @@
 
     .PanelBody {
         padding: 16px 24px 20px;
+        max-height: 65vh;
+        overflow-y: auto;
 
         &::-webkit-scrollbar {
-            width: 4px;
+            width: 6px;
         }
         &::-webkit-scrollbar-track {
             background: transparent;
         }
         &::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.15);
-            border-radius: 2px;
+            border-radius: 3px;
+        }
+        &::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.25);
         }
     }
 
@@ -127,23 +132,11 @@
         }
     }
 
-    .LoadMoreButton {
-        display: block;
-        margin: 10px 0 0;
-        padding: 6px 0;
+    .LoadMoreHint {
+        padding: 10px 0 4px;
         font-size: 11px;
-        color: #888;
-        cursor: pointer;
-        border: none;
-        border-radius: 3px;
-        background-color: rgba(255, 255, 255, 0.06);
+        color: #555;
         text-align: center;
-        transition: all 0.15s ease;
-        width: 100%;
-
-        &:hover {
-            color: #ccc;
-            background-color: rgba(255, 255, 255, 0.1);
-        }
+        font-style: italic;
     }
 }

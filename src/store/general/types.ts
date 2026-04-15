@@ -17,7 +17,7 @@ export type GeneralState = {
     customCursorStyle: CustomCursorStyle;
     preventCustomCursor: boolean;
     imageDragMode: boolean;
-    crossHairVisible: boolean;
+    smartAnnotationActive: boolean;
     enablePerClassColoration: boolean;
     activeContext: ContextType;
     projectData: ProjectData;
@@ -74,10 +74,10 @@ interface UpdateImageDragModeStatus {
     }
 }
 
-interface UpdateCrossHairVisibleStatus {
-    type: typeof Action.UPDATE_CROSS_HAIR_VISIBLE_STATUS;
+interface UpdateSmartAnnotationActiveStatus {
+    type: typeof Action.UPDATE_SMART_ANNOTATION_ACTIVE_STATUS;
     payload: {
-        crossHairVisible: boolean;
+        smartAnnotationActive: boolean;
     }
 }
 
@@ -109,7 +109,7 @@ export type GeneralActionTypes = UpdateProjectData
     | UpdateActiveContext
     | UpdatePreventCustomCursorStatus
     | UpdateImageDragModeStatus
-    | UpdateCrossHairVisibleStatus
+    | UpdateSmartAnnotationActiveStatus
     | UpdateZoom
     | UpdatePerClassColoration
     | UpdateLanguage

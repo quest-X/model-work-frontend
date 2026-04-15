@@ -21,8 +21,8 @@ export class GeneralSelector {
         return store.getState().general.imageDragMode;
     }
 
-    public static getCrossHairVisibleStatus(): boolean {
-        return store.getState().general.crossHairVisible;
+    public static getSmartAnnotationActiveStatus(): boolean {
+        return store.getState().general.smartAnnotationActive;
     }
 
     public static getCustomCursorStyle(): CustomCursorStyle {

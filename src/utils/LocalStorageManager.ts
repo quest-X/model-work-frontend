@@ -6,7 +6,7 @@ export interface ProjectSettings {
     lastSaved: number;
     zoom: number;
     imageDragMode: boolean;
-    crossHairVisible: boolean;
+    smartAnnotationActive: boolean;
     currentImageIndex: number;
     activeLabelType: string;
 }
@@ -46,7 +46,7 @@ export class LocalStorageManager {
             lastSaved: 0,
             zoom: 1,
             imageDragMode: false,
-            crossHairVisible: false,
+            smartAnnotationActive: false,
             currentImageIndex: 0,
             activeLabelType: 'RECT'
         };

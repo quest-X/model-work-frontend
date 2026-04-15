@@ -174,7 +174,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
     // 视频模式下：始终从当前帧的 labelRects 生成（批量检测结果存在每帧的 labelRects 中）
     // 图片模式下：优先使用全局 segmentationResults（单张检测时设置），否则从 labelRects 回退
     const displayResults = React.useMemo(() => {
-        if (!isVideoMode && segmentationResults && segmentationResults.length > 0) return segmentationResults;
+        if (!isVideoMode) return segmentationResults || [];
         if (!activeImageData) return [];
         const aiRects = activeImageData.labelRects.filter(r => r.isCreatedByAI);
         if (aiRects.length === 0) return [];
@@ -349,7 +349,7 @@ const mapStateToProps = (state: AppState) => ({
         if (imageId && state.ai.imageSegmentationResults.has(imageId)) {
             return state.ai.imageSegmentationResults.get(imageId)!;
         }
-        return state.ai.segmentationResults;
+        return [];
     })(),
     activeImageData: state.labels.imagesData[state.labels.activeImageIndex] || null,
     labelNames: state.labels.labels,

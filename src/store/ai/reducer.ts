@@ -113,8 +113,9 @@ export function aiReducer(
         case Action.TOGGLE_IMAGE_AI_LABELS_VISIBILITY: {
             const { imageId } = action.payload;
             const currentState = state.imageAIStates.get(imageId) || {
-                aiLabelsVisible: false,
-                segmentationLabelsVisible: false,
+                // 默认可见：标签在没有被显式隐藏前应该显示（eye 按钮首次点击 → 切到隐藏）
+                aiLabelsVisible: true,
+                segmentationLabelsVisible: true,
                 inferenceHistory: []
             };
             
@@ -143,8 +144,9 @@ export function aiReducer(
         case Action.TOGGLE_IMAGE_SEGMENTATION_LABELS_VISIBILITY: {
             const { imageId } = action.payload;
             const currentState = state.imageAIStates.get(imageId) || {
-                aiLabelsVisible: false,
-                segmentationLabelsVisible: false,
+                // 默认可见：标签在没有被显式隐藏前应该显示（eye 按钮首次点击 → 切到隐藏）
+                aiLabelsVisible: true,
+                segmentationLabelsVisible: true,
                 inferenceHistory: []
             };
 
@@ -185,8 +187,8 @@ export function aiReducer(
             const { imageId, timestamp, detectedCount, success, type } = action.payload;
             const newImageAIStates = new Map(state.imageAIStates);
             const currentState = newImageAIStates.get(imageId) || {
-                aiLabelsVisible: false,
-                segmentationLabelsVisible: false,
+                aiLabelsVisible: true,
+                segmentationLabelsVisible: true,
                 inferenceHistory: []
             };
 

@@ -12,7 +12,7 @@ const initialState: GeneralState = {
     activeContext: null,
     preventCustomCursor: false,
     imageDragMode: false,
-    crossHairVisible: false,
+    smartAnnotationActive: false,
     enablePerClassColoration: true,
     projectData: {
         type: ProjectType.OBJECT_DETECTION, // 默认设置为目标检测项目
@@ -63,10 +63,10 @@ export function generalReducer(
                 imageDragMode: action.payload.imageDragMode
             }
         }
-        case Action.UPDATE_CROSS_HAIR_VISIBLE_STATUS: {
+        case Action.UPDATE_SMART_ANNOTATION_ACTIVE_STATUS: {
             return {
                 ...state,
-                crossHairVisible: action.payload.crossHairVisible
+                smartAnnotationActive: action.payload.smartAnnotationActive
             }
         }
         case Action.UPDATE_PROJECT_DATA: {

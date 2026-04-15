@@ -3,7 +3,8 @@ import {SegmentationAPIDetector, SegmentationResult} from "../../ai/Segmentation
 import {ImageData, LabelName, LabelPolygon} from "../../store/labels/types";
 import {LabelStatus} from "../../data/enums/LabelStatus";
 import {v4 as uuidv4} from "uuid";
-import {updateImageDataById, updateLabelNames} from "../../store/labels/actionCreators";
+import {updateImageDataById, updateLabelNames, updateActiveLabelViewType} from "../../store/labels/actionCreators";
+import {LabelType} from "../../data/enums/LabelType";
 import {updateFullImageInferenceStatus, addInferenceHistory, updateSegmentationResults} from "../../store/ai/actionCreators";
 import {submitNewNotification, deleteNotificationById, updateNotificationById} from "../../store/notifications/actionCreators";
 import {updatePerClassColorationStatus} from "../../store/general/actionCreators";
@@ -20,6 +21,10 @@ export class AISegmentationActions {
         return new Promise(r => setTimeout(r, 0));
     }
 
+    private static isCancelled(): boolean {
+        return !store.getState().ai.isFullImageInferenceInProgress;
+    }
+
     private static async withConcurrency<T>(
         tasks: Array<() => Promise<T>>,
         limit: number,
@@ -31,6 +36,7 @@ export class AISegmentationActions {
 
         const worker = async () => {
             while (nextIdx < tasks.length) {
+                if (this.isCancelled()) return;
                 const i = nextIdx++;
                 try {
                     results[i] = await tasks[i]();
@@ -120,6 +126,7 @@ export class AISegmentationActions {
                 capturedBlobs = new Array(captureTotal).fill(null);
                 const FETCH_BATCH = 10;
                 for (let i = 0; i < captureTotal; i += FETCH_BATCH) {
+                    if (this.isCancelled()) { console.log('[Segment/Capture] 用户取消,中止按需取帧'); break; }
                     const count = Math.min(FETCH_BATCH, captureTotal - i);
                     const pct = Math.round((i / captureTotal) * 33);
                     notify(1,
@@ -233,10 +240,13 @@ export class AISegmentationActions {
 
     /**
      * 单帧分割结果写入 Redux
+     * @param source 'batch' = 全图分割（写推理历史 + 推理结果面板）
+     *               'smart' = 智能标注（只追加多边形，不写历史/结果面板）
      */
-    private static applySingleResult(
+    public static applySingleResult(
         imageData: ImageData,
-        results: SegmentationResult[]
+        results: SegmentationResult[],
+        source: 'batch' | 'smart' = 'batch'
     ): void {
         if (!results || results.length === 0) return;
 
@@ -284,12 +294,17 @@ export class AISegmentationActions {
                 labelPolygons: [...currentImg.labelPolygons, ...newPolygons]
             };
             store.dispatch(updateImageDataById(imageData.id, updatedImg));
+            // 推理结果落地后自动切到分割标签页
+            store.dispatch(updateActiveLabelViewType(LabelType.POLYGON));
         }
 
-        // 存储统一格式的推理结果（用于 InferenceResultsView）
-        const segResults = SegmentationAPIDetector.convertToUnifiedFormat(results);
-        store.dispatch(updateSegmentationResults(segResults, imageData.id));
-        store.dispatch(addInferenceHistory(imageData.id, results.length, true, 'segmentation'));
+        // 智能标注是一次性 prompt 推理，不该污染推理结果面板和历史
+        if (source === 'batch') {
+            const segResults = SegmentationAPIDetector.convertToUnifiedFormat(results);
+            store.dispatch(updateSegmentationResults(segResults, imageData.id));
+            store.dispatch(addInferenceHistory(imageData.id, results.length, true, 'segmentation'));
+        }
+        // 注：smart 路径不再需要手动设 segmentationLabelsVisible=true —— reducer lazy-init 默认就是 true
 
         EditorActions.fullRender();
     }

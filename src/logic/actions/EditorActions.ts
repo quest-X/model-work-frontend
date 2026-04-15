@@ -36,8 +36,9 @@ export class EditorActions {
                 EditorModel.supportRenderingEngine = new RectRenderEngine(EditorModel.canvas);
                 break;
             case LabelType.ALL:
-                // ALL 工具使用矩形框的绘制功能
-                EditorModel.supportRenderingEngine = new RectRenderEngine(EditorModel.canvas);
+                // ALL 视图：组合渲染引擎，事件路由到 rectEngine（带智能标注劫持），
+                // 渲染时追加 polygon 引擎，让 SAM 分割 mask 在 ALL 视图下也可见
+                EditorModel.supportRenderingEngine = new AllLabelsRenderEngine(EditorModel.canvas);
                 break;
             case LabelType.POINT:
                 EditorModel.supportRenderingEngine = new PointRenderEngine(EditorModel.canvas);
