@@ -99,7 +99,7 @@ export class IndexedDBManager {
                 ...projectData,
                 id: this.PROJECT_ID,
                 lastModified: Date.now(),
-                version: '1.11.0-alpha'
+                version: '2.1.0'
             };
             
             const request = store.put(saveData);
@@ -173,19 +173,19 @@ export class IndexedDBManager {
         });
     }
     
-    public static async getStorageInfo(): Promise<{ used: number; available: number }> {
+    public static async getStorageInfo(): Promise<{ used: number; quota: number }> {
         try {
             if ('storage' in navigator && 'estimate' in navigator.storage) {
                 const estimate = await navigator.storage.estimate();
                 return {
                     used: estimate.usage || 0,
-                    available: estimate.quota || 0
+                    quota: estimate.quota || 0
                 };
             }
         } catch (error) {
             console.error('获取存储信息失败:', error);
         }
-        
-        return { used: 0, available: 0 };
+
+        return { used: 0, quota: 0 };
     }
 }

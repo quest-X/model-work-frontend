@@ -10,7 +10,7 @@ export interface ImageAIState {
 }
 
 export interface AIStateData {
-    imageAIStates: { [imageId: string]: ImageAIState }; // Map转换为对象存储
+    imageAIStates: Array<[string, ImageAIState]>; // Map.entries() 序列化结果，向后兼容旧的对象格式
     lastSaved: number;
     version: string;
 }

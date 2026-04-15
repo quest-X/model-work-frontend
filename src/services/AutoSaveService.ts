@@ -153,7 +153,7 @@ export class AutoSaveService {
             labelNames: labelNames || [],
             currentImageIndex: state.labels.activeImageIndex,
             lastModified: Date.now(),
-            version: '1.11.0-alpha',
+            version: '2.1.0',
             segmentationResults: state.ai?.segmentationResults || [],
             imageSegmentationResults: imageSegmentationResultsObj,
             isVideoProject: isVideoMode && !!activeVideo?.preExtractedFrames,

@@ -8,7 +8,7 @@ export class AIModelsStorageManager {
             const dataToStore = {
                 models,
                 lastSaved: Date.now(),
-                version: '1.11.0-alpha'
+                version: '2.1.0'
             };
             localStorage.setItem(this.STORAGE_KEY, JSON.stringify(dataToStore));
             console.log('AI模型数据已保存到localStorage');
