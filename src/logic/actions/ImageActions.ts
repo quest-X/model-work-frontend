@@ -57,7 +57,7 @@ export class ImageActions {
         ImageActions.mapNewImageData(imageData, labelIndex)
       )
     );
-    store.dispatch(updateActiveLabelNameId(labelNames[1].id));
+    store.dispatch(updateActiveLabelNameId(labelNames[labelIndex].id));
   }
 
   private static mapNewImageData(
