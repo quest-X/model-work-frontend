@@ -11,7 +11,11 @@ export class DatasetSplitUtil {
         images: ImageData[],
         ratio: [number, number, number] = [0.8, 0.1, 0.1]
     ): DatasetSplit {
-        const shuffled = [...images].sort(() => Math.random() - 0.5);
+        const shuffled = [...images];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
         const total = shuffled.length;
         const trainEnd = Math.round(total * ratio[0]);
         const valEnd = trainEnd + Math.round(total * ratio[1]);
