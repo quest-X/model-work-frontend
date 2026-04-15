@@ -30,6 +30,7 @@ export class COCOImporter extends AnnotationImporter {
     ): void {
         if (filesData.length > 1) {
             onFailure(new COCOAnnotationFileCountError());
+            return;
         }
 
         const reader = new FileReader();
