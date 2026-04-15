@@ -53,6 +53,7 @@ export class ContextManager {
     }
 
     public static restoreCtx(): void {
+        if (ContextManager.contextHistory.length === 0) return;
         ContextManager.updateCtx(ContextManager.contextHistory.pop());
     }
 
