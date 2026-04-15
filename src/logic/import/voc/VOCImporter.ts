@@ -81,7 +81,11 @@ export class VOCImporter extends AnnotationImporter {
 
     private static tryParseVOCDocument(fileText: string): Document {
         try {
-            return parser.parseFromString(fileText, 'application/xml');
+            const doc = parser.parseFromString(fileText, 'application/xml');
+            if (doc.getElementsByTagName('parsererror').length > 0) {
+                throw new DocumentParsingError();
+            }
+            return doc;
         } catch {
             throw new DocumentParsingError();
         }
