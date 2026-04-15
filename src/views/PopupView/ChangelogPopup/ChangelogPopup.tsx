@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.1.3',
+        date: '2026-04-15',
+        changes: [
+            { zh: '【推理下拉】EditorTopNavigationBar 的推理下拉同步应用引擎门控:「检测模型」option 只在已注册检测引擎时显示,「分割模型」option 只在已注册分割引擎时显示。「自定义」option 永远显示。从「CallModelPopup 已做的 section gating」把同样的逻辑延伸到顶栏下拉', en: '[Inference dropdown] EditorTopNavigationBar\'s inference dropdown now applies the same engine gating as CallModelPopup: "Detection" option visible only when a detection engine is registered, "Segmentation" option only when a segmentation engine is registered. "Custom" is always visible. Extends the v2.1.2 CallModelPopup section gate to the top-bar dropdown for consistency' },
+            { zh: '【推理下拉】新增 mode 守卫 useEffect:当前选中的 inferenceMode 对应的 option 被隐藏时(用户删掉引擎 / 切换项目等)自动回落到 "both"("自定义"),避免 React warning + 防止「推理」按钮跑到一个不存在的 slot', en: '[Inference dropdown] Added a mode-guard useEffect: when the currently selected inferenceMode\'s option is hidden (user deleted the engine, switched projects, etc.) the state falls back to "both" ("Custom"), preventing React warnings and stopping the Infer button from dispatching to a non-existent slot' },
+            { zh: '【推理下拉】mapStateToProps 新增 hasDetectionEngine / hasSegmentationEngine 两个标志,通过 AIModelsSelector.hasModelsOfType(state, type) 读取,和 CallModelPopup 的 hasDetectionEngine / hasSegmentationEngine 保持一致的真值来源', en: '[Inference dropdown] mapStateToProps adds hasDetectionEngine / hasSegmentationEngine flags (via AIModelsSelector.hasModelsOfType), using the same single source of truth as CallModelPopup\'s section gate' },
+        ]
+    },
+    {
         version: '2.1.2',
         date: '2026-04-15',
         changes: [

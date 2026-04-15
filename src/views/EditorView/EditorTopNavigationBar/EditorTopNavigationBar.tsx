@@ -135,6 +135,9 @@ interface IProps {
     activeImageIndex: number;
     imagesData: ImageData[];
     hasDetectionModel: boolean;
+    // 用户通过「模型引擎」popup 注册的引擎列表 — 决定推理下拉显示哪些选项
+    hasDetectionEngine: boolean;
+    hasSegmentationEngine: boolean;
     updateActiveLabelType: (activeLabelType: LabelType) => any;
     updateActiveLabelViewType: (activeLabelViewType: LabelType) => any;
 }
@@ -160,6 +163,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         activeImageIndex,
         imagesData,
         hasDetectionModel,
+        hasDetectionEngine,
+        hasSegmentationEngine,
         updateActiveLabelType,
         updateActiveLabelViewType,
     }) => {
@@ -286,6 +291,13 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     useEffect(() => {
         setInferenceMode(smartAnnotationActive ? 'segmentation' : 'detection');
     }, [smartAnnotationActive]);
+
+    // 守卫:当前 inferenceMode 对应的 option 被隐藏时(用户删了对应引擎)自动回落到 'both' (自定义)
+    // 避免下拉展示一个不存在的选项让 React 报 warning,也避免「推理」按钮跑到无意义的 slot
+    useEffect(() => {
+        if (inferenceMode === 'detection' && !hasDetectionEngine) setInferenceMode('both');
+        if (inferenceMode === 'segmentation' && !hasSegmentationEngine) setInferenceMode('both');
+    }, [inferenceMode, hasDetectionEngine, hasSegmentationEngine]);
 
     // 轮询后端获取当前模型名 / 类型 + 自动切换推理模式
     // 保留扩展名 (.pt / .onnx)，built-in 模型在渲染下拉时通过 formatName 剥离。
@@ -548,8 +560,12 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                     }}
                 >
                     <option value="both">{`${language === 'zh' ? '自定义' : 'Custom'}${customLabel ? ` (${customLabel})` : ''}`}</option>
-                    <option value="detection">{`${language === 'zh' ? '检测模型' : 'Detection'}${detModelName && !detIsCustom ? ` (${formatName(detModelName, false)})` : ''}`}</option>
-                    <option value="segmentation">{`${language === 'zh' ? '分割模型' : 'Segmentation'}${segModelName && !segIsCustom ? ` (${formatName(segModelName, false)})` : ''}`}</option>
+                    {hasDetectionEngine && (
+                        <option value="detection">{`${language === 'zh' ? '检测模型' : 'Detection'}${detModelName && !detIsCustom ? ` (${formatName(detModelName, false)})` : ''}`}</option>
+                    )}
+                    {hasSegmentationEngine && (
+                        <option value="segmentation">{`${language === 'zh' ? '分割模型' : 'Segmentation'}${segModelName && !segIsCustom ? ` (${formatName(segModelName, false)})` : ''}`}</option>
+                    )}
                 </select>
                 <button
                     disabled={imagesData.length === 0}
@@ -629,7 +645,10 @@ const mapStateToProps = (state: AppState) => ({
     isAIDisabled: state.ai.isAIDisabled,
     activeImageIndex: state.labels.activeImageIndex,
     imagesData: state.labels.imagesData,
-    hasDetectionModel: AIModelsSelector.hasModelsOfType(state, 'detection') || DetectionAPIDetector.isEnabled()
+    hasDetectionModel: AIModelsSelector.hasModelsOfType(state, 'detection') || DetectionAPIDetector.isEnabled(),
+    // 下拉 option 门控:必须用户通过「模型引擎」popup 注册过对应类型的引擎
+    hasDetectionEngine: AIModelsSelector.hasModelsOfType(state, 'detection'),
+    hasSegmentationEngine: AIModelsSelector.hasModelsOfType(state, 'segmentation'),
 });
 
 export default connect(
