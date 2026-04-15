@@ -8,7 +8,7 @@ import {connect} from 'react-redux';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {GeneralActionTypes} from '../../../store/general/types';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
-import {StyledTextField} from '../../Common/StyledTextField/StyledTextField';
+import {AIModel} from '../../../store/aimodels/types';
 
 export interface YOLOModelFamily {
     id: string;
@@ -45,30 +45,55 @@ export const getSelectedCustomExt = (): 'pt' | 'onnx' | null => _selectedCustomE
 interface IProps {
     updateActivePopupType: (activePopupType: PopupWindowType) => GeneralActionTypes;
     language: Language;
+    // 用户通过「模型引擎」popup 注册的推理服务列表。由 Redux aimodels store 提供。
+    aiModels: AIModel[];
+    activeAIModelId: string | null;
 }
 
-const CallModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) => {
+// 引擎 URL 形如 http://host:port/detect 或 /segment —— 剥掉后缀得到 base。
+const stripInferenceSuffix = (url: string): string =>
+    url.replace(/\/(detect|segment)\/?$/, '');
+
+const CallModelPopup: React.FC<IProps> = ({
+    updateActivePopupType,
+    language,
+    aiModels,
+    activeAIModelId,
+}) => {
     const currentTexts = LanguageConfig[language];
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [serverUrl, setServerUrl] = useState(_serverUrl);
 
     const [availableModels, setAvailableModels] = useState<string[]>([]);
     const [currentModelName, setCurrentModelName] = useState<string>('');
     const [currentSegModelName, setCurrentSegModelName] = useState<string>('');
 
+    // 推理基础地址从已注册的引擎推导 —— 不再让用户在这个弹窗里填 URL。
+    // 优先 active 引擎,退化到第一个注册的,最后兜底 localhost:8000。
+    const activeEngine = aiModels.find(m => m.id === activeAIModelId) || aiModels[0] || null;
+    const derivedBaseUrl = activeEngine
+        ? stripInferenceSuffix(activeEngine.url)
+        : 'http://localhost:8000';
+
     useEffect(() => {
-        fetch(`${serverUrl}/available-models`)
+        fetch(`${derivedBaseUrl}/available-models`)
             .then(r => r.json())
-            .then(data => { if (data.models) setAvailableModels(data.models); })
+            .then(data => {
+                if (!data.models) return;
+                // Backend v2.1.1+ 返回 [{name, type}],老 backend 返回 [name] —— 两兼容
+                const names: string[] = data.models.map((m: unknown) =>
+                    typeof m === 'string' ? m : (m as { name: string }).name
+                );
+                setAvailableModels(names);
+            })
             .catch(() => {});
-        fetch(`${serverUrl}/health`)
+        fetch(`${derivedBaseUrl}/health`)
             .then(r => r.json())
             .then(data => {
                 if (data.model && data.model !== 'none') setCurrentModelName(data.model);
                 if (data.segmentation_model) setCurrentSegModelName(data.segmentation_model);
             })
             .catch(() => {});
-    }, [serverUrl]);
+    }, [derivedBaseUrl]);
 
     const getDownloadedCount = (family: YOLOModelFamily): number => {
         return family.variants.filter(v => availableModels.includes(v)).length;
@@ -79,18 +104,20 @@ const CallModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
     };
 
     const onAccept = () => {
+        // 自定义 .pt / .onnx 上传
         if (selectedId === 'custom-pt' || selectedId === 'custom-onnx') {
             _selectedModelFamily = null;
-            _serverUrl = serverUrl;
+            _serverUrl = derivedBaseUrl;
             _selectedCustomExt = selectedId === 'custom-onnx' ? 'onnx' : 'pt';
             updateActivePopupType(PopupWindowType.LOAD_DETECTION_MODEL);
             return;
         }
+        // 本地内置 YOLO / SAM family —— 推送到 LoadDetectionModelPopup 走加载流程
         const family = YOLO_MODEL_FAMILIES.find(f => f.id === selectedId)
             || SEG_MODEL_FAMILIES.find(f => f.id === selectedId);
         if (!family) return;
         _selectedModelFamily = family;
-        _serverUrl = serverUrl;
+        _serverUrl = derivedBaseUrl;
         _selectedCustomExt = null;
         updateActivePopupType(PopupWindowType.LOAD_DETECTION_MODEL);
     };
@@ -128,6 +155,10 @@ const CallModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
         </div>
     };
 
+    // 已注册的引擎按类型分组 —— 只用来控制下面两个 section 的显隐,不再单独渲染。
+    const hasDetectionEngine = aiModels.some(m => m.modelType === 'detection');
+    const hasSegmentationEngine = aiModels.some(m => m.modelType === 'segmentation');
+
     const zhTexts = language === Language.CHINESE;
 
     const renderContent = () => {
@@ -163,34 +194,26 @@ const CallModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
                     </div>
                 </div>
             </div>
-            <div className='ModelSection'>
-                <div className='SectionHeader'>{zhTexts ? '检测模型' : 'Detection Models'}</div>
-                <div className='Options'>
-                    {YOLO_MODEL_FAMILIES.map(f => renderFamilyOption(f))}
+            {hasDetectionEngine && (
+                <div className='ModelSection'>
+                    <div className='SectionHeader'>{zhTexts ? '检测模型' : 'Detection Models'}</div>
+                    <div className='Options'>
+                        {YOLO_MODEL_FAMILIES.map(f => renderFamilyOption(f))}
+                    </div>
                 </div>
-            </div>
-            <div className='ModelSection'>
-                <div className='SectionHeader'>{zhTexts ? '分割模型' : 'Segmentation Models'}</div>
-                <div className='Options'>
-                    {SEG_MODEL_FAMILIES.map(f => renderFamilyOption(f))}
+            )}
+            {hasSegmentationEngine && (
+                <div className='ModelSection'>
+                    <div className='SectionHeader'>{zhTexts ? '分割模型' : 'Segmentation Models'}</div>
+                    <div className='Options'>
+                        {SEG_MODEL_FAMILIES.map(f => renderFamilyOption(f))}
+                    </div>
                 </div>
-            </div>
-            <div className='ServerConfig'>
-                <StyledTextField
-                    variant='standard'
-                    id={'server-url'}
-                    autoComplete={'off'}
-                    type={'text'}
-                    margin={'dense'}
-                    label={zhTexts ? '推理服务地址' : 'Inference server URL'}
-                    value={serverUrl}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setServerUrl(e.target.value)}
-                    style={{ width: 300 }}
-                    InputLabelProps={{ shrink: true }}
-                />
-            </div>
+            )}
         </div>
     };
+
+    const acceptDisabled = !selectedId;
 
     return (
         <GenericYesNoPopup
@@ -198,7 +221,7 @@ const CallModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
             renderContent={renderContent}
             acceptLabel={currentTexts.popups.callModel.acceptButton}
             onAccept={onAccept}
-            disableAcceptButton={!selectedId || serverUrl === ''}
+            disableAcceptButton={acceptDisabled}
             rejectLabel={currentTexts.popups.callModel.rejectButton}
             onReject={onReject}
         />
@@ -206,11 +229,13 @@ const CallModelPopup: React.FC<IProps> = ({ updateActivePopupType, language }) =
 };
 
 const mapDispatchToProps = {
-    updateActivePopupType: storeUpdateActivePopupType
+    updateActivePopupType: storeUpdateActivePopupType,
 };
 
 const mapStateToProps = (state: AppState) => ({
-    language: state.general.language
+    language: state.general.language,
+    aiModels: state.aimodels.models,
+    activeAIModelId: state.aimodels.activeModelId,
 });
 
 export default connect(

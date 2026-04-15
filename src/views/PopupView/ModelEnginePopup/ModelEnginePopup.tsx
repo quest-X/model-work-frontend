@@ -37,9 +37,16 @@ const ModelEnginePopup: React.FC<IProps> = (
 ) => {
     const currentTexts = LanguageConfig[language];
     
-    const [modelUrl, setModelUrl] = useState('');
-    const [modelType, setModelType] = useState('');
-    const [apiKey, setApiKey] = useState('');
+    // 默认预填本地推理引擎的检测接口 —— 用户打开弹窗就能一键接入 localhost,
+    // 改接远程服务器时只需改 URL (接口路径和类型都已填好)
+    // 每种模型类型预置一个默认密钥,切换类型时 apiKey 自动更新。
+    const DEFAULT_API_KEY_BY_TYPE: Record<'detection' | 'segmentation', string> = {
+        detection: '123456',
+        segmentation: 'baosight@ABC123!',
+    };
+    const [modelUrl, setModelUrl] = useState('http://localhost:8000/detect');
+    const [modelType, setModelType] = useState<'detection' | 'segmentation'>('detection');
+    const [apiKey, setApiKey] = useState(DEFAULT_API_KEY_BY_TYPE.detection);
     const [isConnecting, setIsConnecting] = useState(false);
 
     useEffect(() => {
@@ -58,7 +65,8 @@ const ModelEnginePopup: React.FC<IProps> = (
 
     const disableAcceptButton = () => {
         if (isConnecting) return true;
-        return modelUrl.trim() === '' || modelType === ''; // 模型服务地址和模型类型都是必选的
+        // modelType 初始化为 'detection' 且只能在两个合法值之间切换,不会为空,只需校验 URL
+        return modelUrl.trim() === '';
     }
 
     const onAccept = async () => {
@@ -70,12 +78,16 @@ const ModelEnginePopup: React.FC<IProps> = (
             // 模拟集成过程
             await new Promise(resolve => setTimeout(resolve, 2000));
             
+            // 默认名字按 modelType 生成,用户可以在 ManageAIModelsPopup 里改
+            const defaultName = language === Language.CHINESE
+                ? (modelType === 'detection' ? '检测模型' : '分割模型')
+                : (modelType === 'detection' ? 'Detection Model' : 'Segmentation Model');
             // 创建新的AI模型并添加到状态
             const newModel: AIModel = {
                 id: uuidv4(),
-                name: `AI Model ${new Date().toLocaleDateString()}`, // 默认名称
+                name: defaultName,
                 url: modelUrl,
-                modelType: modelType as 'detection' | 'segmentation',
+                modelType: modelType,
                 apiKey: apiKey.trim() || undefined,
                 description: undefined,
                 createdAt: new Date(),
@@ -118,7 +130,10 @@ const ModelEnginePopup: React.FC<IProps> = (
     }
 
     const modelTypeOnChangeCallback = (event: SelectChangeEvent) => {
-        setModelType(event.target.value);
+        const newType = event.target.value as 'detection' | 'segmentation';
+        setModelType(newType);
+        // 切换类型时把密钥同步到该类型的默认值;用户可以再手改覆盖
+        setApiKey(DEFAULT_API_KEY_BY_TYPE[newType]);
     }
 
     const apiKeyOnChangeCallback = (event: React.ChangeEvent<HTMLInputElement>) => {
