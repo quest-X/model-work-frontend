@@ -119,20 +119,27 @@ export class AutoSaveService {
 
         // 转换ImageData到StoredImageData格式（File → ArrayBuffer 以支持 IndexedDB 持久化）
         // 视频模式下每帧是小 JPEG (~50KB)，可以正常保存
-        const storedImages: StoredImageData[] = await Promise.all(
-            imagesData.map(async (imageData): Promise<StoredImageData> => ({
-                id: imageData.id,
-                fileName: imageData.fileData.name,
-                fileData: await imageData.fileData.arrayBuffer(),
-                fileType: imageData.fileData.type,
-                loadStatus: imageData.loadStatus,
-                labelRects: imageData.labelRects || [],
-                labelPoints: imageData.labelPoints || [],
-                labelLines: imageData.labelLines || [],
-                labelPolygons: imageData.labelPolygons || [],
-                labelNameIds: imageData.labelNameIds || []
-            }))
-        );
+        const storedImages: StoredImageData[] = (await Promise.all(
+            imagesData.map(async (imageData): Promise<StoredImageData | null> => {
+                try {
+                    return {
+                        id: imageData.id,
+                        fileName: imageData.fileData.name,
+                        fileData: await imageData.fileData.arrayBuffer(),
+                        fileType: imageData.fileData.type,
+                        loadStatus: imageData.loadStatus,
+                        labelRects: imageData.labelRects || [],
+                        labelPoints: imageData.labelPoints || [],
+                        labelLines: imageData.labelLines || [],
+                        labelPolygons: imageData.labelPolygons || [],
+                        labelNameIds: imageData.labelNameIds || []
+                    };
+                } catch {
+                    // File reference expired (e.g. on-demand video frame not yet loaded)
+                    return null;
+                }
+            })
+        )).filter((img): img is StoredImageData => img !== null);
 
         // 转换 imageSegmentationResults Map 到普通对象以便序列化
         const imageSegmentationResultsObj: Record<string, any[]> = {};

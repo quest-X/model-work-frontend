@@ -77,8 +77,8 @@ const InsertLabelNamesPopup: React.FC<IProps> = (
 
     const addLabelNameCallback = () => {
         const newLabelNames = [
-            ...labelNames,
-            LabelUtil.createLabelName('')
+            LabelUtil.createLabelName(''),
+            ...labelNames
         ];
         setLabelNames(newLabelNames);
     };
