@@ -42,6 +42,22 @@ interface IState {
 }
 
 class LabelInputField extends React.Component<IProps, IState> {
+    private static RECENT_KEY = 'openSight_recentLabels';
+    private static MAX_RECENT = 50;
+
+    private static getRecentLabelIds(): string[] {
+        try {
+            return JSON.parse(localStorage.getItem(LabelInputField.RECENT_KEY) || '[]');
+        } catch { return []; }
+    }
+
+    private static pushRecentLabelId(id: string): void {
+        const recent = LabelInputField.getRecentLabelIds().filter(r => r !== id);
+        recent.unshift(id);
+        if (recent.length > LabelInputField.MAX_RECENT) recent.length = LabelInputField.MAX_RECENT;
+        localStorage.setItem(LabelInputField.RECENT_KEY, JSON.stringify(recent));
+    }
+
     private dropdownOptionHeight: number = 30;
     private dropdownOptionCount: number = 6;
     private dropdownMargin: number = 4;
@@ -118,6 +134,7 @@ class LabelInputField extends React.Component<IProps, IState> {
             return (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
                 this.setState({isOpen: false});
                 window.removeEventListener(EventType.MOUSE_DOWN, this.closeDropdown);
+                LabelInputField.pushRecentLabelId(id);
                 this.props.onSelectLabel(this.props.id, id);
                 this.props.updateHighlightedLabelId(null);
                 this.props.updateActiveLabelId(this.props.id);
@@ -125,7 +142,17 @@ class LabelInputField extends React.Component<IProps, IState> {
             };
         }
 
-        return this.props.options.map((option: LabelName) => {
+        const recentIds = LabelInputField.getRecentLabelIds();
+        const sorted = [...this.props.options].sort((a, b) => {
+            const ai = recentIds.indexOf(a.id);
+            const bi = recentIds.indexOf(b.id);
+            if (ai !== -1 && bi !== -1) return ai - bi;
+            if (ai !== -1) return -1;
+            if (bi !== -1) return 1;
+            return 0;
+        });
+
+        return sorted.map((option: LabelName) => {
             return <div
                 className='DropdownOption'
                 key={option.id}
