@@ -200,7 +200,7 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
 
     const renderMenu = () => {
         return(<div className='left-container'>
-            <ImageButton
+            {!modelFamily && <ImageButton
                 image={'ico/upload.png'}
                 imageAlt={'upload custom model'}
                 buttonSize={{ width: 40, height: 40 }}
@@ -208,8 +208,8 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
                 onClick={() => changeModelSource(ModelSource.UPLOAD)}
                 externalClassName={'monochrome'}
                 isActive={modelSource === ModelSource.UPLOAD}
-            />
-            <ImageButton
+            />}
+            {!!modelFamily && <ImageButton
                 image={'ico/download.png'}
                 imageAlt={'official models'}
                 buttonSize={{ width: 40, height: 40 }}
@@ -217,7 +217,7 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
                 onClick={() => changeModelSource(ModelSource.OFFICIAL)}
                 externalClassName={'monochrome'}
                 isActive={modelSource === ModelSource.OFFICIAL}
-            />
+            />}
         </div>)
     };
 

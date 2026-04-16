@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback, useRef} from 'react';
 import {connect} from 'react-redux';
 import {Direction} from '../../../data/enums/Direction';
 import {ISize} from '../../../interfaces/ISize';
@@ -32,7 +32,9 @@ import {sortBy} from 'lodash';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import InferenceResultsButton from '../InferenceResultsButton/InferenceResultsButton';
 import InferenceResultsView from '../InferenceResultsView/InferenceResultsView';
+import BatchStatisticsView from '../BatchStatisticsView/BatchStatisticsView';
 import {AutoSaveService} from '../../../services/AutoSaveService';
+import {EditorContext} from '../../../logic/hotkey/EditorContext';
 import {v4 as uuidv4} from 'uuid';
 import {ImageRepository} from '../../../logic/imageRepository/ImageRepository';
 import {FrameExtractorService} from '../../../services/FrameExtractorService';
@@ -89,9 +91,53 @@ const EditorContainer: React.FC<IProps> = (
     const [leftTabStatus, setLeftTabStatus] = useState(true);
     const [rightTabStatus, setRightTabStatus] = useState(true);
     const [showInferenceResults, setShowInferenceResults] = useState<boolean>(false);
+    const [showBatchStatistics, setShowBatchStatistics] = useState<boolean>(false);
     const [showQueueList, setShowQueueList] = useState<boolean>(false);
     const [isWindowDragActive, setIsWindowDragActive] = useState(false);
     const [videoProcessing, setVideoProcessing] = useState<{phase: string; progress: number; fileName: string} | null>(null);
+
+    // 手动保存
+    const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
+    const [saveFlashColor, setSaveFlashColor] = useState<string | null>(null);
+    const isManualSaveRef = useRef(false);
+
+    const triggerSaveFlash = useCallback(() => {
+        setLastSavedTime(new Date());
+        // 手动保存(按钮/Ctrl+S) → 绿色，自动保存 → 蓝色
+        setSaveFlashColor(isManualSaveRef.current ? '#009944' : '#009efd');
+        isManualSaveRef.current = false;
+        setTimeout(() => setSaveFlashColor(null), 800);
+    }, []);
+
+    const handleSave = useCallback(() => {
+        isManualSaveRef.current = true;
+        AutoSaveService.saveCurrentState();
+    }, []);
+
+    useEffect(() => {
+        AutoSaveService.onSaveComplete = triggerSaveFlash;
+        EditorContext.onSaveCallback = () => { isManualSaveRef.current = true; };
+        return () => {
+            AutoSaveService.onSaveComplete = null;
+            EditorContext.onSaveCallback = null;
+        };
+    }, [triggerSaveFlash]);
+
+    const formatSavedTime = (d: Date): string => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const h = d.getHours();
+        const min = String(d.getMinutes()).padStart(2, '0');
+        const sec = String(d.getSeconds()).padStart(2, '0');
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = h % 12 || 12;
+        return `${yyyy}/${mm}/${dd} ${h12}:${min}:${sec} ${ampm}`;
+    };
+
+    const saveTooltip = language === Language.CHINESE
+        ? `保存标注 (Ctrl+S)\n${lastSavedTime ? '上次保存: ' + formatSavedTime(lastSavedTime) : '尚未保存'}`
+        : `Save (Ctrl+S)\n${lastSavedTime ? 'Last saved: ' + formatSavedTime(lastSavedTime) : 'Not saved yet'}`;
 
     // 监听 window 级别的拖拽，确保 canvas/Scrollbars 不会阻断 drop 事件
     useEffect(() => {
@@ -132,6 +178,18 @@ const EditorContainer: React.FC<IProps> = (
         };
     }, [activeContext]);
 
+    // 批量推理完成后自动弹出统计面板
+    useEffect(() => {
+        const checkBatchCompletion = setInterval(() => {
+            if (EditorModel.lastBatchInferenceImageCount > 2) {
+                EditorModel.lastBatchInferenceImageCount = 0;
+                setRightTabStatus(true);
+                setShowBatchStatistics(true);
+                setShowInferenceResults(false);
+            }
+        }, 1000);
+        return () => clearInterval(checkBatchCompletion);
+    }, []);
 
     // 监听数据变化并触发自动保存
     // 使用 ref 来避免频繁触发
@@ -479,9 +537,30 @@ const EditorContainer: React.FC<IProps> = (
                 imageAlt={'queue'}
                 onClick={queueButtonOnClick}
                 isActive={leftTabStatus && showQueueList}
-                style={{top: '170px'}}
+                style={{top: '167px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.1.5</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.1.6</div>
+            <div
+                className='SaveButtonBottom'
+                onClick={handleSave}
+                title={saveTooltip}
+            >
+                <img
+                    draggable={false}
+                    alt='save'
+                    src='ico/shield.png'
+                    style={{
+                        width: 14, height: 14,
+                        filter: saveFlashColor === '#009944'
+                            ? 'brightness(0) invert(35%) sepia(90%) saturate(800%) hue-rotate(115deg) brightness(1.1)'
+                            : saveFlashColor === '#009efd'
+                            ? 'brightness(0) invert(48%) sepia(98%) saturate(1500%) hue-rotate(192deg) brightness(1.05)'
+                            : 'brightness(0) invert(1)',
+                        opacity: saveFlashColor ? 1 : 0.6,
+                        transition: 'filter 0.3s ease, opacity 0.3s ease',
+                    }}
+                />
+            </div>
         </>
     };
 
@@ -489,42 +568,28 @@ const EditorContainer: React.FC<IProps> = (
         return showQueueList ? <QueueList/> : <ImagesList/>
     };
 
-    const rightSideBarButtonOnClick = () => {
-        // 如果右侧导航栏关闭，则打开并显示标签
+    type RightPanel = 'labels' | 'inference' | 'statistics';
+    const activeRightPanel: RightPanel = showBatchStatistics ? 'statistics' : showInferenceResults ? 'inference' : 'labels';
+
+    const switchRightPanel = (target: RightPanel) => {
         if (!rightTabStatus) {
             setRightTabStatus(true);
-            setShowInferenceResults(false);
             ContextManager.switchCtx(ContextType.RIGHT_NAVBAR);
-        }
-        // 如果右侧导航栏打开且当前显示标签，则关闭导航栏
-        else if (rightTabStatus && !showInferenceResults) {
+        } else if (activeRightPanel === target) {
             setRightTabStatus(false);
             ContextManager.restoreCtx();
-        }
-        // 如果右侧导航栏打开但显示推理结果，则切换到标签
-        else {
+            // reset
             setShowInferenceResults(false);
+            setShowBatchStatistics(false);
+            return;
         }
+        setShowInferenceResults(target === 'inference');
+        setShowBatchStatistics(target === 'statistics');
     };
 
-    const inferenceResultsButtonOnClick = () => {
-        // 如果右侧导航栏关闭，则打开并显示推理结果
-        if (!rightTabStatus) {
-            setRightTabStatus(true);
-            setShowInferenceResults(true);
-            ContextManager.switchCtx(ContextType.RIGHT_NAVBAR);
-        }
-        // 如果右侧导航栏打开且当前显示推理结果，则关闭导航栏
-        else if (rightTabStatus && showInferenceResults) {
-            setRightTabStatus(false);
-            setShowInferenceResults(false);
-            ContextManager.restoreCtx();
-        }
-        // 如果右侧导航栏打开但显示标签，则切换到推理结果
-        else {
-            setShowInferenceResults(true);
-        }
-    };
+    const rightSideBarButtonOnClick = () => switchRightPanel('labels');
+    const inferenceResultsButtonOnClick = () => switchRightPanel('inference');
+    const batchStatisticsButtonOnClick = () => switchRightPanel('statistics');
 
     const rightSideBarCompanionRender = () => {
         return <>
@@ -533,18 +598,28 @@ const EditorContainer: React.FC<IProps> = (
                 image={'/ico/tags.png'}
                 imageAlt={'labels'}
                 onClick={rightSideBarButtonOnClick}
-                isActive={rightTabStatus && !showInferenceResults}
+                isActive={rightTabStatus && activeRightPanel === 'labels'}
                 style={{top: '81px'}}
             />
-            <InferenceResultsButton 
+            <InferenceResultsButton
                 onToggle={inferenceResultsButtonOnClick}
-                isActive={rightTabStatus && showInferenceResults}
+                isActive={rightTabStatus && activeRightPanel === 'inference'}
+            />
+            <VerticalEditorButton
+                label={language === Language.CHINESE ? '统计情况' : 'Statistics'}
+                image={'/ico/stats.png'}
+                imageAlt={'batch statistics'}
+                onClick={batchStatisticsButtonOnClick}
+                isActive={rightTabStatus && activeRightPanel === 'statistics'}
+                style={{top: '253px'}}
             />
         </>
     };
 
     const rightSideBarRender = () => {
-        return showInferenceResults ? <InferenceResultsView/> : <LabelsToolkit/>
+        if (showBatchStatistics) return <BatchStatisticsView/>;
+        if (showInferenceResults) return <InferenceResultsView/>;
+        return <LabelsToolkit/>;
     };
 
     return (

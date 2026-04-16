@@ -27,6 +27,7 @@ import {GeneralSelector} from '../../store/selectors/GeneralSelector';
 import {Settings} from '../../settings/Settings';
 import {LabelUtil} from '../../utils/LabelUtil';
 import {PolygonUtil} from '../../utils/PolygonUtil';
+import {EditorModel} from '../../staticModels/EditorModel';
 
 export class PolygonRenderEngine extends BaseRenderEngine {
 
@@ -151,7 +152,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
     // =================================================================================================================
 
     public render(data: EditorData): void {
-        const imageData: ImageData = LabelsSelector.getActiveImageData();
+        const imageData: ImageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
         if (imageData) {
             this.drawExistingLabels(data);
             this.drawActivelyCreatedLabel(data);
@@ -220,7 +221,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
     public drawExistingLabels(data: EditorData) {
         const activeLabelId: string = LabelsSelector.getActiveLabelId();
         const highlightedLabelId: string = LabelsSelector.getHighlightedLabelId();
-        const imageData: ImageData = LabelsSelector.getActiveImageData();
+        const imageData: ImageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
         if (!imageData) return;
         // 显示/隐藏标签开关：segmentationLabelsVisible 为 false 时隐藏所有多边形
         // 默认可见，与 reducer lazy-init 对齐

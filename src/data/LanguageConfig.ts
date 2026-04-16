@@ -261,6 +261,9 @@ export interface LanguageTexts {
         zoomIn: string;
         zoomOut: string;
         moveImage: string;
+        switchImage: string;
+        selectAll: string;
+        save: string;
         selectLabel: string;
         exitPopup: string;
     };
@@ -543,10 +546,10 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             uploadFiles: {
                 title: '上传文件',
                 addNewFiles: '点击上传',
-                clickToSelect: '拖拽文件到此处释放',
+                clickToSelect: '拖拽到此处释放',
                 oneFileLoaded: '已加载 1 个文件',
                 multipleFilesLoaded: '已加载 {count} 个文件',
-                loadButton: '上传',
+                loadButton: '确认',
                 cancelButton: '取消'
             },
         insertLabelNames: {
@@ -564,13 +567,13 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         },
             exportAnnotations: {
                 title: '导出标注',
-                acceptButton: '导出',
+                acceptButton: '确认',
                 rejectButton: '取消',
                 selectFormat: '选择您要用于导出标注的文件格式。'
             },
             importAnnotations: {
                 title: '导入标注',
-                acceptButton: '导入',
+                acceptButton: '确认',
                 rejectButton: '取消',
                 selectFileFormat: '选择您要用于导入标签的文件格式。',
                 dropZoneMessage: '点击上传',
@@ -583,14 +586,14 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             exitProject: {
                 title: '退出项目',
                 content: '您确定要退出当前项目吗？所有未保存的更改将丢失。',
-                acceptButton: '退出',
+                acceptButton: '确认',
                 rejectButton: '取消'
             },
             callModel: {
                 title: '调用模型',
                 selectModel: '选择要加载的模型：',
-                acceptButton: '进入',
-                rejectButton: '取消',
+                acceptButton: '确认',
+                rejectButton: '关闭',
                 models: {
                     yolov5: 'YOLOv5 - 使用矩形框进行目标检测',
                     ssd: 'COCO SSD - 使用矩形框进行目标检测',
@@ -600,7 +603,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             },
             suggestLabels: {
                 title: '建议标签',
-                acceptButton: '接受选中',
+                acceptButton: '确认',
                 rejectButton: '取消',
                 selectAll: '全选',
                 acceptAll: '接受全部',
@@ -608,7 +611,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             },
             connectServer: {
                 title: '连接AI服务器',
-                acceptButton: '连接',
+                acceptButton: '确认',
                 rejectButton: '取消',
                 roboflowModel: 'Roboflow 模型ID',
                 roboflowKey: 'Roboflow API密钥',
@@ -625,7 +628,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             },
             modelEngine: {
                 title: '模型引擎',
-                acceptButton: '接入',
+                acceptButton: '保存',
                 rejectButton: '取消',
                 modelUrl: '模型地址',
                 modelType: '模型类型',
@@ -699,7 +702,10 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             loadNextImage: '加载下一张图像',
             zoomIn: '放大',
             zoomOut: '缩小',
-            moveImage: '移动图像',
+            moveImage: '移动画布',
+            switchImage: '切换上/下一张',
+            selectAll: '全选图片',
+            save: '保存项目',
             selectLabel: '选择标签',
             exitPopup: '退出弹窗'
         },
@@ -708,7 +714,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         loadYoloModel: {
             title: '加载 {model} 模型',
             titleFallback: '自定义模型',
-            acceptLabel: '使用模型',
+            acceptLabel: '确认',
             rejectLabel: '返回',
             active: '使用中',
             downloaded: '已下载',
@@ -823,7 +829,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             multipleLabelsFound: '找到 {count} 个标签',
             message: '加载一个包含标签列表的文本文件。每个标签名称应该用换行符分隔。如果你没有准备好的文件，没关系，你可以现在创建自己的列表。',
             title: '加载标签描述文件',
-            startProject: '开始项目',
+            startProject: '确认',
             back: '返回',
         },
 
@@ -867,7 +873,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             successMessage: '成功检测 {count} 个目标，总耗时 {time}s',
             failedMessage: '分割推理过程中发生错误，请重试',
             results: {
-                title: '推理结果',
+                title: '推理',
                 noResults: '暂无推理结果',
                 noResultsHint: '绘制标注框后将自动触发AI推理',
                 confidence: '置信度',
@@ -875,7 +881,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 size: '大小',
                 area: '面积',
                 thumbnail: '缩略图',
-                objectId: '对象ID'
+                objectId: '对象'
             }
         }
     },
@@ -983,13 +989,13 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 clickToSelect: 'drag and drop here',
                 oneFileLoaded: '1 file loaded',
                 multipleFilesLoaded: '{count} files loaded',
-                loadButton: 'Upload',
+                loadButton: 'Confirm',
                 cancelButton: 'Cancel'
             },
         insertLabelNames: {
             titleCreate: 'Create labels list',
             titleUpdate: 'Update labels list',
-            acceptButton: 'Start project',
+            acceptButton: 'Confirm',
             rejectButton: 'Cancel',
             insertLabel: 'Insert label',
             addLabel: 'Add label',
@@ -1001,13 +1007,13 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         },
             exportAnnotations: {
                 title: 'Export annotations',
-                acceptButton: 'Export',
+                acceptButton: 'Confirm',
                 rejectButton: 'Cancel',
                 selectFormat: 'Select file format you would like to use to export annotations.'
             },
             importAnnotations: {
                 title: 'Import annotations',
-                acceptButton: 'Import',
+                acceptButton: 'Confirm',
                 rejectButton: 'Cancel',
                 selectFileFormat: 'Select file format you would like to use to import labels.',
                 dropZoneMessage: 'Click to upload',
@@ -1020,14 +1026,14 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             exitProject: {
                 title: 'Exit project',
                 content: 'Are you sure you want to exit the current project? All unsaved changes will be lost.',
-                acceptButton: 'Exit',
+                acceptButton: 'Confirm',
                 rejectButton: 'Cancel'
             },
             callModel: {
                 title: 'Call Model',
                 selectModel: 'Select model to load:',
-                acceptButton: 'Enter',
-                rejectButton: 'Cancel',
+                acceptButton: 'Confirm',
+                rejectButton: 'Close',
                 models: {
                     yolov5: 'YOLOv5 - object detection using rectangles',
                     ssd: 'COCO SSD - object detection using rectangles',
@@ -1037,7 +1043,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             },
             suggestLabels: {
                 title: 'Suggest Labels',
-                acceptButton: 'Accept Selected',
+                acceptButton: 'Confirm',
                 rejectButton: 'Cancel',
                 selectAll: 'Select All',
                 acceptAll: 'Accept All',
@@ -1045,7 +1051,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             },
             connectServer: {
                 title: 'Connect AI Server',
-                acceptButton: 'Connect',
+                acceptButton: 'Confirm',
                 rejectButton: 'Cancel',
                 roboflowModel: 'Roboflow Model ID',
                 roboflowKey: 'Roboflow API Key',
@@ -1062,7 +1068,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             },
             modelEngine: {
                 title: 'Model Engine',
-                acceptButton: 'Integrate',
+                acceptButton: 'Save',
                 rejectButton: 'Cancel',
                 modelUrl: 'Model URL',
                 modelType: 'Model Type',
@@ -1136,7 +1142,10 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             loadNextImage: 'Load next image',
             zoomIn: 'Zoom in',
             zoomOut: 'Zoom out',
-            moveImage: 'Move image',
+            moveImage: 'Pan canvas',
+            switchImage: 'Previous / next image',
+            selectAll: 'Select all images',
+            save: 'Save project',
             selectLabel: 'Select Label',
             exitPopup: 'Exit popup'
         },
@@ -1145,7 +1154,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         loadYoloModel: {
             title: 'Load {model} Model',
             titleFallback: 'Custom Model',
-            acceptLabel: 'Use Model',
+            acceptLabel: 'Confirm',
             rejectLabel: 'Back',
             active: 'Active',
             downloaded: 'Downloaded',
@@ -1260,7 +1269,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             multipleLabelsFound: '{count} labels found',
             message: 'Load a text file with a list of labels you are planning to use. The names of each label should be separated by new line. If you don\'t have a prepared file, no problem. You can create your own list now.',
             title: 'Load file with labels description',
-            startProject: 'Start project',
+            startProject: 'Confirm',
             back: 'Back',
         },
 
@@ -1312,7 +1321,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 size: 'Size',
                 area: 'Area',
                 thumbnail: 'Thumbnail',
-                objectId: 'Object ID'
+                objectId: 'Object'
             }
         }
     }

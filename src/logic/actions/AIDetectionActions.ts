@@ -458,6 +458,11 @@ export class AIDetectionActions {
             store.dispatch(updatePerClassColorationStatus(true));
         }
 
+        // Signal batch completion to EditorContainer for auto-showing statistics panel
+        if (successCount > 2) {
+            EditorModel.lastBatchInferenceImageCount = successCount;
+        }
+
         EditorActions.fullRender();
     }
 

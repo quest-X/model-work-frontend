@@ -122,7 +122,36 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
                 canvas.width = size;
                 canvas.height = size;
                 const {x1, y1, x2, y2} = result.bbox;
-                ctx.drawImage(source, x1, y1, x2 - x1, y2 - y1, 0, 0, size, size);
+                const bw = x2 - x1;
+                const bh = y2 - y1;
+
+                // 如果有 mask 多边形，用 clip 裁剪，mask 外部为黑色
+                const maskPoly: [number, number][] | undefined =
+                    Array.isArray(result.mask) ? result.mask
+                    : result.mask?.mask_data ? result.mask.mask_data
+                    : undefined;
+                if (maskPoly && maskPoly.length > 2) {
+                    // 先填黑色背景
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(0, 0, size, size);
+                    // 将 mask 多边形从原图坐标映射到 canvas 坐标并做 clip
+                    ctx.save();
+                    ctx.beginPath();
+                    const scaleX = size / bw;
+                    const scaleY = size / bh;
+                    maskPoly.forEach(([mx, my], i) => {
+                        const cx = (mx - x1) * scaleX;
+                        const cy = (my - y1) * scaleY;
+                        if (i === 0) ctx.moveTo(cx, cy);
+                        else ctx.lineTo(cx, cy);
+                    });
+                    ctx.closePath();
+                    ctx.clip();
+                    ctx.drawImage(source, x1, y1, bw, bh, 0, 0, size, size);
+                    ctx.restore();
+                } else {
+                    ctx.drawImage(source, x1, y1, bw, bh, 0, 0, size, size);
+                }
                 resolve(canvas.toDataURL());
             } catch { resolve(''); }
         };
@@ -307,10 +336,12 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
                                             <span className="DetailLabel">{currentTexts.aiInference.results.coordinates}:</span>
                                             <span className="DetailValue">({Math.round(result.bbox.x1)},{Math.round(result.bbox.y1)},{Math.round(result.bbox.x2)},{Math.round(result.bbox.y2)})</span>
                                         </div>
+                                        {!result.mask && (
                                         <div className="DetailRow">
                                             <span className="DetailLabel">{currentTexts.aiInference.results.size}:</span>
                                             <span className="DetailValue">{Math.round(result.bbox.width)} × {Math.round(result.bbox.height)}</span>
                                         </div>
+                                        )}
                                         {result.mask && (
                                             <div className="DetailRow">
                                                 <span className="DetailLabel">{currentTexts.aiInference.results.area}:</span>
@@ -333,7 +364,6 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
                     <div className="EmptyResults">
                         <img src="/ico/brain.png" alt="AI" className="EmptyIcon"/>
                         <div className="EmptyText">{currentTexts.aiInference.results.noResults}</div>
-                        <div className="EmptySubText">{currentTexts.aiInference.results.noResultsHint}</div>
                     </div>
                 )}
             </div>

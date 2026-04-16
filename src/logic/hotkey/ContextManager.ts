@@ -42,6 +42,8 @@ export class ContextManager {
         store.dispatch(updateActiveContext(context));
         switch (context) {
             case ContextType.EDITOR:
+            case ContextType.LEFT_NAVBAR:
+            case ContextType.RIGHT_NAVBAR:
                 ContextManager.actions = EditorContext.getActions();
                 break;
             case ContextType.POPUP:
@@ -54,7 +56,10 @@ export class ContextManager {
 
     public static restoreCtx(): void {
         if (ContextManager.contextHistory.length === 0) return;
-        ContextManager.updateCtx(ContextManager.contextHistory.pop());
+        const prev = ContextManager.contextHistory.pop();
+        if (prev !== undefined) {
+            ContextManager.updateCtx(prev);
+        }
     }
 
     private static onDown(event: KeyboardEvent): void {

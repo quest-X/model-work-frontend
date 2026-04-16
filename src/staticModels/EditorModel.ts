@@ -35,6 +35,7 @@ export class EditorModel {
     public static preloadedImageCache: Map<number, HTMLImageElement> = new Map(); // Pre-decoded Image cache from parsing phase
     public static isLoading: boolean = false;
     public static lastLoadedModelService: 'detection' | 'segmentation' | null = null; // set by LoadDetectionModelPopup after model load
+    public static lastBatchInferenceImageCount: number = 0; // set by detectBatch/segmentBatch on completion, read by EditorContainer to auto-show statistics
     public static viewPortActionsDisabled: boolean = false;
     public static mousePositionOnViewPortContent: IPoint;
     public static viewPortSize: ISize;

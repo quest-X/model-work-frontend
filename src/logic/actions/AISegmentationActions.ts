@@ -235,6 +235,10 @@ export class AISegmentationActions {
             store.dispatch(updatePerClassColorationStatus(true));
         }
 
+        if (successCount > 2) {
+            EditorModel.lastBatchInferenceImageCount = successCount;
+        }
+
         EditorActions.fullRender();
     }
 
@@ -285,6 +289,7 @@ export class AISegmentationActions {
                     isVisible: true,
                     status: LabelStatus.ACCEPTED,
                     suggestedLabel: labelId ? null : result.info.name,
+                    confidence: result.info.confidence ?? 0,
                 };
             });
 

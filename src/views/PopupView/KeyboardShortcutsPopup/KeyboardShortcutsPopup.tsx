@@ -88,10 +88,28 @@ const KeyboardShortcutsPopup: React.FC<IProps> = ({language}) => {
             windows: 'Ctrl + -'
         },
         {
+            functionality: currentTexts.keyboardShortcuts.switchImage,
+            context: currentTexts.keyboardShortcuts.editor,
+            mac: 'Left / Right',
+            windows: 'Left / Right'
+        },
+        {
             functionality: currentTexts.keyboardShortcuts.moveImage,
             context: currentTexts.keyboardShortcuts.editor,
-            mac: 'Up / Down / Left / Right',
-            windows: 'Up / Down / Left / Right'
+            mac: 'Up / Down',
+            windows: 'Up / Down'
+        },
+        {
+            functionality: currentTexts.keyboardShortcuts.selectAll,
+            context: currentTexts.keyboardShortcuts.editor,
+            mac: '⌘ + A',
+            windows: 'Ctrl + A'
+        },
+        {
+            functionality: currentTexts.keyboardShortcuts.save,
+            context: currentTexts.keyboardShortcuts.editor,
+            mac: '⌘ + S',
+            windows: 'Ctrl + S'
         },
         {
             functionality: currentTexts.keyboardShortcuts.selectLabel,

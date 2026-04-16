@@ -93,7 +93,7 @@ const EditorBottomNavigationBar: React.FC<IProps> = ({size, imageData, totalImag
             <div className="CenterSection">
                 {size.width > minWidth ?
                     <Tooltip
-                        title={getDetailedSavedTimeTooltip()}
+                        title={imageData.fileData.name}
                         placement="top"
                         arrow
                         enterDelay={500}

@@ -16,6 +16,24 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.1.6',
+        date: '2026-04-16',
+        changes: [
+            { zh: '【修复】跳帧时分割 mask 对不上当前帧：PolygonRenderEngine 未使用 playbackImageData，导致多边形渲染滞后于实际显示帧', en: '[Fix] Segmentation mask misaligned when jumping frames: PolygonRenderEngine did not use playbackImageData, causing polygon rendering to lag behind the displayed frame' },
+            { zh: '【UI】侧边栏标签重命名：队列→文件队列、推理→推理结果、统计→统计情况', en: '[UI] Sidebar tab labels renamed: Queue→File Queue, Inference→Inference Results, Statistics→Statistics Info' },
+            { zh: '【UI】侧边栏按钮间距优化，避免文字紧贴', en: '[UI] Improved sidebar button spacing to prevent labels touching' },
+            { zh: '【UI】自定义模型弹窗隐藏下载按钮，YOLO 模型弹窗隐藏上传按钮', en: '[UI] Custom model popup hides download button; YOLO model popup hides upload button' },
+            { zh: '【修复】快捷键在点击图片列表/标签面板后失灵：LEFT_NAVBAR / RIGHT_NAVBAR context 现在继承 EDITOR 快捷键，不再清空 actions', en: '[Fix] Hotkeys stopped working after clicking image list or labels panel: LEFT_NAVBAR / RIGHT_NAVBAR contexts now inherit EDITOR hotkeys instead of clearing actions' },
+            { zh: '【修复】restoreCtx 空栈防护：防止快速开关弹窗导致 actions 被清空', en: '[Fix] restoreCtx empty stack guard: prevent rapid popup open/close from wiping all hotkeys' },
+            { zh: '【修复】分割模型 mask 面积计算：Shoelace 公式从多边形顶点计算真实面积（之前硬编码为 0）', en: '[Fix] Segmentation mask area calculation: Shoelace formula computes real polygon area (was hardcoded to 0)' },
+            { zh: '【UI】推理卡片：分割模型隐藏"大小"只显示"面积"，检测模型显示"大小"隐藏"面积"', en: '[UI] Inference cards: segmentation models hide "size" and show "area"; detection models show "size" and hide "area"' },
+            { zh: '【UI】名称精简：文件队列→队列、推理结果→推理、结果统计→统计、对象ID→对象', en: '[UI] Shorter labels: File Queue→Queue, Inference Results→Inference, Statistics Info→Statistics, Object ID→Object' },
+            { zh: '【UI】统计面板去掉"需要2张以上图像"限制，1张图也能看统计', en: '[UI] Statistics panel removes 2+ image requirement — works with single image' },
+            { zh: '【UI】去掉推理空状态的"绘制标注框后将自动触发AI推理"提示', en: '[UI] Removed "draw annotation boxes to trigger AI inference" hint from empty inference view' },
+            { zh: '【UI】快捷键说明更新：拆分箭头键说明（切换图片 vs 移动画布），新增 Ctrl+A 全选和 Ctrl+S 保存', en: '[UI] Keyboard shortcuts popup updated: split arrow key descriptions (switch image vs pan canvas), added Ctrl+A select all and Ctrl+S save' },
+        ]
+    },
+    {
         version: '2.1.5',
         date: '2026-04-16',
         changes: [

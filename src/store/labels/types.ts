@@ -31,6 +31,7 @@ export type LabelPolygon = Annotation & {
     isCreatedByAI: boolean;
     status: LabelStatus;
     suggestedLabel: string;
+    confidence?: number; // AI 分割置信度 (0-1)
 }
 
 export type LabelLine = Annotation & {

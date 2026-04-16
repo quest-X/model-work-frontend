@@ -503,35 +503,33 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                     )
                 }
             </div>
-            <div className='ButtonWrapper'>
-                {/* 智能标注按钮：只有加载了 SAM 家族模型才显示 */}
-                {isSAMLoaded && getButtonWithTooltip(
-                    'smart-annotation',
-                    currentTexts.editorTopNavBar.smartAnnotationOn,
-                    'ico/cross-hair.png',
-                    'smart-annotation',
-                    smartAnnotationActive,
-                    undefined,
-                    smartAnnotationOnClick
-                )}
-                {useMemo(() => {
-                    const activeImageData = LabelsSelector.getActiveImageData();
-                    const hasImage = imagesData.length > 0;
-                    const aiState = activeImageData ? imageAIStates.get(activeImageData.id) : null;
-                    // 默认可见（reducer lazy-init 也是 true）
-                    const rectsVisible = aiState?.aiLabelsVisible ?? true;
-                    const polysVisible = aiState?.segmentationLabelsVisible ?? true;
-                    const anyVisible = rectsVisible || polysVisible;
-                    // 图像上有任何标签（rect 或 polygon，AI 或手动）就可以用切换按钮
-                    const hasAnyLabel = hasImage && (
-                        (activeImageData?.labelRects?.length || 0) > 0 ||
-                        (activeImageData?.labelPolygons?.length || 0) > 0
-                    );
-                    const isDisabled = !hasImage || !hasAnyLabel;
-                    const icon = isDisabled ? 'ico/eye-slash.png'
-                        : anyVisible ? 'ico/eye.png' : 'ico/eye-off.png';
+            {useMemo(() => {
+                if (imagesData.length === 0) return null;
+                const activeImageData = LabelsSelector.getActiveImageData();
+                const hasImage = imagesData.length > 0;
+                const aiState = activeImageData ? imageAIStates.get(activeImageData.id) : null;
+                const rectsVisible = aiState?.aiLabelsVisible ?? true;
+                const polysVisible = aiState?.segmentationLabelsVisible ?? true;
+                const anyVisible = rectsVisible || polysVisible;
+                const hasAnyLabel = hasImage && (
+                    (activeImageData?.labelRects?.length || 0) > 0 ||
+                    (activeImageData?.labelPolygons?.length || 0) > 0
+                );
+                const isDisabled = !hasImage || !hasAnyLabel;
+                const icon = isDisabled ? 'ico/eye-slash.png'
+                    : anyVisible ? 'ico/eye.png' : 'ico/eye-off.png';
 
-                    return getButtonWithTooltip(
+                return <div className='ButtonWrapper'>
+                    {isSAMLoaded && getButtonWithTooltip(
+                        'smart-annotation',
+                        currentTexts.editorTopNavBar.smartAnnotationOn,
+                        'ico/cross-hair.png',
+                        'smart-annotation',
+                        smartAnnotationActive,
+                        undefined,
+                        smartAnnotationOnClick
+                    )}
+                    {getButtonWithTooltip(
                         'toggle-ai-labels',
                         anyVisible ? '隐藏标签' : '显示标签',
                         icon,
@@ -540,9 +538,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         undefined,
                         isDisabled ? undefined : toggleAILabelsOnClick,
                         isDisabled
-                    );
-                }, [imageAIStates, imagesData, activeImageIndex, toggleAILabelsOnClick])}
-            </div>
+                    )}
+                </div>;
+            }, [imageAIStates, imagesData, activeImageIndex, toggleAILabelsOnClick, isSAMLoaded, smartAnnotationActive, smartAnnotationOnClick, currentTexts])}
             <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 6, height: '100%' }}>
                 <select
                     value={activeModelName}

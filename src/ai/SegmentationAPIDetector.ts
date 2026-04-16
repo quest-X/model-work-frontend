@@ -114,6 +114,21 @@ export class SegmentationAPIDetector {
     /**
      * 将分割结果转换为统一的推理结果格式
      */
+    /**
+     * Shoelace formula: 从多边形顶点计算面积（像素²）
+     */
+    private static polygonArea(vertices: [number, number][]): number {
+        const n = vertices.length;
+        if (n < 3) return 0;
+        let area = 0;
+        for (let i = 0; i < n; i++) {
+            const [x1, y1] = vertices[i];
+            const [x2, y2] = vertices[(i + 1) % n];
+            area += x1 * y2 - x2 * y1;
+        }
+        return Math.abs(area) / 2;
+    }
+
     public static convertToUnifiedFormat(results: SegmentationResult[]): any[] {
         return results.map(result => ({
             class_id: result.info.id,
@@ -128,7 +143,7 @@ export class SegmentationAPIDetector {
                 height: result.bbox[3] - result.bbox[1]
             },
             mask: {
-                area: 0, // 后续可从多边形面积计算
+                area: this.polygonArea(result.mask),
                 mask_data: result.mask
             }
         }));

@@ -70,7 +70,7 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
         }
 
         // 只读绘制多边形（不 dispatch 任何 action），保证 SAM / 全图分割结果在 ALL 视图下可见
-        if (showPolygons && LabelsSelector.getActiveImageData()) {
+        if (showPolygons && (EditorModel.playbackImageData || LabelsSelector.getActiveImageData())) {
             this.polygonEngine.drawExistingLabels(data);
         }
 

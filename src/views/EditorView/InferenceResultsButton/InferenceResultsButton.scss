@@ -10,7 +10,7 @@
   user-select: none;
   cursor: pointer;
   position: absolute;
-  top: 170px;
+  top: 167px;
   left: 0;
 
   display: flex;
@@ -23,12 +23,12 @@
   color: white;
   font-size: 13px;
   font-weight: normal;
-  gap: 6px;
 
   .ButtonIcon {
-    width: 16px;
-    height: 16px;
-    filter: brightness(0) invert(1) opacity(0.85);
+    width: 15px;
+    height: 15px;
+    filter: brightness(0) invert(1);
+    margin-right: 5px;
   }
 
   span {

@@ -8,8 +8,10 @@ import { ImageRepository } from '../logic/imageRepository/ImageRepository';
 
 export class AutoSaveService {
     private static saveTimer: NodeJS.Timeout | null = null;
-    private static readonly SAVE_INTERVAL = 30000; // 30秒自动保存一次
+    private static readonly SAVE_INTERVAL = 60000; // 60秒自动保存一次
     private static isInitialized = false;
+    // 保存完成回调：UI 层注册，用于触发绿色闪烁等视觉反馈
+    public static onSaveComplete: (() => void) | null = null;
     
     public static async initialize(): Promise<void> {
         if (this.isInitialized) {
@@ -69,7 +71,8 @@ export class AutoSaveService {
             // 保存重型数据到IndexedDB
             await this.saveProjectData();
             
-            // 静默保存，不刷屏
+            // 通知 UI 层保存完成
+            if (this.onSaveComplete) this.onSaveComplete();
         } catch (error) {
             console.error('保存当前状态失败:', error);
         }

@@ -253,32 +253,36 @@ const ModelEnginePopup: React.FC<IProps> = (
                                 }
                             }}
                         >
-                            <InputLabel 
-                                id="model-type-label"
-                                shrink={true}
-                            >
+                            <label style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 4, display: 'block' }}>
                                 {currentTexts.popups.modelEngine.modelType}
-                            </InputLabel>
-                            <Select
-                                labelId="model-type-label"
-                                id="model-type"
+                            </label>
+                            <select
                                 value={modelType}
-                                onChange={modelTypeOnChangeCallback}
-                                label={currentTexts.popups.modelEngine.modelType}
-                                sx={{
+                                onChange={(e) => {
+                                    const newType = e.target.value as 'detection' | 'segmentation';
+                                    setModelType(newType);
+                                    setApiKey(DEFAULT_API_KEY_BY_TYPE[newType]);
+                                    setModelUrl(getDefaultBackendUrl(newType === 'detection' ? '/detect' : '/segment'));
+                                }}
+                                style={{
+                                    width: '100%',
+                                    background: 'transparent',
                                     color: 'white',
-                                    '& .MuiSelect-icon': {
-                                        color: 'white'
-                                    }
+                                    border: 'none',
+                                    borderBottom: '1px solid white',
+                                    fontSize: 14,
+                                    padding: '6px 0',
+                                    outline: 'none',
+                                    cursor: 'pointer',
                                 }}
                             >
-                                <MenuItem value="detection">
+                                <option value="detection" style={{ background: '#333' }}>
                                     {currentTexts.popups.modelEngine.taskTypeDetection}
-                                </MenuItem>
-                                <MenuItem value="segmentation">
+                                </option>
+                                {/* <option value="segmentation" style={{ background: '#333' }}>
                                     {currentTexts.popups.modelEngine.taskTypeSegmentation}
-                                </MenuItem>
-                            </Select>
+                                </option> */}
+                            </select>
                         </FormControl>
                     </div>
                 </div>

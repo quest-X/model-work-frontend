@@ -382,10 +382,9 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
         <GenericYesNoPopup
             title={currentTexts.modelManagement.title}
             renderContent={renderContent}
-            acceptLabel={currentTexts.ok}
-            onAccept={onAccept}
-            rejectLabel={currentTexts.modelManagement.close}
-            onReject={onReject}
+            acceptLabel={currentTexts.modelManagement.close}
+            onAccept={onReject}
+            skipRejectButton={true}
         />
     );
 };
