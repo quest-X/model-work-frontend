@@ -16,6 +16,20 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.1.5',
+        date: '2026-04-16',
+        changes: [
+            { zh: '【严重】修复自定义分割模型推理完全不可用：后端缺少 /segment 端点（前端 SegmentationAPIDetector 调用 → 404）；现已添加完整的 /segment 端点，支持 YOLO-seg mask 提取 + SAM point/bbox prompt', en: '[Critical] Fix custom segmentation model inference completely broken: backend had no /segment endpoint (frontend SegmentationAPIDetector called → 404). Added full /segment endpoint with YOLO-seg mask extraction + SAM point/bbox prompt support' },
+            { zh: '【严重】/segment 端点添加 retina_masks=True：没有此参数时 masks[i].xy 返回模型内部分辨率坐标（如 640×640），前端把它当原图坐标叠加导致 mask 缩成一团', en: '[Critical] /segment endpoint now uses retina_masks=True: without it, masks[i].xy returns coordinates at model internal resolution (e.g. 640×640) instead of original image dimensions, causing masks to shrink into a tiny cluster on the canvas' },
+            { zh: '【修复】后端 /health 新增 model_task（当前模型的 task 类型）和 model_tasks（所有已加载模型的 task 字典），前端不再纯靠文件名正则猜测模型类型，任意命名的自定义分割模型都能被正确识别', en: '[Fix] Backend /health now returns model_task (active model\'s task type) and model_tasks (task dict for all loaded models). Frontend no longer guesses model type by filename regex — arbitrarily named custom segmentation models are now correctly identified' },
+            { zh: '【修复】后端 /upload 返回 service 字段（"detection" / "segmentation"），基于 model.task 属性精确判断；前端 LoadDetectionModelPopup 已有读取 data.service 的逻辑，之前因后端不返回而永远默认 detection', en: '[Fix] Backend /upload now returns service field ("detection" / "segmentation") based on model.task attribute. Frontend LoadDetectionModelPopup already reads data.service but previously always defaulted to detection because backend never sent it' },
+            { zh: '【修复】DetectionAPIDetector.syncFromActiveModel 和 SegmentationAPIDetector.syncFromActiveModel 现在接受 custom modelType，之前 custom 类型的模型会被直接拒绝推理', en: '[Fix] DetectionAPIDetector.syncFromActiveModel and SegmentationAPIDetector.syncFromActiveModel now accept custom modelType — previously custom-typed models were rejected outright' },
+            { zh: '【优化】模型下拉显示 [seg]/[cls]/[pose] 后缀标识模型类型，方便用户一眼辨认', en: '[Enhancement] Model dropdown shows [seg]/[cls]/[pose] suffix to identify model type at a glance' },
+            { zh: '【优化】后端 /upload 支持 .onnx 格式上传（之前只允许 .pt）', en: '[Enhancement] Backend /upload now accepts .onnx format (previously .pt only)' },
+            { zh: '【UI】模型引擎弹窗 UI 重构 + 推理结果删除同步修复 + 多处 UI 细节优化', en: '[UI] Model engine popup UI overhaul + inference result deletion sync fix + multiple UI detail improvements' },
+        ]
+    },
+    {
         version: '2.1.4',
         date: '2026-04-15',
         changes: [

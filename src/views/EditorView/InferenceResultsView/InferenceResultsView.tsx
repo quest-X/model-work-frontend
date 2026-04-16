@@ -26,7 +26,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
 
     const handleDeleteSegmentationResult = (result: SegmentationResult, index: number) => {
         const newSegmentationResults = segmentationResults.filter((_, i) => i !== index);
-        updateSegmentationResults(newSegmentationResults);
+        updateSegmentationResults(newSegmentationResults, activeImageData?.id);
 
         if (activeImageData) {
             const candidateLabelRects = activeImageData.labelRects.filter(labelRect => {

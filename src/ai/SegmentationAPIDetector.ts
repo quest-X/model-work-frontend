@@ -49,8 +49,8 @@ export class SegmentationAPIDetector {
             const state = store.getState();
             const active = AIModelsSelector.getActiveAIModel(state);
             if (active) {
-                if (active.modelType !== 'segmentation') {
-                    return { ok: false, reason: `Active model "${active.name}" is ${active.modelType}, not segmentation` };
+                if (active.modelType !== 'segmentation' && active.modelType !== 'custom') {
+                    return { ok: false, reason: `Active model "${active.name}" is ${active.modelType}, not segmentation/custom` };
                 }
                 if (!active.url) {
                     return { ok: false, reason: `Active model "${active.name}" has no url` };

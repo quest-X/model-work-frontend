@@ -12,7 +12,7 @@ import { AIModel } from '../../../store/aimodels/types';
 import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { v4 as uuidv4 } from 'uuid';
 import { StyledTextField } from '../../Common/StyledTextField/StyledTextField';
-import { YOLO_MODEL_FAMILIES, getServerUrl } from '../CallModelPopup/CallModelPopup';
+import { YOLO_MODEL_FAMILIES, SEG_MODEL_FAMILIES, YOLOModelFamily, getServerUrl } from '../CallModelPopup/CallModelPopup';
 
 interface IProps {
     updateActivePopupTypeAction: (activePopupType: PopupWindowType) => any;
@@ -119,31 +119,43 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
         return family.variants.filter(v => availableLocalModels.includes(v)).length;
     };
 
+    const renderModelFamilyList = (families: YOLOModelFamily[]) => {
+        return families.map(family => {
+            const downloaded = getLocalDownloadedCount(family.id);
+            return (
+                <div key={family.id} className={`LocalModelEntry${downloaded > 0 ? ' has-models' : ''}`}>
+                    <div className='LocalModelName'>{family.name}</div>
+                    <div className='LocalModelStatus'>
+                        {downloaded > 0 ? (
+                            <span className='downloaded'>{downloaded}/{family.variants.length}</span>
+                        ) : (
+                            <span className='none'>—</span>
+                        )}
+                    </div>
+                </div>
+            );
+        });
+    };
+
     const renderLocalModels = () => {
+        const selectedEngine = aiModels.find(m => m.id === selectedModelId);
+        const engineType = selectedEngine?.modelType;
+        const families = engineType === 'segmentation' ? SEG_MODEL_FAMILIES
+            : engineType === 'detection' ? YOLO_MODEL_FAMILIES
+            : null;
         return (
             <div className='LocalModelsSection'>
                 <div className='SectionTitle'>
                     {currentTexts.modelManagement.callModels}
-                    <span className='ManageLink' onClick={openLocalModelManager}>
-                        {currentTexts.modelManagement.manage}
-                    </span>
                 </div>
                 <div className='LocalModelsList'>
-                    {YOLO_MODEL_FAMILIES.map(family => {
-                        const downloaded = getLocalDownloadedCount(family.id);
-                        return (
-                            <div key={family.id} className={`LocalModelEntry${downloaded > 0 ? ' has-models' : ''}`}>
-                                <div className='LocalModelName'>{family.name}</div>
-                                <div className='LocalModelStatus'>
-                                    {downloaded > 0 ? (
-                                        <span className='downloaded'>{downloaded}/{family.variants.length}</span>
-                                    ) : (
-                                        <span className='none'>—</span>
-                                    )}
-                                </div>
+                    {families ? renderModelFamilyList(families) : (
+                        <div className='LocalModelEntry'>
+                            <div className='LocalModelName' style={{color: 'rgba(255,255,255,0.5)', fontStyle: 'italic'}}>
+                                {language === Language.CHINESE ? '请选择模型引擎' : 'Select a model engine'}
                             </div>
-                        );
-                    })}
+                        </div>
+                    )}
                 </div>
             </div>
         );
@@ -178,7 +190,6 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
         }
 
         return (
-            <Scrollbars>
                 <div className='ManageAIModelsPopupContent'>
                     {aiModels.map((model, index) => (
                         <div 
@@ -194,7 +205,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                             </div>
                             <div className='ModelActions'>
                                 <ImageButton
-                                    image={'ico/more.png'}
+                                    image={'ico/edit.png'}
                                     imageAlt={'edit'}
                                     buttonSize={{ width: 20, height: 20 }}
                                     padding={8}
@@ -211,7 +222,6 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                         </div>
                     ))}
                 </div>
-            </Scrollbars>
         );
     };
 
@@ -243,37 +253,37 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                         <StyledTextField
                             variant='standard'
                             type='password'
-                            label={currentTexts.modelManagement.apiKeyOptional}
+                            label={currentTexts.modelManagement.modelKeyOptional || '模型密钥 (可选)'}
                             value={editingModel.apiKey || ''}
                             onChange={(e) => updateEditingField('apiKey', e.target.value)}
                             style={{ width: '100%', marginBottom: '16px' }}
                         />
                     </div>
+                    {/* 模型描述字段暂时隐藏，以后再启用
                     <div className='ModelField'>
                         <StyledTextField
                             variant='standard'
-                            multiline
-                            rows={3}
                             label={currentTexts.modelManagement.descriptionOptional}
                             value={editingModel.description || ''}
                             onChange={(e) => updateEditingField('description', e.target.value)}
                             style={{ width: '100%', marginBottom: '16px' }}
                         />
                     </div>
+                    */}
                     <div className='EditActions'>
-                        <ImageButton
-                            image={'ico/ok.png'}
-                            imageAlt={'save'}
-                            buttonSize={{ width: 30, height: 30 }}
-                            padding={10}
-                            onClick={saveEditingModel}
-                        />
                         <ImageButton
                             image={'ico/cancel.png'}
                             imageAlt={'cancel'}
                             buttonSize={{ width: 30, height: 30 }}
                             padding={10}
                             onClick={cancelEditing}
+                        />
+                        <ImageButton
+                            image={'ico/save.png'}
+                            imageAlt={'save'}
+                            buttonSize={{ width: 30, height: 30 }}
+                            padding={10}
+                            onClick={saveEditingModel}
                         />
                     </div>
                 </div>
@@ -297,7 +307,18 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                     </div>
                     <div className='created-time-section'>
                         <label>{language === Language.CHINESE ? '添加时间' : 'Added'}</label>
-                        <span className='created-time'>{new Date(selectedModel.createdAt).toLocaleString()}</span>
+                        <span className='created-time'>{(() => {
+                            const d = new Date(selectedModel.createdAt);
+                            const yyyy = d.getFullYear();
+                            const mm = String(d.getMonth() + 1).padStart(2, '0');
+                            const dd = String(d.getDate()).padStart(2, '0');
+                            const h = d.getHours();
+                            const min = String(d.getMinutes()).padStart(2, '0');
+                            const sec = String(d.getSeconds()).padStart(2, '0');
+                            const ampm = h >= 12 ? 'PM' : 'AM';
+                            const h12 = h % 12 || 12;
+                            return `${yyyy}/${mm}/${dd}, ${h12}:${min}:${sec} ${ampm}`;
+                        })()}</span>
                     </div>
                 </div>
                 <div className='ModelField'>
@@ -305,13 +326,15 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                     <span className='url'>{selectedModel.url}</span>
                 </div>
                 <div className='ModelField'>
-                    <label>{currentTexts.modelManagement.apiKey}:</label>
+                    <label>{language === Language.CHINESE ? '模型密钥' : 'Model Key'}:</label>
                     <span>{selectedModel.apiKey ? '••••••••' : currentTexts.modelManagement.none}</span>
                 </div>
+                {/* 模型描述字段暂时隐藏，以后再启用
                 <div className='ModelField'>
                     <label>{currentTexts.modelManagement.description}:</label>
                     <span>{selectedModel.description || currentTexts.modelManagement.noDescription}</span>
                 </div>
+                */}
             </div>
         );
     };
@@ -335,13 +358,13 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                     </div>
                     <div className='ContentArea'>
                         <div className='ModelsListContainer'>
-                            {renderLocalModels()}
                             <div className='SectionTitle'>
                                 {currentTexts.modelManagement.modelEngines}
                             </div>
-                            <div className='ModelsContainer'>
+                            <div className={`ModelsContainer${aiModels.length === 0 ? ' empty' : ''}`}>
                                 {renderModelList()}
                             </div>
+                            {aiModels.length > 0 && renderLocalModels()}
                         </div>
                         <div className='ModelDetailsContainer'>
                             <div className='SectionTitle'>

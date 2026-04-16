@@ -42,7 +42,10 @@ const PolygonLabelsList: React.FC<IProps> = (
     }
 ) => {
     const currentTexts = LanguageConfig[language];
-    if (!imageData) return null;
+    if (!imageData) return <EmptyLabelList
+        labelBefore={currentTexts.drawFirstPolygon}
+        labelAfter={currentTexts.noLabelsCreated}
+    />;
 
     const labelInputFieldHeight = 40;
     const listStyle: React.CSSProperties = {

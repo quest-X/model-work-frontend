@@ -472,11 +472,11 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         },
 
         // EmptyLabelList
-        drawFirstBoundingBox: '绘制第一个边界框',
+        drawFirstBoundingBox: '绘制第一个矩形框',
         markFirstPoint: '标记第一个点',
         drawFirstLine: '绘制第一条线',
         drawFirstPolygon: '绘制第一个多边形',
-        drawFirstLabel: '绘制第一个标签',
+        drawFirstLabel: '查看全部标签',
         noLabelsCreated: '尚未为此图像创建标签',
         
         // EditorBottomNavigationBar
@@ -519,7 +519,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 description: '在服务器上运行标注模型'
             },
             integrateAIModel: {
-                name: '管理模型',
+                name: '模型管理',
                 description: '集成外部AI模型服务'
             }
         },
@@ -617,8 +617,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 modelServiceUrl: '模型服务地址',
                 modelTaskType: '模型任务类型',
                 modelApiKey: '模型接口密钥',
-                taskTypeDetection: '目标检测',
-                taskTypeSegmentation: '目标分割',
+                taskTypeDetection: '检测模型',
+                taskTypeSegmentation: '分割模型',
                 customAIMessage: '配置您的AI模型服务连接信息',
                 localYoloMessage: '连接本地 YOLO 推理服务（python detect_server.py）',
                 localYoloUrl: '服务地址'
@@ -632,8 +632,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 apiKey: '模型密钥',
                 testConnection: '测试连接',
                 integrationMessage: '配置您要接入的外部AI模型服务的详细信息。模型地址和模型类型是必填项，模型密钥为可选项。',
-                taskTypeDetection: '目标检测',
-                taskTypeSegmentation: '目标分割'
+                taskTypeDetection: '检测模型',
+                taskTypeSegmentation: '分割模型'
             }
         },
         
@@ -788,7 +788,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             noDescription: '暂无描述',
             manageMessage: '管理您的AI模型。您可以添加、编辑或删除模型，选择要使用的默认模型。',
             modelDetails: '模型详情',
-            title: 'AI模型管理',
+            title: '模型引擎',
             close: '关闭',
             apiEndpoint: '接口地址',
             apiKey: '模型密钥',

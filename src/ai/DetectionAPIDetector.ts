@@ -117,8 +117,8 @@ export class DetectionAPIDetector {
             const state = store.getState();
             const active = AIModelsSelector.getActiveAIModel(state);
             if (active) {
-                if (active.modelType !== 'detection') {
-                    return { ok: false, reason: `Active model "${active.name}" is ${active.modelType}, not detection` };
+                if (active.modelType !== 'detection' && active.modelType !== 'custom') {
+                    return { ok: false, reason: `Active model "${active.name}" is ${active.modelType}, not detection/custom` };
                 }
                 if (!active.url) {
                     return { ok: false, reason: `Active model "${active.name}" has no url` };

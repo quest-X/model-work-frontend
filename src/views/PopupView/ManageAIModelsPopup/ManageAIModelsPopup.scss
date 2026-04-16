@@ -10,7 +10,7 @@
 
   align-self: stretch;
   flex: 1;
-  min-height: 500px;
+  min-height: 300px;
 
   .LeftContainer {
     width: 50px;
@@ -87,8 +87,14 @@
         }
 
         .ModelsContainer {
-          flex: 1;
-          
+          max-height: 200px;
+          overflow-y: auto;
+
+          &.empty {
+            flex: 1;
+            max-height: none;
+          }
+
           .EmptyList {
             height: 100%;
             display: flex;
@@ -123,7 +129,7 @@
           }
 
           .ManageAIModelsPopupContent {
-            padding: 10px 0;
+            padding: 0;
 
             .ModelEntry {
               display: flex;

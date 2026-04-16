@@ -66,8 +66,8 @@ const CallModelPopup: React.FC<IProps> = ({
     const [selectedId, setSelectedId] = useState<string | null>(null);
 
     const [availableModels, setAvailableModels] = useState<string[]>([]);
-    const [currentModelName, setCurrentModelName] = useState<string>('');
-    const [currentSegModelName, setCurrentSegModelName] = useState<string>('');
+    // 后端同时在内存中的所有模型（多模型共存）
+    const [loadedModels, setLoadedModels] = useState<string[]>([]);
 
     // 推理基础地址从已注册的引擎推导 —— 不再让用户在这个弹窗里填 URL。
     // 优先 active 引擎,退化到第一个注册的,最后兜底用浏览器 host 推导的默认地址。
@@ -81,7 +81,6 @@ const CallModelPopup: React.FC<IProps> = ({
             .then(r => r.json())
             .then(data => {
                 if (!data.models) return;
-                // Backend v2.1.1+ 返回 [{name, type}],老 backend 返回 [name] —— 两兼容
                 const names: string[] = data.models.map((m: unknown) =>
                     typeof m === 'string' ? m : (m as { name: string }).name
                 );
@@ -91,8 +90,7 @@ const CallModelPopup: React.FC<IProps> = ({
         fetch(`${derivedBaseUrl}/health`)
             .then(r => r.json())
             .then(data => {
-                if (data.model && data.model !== 'none') setCurrentModelName(data.model);
-                if (data.segmentation_model) setCurrentSegModelName(data.segmentation_model);
+                if (data.loaded_models) setLoadedModels(data.loaded_models);
             })
             .catch(() => {});
     }, [derivedBaseUrl]);
@@ -128,19 +126,20 @@ const CallModelPopup: React.FC<IProps> = ({
         PopupActions.close();
     };
 
-    const isActiveFamily = (family: YOLOModelFamily): boolean => {
-        const isSeg = SEG_MODEL_FAMILIES.some(f => f.id === family.id);
-        const modelName = isSeg ? currentSegModelName : currentModelName;
-        if (!modelName) return false;
-        const baseName = modelName.replace('.pt', '');
-        return family.variants.some(v => v === baseName);
+    // 找出该 family 中所有已加载（在内存中）的模型
+    const getActiveVariants = (family: YOLOModelFamily): string[] => {
+        return loadedModels.filter(m => {
+            const baseName = m.replace(/\.(pt|onnx)$/i, '');
+            return family.variants.includes(baseName);
+        });
     };
 
     const renderFamilyOption = (family: YOLOModelFamily) => {
         const isSelected = selectedId === family.id;
         const downloaded = getDownloadedCount(family);
         const total = family.variants.length;
-        const isActive = isActiveFamily(family);
+        const activeVariants = getActiveVariants(family);
+        const isActive = activeVariants.length > 0;
         return <div
             className={`OptionsItem${downloaded > 0 ? ' has-models' : ''}${isActive ? ' active-model' : ''}`}
             onClick={() => onSelect(family.id)}
@@ -153,7 +152,7 @@ const CallModelPopup: React.FC<IProps> = ({
             />
             {family.name}
             {downloaded > 0 && <span className='model-count'> ({downloaded}/{total})</span>}
-            {isActive && <span className='active-badge'>✓ {(SEG_MODEL_FAMILIES.some(f => f.id === family.id) ? currentSegModelName : currentModelName).replace('.pt', '')}</span>}
+            {activeVariants.map(v => <span key={v} className='active-badge'>✓ {v.replace(/\.(pt|onnx)$/i, '')}</span>)}
         </div>
     };
 
@@ -163,13 +162,25 @@ const CallModelPopup: React.FC<IProps> = ({
 
     const zhTexts = language === Language.CHINESE;
 
+    // 从 loadedModels 中找出所有自定义模型（不属于任何内置 family）
+    const allBuiltinVariants = [
+        ...YOLO_MODEL_FAMILIES.flatMap(f => f.variants),
+        ...SEG_MODEL_FAMILIES.flatMap(f => f.variants),
+    ];
+    const customLoadedModels = loadedModels.filter(name => {
+        const baseName = name.replace(/\.(pt|onnx)$/i, '');
+        return !allBuiltinVariants.includes(baseName);
+    });
+    const customPtModels = customLoadedModels.filter(n => !n.endsWith('.onnx'));
+    const customOnnxModels = customLoadedModels.filter(n => n.endsWith('.onnx'));
+
     const renderContent = () => {
         return <div className='CallModelPopupContent'>
             <div className='ModelSection'>
                 <div className='SectionHeader'>{zhTexts ? '自定义' : 'Custom'}</div>
                 <div className='Options'>
                     <div
-                        className='OptionsItem'
+                        className={`OptionsItem${customPtModels.length > 0 ? ' active-model' : ''}`}
                         onClick={() => onSelect('custom-pt')}
                     >
                         <img
@@ -178,9 +189,10 @@ const CallModelPopup: React.FC<IProps> = ({
                             alt={selectedId === 'custom-pt' ? 'checked' : 'unchecked'}
                         />
                         {zhTexts ? '模型 .pt 文件' : '.pt model file'}
+                        {customPtModels.map(n => <span key={n} className='active-badge'>✓ {n}</span>)}
                     </div>
                     <div
-                        className='OptionsItem'
+                        className={`OptionsItem${customOnnxModels.length > 0 ? ' active-model' : ''}`}
                         onClick={() => onSelect('custom-onnx')}
                     >
                         <img
@@ -189,6 +201,7 @@ const CallModelPopup: React.FC<IProps> = ({
                             alt={selectedId === 'custom-onnx' ? 'checked' : 'unchecked'}
                         />
                         {zhTexts ? '模型 .onnx 文件' : '.onnx model file'}
+                        {customOnnxModels.map(n => <span key={n} className='active-badge'>✓ {n}</span>)}
                     </div>
                     <div className='OptionsItem disabled'>
                         <img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />
