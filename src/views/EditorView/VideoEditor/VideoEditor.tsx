@@ -147,8 +147,7 @@ const VideoEditor: React.FC<IProps> = ({
 
             const frameChanged = activeVideo.currentFrame !== lastFrameForImageRef.current;
             const playStateChanged = isPlaying !== lastIsPlayingRef.current;
-            // 暂停 → 播放 或 播放 → 暂停 时，必须重绘 Editor canvas
-            // （因为 VideoPrimaryRenderEngine 在播放时跳过 drawImage，暂停时才绘制）
+            // 暂停 → 播放 或 播放 → 暂停 时重绘以刷新 Editor canvas 底图
             const needsRedraw = frameChanged || playStateChanged;
 
             if (needsRedraw) {

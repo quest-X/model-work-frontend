@@ -282,27 +282,26 @@ export class AIDetectionActions {
                     frameIdx < preFrames.length ? (preFrames[frameIdx] as Blob) : null
                 );
             } else if (sessionId) {
-                // === fast_ffmpeg_mode (on-demand): fetch frames in batches from backend ===
+                // === fast_ffmpeg_mode (on-demand): 按真实帧索引逐帧取帧 ===
+                // 注意：必须用 frameQueue[i].frameIdx（视频中的真实位置），
+                // 而不是循环变量 i（frameQueue 的下标）——跳帧推理时两者不同！
                 console.log('[Capture] fast_ffmpeg_mode (on-demand): fetching frames from backend', { captureTotal, sessionId });
                 capturedBlobs = new Array(captureTotal).fill(null);
-                const FETCH_BATCH = 10;
-                for (let i = 0; i < captureTotal; i += FETCH_BATCH) {
+                for (let i = 0; i < captureTotal; i++) {
                     if (this.isCancelled()) { console.log('[Capture] 用户取消,中止按需取帧'); break; }
-                    const count = Math.min(FETCH_BATCH, captureTotal - i);
+                    const { frameIdx } = frameQueue[i];
                     const pct = Math.round((i / captureTotal) * 33);
                     notify(1,
-                        `${t().aiInference.steps.captureFrame} (${i + count}/${captureTotal})`,
-                        `${pct}%`
+                        `${t().aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`,
+                        `${pct}% — frame ${frameIdx}`
                     );
                     try {
-                        const batchFrames = await FrameExtractorService.fetchFrameRange(sessionId, i, count);
-                        for (let j = 0; j < batchFrames.length; j++) {
-                            capturedBlobs[i + j] = batchFrames[j] as Blob;
-                        }
+                        const [frame] = await FrameExtractorService.fetchFrameRange(sessionId, frameIdx, 1);
+                        capturedBlobs[i] = frame as Blob;
                     } catch (err) {
-                        console.warn(`[Capture] 按需获取帧 ${i}-${i + count} 失败:`, err);
+                        console.warn(`[Capture] 按需获取帧 ${frameIdx} 失败:`, err);
                     }
-                    if (i % 20 === 0 && i > 0) await this.yieldToUI();
+                    if (i % 10 === 0 && i > 0) await this.yieldToUI();
                 }
             } else {
                 // === raw_browser_mode fallback: Phase 1 sequential seek+capture from <video> ===
@@ -518,8 +517,9 @@ export class AIDetectionActions {
             store.dispatch(updateImageDataById(imageData.id, updatedImg));
             // 推理结果落地后自动切到检测标签页（view + tool 同步，这样渲染引擎一起切过去，
             // 画布只显示检测框而不会泄漏分割 mask）
+            // 橡皮擦激活时不强制切换工具，避免中断用户的擦除操作
             store.dispatch(updateActiveLabelViewType(LabelType.RECT));
-            if (!store.getState().general.smartAnnotationActive) {
+            if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
                 store.dispatch(updateActiveLabelType(LabelType.RECT));
             }
             // 同步缓存 + playbackImageData
@@ -631,8 +631,9 @@ export class AIDetectionActions {
         if (modified) {
             store.dispatch(updateImageData(currentImagesData));
             // 批量推理出检测框后自动切到检测标签页（view + tool 同步）
+            // 橡皮擦激活时不强制切换工具，避免中断用户的擦除操作
             store.dispatch(updateActiveLabelViewType(LabelType.RECT));
-            if (!store.getState().general.smartAnnotationActive) {
+            if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
                 store.dispatch(updateActiveLabelType(LabelType.RECT));
             }
             // 同步缓存到 EditorModel，供播放时 handleVideoTimeUpdate 立即读取

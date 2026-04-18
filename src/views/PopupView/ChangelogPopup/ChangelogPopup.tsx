@@ -16,6 +16,18 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.1.8',
+        date: '2026-04-19',
+        changes: [
+            { zh: '【功能】快捷键撤销 Ctrl+Z / Cmd+Z：通过 Redux 中间件维护 imagesData / labels 的深拷贝快照栈（上限 100），覆盖矩形 / 多边形 / 点 / 折线的创建、删除、修改；因 render engine 历史上在 dispatch 前直接 mutate store，中间件缓存上一次 dispatch 后的 pristine 深拷贝，下一次 mutation 到来时推该缓存，避免被已发生的 mutation 污染', en: '[Feature] Undo hotkey Ctrl+Z / Cmd+Z: Redux middleware keeps a deep-cloned snapshot stack of imagesData/labels (cap 100) covering create/delete/modify for rect/polygon/point/line. Because render engines historically mutate store state before dispatching, the middleware caches a pristine deep clone after every dispatch and pushes that cached clone on the next mutation — bypassing the already-dirty live state' },
+            { zh: '【修复】视频放大播放 mask 渲染错位（2.1.7 修了画布 resize 但视频层 object-fit 仍在原始尺寸）：VideoPrimaryRenderEngine 播放时不再 early-return，改用 EditorModel.videoFrameImage（FramePlayer 每帧已更新）作为底图源，Editor 画布同时绘制视频帧 + masks，两者共用同一套 zoom 坐标变换', en: '[Fix] Mask misalignment when playing zoomed video (2.1.7 fixed canvas resize but the video layer itself stayed at original size via object-fit): VideoPrimaryRenderEngine no longer early-returns during playback — instead uses EditorModel.videoFrameImage (updated per-frame by FramePlayer) as the image source, so the Editor canvas draws both the video frame and masks under the same zoomed coordinate transform' },
+            { zh: '【重构】橡皮擦工具改为 2 状态按钮（整体擦除 / 局部擦除），首次点击进入整体擦除（单击删整个多边形或矩形），再次点击切到局部擦除（拖拽笔刷擦顶点）；替换 v2.1.7 的画布双击检测；新增 Redux eraserFineMode、ERASER / ERASER_FINE cursor，切换其他工具时无条件关闭橡皮擦', en: '[Refactor] Eraser tool is now a 2-state toolbar button (global erase / fine erase): first click activates global erase (single click deletes an entire polygon/rect), clicking again toggles to fine erase (drag brush to remove vertices). Replaces the canvas double-click detection from v2.1.7. Adds Redux eraserFineMode flag + ERASER / ERASER_FINE cursor styles; switching to any other tool unconditionally exits eraser' },
+            { zh: '【修复】fast_ffmpeg_mode 按需取帧用错帧：跳帧推理时循环变量 i 与 frameQueue[i].frameIdx 不同（i 是队列下标，frameIdx 是视频中的真实帧号），原代码按 i 批量取帧导致取错帧；现改为按 frameIdx 逐帧 fetch，进度提示同时显示 frame 编号', en: '[Fix] fast_ffmpeg_mode on-demand frame fetch fetched wrong frames when frame-skip > 1: loop index i (queue position) was used as the video frame number instead of frameQueue[i].frameIdx (actual frame). Now fetches by real frameIdx one frame at a time; progress notification displays the frame number' },
+            { zh: '【修复】推理完成后强制切到 RECT 工具会打断橡皮擦操作：检测单帧 / 批量推理的工具切换加 eraserMode 守卫，橡皮擦激活时只切 view type 不切 active tool', en: '[Fix] Inference completion forcibly switched to RECT tool, interrupting eraser use: detection single-frame / batch paths now guard the tool switch behind an eraserMode check — when eraser is active only the view type is switched, leaving the active tool untouched' },
+            { zh: '【修复】PolygonRenderEngine.eraserClick 与其他方法对齐，优先读 EditorModel.playbackImageData，使视频模式下擦除命中当前显示帧的多边形', en: '[Fix] PolygonRenderEngine.eraserClick now prefers EditorModel.playbackImageData (matching sibling methods), so erasing in video mode hits polygons on the displayed frame' },
+        ]
+    },
+    {
         version: '2.1.7',
         date: '2026-04-18',
         changes: [

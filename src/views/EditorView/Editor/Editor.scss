@@ -86,5 +86,16 @@
         display: block;
       }
     }
+
+    &.eraser, &.eraser-fine {
+      width: 24px;
+      height: 24px;
+      background-color: transparent;
+      border: none;
+      > img {
+        display: block;
+        filter: brightness(0) invert(1);
+      }
+    }
   }
 }

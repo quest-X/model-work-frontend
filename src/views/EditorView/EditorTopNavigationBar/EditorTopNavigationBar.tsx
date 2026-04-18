@@ -5,7 +5,7 @@ import classNames from 'classnames';
 import { AppState } from '../../../store';
 import { store } from '../../../index';
 import { connect } from 'react-redux';
-import { updateSmartAnnotationActiveStatus, updateImageDragModeStatus, updateActivePopupType, updateCustomCursorStyle, updateEraserMode } from '../../../store/general/actionCreators';
+import { updateSmartAnnotationActiveStatus, updateImageDragModeStatus, updateActivePopupType, updateCustomCursorStyle, updateEraserMode, updateEraserFineMode } from '../../../store/general/actionCreators';
 import { PopupWindowType } from '../../../data/enums/PopupWindowType';
 import { CustomCursorStyle } from '../../../data/enums/CustomCursorStyle';
 import { GeneralSelector } from '../../../store/selectors/GeneralSelector';
@@ -128,6 +128,7 @@ interface IProps {
     imageDragMode: boolean;
     smartAnnotationActive: boolean;
     eraserMode: boolean;
+    eraserFineMode: boolean;
     updateEraserModeAction: (eraserMode: boolean) => any;
     isFullImageInferenceInProgress: boolean;
     imageAIStates: Map<string, { aiLabelsVisible: boolean; segmentationLabelsVisible: boolean; inferenceHistory: Array<any> }>;
@@ -155,6 +156,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         imageDragMode,
         smartAnnotationActive,
         eraserMode,
+        eraserFineMode,
         updateEraserModeAction,
         isFullImageInferenceInProgress,
         imageAIStates,
@@ -203,26 +205,29 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         if (smartAnnotationActive) {
             updateSmartAnnotationActiveStatusAction(false);
         }
-        if (eraserMode) {
-            updateEraserModeAction(false);
-        }
+        // 切换任何工具时无条件关闭橡皮擦（避免 stale closure 漏掉 eraserMode=true 的情况）
+        updateEraserModeAction(false);
         updateActiveLabelType(toolType);
         // 切换工具时重置 cursor 到 DEFAULT —— 避免从 ALL 视图切过来时 GRAB 光标残留
         store.dispatch(updateCustomCursorStyle(CustomCursorStyle.DEFAULT));
-    }, [smartAnnotationActive, updateSmartAnnotationActiveStatusAction, updateActiveLabelType]);
+    }, [smartAnnotationActive, updateSmartAnnotationActiveStatusAction, updateActiveLabelType, updateEraserModeAction]);
 
-    // 橡皮擦按钮
+    // 橡皮擦按钮 —— 2 状态切换：整体擦除 ↔ 局部擦除
+    // 首次点击激活橡皮擦（进入整体擦除），之后每次点击在整体/局部之间切换
+    // 退出橡皮擦：点击其他工具按钮（查看标签/绘制矩形框/绘制多边形）
     const eraserOnClick = useCallback(() => {
-        const willActivate = !eraserMode;
-        updateEraserModeAction(willActivate);
-        if (willActivate) {
-            // 橡皮擦激活时：关闭智能标注、关闭拖拽、切到 ALL 视图
+        if (!eraserMode) {
+            // 未激活 → 整体擦除
+            updateEraserModeAction(true);
             if (smartAnnotationActive) updateSmartAnnotationActiveStatusAction(false);
             if (imageDragMode) updateImageDragModeStatusAction(false);
             updateActiveLabelType(LabelType.ALL);
             store.dispatch(updateCustomCursorStyle(CustomCursorStyle.DEFAULT));
+        } else {
+            // 已激活 → 在整体/局部之间切换
+            store.dispatch(updateEraserFineMode(!eraserFineMode));
         }
-    }, [eraserMode, smartAnnotationActive, imageDragMode, updateEraserModeAction,
+    }, [eraserMode, eraserFineMode, smartAnnotationActive, imageDragMode, updateEraserModeAction,
         updateSmartAnnotationActiveStatusAction, updateImageDragModeStatusAction, updateActiveLabelType]);
 
     // 显示/隐藏标签按钮 —— 同时控制矩形框和多边形
@@ -575,15 +580,17 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                     )}
                     {hasAnyLabel && getButtonWithTooltip(
                         'eraser',
-                        language === 'zh' ? (eraserMode ? '退出橡皮擦' : '橡皮擦') : (eraserMode ? 'Exit Eraser' : 'Eraser'),
-                        'ico/eraser.png',
+                        language === 'zh'
+                            ? (eraserFineMode ? '局部擦除' : '整体擦除')
+                            : (eraserFineMode ? 'Local erase' : 'Whole erase'),
+                        eraserFineMode ? 'ico/eraser.png' : 'ico/eraser-fine.png',
                         'eraser',
                         eraserMode,
                         undefined,
                         eraserOnClick
                     )}
                 </div>;
-            }, [imageAIStates, imagesData, activeImageIndex, toggleAILabelsOnClick, isSAMLoaded, smartAnnotationActive, smartAnnotationOnClick, currentTexts])}
+            }, [imageAIStates, imagesData, activeImageIndex, toggleAILabelsOnClick, isSAMLoaded, smartAnnotationActive, smartAnnotationOnClick, currentTexts, eraserMode, eraserFineMode, eraserOnClick, language])}
             <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 6, height: '100%' }}>
                 <select
                     value={activeModelName}
@@ -701,6 +708,7 @@ const mapStateToProps = (state: AppState) => ({
     imageDragMode: state.general.imageDragMode,
     smartAnnotationActive: state.general.smartAnnotationActive,
     eraserMode: state.general.eraserMode ?? false,
+    eraserFineMode: state.general.eraserFineMode ?? false,
     isFullImageInferenceInProgress: state.ai.isFullImageInferenceInProgress,
     imageAIStates: state.ai.imageAIStates,
     activeLabelType: state.labels.activeLabelType,

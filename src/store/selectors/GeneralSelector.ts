@@ -48,4 +48,8 @@ export class GeneralSelector {
     public static getEraserMode(): boolean {
         return store.getState().general.eraserMode ?? false;
     }
+
+    public static getEraserFineMode(): boolean {
+        return store.getState().general.eraserFineMode ?? false;
+    }
 }

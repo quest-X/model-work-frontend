@@ -128,26 +128,25 @@ export class AISegmentationActions {
                     frameIdx < preFrames.length ? (preFrames[frameIdx] as Blob) : null
                 );
             } else if (sessionId) {
-                // fast_ffmpeg_mode (on-demand): fetch frames from backend
+                // fast_ffmpeg_mode (on-demand): 按真实帧索引逐帧取帧
+                // 注意：必须用 frameQueue[i].frameIdx（视频中的真实位置），
+                // 而不是循环变量 i（frameQueue 的下标）——跳帧推理时两者不同！
                 capturedBlobs = new Array(captureTotal).fill(null);
-                const FETCH_BATCH = 10;
-                for (let i = 0; i < captureTotal; i += FETCH_BATCH) {
+                for (let i = 0; i < captureTotal; i++) {
                     if (this.isCancelled()) { console.log('[Segment/Capture] 用户取消,中止按需取帧'); break; }
-                    const count = Math.min(FETCH_BATCH, captureTotal - i);
+                    const { frameIdx } = frameQueue[i];
                     const pct = Math.round((i / captureTotal) * 33);
                     notify(1,
-                        `${t().aiInference.steps.captureFrame} (${i + count}/${captureTotal})`,
-                        `${pct}%`
+                        `${t().aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`,
+                        `${pct}% — frame ${frameIdx}`
                     );
                     try {
-                        const batchFrames = await FrameExtractorService.fetchFrameRange(sessionId, i, count);
-                        for (let j = 0; j < batchFrames.length; j++) {
-                            capturedBlobs[i + j] = batchFrames[j] as Blob;
-                        }
+                        const [frame] = await FrameExtractorService.fetchFrameRange(sessionId, frameIdx, 1);
+                        capturedBlobs[i] = frame as Blob;
                     } catch (err) {
-                        console.warn(`[Segment/Capture] fetch frames ${i}-${i + count} failed:`, err);
+                        console.warn(`[Segment/Capture] fetch frame ${frameIdx} failed:`, err);
                     }
-                    if (i % 20 === 0 && i > 0) await this.yieldToUI();
+                    if (i % 10 === 0 && i > 0) await this.yieldToUI();
                 }
             } else {
                 // raw_browser_mode: not implemented for segmentation (fallback)
@@ -310,7 +309,8 @@ export class AISegmentationActions {
             // （智能标注是连续交互，每次点击都抢视图会打断用户的节奏）
             if (source === 'batch') {
                 store.dispatch(updateActiveLabelViewType(LabelType.POLYGON));
-                if (!store.getState().general.smartAnnotationActive) {
+                // 橡皮擦激活时不强制切换工具，避免中断用户的擦除操作
+                if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
                     store.dispatch(updateActiveLabelType(LabelType.POLYGON));
                 }
             }

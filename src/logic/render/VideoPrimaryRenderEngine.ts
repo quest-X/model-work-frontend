@@ -1,12 +1,10 @@
 import {IRect} from '../../interfaces/IRect';
 import {PrimaryEditorRenderEngine} from './PrimaryEditorRenderEngine';
 import {VideoSelector} from '../../store/selectors/VideoSelector';
+import {EditorModel} from '../../staticModels/EditorModel';
 
 /**
- * 视频模式的主渲染引擎
- * 继承自 PrimaryEditorRenderEngine
- * - 播放时不绘制背景图像（由下层 VideoPlayer 高帧率显示）
- * - 暂停时绘制背景图像（使缩放时视频帧与标注框同步缩放）
+ * 视频模式的主渲染引擎：播放时改用 videoFrameImage 作为底图源，让画布在 zoom>1 时也能正确渲染当前帧
  */
 export class VideoPrimaryRenderEngine extends PrimaryEditorRenderEngine {
 
@@ -15,11 +13,11 @@ export class VideoPrimaryRenderEngine extends PrimaryEditorRenderEngine {
     }
 
     public drawImage(image: HTMLImageElement, imageRect: IRect) {
-        if (VideoSelector.isVideoPlaying() || !imageRect) {
-            return;
-        }
-        // 暂停时：在标注画布上绘制视频帧，使其跟随缩放
-        super.drawImage(image, imageRect);
+        if (!imageRect) return;
+        const src = VideoSelector.isVideoPlaying()
+            ? (EditorModel.videoFrameImage || image)
+            : image;
+        super.drawImage(src, imageRect);
     }
 }
 

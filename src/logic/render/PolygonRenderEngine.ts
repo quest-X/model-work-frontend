@@ -489,7 +489,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
      * 返回 true 表示有删除发生。
      */
     public eraserClick(data: EditorData): boolean {
-        const imageData = LabelsSelector.getActiveImageData();
+        const imageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
         if (!imageData) return false;
         const mouse = data.mousePositionOnViewPortContent;
         if (!mouse) return false;
@@ -539,7 +539,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
      * 供 AllLabelsRenderEngine 的双击检测使用
      */
     public getPolygonIdUnderMouse(data: EditorData): string | null {
-        const imageData = LabelsSelector.getActiveImageData();
+        const imageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
         if (!imageData) return null;
         const mouse = data.mousePositionOnViewPortContent;
         if (!mouse) return null;
@@ -565,7 +565,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
      * 返回 true = 多边形仍存在，false = 顶点不足 3 个已整体删除
      */
     public eraseVerticesNearPoint(data: EditorData, polygonId: string, brushRadius: number): boolean {
-        const imageData = LabelsSelector.getActiveImageData();
+        const imageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
         if (!imageData) return false;
         const mouse = data.mousePositionOnViewPortContent;
         if (!mouse) return false;
@@ -607,7 +607,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
      *  - 鼠标位置笔刷圆圈
      */
     public drawFineEraserOverlay(data: EditorData, polygonId: string, brushRadius: number): void {
-        const imageData = LabelsSelector.getActiveImageData();
+        const imageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
         if (!imageData) return;
         const mouse = data.mousePositionOnViewPortContent;
         const polygon = imageData.labelPolygons.find(p => p.id === polygonId);
@@ -635,6 +635,86 @@ export class PolygonRenderEngine extends BaseRenderEngine {
             DrawUtil.drawCircleWithFill(this.canvas, v, 5, fill);
             DrawUtil.drawCircle(this.canvas, v, 5, 0, 360, 1, 'rgba(0, 0, 0, 0.5)');
         }
+    }
+
+    /**
+     * 局部擦除（全局版）：擦除所有可见多边形中距鼠标 ≤ brushRadius 像素的顶点
+     * 返回 true = 有任何变更
+     */
+    public eraseVerticesNearPointAll(data: EditorData, brushRadius: number): boolean {
+        const imageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
+        if (!imageData) return false;
+        const mouse = data.mousePositionOnViewPortContent;
+        if (!mouse) return false;
+
+        let anyChanged = false;
+        const toDelete = new Set<string>();
+
+        const updatedPolygons = imageData.labelPolygons.map(polygon => {
+            if (!polygon.isVisible) return polygon;
+            const verticesOnCanvas = RenderEngineUtil.transferPolygonFromImageToViewPortContent(polygon.vertices, data);
+            const keepIndices: number[] = [];
+            for (let i = 0; i < verticesOnCanvas.length; i++) {
+                const dx = verticesOnCanvas[i].x - mouse.x;
+                const dy = verticesOnCanvas[i].y - mouse.y;
+                if (Math.sqrt(dx * dx + dy * dy) > brushRadius) keepIndices.push(i);
+            }
+            if (keepIndices.length === polygon.vertices.length) return polygon; // 无变化
+            anyChanged = true;
+            if (keepIndices.length < 3) {
+                toDelete.add(polygon.id);
+                return polygon; // 待删
+            }
+            return { ...polygon, vertices: keepIndices.map(i => polygon.vertices[i]) };
+        }).filter(p => !toDelete.has(p.id));
+
+        if (!anyChanged) return false;
+        store.dispatch(updateImageDataById(imageData.id, { ...imageData, labelPolygons: updatedPolygons }));
+        EditorActions.fullRender();
+        return true;
+    }
+
+    /**
+     * 局部擦除模式下绘制：
+     *  - 鼠标悬停在某个多边形上时，显示该多边形的所有顶点
+     *    （白点=安全，红点=在笔刷范围内将被擦除）
+     *  - 笔刷圆圈（始终显示，标示擦除范围）
+     */
+    public drawFineEraserBrush(data: EditorData, brushRadius: number): void {
+        const mouse = data.mousePositionOnViewPortContent;
+        const imageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
+
+        if (imageData && mouse) {
+            const edgeRadius = RenderEngineSettings.anchorHoverSize.width / 2;
+
+            // 找到鼠标悬停的第一个多边形（内部 / 边缘 / 顶点附近均算）
+            let hoveredPolygon: LabelPolygon | null = null;
+            for (const polygon of imageData.labelPolygons) {
+                if (!polygon.isVisible) continue;
+                const verts = RenderEngineUtil.transferPolygonFromImageToViewPortContent(polygon.vertices, data);
+                const inside = PolygonRenderEngine.isPointInsidePolygon(mouse, verts);
+                const onEdge = RenderEngineUtil.isMouseOverPolygon(mouse, verts, edgeRadius);
+                if (inside || onEdge) {
+                    hoveredPolygon = polygon;
+                    break;
+                }
+            }
+
+            // 只对悬停的多边形显示顶点
+            if (hoveredPolygon) {
+                const verts = RenderEngineUtil.transferPolygonFromImageToViewPortContent(hoveredPolygon.vertices, data);
+                for (const v of verts) {
+                    const dx = v.x - mouse.x;
+                    const dy = v.y - mouse.y;
+                    const inBrush = Math.sqrt(dx * dx + dy * dy) <= brushRadius;
+                    const fill = inBrush ? 'rgba(255, 50, 50, 1)' : 'rgba(255, 255, 255, 0.9)';
+                    DrawUtil.drawCircleWithFill(this.canvas, v, 4, fill);
+                    DrawUtil.drawCircle(this.canvas, v, 4, 0, 360, 1, 'rgba(0, 0, 0, 0.6)');
+                }
+            }
+        }
+
+        // 注意：不画笔刷圆圈，光标本身已能指示操作范围
     }
 
     // =================================================================================================================

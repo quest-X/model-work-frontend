@@ -105,6 +105,15 @@ export function updateEraserMode(eraserMode: boolean): GeneralActionTypes {
     };
 }
 
+export function updateEraserFineMode(eraserFineMode: boolean): GeneralActionTypes {
+    return {
+        type: Action.UPDATE_ERASER_FINE_MODE,
+        payload: {
+            eraserFineMode,
+        },
+    };
+}
+
 export function updateLanguage(language: Language): GeneralActionTypes {
     return {
         type: Action.UPDATE_LANGUAGE,

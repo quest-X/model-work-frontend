@@ -12,6 +12,7 @@ import {LabelActions} from "../actions/LabelActions";
 import {LineRenderEngine} from "../render/LineRenderEngine";
 import {PolygonRenderEngine} from "../render/PolygonRenderEngine";
 import {AutoSaveService} from "../../services/AutoSaveService";
+import {UndoActions} from "../actions/UndoActions";
 
 export class EditorContext extends BaseContext {
     // 保存回调：由 TopNavigationBar 注册，用于更新 UI 上的最近保存时间
@@ -24,6 +25,13 @@ export class EditorContext extends BaseContext {
                 event.preventDefault();
                 if (EditorContext.onSaveCallback) EditorContext.onSaveCallback();
                 AutoSaveService.saveCurrentState();
+            }
+        },
+        {
+            keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Meta", "z"] : ["Control", "z"],
+            action: (event: KeyboardEvent) => {
+                event.preventDefault();
+                UndoActions.undo();
             }
         },
         {

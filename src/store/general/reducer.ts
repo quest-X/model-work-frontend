@@ -14,6 +14,7 @@ const initialState: GeneralState = {
     imageDragMode: false,
     smartAnnotationActive: false,
     eraserMode: false,
+    eraserFineMode: false,
     enablePerClassColoration: true,
     projectData: {
         type: ProjectType.OBJECT_DETECTION, // 默认设置为目标检测项目
@@ -73,7 +74,15 @@ export function generalReducer(
         case Action.UPDATE_ERASER_MODE: {
             return {
                 ...state,
-                eraserMode: action.payload.eraserMode
+                eraserMode: action.payload.eraserMode,
+                // 保留 eraserFineMode，使橡皮擦记住上次模式（整体/局部）
+                // 这样从局部擦除切换到其他工具再切回，仍恢复局部擦除
+            }
+        }
+        case Action.UPDATE_ERASER_FINE_MODE: {
+            return {
+                ...state,
+                eraserFineMode: action.payload.eraserFineMode
             }
         }
         case Action.UPDATE_PROJECT_DATA: {
