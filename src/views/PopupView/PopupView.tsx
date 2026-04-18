@@ -20,6 +20,9 @@ import ModelEnginePopup from './ModelEnginePopup/ModelEnginePopup';
 import ManageAIModelsPopup from './ManageAIModelsPopup/ManageAIModelsPopup';
 import KeyboardShortcutsPopup from './KeyboardShortcutsPopup/KeyboardShortcutsPopup';
 import ChangelogPopup from './ChangelogPopup/ChangelogPopup';
+import PipelinePreprocessPopup from './PipelinePopup/PipelinePreprocessPopup';
+import PipelineInferencePopup from './PipelinePopup/PipelineInferencePopup';
+import PipelinePostprocessPopup from './PipelinePopup/PipelinePostprocessPopup';
 
 interface IProps {
     activePopupType: PopupWindowType;
@@ -86,6 +89,12 @@ const PopupView: React.FC<IProps> = ({ activePopupType }) => {
                 return <KeyboardShortcutsPopup />;
             case PopupWindowType.CHANGELOG:
                 return <ChangelogPopup />;
+            case PopupWindowType.PIPELINE_PREPROCESS:
+                return <PipelinePreprocessPopup />;
+            case PopupWindowType.PIPELINE_INFERENCE:
+                return <PipelineInferencePopup />;
+            case PopupWindowType.PIPELINE_POSTPROCESS:
+                return <PipelinePostprocessPopup />;
             case PopupWindowType.LOADER:
                 return <ClipLoader
                     size={50}

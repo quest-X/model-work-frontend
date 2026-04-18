@@ -3,7 +3,8 @@ import { AIModelsStorageManager } from '../../utils/AIModelsStorageManager';
 
 const initialState: AIModelsState = {
     models: AIModelsStorageManager.loadModels(), // 从localStorage恢复数据
-    activeModelId: null
+    activeModelId: null,
+    selectedModelTask: null,
 };
 
 export const aiModelsReducer = (
@@ -47,10 +48,13 @@ export const aiModelsReducer = (
                 models: action.payload
             };
             break;
+        case 'SET_SELECTED_MODEL_TASK':
+            // 不写 localStorage，只更新内存状态
+            return { ...state, selectedModelTask: action.payload };
         default:
             return state;
     }
-    
+
     // 每次状态变更后自动保存到localStorage
     AIModelsStorageManager.saveModels(newState.models);
     

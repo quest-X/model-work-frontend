@@ -1,0 +1,245 @@
+@import '../../../settings/Settings';
+
+.GenericYesNoPopup:has(.PipelinePopupContent) {
+  width: 480px;
+  max-width: 480px;
+  height: auto;
+  max-height: none;
+
+  .Content {
+    flex: 0 0 auto;
+  }
+
+  .Footer {
+    height: 56px;
+  }
+}
+
+.PipelinePopupContent {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 24px 14px 24px;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  color: white;
+
+  // 只在未激活时显示
+  .StageInactiveWarning {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.35);
+
+    .Dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.25);
+      flex-shrink: 0;
+    }
+  }
+
+  // section 容器
+  .ParamSection {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+
+    & + .ParamSection {
+      margin-top: 10px;
+    }
+  }
+
+  // section 标题行
+  .ParamSectionTitle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+
+    &::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: currentColor;
+      opacity: 0.18;
+    }
+
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .ParamRow {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    // 参数被勾掉时整行 dim，控件 disabled
+    &.param-disabled {
+      .ParamLabel        { opacity: 0.35; }
+      .ParamValueGroup   { opacity: 0.35; }
+      .ParamDesc         { opacity: 0.2;  }
+      .ParamResetBtn     { display: none; }
+
+      input[type='range'],
+      input[type='number'],
+      input[type='text'],
+      select,
+      .CheckboxRow {
+        opacity: 0.3;
+        pointer-events: none;
+      }
+    }
+
+    .ParamHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+
+      // 复选框 + 标签行
+      .ParamLabelRow {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+
+        input[type='checkbox'] {
+          accent-color: #4da6ff;
+          cursor: pointer;
+          margin: 0;
+          width: 13px;
+          height: 13px;
+          flex-shrink: 0;
+        }
+      }
+
+      .ParamLabel {
+        font-weight: 600;
+      }
+
+      .ParamValueGroup {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        .ParamValue {
+          color: #4da6ff;
+          font-variant-numeric: tabular-nums;
+          font-size: 13px;
+        }
+
+        // 只在值被修改时出现
+        .ParamResetBtn {
+          background: none;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 1px 5px;
+          border-radius: 3px;
+          cursor: pointer;
+          font-size: 11px;
+          color: rgba(255, 255, 255, 0.3);
+          font-variant-numeric: tabular-nums;
+          line-height: 1.4;
+
+          &:hover {
+            color: rgba(255, 255, 255, 0.75);
+            border-color: rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.05);
+          }
+        }
+      }
+    }
+
+    .ParamDesc {
+      font-size: 11px;
+      opacity: 0.5;
+      line-height: 1.4;
+    }
+
+    input[type='range'] {
+      width: 100%;
+      accent-color: #4da6ff;
+    }
+
+    input[type='number'],
+    input[type='text'] {
+      width: 120px;
+      padding: 4px 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 3px;
+      color: white;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+
+      &:focus {
+        outline: none;
+        border-color: #4da6ff;
+      }
+
+      &::placeholder {
+        color: rgba(255, 255, 255, 0.25);
+      }
+    }
+
+    input[type='text'] {
+      width: 200px;
+    }
+
+    select {
+      width: 160px;
+      padding: 4px 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 3px;
+      color: white;
+      font-size: 13px;
+
+      &:focus {
+        outline: none;
+        border-color: #4da6ff;
+      }
+    }
+
+    .CheckboxRow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+
+      input[type='checkbox'] {
+        accent-color: #4da6ff;
+        cursor: pointer;
+      }
+    }
+  }
+
+  .ResetRow {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 2px;
+
+    button {
+      background: none;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 11px;
+      padding: 4px 12px;
+      border-radius: 3px;
+      cursor: pointer;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: white;
+      }
+    }
+  }
+}

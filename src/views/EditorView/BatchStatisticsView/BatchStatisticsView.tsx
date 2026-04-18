@@ -113,7 +113,7 @@ const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, activeImag
                     <div className="SummaryGrid">
                         <div className="StatItemWide">
                             <span className={`StatValue ${detectionRate >= 0.8 ? 'highlight' : ''}`}>
-                                {(detectionRate * 100).toFixed(0)}%
+                                {(detectionRate * 100).toFixed(1)}%
                             </span>
                             <span className="StatSub">
                                 {zh
@@ -184,6 +184,9 @@ const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, activeImag
                                 title={stat.name}
                             >
                                 <span className="ImageName">{stat.name}</span>
+                                <span className="DetCount">
+                                    {hasDetection ? `x${stat.detCount}` : ''}
+                                </span>
                                 <div className="BarContainer">
                                     {hasDetection && (
                                         <div
@@ -197,9 +200,6 @@ const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, activeImag
                                 </div>
                                 <span className="ConfText" style={{color: hasDetection ? getConfColor(conf) : undefined}}>
                                     {hasDetection ? pct(conf) : '--'}
-                                </span>
-                                <span className="DetCount">
-                                    {hasDetection ? `x${stat.detCount}` : ''}
                                 </span>
                             </div>
                         );

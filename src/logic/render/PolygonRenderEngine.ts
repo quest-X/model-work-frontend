@@ -28,6 +28,7 @@ import {Settings} from '../../settings/Settings';
 import {LabelUtil} from '../../utils/LabelUtil';
 import {PolygonUtil} from '../../utils/PolygonUtil';
 import {EditorModel} from '../../staticModels/EditorModel';
+import {LabelActions} from '../actions/LabelActions';
 
 export class PolygonRenderEngine extends BaseRenderEngine {
 
@@ -462,6 +463,178 @@ export class PolygonRenderEngine extends BaseRenderEngine {
     private isMouseOverAnchor(mouse: IPoint, anchor: IPoint): boolean {
         if (!mouse || !anchor) return null;
         return RectUtil.isPointInside(RectUtil.getRectWithCenterAndSize(anchor, RenderEngineSettings.anchorSize), mouse);
+    }
+
+    /**
+     * Ray-casting 点在多边形内判断（canvas 坐标）
+     */
+    private static isPointInsidePolygon(point: IPoint, vertices: IPoint[]): boolean {
+        if (vertices.length < 3) return false;
+        let inside = false;
+        const { x, y } = point;
+        for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+            const xi = vertices[i].x, yi = vertices[i].y;
+            const xj = vertices[j].x, yj = vertices[j].y;
+            const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+
+    /**
+     * 橡皮擦模式：
+     *  - 点击靠近顶点 → 删除该顶点（<3个则删整个多边形）
+     *  - 点击多边形内部 → 删整个多边形
+     *  - 点击多边形边缘 → 删整个多边形
+     * 返回 true 表示有删除发生。
+     */
+    public eraserClick(data: EditorData): boolean {
+        const imageData = LabelsSelector.getActiveImageData();
+        if (!imageData) return false;
+        const mouse = data.mousePositionOnViewPortContent;
+        if (!mouse) return false;
+
+        // 顶点命中半径稍大（方便操作）
+        const vertexRadius = RenderEngineSettings.anchorHoverSize.width;
+        // 边缘命中半径
+        const edgeRadius = RenderEngineSettings.anchorHoverSize.width / 2;
+
+        for (const polygon of imageData.labelPolygons) {
+            if (!polygon.isVisible) continue;
+            const verticesOnCanvas = RenderEngineUtil.transferPolygonFromImageToViewPortContent(polygon.vertices, data);
+
+            // 1. 优先：靠近某个顶点 → 删除该顶点
+            for (let i = 0; i < verticesOnCanvas.length; i++) {
+                if (RenderEngineUtil.isMouseOverAnchor(mouse, verticesOnCanvas[i], vertexRadius)) {
+                    LabelActions.deletePolygonVertexByIndex(imageData.id, polygon.id, i);
+                    EditorActions.fullRender();
+                    return true;
+                }
+            }
+
+            // 2. 点击内部（ray-casting）→ 删整个多边形
+            if (PolygonRenderEngine.isPointInsidePolygon(mouse, verticesOnCanvas)) {
+                LabelActions.deletePolygonLabelById(imageData.id, polygon.id);
+                EditorActions.fullRender();
+                return true;
+            }
+
+            // 3. 点击边缘 → 删整个多边形
+            if (RenderEngineUtil.isMouseOverPolygon(mouse, verticesOnCanvas, edgeRadius)) {
+                LabelActions.deletePolygonLabelById(imageData.id, polygon.id);
+                EditorActions.fullRender();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // =================================================================================================================
+    // FINE ERASER HELPERS
+    // =================================================================================================================
+
+    /**
+     * 返回鼠标下方的多边形 ID（内部 ray-casting 或边缘/顶点附近）
+     * 供 AllLabelsRenderEngine 的双击检测使用
+     */
+    public getPolygonIdUnderMouse(data: EditorData): string | null {
+        const imageData = LabelsSelector.getActiveImageData();
+        if (!imageData) return null;
+        const mouse = data.mousePositionOnViewPortContent;
+        if (!mouse) return null;
+
+        const vertexRadius = RenderEngineSettings.anchorHoverSize.width;
+        const edgeRadius   = RenderEngineSettings.anchorHoverSize.width / 2;
+
+        for (const polygon of imageData.labelPolygons) {
+            if (!polygon.isVisible) continue;
+            const verticesOnCanvas = RenderEngineUtil.transferPolygonFromImageToViewPortContent(polygon.vertices, data);
+
+            if (PolygonRenderEngine.isPointInsidePolygon(mouse, verticesOnCanvas)) return polygon.id;
+            if (RenderEngineUtil.isMouseOverPolygon(mouse, verticesOnCanvas, edgeRadius)) return polygon.id;
+            for (const v of verticesOnCanvas) {
+                if (RenderEngineUtil.isMouseOverAnchor(mouse, v, vertexRadius)) return polygon.id;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 精细擦除：移除指定多边形中距鼠标 ≤ brushRadius 像素的顶点
+     * 返回 true = 多边形仍存在，false = 顶点不足 3 个已整体删除
+     */
+    public eraseVerticesNearPoint(data: EditorData, polygonId: string, brushRadius: number): boolean {
+        const imageData = LabelsSelector.getActiveImageData();
+        if (!imageData) return false;
+        const mouse = data.mousePositionOnViewPortContent;
+        if (!mouse) return false;
+
+        const polygon = imageData.labelPolygons.find(p => p.id === polygonId);
+        if (!polygon) return false;
+
+        const verticesOnCanvas = RenderEngineUtil.transferPolygonFromImageToViewPortContent(polygon.vertices, data);
+        const toRemove = new Set<number>();
+        for (let i = 0; i < verticesOnCanvas.length; i++) {
+            const dx = verticesOnCanvas[i].x - mouse.x;
+            const dy = verticesOnCanvas[i].y - mouse.y;
+            if (Math.sqrt(dx * dx + dy * dy) <= brushRadius) toRemove.add(i);
+        }
+        if (toRemove.size === 0) return true;
+
+        const remaining = polygon.vertices.filter((_, i) => !toRemove.has(i));
+        if (remaining.length < 3) {
+            LabelActions.deletePolygonLabelById(imageData.id, polygonId);
+            EditorActions.fullRender();
+            return false;
+        }
+        const newImageData = {
+            ...imageData,
+            labelPolygons: imageData.labelPolygons.map(p =>
+                p.id === polygonId ? { ...p, vertices: remaining } : p
+            )
+        };
+        store.dispatch(updateImageDataById(imageData.id, newImageData));
+        EditorActions.fullRender();
+        return true;
+    }
+
+    /**
+     * 精细擦除模式下的视觉叠加：
+     *  - 橙色半透明多边形轮廓 + 填充
+     *  - 所有顶点白色圆点
+     *  - 笔刷范围内顶点红色圆点
+     *  - 鼠标位置笔刷圆圈
+     */
+    public drawFineEraserOverlay(data: EditorData, polygonId: string, brushRadius: number): void {
+        const imageData = LabelsSelector.getActiveImageData();
+        if (!imageData) return;
+        const mouse = data.mousePositionOnViewPortContent;
+        const polygon = imageData.labelPolygons.find(p => p.id === polygonId);
+        if (!polygon) return;
+
+        const verts = RenderEngineUtil.transferPolygonFromImageToViewPortContent(polygon.vertices, data);
+
+        // Orange fill + outline
+        DrawUtil.drawPolygonWithFill(this.canvas, verts, 'rgba(255, 140, 0, 0.30)');
+        DrawUtil.drawPolygon(this.canvas, verts, 'rgba(255, 140, 0, 0.90)', 2);
+
+        // Brush circle around cursor
+        if (mouse) {
+            DrawUtil.drawCircle(this.canvas, mouse, brushRadius, 0, 360, 1.5, 'rgba(255, 80, 80, 0.75)');
+        }
+
+        // Vertex dots
+        for (const v of verts) {
+            const inBrush = mouse !== null && (() => {
+                const dx = v.x - mouse.x;
+                const dy = v.y - mouse.y;
+                return Math.sqrt(dx * dx + dy * dy) <= brushRadius;
+            })();
+            const fill = inBrush ? 'rgba(255, 50, 50, 1)' : 'rgba(255, 255, 255, 0.9)';
+            DrawUtil.drawCircleWithFill(this.canvas, v, 5, fill);
+            DrawUtil.drawCircle(this.canvas, v, 5, 0, 360, 1, 'rgba(0, 0, 0, 0.5)');
+        }
     }
 
     // =================================================================================================================

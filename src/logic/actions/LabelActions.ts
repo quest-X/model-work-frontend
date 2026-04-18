@@ -68,6 +68,28 @@ export class LabelActions {
         store.dispatch(updateImageDataById(imageData.id, newImageData));
     }
 
+    /**
+     * 删除多边形中指定索引的顶点。
+     * 若删除后顶点数 < 3，直接删除整个多边形。
+     */
+    public static deletePolygonVertexByIndex(imageId: string, polygonId: string, vertexIndex: number) {
+        const imageData: ImageData = LabelsSelector.getImageDataById(imageId);
+        const polygon = imageData.labelPolygons.find(p => p.id === polygonId);
+        if (!polygon) return;
+        if (polygon.vertices.length <= 3) {
+            LabelActions.deletePolygonLabelById(imageId, polygonId);
+            return;
+        }
+        const newVertices = polygon.vertices.filter((_, i) => i !== vertexIndex);
+        const newImageData = {
+            ...imageData,
+            labelPolygons: imageData.labelPolygons.map(p =>
+                p.id === polygonId ? { ...p, vertices: newVertices } : p
+            )
+        };
+        store.dispatch(updateImageDataById(imageData.id, newImageData));
+    }
+
     public static toggleLabelVisibilityById(imageId: string, labelId: string) {
         const imageData: ImageData = LabelsSelector.getImageDataById(imageId);
         const newImageData = {

@@ -5,12 +5,33 @@ import {EditorModel} from '../staticModels/EditorModel';
 import {store} from '../index';
 import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
 import {getDefaultBackendUrl} from '../utils/DefaultBackendUrl';
+import {PipelineStore} from './PipelineStore';
 
 export interface InferenceParams {
     conf: number;
     iou: number;
     imgsz: number;
     max_det: number;
+    augment: boolean;
+    half: boolean;
+    agnostic_nms: boolean;
+    classes: string;           // comma-separated class IDs; '' = all classes
+    // per-param enabled flags (default true)
+    imgsz_enabled: boolean;
+    conf_enabled: boolean;
+    iou_enabled: boolean;
+    max_det_enabled: boolean;
+    augment_enabled: boolean;
+    half_enabled: boolean;
+    agnostic_nms_enabled: boolean;
+    classes_enabled: boolean;
+}
+
+export interface DetectionPostprocessParams {
+    min_bbox_area: number;      // filter boxes below this area (px²); 0 = off
+    bbox_padding: number;       // expand each bbox outward by N pixels; 0 = off
+    min_bbox_area_enabled: boolean;
+    bbox_padding_enabled: boolean;
 }
 
 export interface DetectionAPIConfig {
@@ -19,6 +40,30 @@ export interface DetectionAPIConfig {
 }
 
 const INFERENCE_PARAMS_STORAGE_KEY = 'detectionAPI.inferenceParams';
+const POSTPROCESS_PARAMS_STORAGE_KEY = 'detectionAPI.postprocessParams';
+
+export const DEFAULT_DETECTION_POSTPROCESS_PARAMS: DetectionPostprocessParams = {
+    min_bbox_area: 0,
+    bbox_padding: 0,
+    min_bbox_area_enabled: true,
+    bbox_padding_enabled: true,
+};
+
+function loadDetectionPostprocessParams(): DetectionPostprocessParams {
+    try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(POSTPROCESS_PARAMS_STORAGE_KEY) : null;
+        if (!raw) return { ...DEFAULT_DETECTION_POSTPROCESS_PARAMS };
+        const p = JSON.parse(raw);
+        return {
+            min_bbox_area: typeof p.min_bbox_area === 'number' ? p.min_bbox_area : DEFAULT_DETECTION_POSTPROCESS_PARAMS.min_bbox_area,
+            bbox_padding: typeof p.bbox_padding === 'number' ? p.bbox_padding : DEFAULT_DETECTION_POSTPROCESS_PARAMS.bbox_padding,
+            min_bbox_area_enabled: p.min_bbox_area_enabled !== false,
+            bbox_padding_enabled: p.bbox_padding_enabled !== false,
+        };
+    } catch {
+        return { ...DEFAULT_DETECTION_POSTPROCESS_PARAMS };
+    }
+}
 
 // 默认与 ultralytics v8+ 保持一致(iou=0.7,不是 YOLOv5 的 0.45);
 // 前端发 0.45 会让 NMS 比后端原行为更激进,结果更少。
@@ -26,7 +71,19 @@ export const DEFAULT_INFERENCE_PARAMS: InferenceParams = {
     conf: 0.25,
     iou: 0.7,
     imgsz: 640,
-    max_det: 300
+    max_det: 300,
+    augment: false,
+    half: false,
+    agnostic_nms: false,
+    classes: '',
+    imgsz_enabled: true,
+    conf_enabled: true,
+    iou_enabled: true,
+    max_det_enabled: true,
+    augment_enabled: true,
+    half_enabled: true,
+    agnostic_nms_enabled: true,
+    classes_enabled: true,
 };
 
 function loadInferenceParams(): InferenceParams {
@@ -38,7 +95,18 @@ function loadInferenceParams(): InferenceParams {
             conf: typeof parsed.conf === 'number' ? parsed.conf : DEFAULT_INFERENCE_PARAMS.conf,
             iou: typeof parsed.iou === 'number' ? parsed.iou : DEFAULT_INFERENCE_PARAMS.iou,
             imgsz: typeof parsed.imgsz === 'number' ? parsed.imgsz : DEFAULT_INFERENCE_PARAMS.imgsz,
-            max_det: typeof parsed.max_det === 'number' ? parsed.max_det : DEFAULT_INFERENCE_PARAMS.max_det
+            max_det: typeof parsed.max_det === 'number' ? parsed.max_det : DEFAULT_INFERENCE_PARAMS.max_det,
+            augment: typeof parsed.augment === 'boolean' ? parsed.augment : DEFAULT_INFERENCE_PARAMS.augment,
+            half: typeof parsed.half === 'boolean' ? parsed.half : DEFAULT_INFERENCE_PARAMS.half,
+            agnostic_nms: typeof parsed.agnostic_nms === 'boolean' ? parsed.agnostic_nms : DEFAULT_INFERENCE_PARAMS.agnostic_nms,
+            classes: typeof parsed.classes === 'string' ? parsed.classes : DEFAULT_INFERENCE_PARAMS.classes,
+            imgsz_enabled: parsed.imgsz_enabled !== false,
+            conf_enabled: parsed.conf_enabled !== false,
+            iou_enabled: parsed.iou_enabled !== false,
+            max_det_enabled: parsed.max_det_enabled !== false,
+            augment_enabled: parsed.augment_enabled !== false,
+            agnostic_nms_enabled: parsed.agnostic_nms_enabled !== false,
+            classes_enabled: parsed.classes_enabled !== false,
         };
     } catch {
         return { ...DEFAULT_INFERENCE_PARAMS };
@@ -79,6 +147,7 @@ export class DetectionAPIDetector {
     };
 
     private static inferenceParams: InferenceParams = loadInferenceParams();
+    private static postprocessParams: DetectionPostprocessParams = loadDetectionPostprocessParams();
 
     public static setConfig(config: DetectionAPIConfig) {
         this.config = config;
@@ -104,6 +173,19 @@ export class DetectionAPIDetector {
         try {
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem(INFERENCE_PARAMS_STORAGE_KEY, JSON.stringify(this.inferenceParams));
+            }
+        } catch { /* ignore */ }
+    }
+
+    public static getPostprocessParams(): DetectionPostprocessParams {
+        return { ...this.postprocessParams };
+    }
+
+    public static setPostprocessParams(partial: Partial<DetectionPostprocessParams>) {
+        this.postprocessParams = { ...this.postprocessParams, ...partial };
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(POSTPROCESS_PARAMS_STORAGE_KEY, JSON.stringify(this.postprocessParams));
             }
         } catch { /* ignore */ }
     }
@@ -136,11 +218,27 @@ export class DetectionAPIDetector {
     }
 
     private static appendInferenceParams(formData: FormData) {
+        // 按 PipelineStore 阶段激活 + 各参数独立 enabled 标志双重过滤。
         const p = this.inferenceParams;
-        formData.append('conf', String(p.conf));
-        formData.append('iou', String(p.iou));
-        formData.append('imgsz', String(p.imgsz));
-        formData.append('max_det', String(p.max_det));
+        if (PipelineStore.isActivated('preprocess')) {
+            if (p.imgsz_enabled !== false)   formData.append('imgsz', String(p.imgsz));
+            if (p.augment_enabled !== false)  formData.append('augment', p.augment ? '1' : '0');
+        }
+        if (PipelineStore.isActivated('inference')) {
+            if (p.conf_enabled !== false)         formData.append('conf',         String(p.conf));
+            if (p.iou_enabled !== false)          formData.append('iou',          String(p.iou));
+            if (p.max_det_enabled !== false)      formData.append('max_det',      String(p.max_det));
+            if (p.agnostic_nms_enabled !== false) formData.append('agnostic_nms', p.agnostic_nms ? '1' : '0');
+            if (p.classes_enabled !== false && p.classes.trim())
+                formData.append('classes', p.classes.trim());
+        }
+        if (PipelineStore.isActivated('postprocess')) {
+            const pp = this.postprocessParams;
+            if (pp.min_bbox_area_enabled !== false && pp.min_bbox_area > 0)
+                formData.append('min_bbox_area', String(pp.min_bbox_area));
+            if (pp.bbox_padding_enabled !== false && pp.bbox_padding > 0)
+                formData.append('bbox_padding', String(pp.bbox_padding));
+        }
     }
 
     /**

@@ -12,6 +12,8 @@ import {store} from '../../index';
 import {updateCustomCursorStyle} from '../../store/general/actionCreators';
 import {CustomCursorStyle} from '../../data/enums/CustomCursorStyle';
 import {RenderEngineUtil} from '../../utils/RenderEngineUtil';
+import {LabelActions} from '../actions/LabelActions';
+import {EditorActions} from '../actions/EditorActions';
 
 /**
  * 全部标签渲染引擎
@@ -23,6 +25,22 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
     private pointEngine: PointRenderEngine;
     private lineEngine: LineRenderEngine;
     private polygonEngine: PolygonRenderEngine;
+
+    // ---- 精细擦除状态 ----
+    /** 当前正在精细擦除的多边形 ID；null 表示未进入精细模式 */
+    private eraserFinePolygonId: string | null = null;
+    /** 上次单击（mousedown）的时间戳，用于双击检测 */
+    private lastClickTime: number = 0;
+    /** 上次单击命中的多边形 ID */
+    private lastClickPolygonId: string | null = null;
+    /** 鼠标是否处于按下状态（精细模式下拖拽擦除用） */
+    private eraserMouseDown: boolean = false;
+    /** 待执行的延迟单击删除 timer */
+    private pendingDeleteTimer: ReturnType<typeof setTimeout> | null = null;
+    /** 笔刷半径（canvas 像素） */
+    private readonly BRUSH_RADIUS = 20;
+    /** 双击判定时间窗口（ms） */
+    private readonly DBLCLICK_MS = 350;
 
     public constructor(canvas: HTMLCanvasElement) {
         super(canvas);
@@ -45,10 +63,149 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
             this.rectEngine.update(data);
             return;
         }
+
+        // 橡皮擦模式
+        if (GeneralSelector.getEraserMode()) {
+            if (!data.event) return;
+            const type = (data.event as MouseEvent).type;
+
+            // ── mouseup：结束拖拽
+            if (type === 'mouseup') {
+                this.eraserMouseDown = false;
+                return;
+            }
+
+            // ── mousemove：精细模式下按住拖拽擦除顶点
+            if (type === 'mousemove') {
+                if (this.eraserMouseDown && this.eraserFinePolygonId) {
+                    const stillExists = this.polygonEngine.eraseVerticesNearPoint(
+                        data, this.eraserFinePolygonId, this.BRUSH_RADIUS
+                    );
+                    if (!stillExists) {
+                        this.eraserFinePolygonId = null;
+                        this.eraserMouseDown = false;
+                    }
+                }
+                return;
+            }
+
+            // ── mousedown：核心逻辑
+            if (type === 'mousedown') {
+                const me = data.event as MouseEvent;
+                if (me.button !== 0) return;
+
+                // 精细模式已激活
+                if (this.eraserFinePolygonId) {
+                    const polygonId = this.polygonEngine.getPolygonIdUnderMouse(data);
+                    if (polygonId === this.eraserFinePolygonId) {
+                        // 在精细模式多边形上按下：开始拖拽擦除
+                        this.eraserMouseDown = true;
+                        // 立即擦除一次（点击不移动也能删顶点）
+                        const stillExists = this.polygonEngine.eraseVerticesNearPoint(
+                            data, this.eraserFinePolygonId, this.BRUSH_RADIUS
+                        );
+                        if (!stillExists) {
+                            this.eraserFinePolygonId = null;
+                            this.eraserMouseDown = false;
+                        }
+                    } else {
+                        // 点击到精细多边形之外 → 退出精细模式
+                        this.eraserFinePolygonId = null;
+                        this.eraserMouseDown = false;
+                        // 若点击到其他矩形或多边形，执行普通删除
+                        const erasedRect = this.rectEngine.eraserClick(data);
+                        if (!erasedRect) {
+                            const otherPolygonId = this.polygonEngine.getPolygonIdUnderMouse(data);
+                            if (otherPolygonId) {
+                                this.schedulePolygonDelete(data, otherPolygonId);
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                // 未在精细模式：先检测矩形
+                const erasedRect = this.rectEngine.eraserClick(data);
+                if (erasedRect) {
+                    // 矩形已删除，清空双击状态
+                    this.clearClickTracking();
+                    return;
+                }
+
+                // 检测多边形
+                const polygonId = this.polygonEngine.getPolygonIdUnderMouse(data);
+                if (!polygonId) {
+                    // 点击空白区域，清空追踪
+                    this.clearClickTracking();
+                    return;
+                }
+
+                const now = Date.now();
+                if (
+                    polygonId === this.lastClickPolygonId &&
+                    now - this.lastClickTime < this.DBLCLICK_MS
+                ) {
+                    // ── 双击：取消待执行的删除，进入精细模式
+                    this.cancelPendingDelete();
+                    this.eraserFinePolygonId = polygonId;
+                    this.clearClickTracking();
+                } else {
+                    // ── 单击（第一次或不同多边形）：延迟删除（等待可能的第二击）
+                    this.cancelPendingDelete(); // 取消对前一个多边形的待删除
+                    this.lastClickTime = now;
+                    this.lastClickPolygonId = polygonId;
+                    const imageData = LabelsSelector.getActiveImageData();
+                    if (imageData) {
+                        const imageId = imageData.id;
+                        this.pendingDeleteTimer = setTimeout(() => {
+                            this.pendingDeleteTimer = null;
+                            LabelActions.deletePolygonLabelById(imageId, polygonId);
+                            // 如果刚好在精细模式下操作的是同一个多边形，退出精细模式
+                            if (this.eraserFinePolygonId === polygonId) {
+                                this.eraserFinePolygonId = null;
+                            }
+                            this.clearClickTracking();
+                            // 触发重绘
+                            EditorActions.fullRender();
+                        }, this.DBLCLICK_MS);
+                    }
+                }
+                return;
+            }
+
+            return;
+        }
+
         // 普通 ALL 视图：鼠标事件交给 ViewPortHelper 做拖拽平移（hand 工具）
         if (EditorModel.viewPortHelper) {
             EditorModel.viewPortHelper.update(data);
         }
+    }
+
+    private clearClickTracking() {
+        this.lastClickTime = 0;
+        this.lastClickPolygonId = null;
+    }
+
+    private cancelPendingDelete() {
+        if (this.pendingDeleteTimer !== null) {
+            clearTimeout(this.pendingDeleteTimer);
+            this.pendingDeleteTimer = null;
+        }
+    }
+
+    private schedulePolygonDelete(_data: EditorData, polygonId: string) {
+        const imageData = LabelsSelector.getActiveImageData();
+        if (!imageData) return;
+        const imageId = imageData.id;
+        this.lastClickTime = Date.now();
+        this.lastClickPolygonId = polygonId;
+        this.pendingDeleteTimer = setTimeout(() => {
+            this.pendingDeleteTimer = null;
+            LabelActions.deletePolygonLabelById(imageId, polygonId);
+            this.clearClickTracking();
+            EditorActions.fullRender();
+        }, this.DBLCLICK_MS);
     }
 
     public render(data: EditorData): void {
@@ -74,8 +231,25 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
             this.polygonEngine.drawExistingLabels(data);
         }
 
+        const isEraser = GeneralSelector.getEraserMode();
+
+        // 精细擦除模式叠加层（在普通标签之上绘制高亮 + 笔刷圆圈）
+        if (isEraser && this.eraserFinePolygonId) {
+            this.polygonEngine.drawFineEraserOverlay(data, this.eraserFinePolygonId, this.BRUSH_RADIUS);
+        }
+
+        // 橡皮擦模式：crosshair 光标
+        if (isEraser && !!this.canvas && !!data.mousePositionOnViewPortContent && RenderEngineUtil.isMouseOverCanvas(data)) {
+            this.canvas.style.cursor = 'crosshair';
+            const current = GeneralSelector.getCustomCursorStyle();
+            if (current !== CustomCursorStyle.DEFAULT) {
+                store.dispatch(updateCustomCursorStyle(CustomCursorStyle.DEFAULT));
+            }
+            return;
+        }
+
         // 非智能标注 ALL 视图下光标设为 hand（GRAB）—— 表示可以拖拽平移画布
-        if (!isSmart
+        if (!isSmart && !isEraser
             && !!this.canvas
             && !!data.mousePositionOnViewPortContent
             && RenderEngineUtil.isMouseOverCanvas(data)) {

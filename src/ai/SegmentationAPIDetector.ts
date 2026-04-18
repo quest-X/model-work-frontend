@@ -2,6 +2,7 @@ import axios from 'axios';
 import {store} from '../index';
 import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
 import {getDefaultBackendUrl} from '../utils/DefaultBackendUrl';
+import {PipelineStore} from './PipelineStore';
 
 export interface SegmentationObjectInfo {
     id: number;
@@ -21,12 +22,132 @@ export interface SegmentationAPIResponse {
     results: SegmentationResult[];
 }
 
+export interface SegmentationInferenceParams {
+    conf: number;
+    iou: number;
+    imgsz: number;
+    max_det: number;
+    augment: boolean;
+    agnostic_nms: boolean;
+    classes: string;           // comma-separated class IDs; '' = all classes
+    retina_masks: boolean;     // YOLO-seg only: use high-resolution retina masks
+    imgsz_enabled: boolean;
+    conf_enabled: boolean;
+    iou_enabled: boolean;
+    max_det_enabled: boolean;
+    augment_enabled: boolean;
+    agnostic_nms_enabled: boolean;
+    classes_enabled: boolean;
+    retina_masks_enabled: boolean;
+}
+
+export interface SegmentationPostprocessParams {
+    polygon_epsilon: number;            // Douglas-Peucker 抽稀像素阈值；0 = 关闭
+    min_mask_area: number;              // mask 最小像素面积；0 = 关闭
+    largest_cc_only: boolean;           // 仅保留最大连通域
+    mask_dilate: number;                // 形态学膨胀半径（像素）；0 = 关闭
+    max_polygon_points: number;         // 最大顶点数限制；0 = 关闭
+    polygon_epsilon_enabled: boolean;
+    min_mask_area_enabled: boolean;
+    largest_cc_only_enabled: boolean;
+    mask_dilate_enabled: boolean;
+    max_polygon_points_enabled: boolean;
+}
+
+const INFERENCE_PARAMS_STORAGE_KEY = 'segmentationAPI.inferenceParams';
+const POSTPROCESS_PARAMS_STORAGE_KEY = 'segmentationAPI.postprocessParams';
+
+export const DEFAULT_SEGMENTATION_INFERENCE_PARAMS: SegmentationInferenceParams = {
+    conf: 0.25,
+    iou: 0.7,
+    imgsz: 640,
+    max_det: 300,
+    augment: false,
+    agnostic_nms: false,
+    classes: '',
+    retina_masks: false,
+    imgsz_enabled: true,
+    conf_enabled: true,
+    iou_enabled: true,
+    max_det_enabled: true,
+    augment_enabled: true,
+    agnostic_nms_enabled: true,
+    classes_enabled: true,
+    retina_masks_enabled: true,
+};
+
+export const DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS: SegmentationPostprocessParams = {
+    polygon_epsilon: 0,
+    min_mask_area: 0,
+    largest_cc_only: false,
+    mask_dilate: 0,
+    max_polygon_points: 0,
+    polygon_epsilon_enabled: true,
+    min_mask_area_enabled: true,
+    largest_cc_only_enabled: true,
+    mask_dilate_enabled: true,
+    max_polygon_points_enabled: true,
+};
+
+function loadSegInferenceParams(): SegmentationInferenceParams {
+    try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(INFERENCE_PARAMS_STORAGE_KEY) : null;
+        if (!raw) return { ...DEFAULT_SEGMENTATION_INFERENCE_PARAMS };
+        const p = JSON.parse(raw);
+        return {
+            conf: typeof p.conf === 'number' ? p.conf : DEFAULT_SEGMENTATION_INFERENCE_PARAMS.conf,
+            iou: typeof p.iou === 'number' ? p.iou : DEFAULT_SEGMENTATION_INFERENCE_PARAMS.iou,
+            imgsz: typeof p.imgsz === 'number' ? p.imgsz : DEFAULT_SEGMENTATION_INFERENCE_PARAMS.imgsz,
+            max_det: typeof p.max_det === 'number' ? p.max_det : DEFAULT_SEGMENTATION_INFERENCE_PARAMS.max_det,
+            augment: typeof p.augment === 'boolean' ? p.augment : DEFAULT_SEGMENTATION_INFERENCE_PARAMS.augment,
+            agnostic_nms: typeof p.agnostic_nms === 'boolean' ? p.agnostic_nms : DEFAULT_SEGMENTATION_INFERENCE_PARAMS.agnostic_nms,
+            classes: typeof p.classes === 'string' ? p.classes : DEFAULT_SEGMENTATION_INFERENCE_PARAMS.classes,
+            retina_masks: typeof p.retina_masks === 'boolean' ? p.retina_masks : DEFAULT_SEGMENTATION_INFERENCE_PARAMS.retina_masks,
+            imgsz_enabled: p.imgsz_enabled !== false,
+            conf_enabled: p.conf_enabled !== false,
+            iou_enabled: p.iou_enabled !== false,
+            max_det_enabled: p.max_det_enabled !== false,
+            augment_enabled: p.augment_enabled !== false,
+            agnostic_nms_enabled: p.agnostic_nms_enabled !== false,
+            classes_enabled: p.classes_enabled !== false,
+            retina_masks_enabled: p.retina_masks_enabled !== false,
+        };
+    } catch {
+        return { ...DEFAULT_SEGMENTATION_INFERENCE_PARAMS };
+    }
+}
+
+function loadSegPostprocessParams(): SegmentationPostprocessParams {
+    try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(POSTPROCESS_PARAMS_STORAGE_KEY) : null;
+        if (!raw) return { ...DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS };
+        const p = JSON.parse(raw);
+        return {
+            polygon_epsilon: typeof p.polygon_epsilon === 'number' ? p.polygon_epsilon : DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS.polygon_epsilon,
+            min_mask_area: typeof p.min_mask_area === 'number' ? p.min_mask_area : DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS.min_mask_area,
+            largest_cc_only: typeof p.largest_cc_only === 'boolean' ? p.largest_cc_only : DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS.largest_cc_only,
+            mask_dilate: typeof p.mask_dilate === 'number' ? p.mask_dilate : DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS.mask_dilate,
+            max_polygon_points: typeof p.max_polygon_points === 'number' ? p.max_polygon_points : DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS.max_polygon_points,
+            polygon_epsilon_enabled: p.polygon_epsilon_enabled !== false,
+            min_mask_area_enabled: p.min_mask_area_enabled !== false,
+            largest_cc_only_enabled: p.largest_cc_only_enabled !== false,
+            mask_dilate_enabled: p.mask_dilate_enabled !== false,
+            max_polygon_points_enabled: p.max_polygon_points_enabled !== false,
+        };
+    } catch {
+        return { ...DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS };
+    }
+}
+
 export class SegmentationAPIDetector {
     private static config = {
         // 默认分割 API:跟随 window.location.hostname,支持局域网跨机访问
         url: getDefaultBackendUrl('/segment'),
         enabled: true
     };
+
+    private static inferenceParams: SegmentationInferenceParams = loadSegInferenceParams();
+    private static postprocessParams: SegmentationPostprocessParams = loadSegPostprocessParams();
 
     public static setConfig(config: { url: string; enabled: boolean }) {
         this.config = config;
@@ -38,6 +159,60 @@ export class SegmentationAPIDetector {
 
     public static isEnabled(): boolean {
         return this.config.enabled;
+    }
+
+    public static getInferenceParams(): SegmentationInferenceParams {
+        return { ...this.inferenceParams };
+    }
+
+    public static setInferenceParams(partial: Partial<SegmentationInferenceParams>) {
+        this.inferenceParams = { ...this.inferenceParams, ...partial };
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(INFERENCE_PARAMS_STORAGE_KEY, JSON.stringify(this.inferenceParams));
+            }
+        } catch { /* ignore */ }
+    }
+
+    public static getPostprocessParams(): SegmentationPostprocessParams {
+        return { ...this.postprocessParams };
+    }
+
+    public static setPostprocessParams(partial: Partial<SegmentationPostprocessParams>) {
+        this.postprocessParams = { ...this.postprocessParams, ...partial };
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(POSTPROCESS_PARAMS_STORAGE_KEY, JSON.stringify(this.postprocessParams));
+            }
+        } catch { /* ignore */ }
+    }
+
+    private static appendPipelineParams(formData: FormData) {
+        // 按 PipelineStore 阶段激活 + 各参数独立 enabled 标志双重过滤。
+        const ip = this.inferenceParams;
+        if (PipelineStore.isActivated('preprocess')) {
+            if (ip.imgsz_enabled !== false)  formData.append('imgsz',   String(ip.imgsz));
+            if (ip.augment_enabled !== false) formData.append('augment', ip.augment ? '1' : '0');
+        }
+        if (PipelineStore.isActivated('inference')) {
+            if (ip.conf_enabled !== false)          formData.append('conf',         String(ip.conf));
+            if (ip.iou_enabled !== false)           formData.append('iou',          String(ip.iou));
+            if (ip.max_det_enabled !== false)       formData.append('max_det',      String(ip.max_det));
+            if (ip.agnostic_nms_enabled !== false)  formData.append('agnostic_nms', ip.agnostic_nms ? '1' : '0');
+            if (ip.classes_enabled !== false && ip.classes.trim())
+                formData.append('classes', ip.classes.trim());
+            if (ip.retina_masks_enabled !== false)  formData.append('retina_masks', ip.retina_masks ? '1' : '0');
+        }
+        if (PipelineStore.isActivated('postprocess')) {
+            const pp = this.postprocessParams;
+            if (pp.polygon_epsilon_enabled !== false)  formData.append('polygon_epsilon', String(pp.polygon_epsilon));
+            if (pp.min_mask_area_enabled !== false)    formData.append('min_mask_area',   String(pp.min_mask_area));
+            if (pp.largest_cc_only_enabled !== false)  formData.append('largest_cc_only', pp.largest_cc_only ? '1' : '0');
+            if (pp.mask_dilate_enabled !== false && pp.mask_dilate > 0)
+                formData.append('mask_dilate', String(pp.mask_dilate));
+            if (pp.max_polygon_points_enabled !== false && pp.max_polygon_points > 0)
+                formData.append('max_polygon_points', String(pp.max_polygon_points));
+        }
     }
 
     /**
@@ -95,6 +270,7 @@ export class SegmentationAPIDetector {
             const [x1, y1, x2, y2] = prompt.bbox;
             formData.append('bbox', `${Math.round(x1)},${Math.round(y1)},${Math.round(x2)},${Math.round(y2)}`);
         }
+        this.appendPipelineParams(formData);
 
         const response = await axios.post<SegmentationAPIResponse>(
             this.config.url,

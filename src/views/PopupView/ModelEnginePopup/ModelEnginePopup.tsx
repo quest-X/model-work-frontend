@@ -279,9 +279,9 @@ const ModelEnginePopup: React.FC<IProps> = (
                                 <option value="detection" style={{ background: '#333' }}>
                                     {currentTexts.popups.modelEngine.taskTypeDetection}
                                 </option>
-                                {/* <option value="segmentation" style={{ background: '#333' }}>
+                                <option value="segmentation" style={{ background: '#333' }}>
                                     {currentTexts.popups.modelEngine.taskTypeSegmentation}
-                                </option> */}
+                                </option>
                             </select>
                         </FormControl>
                     </div>

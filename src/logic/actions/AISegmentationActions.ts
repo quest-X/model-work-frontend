@@ -55,8 +55,11 @@ export class AISegmentationActions {
     /**
      * 批量分割 — 和 AIDetectionActions.detectBatch 完全并行的流程，
      * 只是 API 调用走 /segment、结果写入 labelPolygons 而非 labelRects。
+     *
+     * @param isBatch true = 批量模式,跳过已有 AI 多边形的图像(避免重复推理);
+     *                false = 单图模式,允许对已推理过的图像重复推理。
      */
-    public static async segmentBatch(imagesToSegment: ImageData[]): Promise<void> {
+    public static async segmentBatch(imagesToSegment: ImageData[], isBatch: boolean = true): Promise<void> {
         if (!SegmentationAPIDetector.isEnabled() || imagesToSegment.length === 0) return;
 
         const startTime = Date.now();
@@ -97,13 +100,16 @@ export class AISegmentationActions {
 
         if (isVideo && (preFrames || sessionId || EditorModel.videoElement)) {
             // ======== Video mode: 帧捕获 + 分割 ========
+            // 批量模式跳过已有 AI 多边形的帧；单图模式允许重复推理
             const selectedIds = new Set(imagesToSegment.map(img => img.id));
             const frameQueue: { frameIdx: number; imageData: ImageData }[] = [];
             for (let frameIdx = 0; frameIdx < allImagesData.length; frameIdx++) {
-                if (selectedIds.has(allImagesData[frameIdx].id)) {
-                    frameQueue.push({ frameIdx, imageData: allImagesData[frameIdx] });
-                }
+                const img = allImagesData[frameIdx];
+                if (!selectedIds.has(img.id)) continue;
+                if (isBatch && img.labelPolygons.some(p => p.isCreatedByAI)) continue;
+                frameQueue.push({ frameIdx, imageData: img });
             }
+            successCount = total - frameQueue.length;
 
             const captureTotal = frameQueue.length;
             console.log('[BatchSegment] Frame queue:', { captureTotal });
@@ -188,9 +194,10 @@ export class AISegmentationActions {
 
         } else {
             // ======== 普通图像模式：4路并发流式分割 ========
-            const imageQueue = imagesToSegment.filter(
-                img => !img.labelPolygons.some(p => p.isCreatedByAI)
-            );
+            // 批量模式跳过已推理过的图;单图模式允许重复推理
+            const imageQueue = isBatch
+                ? imagesToSegment.filter(img => !img.labelPolygons.some(p => p.isCreatedByAI))
+                : imagesToSegment;
             successCount = total - imageQueue.length;
 
             const imageTasks = imageQueue.map((imageData) => async (): Promise<SegmentationResult[] | null> => {

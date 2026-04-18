@@ -18,6 +18,7 @@ import { updateImageDataById, updateActiveImageIndex, addImageData, toggleImageS
 import { ImageDataUtil } from '../../../utils/ImageDataUtil';
 import { ImageRepository } from '../../../logic/imageRepository/ImageRepository';
 import { EditorActions } from '../../../logic/actions/EditorActions';
+import { ViewPortActions } from '../../../logic/actions/ViewPortActions';
 import { EditorModel } from '../../../staticModels/EditorModel';
 import { Language } from '../../../data/LanguageConfig';
 
@@ -529,7 +530,8 @@ const VideoEditor: React.FC<IProps> = ({
                     lastSidebarUpdateRef.current = now;
                 }
 
-                // 4. 渲染标注框
+                // 播放时 Editor.componentDidUpdate 会 early-return 跳过 canvas resize,此处补上以支持 zoom>1
+                ViewPortActions.resizeViewPortContent();
                 EditorActions.fullRender();
             }
         },

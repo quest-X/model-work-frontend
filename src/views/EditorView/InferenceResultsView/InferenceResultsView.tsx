@@ -200,11 +200,20 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
     };
 
     // 生成当前帧的推理结果显示数据
-    // 视频模式下：始终从当前帧的 labelRects 生成（批量检测结果存在每帧的 labelRects 中）
-    // 图片模式下：优先使用全局 segmentationResults（单张检测时设置），否则从 labelRects 回退
+    // 视频模式下：
+    //   - 优先使用 segmentationResults（分割推理结果，按 imageId 存储在 Redux 中）
+    //   - 回退到 labelRects（检测推理结果存在每帧的 labelRects 中）
+    // 图片模式下：直接使用 segmentationResults
     const displayResults = React.useMemo(() => {
         if (!isVideoMode) return segmentationResults || [];
         if (!activeImageData) return [];
+
+        // 视频模式：优先 segmentationResults（分割结果已按 imageId 索引）
+        if (segmentationResults && segmentationResults.length > 0) {
+            return segmentationResults;
+        }
+
+        // 回退：从 labelRects 读取检测结果
         const aiRects = activeImageData.labelRects.filter(r => r.isCreatedByAI);
         if (aiRects.length === 0) return [];
         return aiRects.map((rect, idx) => {
@@ -276,7 +285,37 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
                 canvas.width = size;
                 canvas.height = size;
                 const {x1, y1, x2, y2} = result.bbox;
-                ctx.drawImage(source, x1, y1, x2 - x1, y2 - y1, 0, 0, size, size);
+                const bw = x2 - x1;
+                const bh = y2 - y1;
+
+                // 提取 mask 多边形（与 generateThumbnail 一致）
+                const maskPoly: [number, number][] | undefined =
+                    Array.isArray(result.mask) ? result.mask
+                    : result.mask?.mask_data ? result.mask.mask_data
+                    : undefined;
+
+                if (maskPoly && maskPoly.length > 2) {
+                    // mask 外部填黑色
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(0, 0, size, size);
+                    ctx.save();
+                    ctx.beginPath();
+                    const scaleX = size / bw;
+                    const scaleY = size / bh;
+                    maskPoly.forEach(([mx, my], i) => {
+                        const cx = (mx - x1) * scaleX;
+                        const cy = (my - y1) * scaleY;
+                        if (i === 0) ctx.moveTo(cx, cy);
+                        else ctx.lineTo(cx, cy);
+                    });
+                    ctx.closePath();
+                    ctx.clip();
+                    ctx.drawImage(source, x1, y1, bw, bh, 0, 0, size, size);
+                    ctx.restore();
+                } else {
+                    ctx.drawImage(source, x1, y1, bw, bh, 0, 0, size, size);
+                }
+
                 const url = canvas.toDataURL();
                 if (url && imageId === lastImageIdRef.current) {
                     setThumbnails(prev => ({...prev, [index]: url}));

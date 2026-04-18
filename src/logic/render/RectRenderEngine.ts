@@ -28,6 +28,7 @@ import {LabelStatus} from '../../data/enums/LabelStatus';
 import {LabelUtil} from '../../utils/LabelUtil';
 import {Settings} from '../../settings/Settings';
 import {SmartAnnotationActions} from '../actions/SmartAnnotationActions';
+import {LabelActions} from '../actions/LabelActions';
 
 export class RectRenderEngine extends BaseRenderEngine {
 
@@ -478,6 +479,27 @@ export class RectRenderEngine extends BaseRenderEngine {
         store.dispatch(updateFirstLabelCreatedFlag(true));
         store.dispatch(updateActiveLabelId(labelRect.id));
     };
+
+    /**
+     * 橡皮擦模式：点击命中的矩形框 → 删除，返回 true；否则返回 false。
+     */
+    public eraserClick(data: EditorData): boolean {
+        const imageData = LabelsSelector.getActiveImageData();
+        if (!imageData || !imageData.labelRects) return false;
+        const aiState = store.getState().ai.imageAIStates.get(imageData.id);
+        const aiLabelsVisible = aiState ? aiState.aiLabelsVisible : false;
+        // 从后往前，优先命中最上层
+        for (let i = imageData.labelRects.length - 1; i >= 0; i--) {
+            const rect = imageData.labelRects[i];
+            const shouldShow = rect.isVisible && (rect.isCreatedByAI ? aiLabelsVisible : true);
+            if (shouldShow && this.isMouseOverEntireRect(rect.rect, data)) {
+                LabelActions.deleteRectLabelById(imageData.id, rect.id);
+                EditorActions.fullRender();
+                return true;
+            }
+        }
+        return false;
+    }
 
     private getRectUnderMouse(data: EditorData): LabelRect {
         const activeRectLabel: LabelRect = LabelsSelector.getActiveRectLabel();

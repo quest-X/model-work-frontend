@@ -592,7 +592,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             callModel: {
                 title: '调用模型',
                 selectModel: '选择要加载的模型：',
-                acceptButton: '确认',
+                acceptButton: '进入',
                 rejectButton: '关闭',
                 models: {
                     yolov5: 'YOLOv5 - 使用矩形框进行目标检测',
@@ -1032,7 +1032,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             callModel: {
                 title: 'Call Model',
                 selectModel: 'Select model to load:',
-                acceptButton: 'Confirm',
+                acceptButton: 'Next',
                 rejectButton: 'Close',
                 models: {
                     yolov5: 'YOLOv5 - object detection using rectangles',
@@ -1300,7 +1300,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             completed: 'Inference Completed',
             failed: 'Inference Failed',
             steps: {
-                preprocessing: 'Preprocessing',
+                preprocessing: 'Pre-processing',
                 inference: 'Inference',
                 postprocessing: 'Post-processing',
                 captureFrame: 'Capturing frames',

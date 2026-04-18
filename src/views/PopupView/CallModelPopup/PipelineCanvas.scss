@@ -1,0 +1,121 @@
+@import '../../../settings/Settings';
+
+.PipelineCanvas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  // ── Palette / 移除区 ─────────────────────────────────────────────
+  .PipelineToolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 4px;
+    border: 1px dashed transparent;
+    transition: background 0.15s ease, border-color 0.15s ease;
+
+    &.drag-over {
+      border-color: rgba(255, 80, 80, 0.4);
+      background: rgba(255, 60, 60, 0.04);
+    }
+
+    .ToolbarHint {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    .ToolbarNode {
+      display: flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px dashed rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.5);
+      cursor: grab;
+      user-select: none;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.09);
+        border-color: rgba(255, 255, 255, 0.35);
+        color: rgba(255, 255, 255, 0.8);
+      }
+      &:active { cursor: grabbing; }
+    }
+  }
+
+  // ── 自由画布 ─────────────────────────────────────────────────────
+  .PipelineDropZone {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 14px 20px;
+
+    .PipelineFlow {
+      display: flex;
+      align-items: center;
+      justify-content: space-evenly;
+      width: 100%;
+
+      // ── 激活节点 ────────────────────────────────────────────────
+      .FlowNode {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 90px;
+        padding: 7px 20px;
+        background: rgba(0, 158, 253, 0.1);
+        border: 1px solid rgba(0, 158, 253, 0.3);
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.85);
+        cursor: grab;
+        user-select: none;
+        transition: background 0.12s, border-color 0.12s, color 0.12s;
+
+        &:hover {
+          background: rgba(0, 158, 253, 0.2);
+          border-color: rgba(0, 158, 253, 0.55);
+          color: #fff;
+        }
+        &:active { cursor: grabbing; }
+      }
+
+      // ── 未激活占位 ───────────────────────────────────────────────
+      .FlowSlot {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 90px;
+        padding: 7px 20px;
+        background: transparent;
+        border: 1px dashed rgba(255, 255, 255, 0.12);
+        border-radius: 4px;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.2);
+        user-select: none;
+        transition: background 0.12s, border-color 0.12s, color 0.12s;
+
+        &.drag-over {
+          background: rgba(0, 158, 253, 0.08);
+          border-color: rgba(0, 158, 253, 0.45);
+          border-style: solid;
+          color: rgba(255, 255, 255, 0.6);
+        }
+      }
+
+      // ── 箭头连接符 ───────────────────────────────────────────────
+      .FlowArrow {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.2);
+        flex-shrink: 0;
+      }
+    }
+  }
+}

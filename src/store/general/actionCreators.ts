@@ -96,6 +96,15 @@ export function updatePerClassColorationStatus(enablePerClassColoration: boolean
     };
 }
 
+export function updateEraserMode(eraserMode: boolean): GeneralActionTypes {
+    return {
+        type: Action.UPDATE_ERASER_MODE,
+        payload: {
+            eraserMode,
+        },
+    };
+}
+
 export function updateLanguage(language: Language): GeneralActionTypes {
     return {
         type: Action.UPDATE_LANGUAGE,

@@ -10,6 +10,7 @@ import {GeneralActionTypes} from '../../../store/general/types';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {AIModel} from '../../../store/aimodels/types';
 import {getDefaultBackendBase} from '../../../utils/DefaultBackendUrl';
+import PipelineCanvas from './PipelineCanvas';
 
 export interface YOLOModelFamily {
     id: string;
@@ -176,6 +177,10 @@ const CallModelPopup: React.FC<IProps> = ({
 
     const renderContent = () => {
         return <div className='CallModelPopupContent'>
+            <div className='ModelSection'>
+                <div className='SectionHeader'>{zhTexts ? '流程参数' : 'Pipeline'}</div>
+                <PipelineCanvas zh={zhTexts} onOpenPopup={updateActivePopupType} />
+            </div>
             <div className='ModelSection'>
                 <div className='SectionHeader'>{zhTexts ? '自定义' : 'Custom'}</div>
                 <div className='Options'>

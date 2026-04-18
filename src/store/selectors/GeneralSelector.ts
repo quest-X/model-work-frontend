@@ -44,4 +44,8 @@ export class GeneralSelector {
     public static getEnablePerClassColorationStatus(): boolean {
         return store.getState().general.enablePerClassColoration
     }
+
+    public static getEraserMode(): boolean {
+        return store.getState().general.eraserMode ?? false;
+    }
 }

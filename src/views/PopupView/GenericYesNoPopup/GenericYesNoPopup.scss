@@ -23,11 +23,11 @@
     background-color: $darkThemeFirstColor;
 
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     flex-wrap: nowrap;
     justify-content: center;
     align-items: center;
-    align-content: center;
+    gap: 8px;
   }
 
   .Content {

@@ -252,13 +252,16 @@ export class AIDetectionActions {
 
         if (isVideo && (preFrames || sessionId || EditorModel.videoElement)) {
             // Video mode: only detect selected frames (not all frames)
+            // detectBatch 只在批量模式下被调用(单图走 detectObjects),所以直接跳过已推理帧
             const selectedIds = new Set(imagesToDetect.map(img => img.id));
             const frameQueue: { frameIdx: number; imageData: ImageData }[] = [];
             for (let frameIdx = 0; frameIdx < allImagesData.length; frameIdx++) {
-                if (selectedIds.has(allImagesData[frameIdx].id)) {
-                    frameQueue.push({ frameIdx, imageData: allImagesData[frameIdx] });
-                }
+                const img = allImagesData[frameIdx];
+                if (!selectedIds.has(img.id)) continue;
+                if (img.labelRects.some((r: LabelRect) => r.isCreatedByAI)) continue;
+                frameQueue.push({ frameIdx, imageData: img });
             }
+            successCount = total - frameQueue.length;
 
             const captureTotal = frameQueue.length;
             console.log('[BatchDetect] Frame queue:', { captureTotal, skipped: total - captureTotal });

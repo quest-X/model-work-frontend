@@ -13,6 +13,7 @@ const initialState: GeneralState = {
     preventCustomCursor: false,
     imageDragMode: false,
     smartAnnotationActive: false,
+    eraserMode: false,
     enablePerClassColoration: true,
     projectData: {
         type: ProjectType.OBJECT_DETECTION, // 默认设置为目标检测项目
@@ -67,6 +68,12 @@ export function generalReducer(
             return {
                 ...state,
                 smartAnnotationActive: action.payload.smartAnnotationActive
+            }
+        }
+        case Action.UPDATE_ERASER_MODE: {
+            return {
+                ...state,
+                eraserMode: action.payload.eraserMode
             }
         }
         case Action.UPDATE_PROJECT_DATA: {

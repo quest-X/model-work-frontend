@@ -5,7 +5,7 @@ import classNames from 'classnames';
 import { AppState } from '../../../store';
 import { store } from '../../../index';
 import { connect } from 'react-redux';
-import { updateSmartAnnotationActiveStatus, updateImageDragModeStatus, updateActivePopupType, updateCustomCursorStyle } from '../../../store/general/actionCreators';
+import { updateSmartAnnotationActiveStatus, updateImageDragModeStatus, updateActivePopupType, updateCustomCursorStyle, updateEraserMode } from '../../../store/general/actionCreators';
 import { PopupWindowType } from '../../../data/enums/PopupWindowType';
 import { CustomCursorStyle } from '../../../data/enums/CustomCursorStyle';
 import { GeneralSelector } from '../../../store/selectors/GeneralSelector';
@@ -127,6 +127,8 @@ interface IProps {
     addInferenceHistory: (imageId: string, detectedCount: number, success?: boolean) => any;
     imageDragMode: boolean;
     smartAnnotationActive: boolean;
+    eraserMode: boolean;
+    updateEraserModeAction: (eraserMode: boolean) => any;
     isFullImageInferenceInProgress: boolean;
     imageAIStates: Map<string, { aiLabelsVisible: boolean; segmentationLabelsVisible: boolean; inferenceHistory: Array<any> }>;
     activeLabelType: LabelType;
@@ -152,6 +154,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         addInferenceHistory,
         imageDragMode,
         smartAnnotationActive,
+        eraserMode,
+        updateEraserModeAction,
         isFullImageInferenceInProgress,
         imageAIStates,
         activeLabelType,
@@ -197,13 +201,29 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     // 绘制矩形框 / 绘制多边形 / 智能标注 / 查看所有标签 四个工具互斥
     const onToolClick = useCallback((toolType: LabelType) => {
         if (smartAnnotationActive) {
-            // 点击其他工具 → 关掉智能标注
             updateSmartAnnotationActiveStatusAction(false);
+        }
+        if (eraserMode) {
+            updateEraserModeAction(false);
         }
         updateActiveLabelType(toolType);
         // 切换工具时重置 cursor 到 DEFAULT —— 避免从 ALL 视图切过来时 GRAB 光标残留
         store.dispatch(updateCustomCursorStyle(CustomCursorStyle.DEFAULT));
     }, [smartAnnotationActive, updateSmartAnnotationActiveStatusAction, updateActiveLabelType]);
+
+    // 橡皮擦按钮
+    const eraserOnClick = useCallback(() => {
+        const willActivate = !eraserMode;
+        updateEraserModeAction(willActivate);
+        if (willActivate) {
+            // 橡皮擦激活时：关闭智能标注、关闭拖拽、切到 ALL 视图
+            if (smartAnnotationActive) updateSmartAnnotationActiveStatusAction(false);
+            if (imageDragMode) updateImageDragModeStatusAction(false);
+            updateActiveLabelType(LabelType.ALL);
+            store.dispatch(updateCustomCursorStyle(CustomCursorStyle.DEFAULT));
+        }
+    }, [eraserMode, smartAnnotationActive, imageDragMode, updateEraserModeAction,
+        updateSmartAnnotationActiveStatusAction, updateImageDragModeStatusAction, updateActiveLabelType]);
 
     // 显示/隐藏标签按钮 —— 同时控制矩形框和多边形
     // 默认可见：未被显式隐藏前两个 flag 都是 true
@@ -364,6 +384,19 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         [activeModelName, modelTasks]
     );
 
+    // 同步选中模型的任务类型到 Redux，供 pipeline popup 读取
+    useEffect(() => {
+        const task = modelTasks[activeModelName];
+        const resolvedTask: string | null = task
+            ? task
+            : activeModelName
+                ? ((/^(sam2|sam_|mobile_sam|FastSAM)/i.test(activeModelName) || /-seg/i.test(activeModelName))
+                    ? 'segment'
+                    : 'detect')
+                : null;
+        store.dispatch({ type: 'SET_SELECTED_MODEL_TASK', payload: resolvedTask });
+    }, [activeModelName, modelTasks]);
+
     const runInference = useCallback((_mode?: string) => {
         setShowInferenceMenu(false);
         if (isFullImageInferenceInProgress) return;
@@ -378,8 +411,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         updateFullImageInferenceStatus(true);
 
         // 根据当前活跃模型类型自动路由到检测或分割
+        // 批量模式跳过已推理过的图像;单图模式允许重复推理(显式传 isBatch 区分)
         if (isSegModel) {
-            AISegmentationActions.segmentBatch(targets);
+            AISegmentationActions.segmentBatch(targets, isBatchMode);
         } else {
             if (isBatchMode) {
                 AIDetectionActions.detectBatch(targets);
@@ -451,7 +485,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         currentTexts.labelTypes?.toolAll || '查看所有标签',
                         'ico/all.png',
                         'tool-all',
-                        !smartAnnotationActive && activeLabelType === LabelType.ALL,
+                        !smartAnnotationActive && !eraserMode && activeLabelType === LabelType.ALL,
                         undefined,
                         () => onToolClick(LabelType.ALL)
                     )
@@ -462,7 +496,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         currentTexts.labelTypes?.toolRect || '绘制矩形框',
                         'ico/rectangle.png',
                         'tool-rect',
-                        !smartAnnotationActive && activeLabelType === LabelType.RECT,
+                        !smartAnnotationActive && !eraserMode && activeLabelType === LabelType.RECT,
                         undefined,
                         () => onToolClick(LabelType.RECT)
                     )
@@ -497,7 +531,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         currentTexts.labelTypes?.toolPolygon || '绘制多边形',
                         'ico/polygon.png',
                         'tool-polygon',
-                        !smartAnnotationActive && activeLabelType === LabelType.POLYGON,
+                        !smartAnnotationActive && !eraserMode && activeLabelType === LabelType.POLYGON,
                         undefined,
                         () => onToolClick(LabelType.POLYGON)
                     )
@@ -525,7 +559,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         currentTexts.editorTopNavBar.smartAnnotationOn,
                         'ico/cross-hair.png',
                         'smart-annotation',
-                        smartAnnotationActive,
+                        smartAnnotationActive && !eraserMode,
                         undefined,
                         smartAnnotationOnClick
                     )}
@@ -538,6 +572,15 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         undefined,
                         isDisabled ? undefined : toggleAILabelsOnClick,
                         isDisabled
+                    )}
+                    {hasAnyLabel && getButtonWithTooltip(
+                        'eraser',
+                        language === 'zh' ? (eraserMode ? '退出橡皮擦' : '橡皮擦') : (eraserMode ? 'Exit Eraser' : 'Eraser'),
+                        'ico/eraser.png',
+                        'eraser',
+                        eraserMode,
+                        undefined,
+                        eraserOnClick
                     )}
                 </div>;
             }, [imageAIStates, imagesData, activeImageIndex, toggleAILabelsOnClick, isSAMLoaded, smartAnnotationActive, smartAnnotationOnClick, currentTexts])}
@@ -649,13 +692,15 @@ const mapDispatchToProps = {
     toggleImageSegmentationLabelsVisibility,
     addInferenceHistory,
     updateActiveLabelType,
-    updateActiveLabelViewType
+    updateActiveLabelViewType,
+    updateEraserModeAction: updateEraserMode,
 };
 
 const mapStateToProps = (state: AppState) => ({
     activeContext: state.general.activeContext,
     imageDragMode: state.general.imageDragMode,
     smartAnnotationActive: state.general.smartAnnotationActive,
+    eraserMode: state.general.eraserMode ?? false,
     isFullImageInferenceInProgress: state.ai.isFullImageInferenceInProgress,
     imageAIStates: state.ai.imageAIStates,
     activeLabelType: state.labels.activeLabelType,

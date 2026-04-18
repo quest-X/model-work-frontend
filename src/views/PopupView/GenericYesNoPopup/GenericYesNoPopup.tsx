@@ -7,7 +7,7 @@ import {store} from '../../../index';
 import {LanguageConfig} from '../../../data/LanguageConfig';
 
 interface IProps {
-    title: string;
+    title: React.ReactNode;
     renderContent: () => any;
     acceptLabel?: string;
     onAccept?: () => any;

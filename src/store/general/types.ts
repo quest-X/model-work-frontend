@@ -18,6 +18,7 @@ export type GeneralState = {
     preventCustomCursor: boolean;
     imageDragMode: boolean;
     smartAnnotationActive: boolean;
+    eraserMode: boolean;
     enablePerClassColoration: boolean;
     activeContext: ContextType;
     projectData: ProjectData;
@@ -102,6 +103,13 @@ interface UpdateLanguage {
     }
 }
 
+interface UpdateEraserMode {
+    type: typeof Action.UPDATE_ERASER_MODE;
+    payload: {
+        eraserMode: boolean;
+    }
+}
+
 export type GeneralActionTypes = UpdateProjectData
     | UpdateWindowSize
     | UpdateActivePopupType
@@ -110,6 +118,7 @@ export type GeneralActionTypes = UpdateProjectData
     | UpdatePreventCustomCursorStatus
     | UpdateImageDragModeStatus
     | UpdateSmartAnnotationActiveStatus
+    | UpdateEraserMode
     | UpdateZoom
     | UpdatePerClassColoration
     | UpdateLanguage
