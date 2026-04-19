@@ -21,7 +21,7 @@ import { ISize } from '../../../interfaces/ISize';
 import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { EditorModel } from '../../../staticModels/EditorModel';
 import { EditorActions } from '../../../logic/actions/EditorActions';
-import { FrameExtractorService } from '../../../services/FrameExtractorService';
+import { FrameExtractorService, SessionExpiredError } from '../../../services/FrameExtractorService';
 
 interface IProps {
     language: Language;
@@ -46,7 +46,7 @@ const THUMBNAIL_SIZE = 150;
 const BATCH_SIZE = 100;
 
 // === available_frames 滑动窗口（基于秒数 × fps 动态计算） ===
-const MIN_AHEAD_SECONDS = 15;   // 前方保持 15 秒可播放
+const MIN_AHEAD_SECONDS = 20;   // 前方保持 20 秒可播放（25fps=500, 30fps=600）
 const MAX_AVAILABLE_SECONDS = 60; // 缓存上限 60 秒
 const KEEP_BEHIND_SECONDS = 3;  // 后方保留 3 秒（支持短回退）
 
@@ -79,10 +79,26 @@ const FramePlayer: React.FC<IProps> = ({
     const focusableElementRef = useRef<HTMLDivElement>(null);
     const [isLoaded, setIsLoaded] = useState(false);
     const [loadingProgress, setLoadingProgress] = useState(0); // initLoad 进度 0-100
+    // 后台分批加载状态：init 完成后，滑动窗口持续补帧时显示
+    const [bgLoad, setBgLoad] = useState<{ ahead: number; min: number } | null>(null);
+    const bgLoadRef = useRef<{ ahead: number; min: number } | null>(null);
+    // session 失效（后端重启或清理）：停止继续请求并显示提示
+    const [sessionExpired, setSessionExpired] = useState(false);
+    const sessionExpiredRef = useRef(false);
+    const updateBgLoad = useCallback((val: { ahead: number; min: number } | null) => {
+        const prev = bgLoadRef.current;
+        if (val === null && prev === null) return;
+        if (val && prev && val.ahead === prev.ahead && val.min === prev.min) return;
+        bgLoadRef.current = val;
+        setBgLoad(val);
+    }, []);
 
     // 帧图像缓存
     const frameCacheRef = useRef<Map<number, HTMLImageElement>>(new Map());
     const blobUrlCacheRef = useRef<Map<number, string>>(new Map());
+    // P3 兜底：已向父组件投递过缩略图的帧号，空闲时从头到尾填补剩余帧
+    const thumbnailDoneRef = useRef<Set<number>>(new Set());
+    const p3CursorRef = useRef(0);
 
     // 稳定 ref
     const onTimeUpdateRef = useRef(onTimeUpdate);
@@ -139,15 +155,29 @@ const FramePlayer: React.FC<IProps> = ({
                 || (frames.length > frameIdx ? frames[frameIdx] : null);
 
             if (!frameFile && sessionId) {
+                if (sessionExpiredRef.current) throw new SessionExpiredError(sessionId);
                 const batchStart = Math.floor(frameIdx / BATCH_SIZE) * BATCH_SIZE;
                 const batchCount = Math.min(BATCH_SIZE, totalFrames - batchStart);
                 let batchPromise = pendingBatchRef.current.get(batchStart);
                 if (!batchPromise) {
                     batchPromise = FrameExtractorService.fetchFrameRange(sessionId, batchStart, batchCount);
                     pendingBatchRef.current.set(batchStart, batchPromise);
-                    batchPromise.finally(() => pendingBatchRef.current.delete(batchStart));
+                    // 独立清理链：用 .then 同时处理成功/失败，避免 .finally 衍生未捕获拒绝
+                    batchPromise.then(
+                        () => pendingBatchRef.current.delete(batchStart),
+                        () => pendingBatchRef.current.delete(batchStart),
+                    );
                 }
-                const fetched = await batchPromise;
+                let fetched: File[];
+                try {
+                    fetched = await batchPromise;
+                } catch (e) {
+                    if (e instanceof SessionExpiredError) {
+                        sessionExpiredRef.current = true;
+                        setSessionExpired(true);
+                    }
+                    throw e;
+                }
                 for (let i = 0; i < fetched.length; i++) {
                     allFrames[batchStart + i] = fetched[i];
                 }
@@ -257,7 +287,11 @@ const FramePlayer: React.FC<IProps> = ({
             const dataUrl = thumbnailCanvasRef.current.toDataURL('image/jpeg', 0.5);
             await new Promise<void>(resolve => {
                 const thumb = new Image();
-                thumb.onload = () => { cb(frameIdx, thumb); resolve(); };
+                thumb.onload = () => {
+                    cb(frameIdx, thumb);
+                    thumbnailDoneRef.current.add(frameIdx);
+                    resolve();
+                };
                 thumb.onerror = () => resolve();
                 thumb.src = dataUrl;
             });
@@ -292,6 +326,7 @@ const FramePlayer: React.FC<IProps> = ({
         const gen = ++loadGenRef.current;
 
         while (loadGenRef.current === gen) {
+            if (sessionExpiredRef.current) return;
             const pos = isPlayingRef.current ? playFrameRef.current : currentFrameRef.current;
             const searchEnd = Math.min(pos + MAX_AVAILABLE, totalFrames);
 
@@ -301,8 +336,27 @@ const FramePlayer: React.FC<IProps> = ({
                 if (!frameCacheRef.current.has(i)) { target = i; break; }
             }
 
+            // 更新后台加载 UI：MIN_AHEAD 窗口内从 pos 起连续已缓存帧数
+            const posClamped = Math.max(0, pos);
+            const minEnd = Math.min(posClamped + MIN_AHEAD, totalFrames);
+            const minRequired = Math.max(0, minEnd - posClamped);
+            const ahead = target < 0 ? minRequired : Math.max(0, target - posClamped);
+            updateBgLoad(ahead < minRequired ? { ahead, min: minRequired } : null);
+
             if (target < 0) {
-                // 窗口内全部已缓存
+                // 窗口内全部已缓存：P3 兜底 —— 未播放时从头到尾补齐全视频缩略图
+                if (!isPlayingRef.current) {
+                    const cursor = thumbnailDoneRef.current;
+                    while (p3CursorRef.current < totalFrames && cursor.has(p3CursorRef.current)) {
+                        p3CursorRef.current++;
+                    }
+                    if (p3CursorRef.current < totalFrames) {
+                        const idx = p3CursorRef.current;
+                        p3CursorRef.current++; // 无论成败推进，避免失败帧无限重试
+                        try { await loadFrameFullRef.current(idx); } catch {}
+                        continue;
+                    }
+                }
                 await new Promise(r => setTimeout(r, 200));
                 continue;
             }
@@ -325,7 +379,7 @@ const FramePlayer: React.FC<IProps> = ({
             // 淘汰旧帧
             evictOldFrames(pos);
         }
-    }, [totalFrames, loadFrameImage, evictOldFrames, MIN_AHEAD, MAX_AVAILABLE]);
+    }, [totalFrames, loadFrameImage, evictOldFrames, updateBgLoad, MIN_AHEAD, MAX_AVAILABLE]);
 
     // 更新稳定 ref
     loadFrameFullRef.current = loadFrameFull;
@@ -380,25 +434,65 @@ const FramePlayer: React.FC<IProps> = ({
                 const gen = ++loadGenRef.current;
                 const initEnd = Math.min(MIN_AHEAD, totalFrames);
 
-                for (let i = 0; i < initEnd; i++) {
-                    if (loadGenRef.current !== gen || cancelled) return;
-                    await loadFrameFullRef.current(i);
-                    if (i % 30 === 0) {
-                        setLoadingProgress(Math.round(((i + 1) / initEnd) * 100));
-                        await new Promise(r => setTimeout(r, 0));
+                let loaded = 0;
+                const tick = () => {
+                    loaded++;
+                    // 用"解析中 X%"进度反馈，不打开右下角角标
+                    setLoadingProgress(Math.round((loaded / initEnd) * 100));
+                };
+
+                // 预拉所有 batch：每个 batch 的第一帧并发触发 loadFrameImage，
+                // 让网络 fetch / ZIP 解压与后续的 canvas+thumbnail 主线程工作流水线重叠
+                if (sessionId) {
+                    const warms: Promise<any>[] = [];
+                    for (let start = 0; start < initEnd; start += BATCH_SIZE) {
+                        warms.push(loadFrameImage(start).catch(() => null));
                     }
+                    await Promise.all(warms);
+                    if (loadGenRef.current !== gen || cancelled) return;
                 }
+
+                // Fast-prefetch：前 FAST 帧全部并发，最容易被用户看到，必须尽快出现
+                const FAST = Math.min(20, initEnd);
+                await Promise.all(
+                    Array.from({ length: FAST }, (_, i) =>
+                        (async () => {
+                            if (loadGenRef.current !== gen || cancelled) return;
+                            try { await loadFrameFullRef.current(i); } catch {}
+                            tick();
+                        })()
+                    )
+                );
                 if (loadGenRef.current !== gen || cancelled) return;
 
-                setIsLoaded(true);
+                // 剩余帧用 worker pool（batch 已预拉，worker 只做 decode + thumbnail）
+                const CONCURRENCY = 8;
+                let nextIdx = FAST;
+                await Promise.all(
+                    Array.from({ length: CONCURRENCY }, async () => {
+                        while (true) {
+                            if (loadGenRef.current !== gen || cancelled) return;
+                            const i = nextIdx++;
+                            if (i >= initEnd) return;
+                            try { await loadFrameFullRef.current(i); } catch {}
+                            tick();
+                        }
+                    })
+                );
+                if (loadGenRef.current !== gen || cancelled) return;
 
-                // 初始化完成，允许 seek
+                // 完全解析完，一次性掀开画面
+                setIsLoaded(true);
                 initPhaseRef.current = false;
 
-                // 启动 available_frames 滑动窗口维护
+                // 启动 available_frames 滑动窗口维护（P3 兜底继续填剩余帧）
                 maintainRef.current();
             } catch (err) {
                 console.error('[FramePlayer] Init failed:', err);
+                if (err instanceof SessionExpiredError) {
+                    sessionExpiredRef.current = true;
+                    setSessionExpired(true);
+                }
             }
         };
 
@@ -565,6 +659,26 @@ const FramePlayer: React.FC<IProps> = ({
                 <div className="LoadingOverlay">
                     <div className="LoadingSpinner"></div>
                     <p>解析中 {loadingProgress}%</p>
+                </div>
+            )}
+            {isLoaded && bgLoad && bgLoad.ahead === 0 && (
+                <div className="LoadingOverlay LoadingOverlayDim">
+                    <div className="LoadingSpinner"></div>
+                    <p>加载帧中 {bgLoad.ahead}/{bgLoad.min}</p>
+                </div>
+            )}
+            {isLoaded && bgLoad && !sessionExpired && (
+                <div className="BgLoadingBadge">
+                    <div className="BgSpinner"></div>
+                    <span>缓冲 {bgLoad.ahead}/{bgLoad.min}</span>
+                </div>
+            )}
+            {sessionExpired && (
+                <div className="LoadingOverlay">
+                    <p style={{ fontSize: 16, marginBottom: 8 }}>视频会话已失效</p>
+                    <p style={{ fontSize: 13, color: '#aaa' }}>
+                        后端已重启或 session 已清理，请删除当前队列项并重新上传视频
+                    </p>
                 </div>
             )}
         </div>

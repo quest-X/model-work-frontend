@@ -601,6 +601,7 @@ const VideoEditor: React.FC<IProps> = ({
                         Condition: preExtractedFrames or sessionId present = fast_ffmpeg_mode */}
                     {(activeVideo.preExtractedFrames || activeVideo.sessionId) ? (
                         <FramePlayer
+                            key={activeVideo.id}
                             language={language}
                             frames={activeVideo.preExtractedFrames || EMPTY_FRAMES}
                             sessionId={activeVideo.sessionId}

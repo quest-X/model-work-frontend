@@ -4,11 +4,48 @@ import {connect} from 'react-redux';
 import {AppState} from '../../../store';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {SegmentationResult} from '../../../store/ai/types';
-import {ImageData, LabelName} from '../../../store/labels/types';
+import {ImageData, LabelName, LabelPolygon} from '../../../store/labels/types';
 import {updateSegmentationResults} from '../../../store/ai/actionCreators';
 import {updateActiveLabelId} from '../../../store/labels/actionCreators';
 import {LabelActions} from '../../../logic/actions/LabelActions';
+import {EditorActions} from '../../../logic/actions/EditorActions';
 import {EditorModel} from '../../../staticModels/EditorModel';
+
+// 把 labelPolygons（分割标注）映射成展示用结构，兜底 segmentationResults Map 为空的情况
+// 返回 shape 与 SegmentationAPIDetector.convertToUnifiedFormat 一致
+function polygonsToDisplay(polys: LabelPolygon[], labelNames: LabelName[]): any[] {
+    return polys.map((p, idx) => {
+        const labelName = labelNames.find(ln => ln.id === p.labelId);
+        const name = labelName?.name || p.suggestedLabel || 'unknown';
+        let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+        const maskData: [number, number][] = [];
+        for (const v of p.vertices) {
+            if (v.x < x1) x1 = v.x;
+            if (v.y < y1) y1 = v.y;
+            if (v.x > x2) x2 = v.x;
+            if (v.y > y2) y2 = v.y;
+            maskData.push([v.x, v.y]);
+        }
+        if (!isFinite(x1)) { x1 = y1 = x2 = y2 = 0; }
+        // Shoelace area
+        let area = 0;
+        for (let i = 0; i < maskData.length; i++) {
+            const [ax, ay] = maskData[i];
+            const [bx, by] = maskData[(i + 1) % maskData.length];
+            area += ax * by - bx * ay;
+        }
+        area = Math.abs(area) / 2;
+        return {
+            class_id: idx,
+            class_name: name,
+            confidence: p.confidence || 0,
+            info: { id: idx, name, confidence: p.confidence || 0 },
+            bbox: { x1, y1, x2, y2, width: x2 - x1, height: y2 - y1 },
+            mask: { area, mask_data: maskData },
+            _labelPolygonId: p.id,
+        };
+    });
+}
 
 interface IProps {
     language: Language;
@@ -28,62 +65,123 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         const newSegmentationResults = segmentationResults.filter((_, i) => i !== index);
         updateSegmentationResults(newSegmentationResults, activeImageData?.id);
 
-        if (activeImageData) {
-            const candidateLabelRects = activeImageData.labelRects.filter(labelRect => {
-                if (!labelRect.isCreatedByAI) return false;
-                const labelName = labelNames.find(ln => ln.id === labelRect.labelId);
-                if (labelName && labelName.name.toLowerCase() === (result.info?.name || result.class_name).toLowerCase()) return true;
-                if (labelRect.suggestedLabel && labelRect.suggestedLabel.toLowerCase() === (result.info?.name || result.class_name).toLowerCase()) return true;
+        if (!activeImageData) return;
+
+        const resultName = (result.info?.name || result.class_name).toLowerCase();
+        const resultCenterX = result.bbox.x1 + result.bbox.width / 2;
+        const resultCenterY = result.bbox.y1 + result.bbox.height / 2;
+
+        // ── 分割结果（有 mask）→ 删对应的 labelPolygon ──
+        if (result.mask) {
+            const candidates = activeImageData.labelPolygons.filter(polygon => {
+                if (!polygon.isCreatedByAI) return false;
+                const labelName = labelNames.find(ln => ln.id === polygon.labelId);
+                if (labelName && labelName.name.toLowerCase() === resultName) return true;
+                if (polygon.suggestedLabel && polygon.suggestedLabel.toLowerCase() === resultName) return true;
                 return false;
             });
-
-            if (candidateLabelRects.length > 0) {
-                let bestMatch = candidateLabelRects[0];
+            if (candidates.length > 0) {
+                let bestMatch = candidates[0];
                 let minDistance = Number.MAX_VALUE;
-                candidateLabelRects.forEach(labelRect => {
-                    const resultCenterX = result.bbox.x1 + result.bbox.width / 2;
-                    const resultCenterY = result.bbox.y1 + result.bbox.height / 2;
-                    const rectCenterX = labelRect.rect.x + labelRect.rect.width / 2;
-                    const rectCenterY = labelRect.rect.y + labelRect.rect.height / 2;
-                    const distance = Math.sqrt(Math.pow(resultCenterX - rectCenterX, 2) + Math.pow(resultCenterY - rectCenterY, 2));
-                    if (distance < minDistance) { minDistance = distance; bestMatch = labelRect; }
+                candidates.forEach(polygon => {
+                    if (polygon.vertices.length === 0) return;
+                    const cx = polygon.vertices.reduce((s, v) => s + v.x, 0) / polygon.vertices.length;
+                    const cy = polygon.vertices.reduce((s, v) => s + v.y, 0) / polygon.vertices.length;
+                    const d = Math.sqrt(Math.pow(resultCenterX - cx, 2) + Math.pow(resultCenterY - cy, 2));
+                    if (d < minDistance) { minDistance = d; bestMatch = polygon; }
                 });
-                LabelActions.deleteRectLabelById(activeImageData.id, bestMatch.id);
+                LabelActions.deletePolygonLabelById(activeImageData.id, bestMatch.id);
+                EditorActions.fullRender();
             }
+            return;
         }
-    };
 
-    const findBestMatchingLabelRect = (result: SegmentationResult) => {
-        if (!activeImageData) return null;
+        // ── 检测结果（_labelRectId 直接对应 labelRect）→ 直接删 ──
+        if ((result as any)._labelRectId) {
+            LabelActions.deleteRectLabelById(activeImageData.id, (result as any)._labelRectId);
+            return;
+        }
+
+        // ── 普通检测结果 → 按类名 + bbox 重心距离匹配 labelRect ──
         const candidateLabelRects = activeImageData.labelRects.filter(labelRect => {
             if (!labelRect.isCreatedByAI) return false;
             const labelName = labelNames.find(ln => ln.id === labelRect.labelId);
-            if (labelName && labelName.name.toLowerCase() === (result.info?.name || result.class_name).toLowerCase()) return true;
-            if (labelRect.suggestedLabel && labelRect.suggestedLabel.toLowerCase() === (result.info?.name || result.class_name).toLowerCase()) return true;
+            if (labelName && labelName.name.toLowerCase() === resultName) return true;
+            if (labelRect.suggestedLabel && labelRect.suggestedLabel.toLowerCase() === resultName) return true;
+            return false;
+        });
+        if (candidateLabelRects.length > 0) {
+            let bestMatch = candidateLabelRects[0];
+            let minDistance = Number.MAX_VALUE;
+            candidateLabelRects.forEach(labelRect => {
+                const rectCenterX = labelRect.rect.x + labelRect.rect.width / 2;
+                const rectCenterY = labelRect.rect.y + labelRect.rect.height / 2;
+                const d = Math.sqrt(Math.pow(resultCenterX - rectCenterX, 2) + Math.pow(resultCenterY - rectCenterY, 2));
+                if (d < minDistance) { minDistance = d; bestMatch = labelRect; }
+            });
+            LabelActions.deleteRectLabelById(activeImageData.id, bestMatch.id);
+        }
+    };
+
+    /** 返回与 result 最匹配的标注对象的 ID（labelPolygon 或 labelRect），找不到返回 null */
+    const findBestMatchingLabelId = (result: SegmentationResult): string | null => {
+        if (!activeImageData) return null;
+        const resultName = (result.info?.name || result.class_name).toLowerCase();
+        const resultCenterX = result.bbox.x1 + result.bbox.width / 2;
+        const resultCenterY = result.bbox.y1 + result.bbox.height / 2;
+
+        // 分割结果 → 找 labelPolygon
+        if (result.mask) {
+            const candidates = activeImageData.labelPolygons.filter(polygon => {
+                if (!polygon.isCreatedByAI) return false;
+                const labelName = labelNames.find(ln => ln.id === polygon.labelId);
+                if (labelName && labelName.name.toLowerCase() === resultName) return true;
+                if (polygon.suggestedLabel && polygon.suggestedLabel.toLowerCase() === resultName) return true;
+                return false;
+            });
+            if (candidates.length === 0) return null;
+            let best = candidates[0];
+            let minD = Number.MAX_VALUE;
+            candidates.forEach(polygon => {
+                if (polygon.vertices.length === 0) return;
+                const cx = polygon.vertices.reduce((s, v) => s + v.x, 0) / polygon.vertices.length;
+                const cy = polygon.vertices.reduce((s, v) => s + v.y, 0) / polygon.vertices.length;
+                const d = Math.sqrt(Math.pow(resultCenterX - cx, 2) + Math.pow(resultCenterY - cy, 2));
+                if (d < minD) { minD = d; best = polygon; }
+            });
+            return best.id;
+        }
+
+        // 检测结果（_labelRectId 直接对应）
+        if ((result as any)._labelRectId) return (result as any)._labelRectId;
+
+        // 普通检测结果 → 找 labelRect
+        const candidateLabelRects = activeImageData.labelRects.filter(labelRect => {
+            if (!labelRect.isCreatedByAI) return false;
+            const labelName = labelNames.find(ln => ln.id === labelRect.labelId);
+            if (labelName && labelName.name.toLowerCase() === resultName) return true;
+            if (labelRect.suggestedLabel && labelRect.suggestedLabel.toLowerCase() === resultName) return true;
             return false;
         });
         if (candidateLabelRects.length === 0) return null;
-        let bestMatch = candidateLabelRects[0];
-        let minDistance = Number.MAX_VALUE;
+        let bestRect = candidateLabelRects[0];
+        let minD = Number.MAX_VALUE;
         candidateLabelRects.forEach(labelRect => {
-            const resultCenterX = result.bbox.x1 + result.bbox.width / 2;
-            const resultCenterY = result.bbox.y1 + result.bbox.height / 2;
             const rectCenterX = labelRect.rect.x + labelRect.rect.width / 2;
             const rectCenterY = labelRect.rect.y + labelRect.rect.height / 2;
-            const distance = Math.sqrt(Math.pow(resultCenterX - rectCenterX, 2) + Math.pow(resultCenterY - rectCenterY, 2));
-            if (distance < minDistance) { minDistance = distance; bestMatch = labelRect; }
+            const d = Math.sqrt(Math.pow(resultCenterX - rectCenterX, 2) + Math.pow(resultCenterY - rectCenterY, 2));
+            if (d < minD) { minD = d; bestRect = labelRect; }
         });
-        return bestMatch;
+        return bestRect.id;
     };
 
     const handleClickSegmentationResult = (result: SegmentationResult, index: number) => {
-        const bestMatch = findBestMatchingLabelRect(result);
-        updateActiveLabelId(bestMatch ? bestMatch.id : null);
+        updateActiveLabelId(findBestMatchingLabelId(result));
     };
 
     const handleMouseEnterSegmentationResult = (result: SegmentationResult, index: number) => {
-        const bestMatch = findBestMatchingLabelRect(result);
-        if (bestMatch) updateActiveLabelId(bestMatch.id);
+        const id = findBestMatchingLabelId(result);
+        if (id) updateActiveLabelId(id);
     };
 
     const handleMouseLeaveSegmentationResult = () => {
@@ -205,7 +303,14 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
     //   - 回退到 labelRects（检测推理结果存在每帧的 labelRects 中）
     // 图片模式下：直接使用 segmentationResults
     const displayResults = React.useMemo(() => {
-        if (!isVideoMode) return segmentationResults || [];
+        if (!isVideoMode) {
+            // 图片模式：优先推理结果 Map，空则兜底 labelPolygons（智能标注 & dispatch 丢失场景）
+            if (segmentationResults && segmentationResults.length > 0) return segmentationResults;
+            if (!activeImageData) return [];
+            const aiPolys = activeImageData.labelPolygons.filter(p => p.isCreatedByAI);
+            if (aiPolys.length > 0) return polygonsToDisplay(aiPolys, labelNames);
+            return [];
+        }
         if (!activeImageData) return [];
 
         // 视频模式：优先 segmentationResults（分割结果已按 imageId 索引）
@@ -213,7 +318,11 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
             return segmentationResults;
         }
 
-        // 回退：从 labelRects 读取检测结果
+        // 回退 1：labelPolygons（分割结果，包含智能标注 & dispatch 未命中 imageId 的场景）
+        const aiPolys = activeImageData.labelPolygons.filter(p => p.isCreatedByAI);
+        if (aiPolys.length > 0) return polygonsToDisplay(aiPolys, labelNames);
+
+        // 回退 2：从 labelRects 读取检测结果
         const aiRects = activeImageData.labelRects.filter(r => r.isCreatedByAI);
         if (aiRects.length === 0) return [];
         return aiRects.map((rect, idx) => {

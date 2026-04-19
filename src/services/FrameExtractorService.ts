@@ -28,6 +28,17 @@ export interface FrameExtractionResult {
 
 export type ProgressCallback = (phase: string, current: number, total: number) => void;
 
+/**
+ * 后端 session 已失效（通常因后端重启）。触发方：GET /frames/{sid} 返回 404。
+ * 捕获侧应停止继续请求并提示用户重新上传。
+ */
+export class SessionExpiredError extends Error {
+    constructor(public sessionId: string) {
+        super(`Backend session expired: ${sessionId}`);
+        this.name = 'SessionExpiredError';
+    }
+}
+
 // API_BASE 跟随浏览器 host:.151 浏览器访问 .205 前端时,会自动得到 http://192.168.x.205:8000
 // 而不是 localhost:8000(后者会被浏览器解析到 .151 自己的机器,跨机必失败)。
 const API_BASE = getDefaultBackendBase();
@@ -101,11 +112,19 @@ export class FrameExtractorService {
         onProgress?: ProgressCallback,
     ): Promise<File[]> {
 
-        const response = await axios.get(`${API_BASE}/frames/${sessionId}`, {
-            params: { start, count },
-            responseType: 'arraybuffer',
-            timeout: 0,
-        });
+        let response;
+        try {
+            response = await axios.get(`${API_BASE}/frames/${sessionId}`, {
+                params: { start, count },
+                responseType: 'arraybuffer',
+                timeout: 0,
+            });
+        } catch (err: any) {
+            if (err?.response?.status === 404) {
+                throw new SessionExpiredError(sessionId);
+            }
+            throw err;
+        }
 
         // 解析 metadata
         const metadataHeader = response.headers['x-frame-metadata'];

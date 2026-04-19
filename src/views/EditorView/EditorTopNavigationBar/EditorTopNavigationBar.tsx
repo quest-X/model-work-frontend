@@ -258,6 +258,11 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     const [activeModelName, setActiveModelName] = useState('');
     // 后端返回的每个模型的 task 类型（detect/segment/classify/pose）
     const [modelTasks, setModelTasks] = useState<Record<string, string>>({});
+    // 后端两个 slot 的当前占用
+    const [detSlotName, setDetSlotName] = useState<string>('');
+    const [segSlotName, setSegSlotName] = useState<string>('');
+    // 磁盘上所有模型（/available-models 返回），每类选一个作为内置代表
+    const [availableModels, setAvailableModels] = useState<Array<{ name: string; type: string }>>([]);
 
     // 展示完整文件名（含扩展名），方便用户辨认模型
     const formatName = (name: string) => {
@@ -330,10 +335,12 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     const initializedRef = useRef(false);
     const loadedModelsRef = useRef<string[]>([]);
     useEffect(() => {
+        const baseUrl = DetectionAPIDetector.getConfig().url.replace('/detect', '');
         const fetchModels = () => {
-            const url = DetectionAPIDetector.getConfig().url.replace('/detect', '/health');
-            fetch(url).then(r => r.json()).then(data => {
+            fetch(`${baseUrl}/health`).then(r => r.json()).then(data => {
                 if (data.model_tasks) setModelTasks(data.model_tasks);
+                setDetSlotName(data.model || '');
+                setSegSlotName(data.segmentation_model || '');
 
                 // 首次：用后端 detection slot 初始化
                 if (!initializedRef.current && data.model && data.model !== 'none') {
@@ -358,6 +365,10 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 if (EditorModel.lastLoadedModelService) {
                     EditorModel.lastLoadedModelService = null;
                 }
+            }).catch(() => {});
+            // 磁盘上所有模型（供 slot 被自定义占用时选一个内置代表）
+            fetch(`${baseUrl}/available-models`).then(r => r.json()).then(data => {
+                if (Array.isArray(data.models)) setAvailableModels(data.models);
             }).catch(() => {});
         };
         fetchModels();
@@ -559,15 +570,6 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                     : anyVisible ? 'ico/eye.png' : 'ico/eye-off.png';
 
                 return <div className='ButtonWrapper'>
-                    {isSAMLoaded && getButtonWithTooltip(
-                        'smart-annotation',
-                        currentTexts.editorTopNavBar.smartAnnotationOn,
-                        'ico/cross-hair.png',
-                        'smart-annotation',
-                        smartAnnotationActive && !eraserMode,
-                        undefined,
-                        smartAnnotationOnClick
-                    )}
                     {getButtonWithTooltip(
                         'toggle-ai-labels',
                         anyVisible ? '隐藏标签' : '显示标签',
@@ -577,6 +579,15 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         undefined,
                         isDisabled ? undefined : toggleAILabelsOnClick,
                         isDisabled
+                    )}
+                    {isSAMLoaded && getButtonWithTooltip(
+                        'smart-annotation',
+                        currentTexts.editorTopNavBar.smartAnnotationOn,
+                        'ico/cross-hair.png',
+                        'smart-annotation',
+                        smartAnnotationActive && !eraserMode,
+                        undefined,
+                        smartAnnotationOnClick
                     )}
                     {hasAnyLabel && getButtonWithTooltip(
                         'eraser',
@@ -614,25 +625,59 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                     {(() => {
                         const zh = language === 'zh';
                         const allBuiltins = [...YOLO_MODEL_FAMILIES, ...SEG_MODEL_FAMILIES].flatMap(f => f.variants);
-                        const getCategory = (name: string): number => {
+                        const isCustomName = (name: string) => {
                             const baseName = name.replace(/\.(pt|onnx)$/i, '');
-                            if (!allBuiltins.includes(baseName)) return 0; // 自定义
-                            const task = modelTasks[name];
-                            if (task === 'segment') return 2; // 分割
-                            return 1; // 检测（含 classify/pose）
+                            return !allBuiltins.includes(baseName);
                         };
-                        const getLabel = (name: string): string => {
-                            const baseName = name.replace(/\.(pt|onnx)$/i, '');
-                            if (!allBuiltins.includes(baseName)) return zh ? '自定义' : 'Custom';
-                            const task = modelTasks[name];
-                            return task === 'segment' ? (zh ? '分割模型' : 'Segmentation')
-                                : task === 'classify' ? (zh ? '分类模型' : 'Classification')
-                                : task === 'pose' ? (zh ? '姿态模型' : 'Pose')
-                                : (zh ? '检测模型' : 'Detection');
+                        // 自定义模型按名字推断 det/seg（与后端 _detect_model_service 规则一致）
+                        const classifyCustom = (name: string): 'detection' | 'segmentation' => {
+                            const lower = name.toLowerCase();
+                            if (lower.startsWith('seg_')) return 'segmentation';
+                            if (lower.startsWith('det_')) return 'detection';
+                            if (lower.includes('seg') || lower.includes('sam')) return 'segmentation';
+                            return 'detection';
                         };
-                        const sorted = [...loadedModels].sort((a, b) => getCategory(a) - getCategory(b));
-                        return sorted.map(name =>
-                            <option key={name} value={name}>{getLabel(name)} ({name})</option>
+                        // 4 个类别：每类最多 1 个最新代表
+                        // 优先用当前 slot 里的模型（如果类别匹配），否则用 /available-models 兜底
+                        // /available-models 返回的 .pt 模型是裸 stem（无扩展名），slot 名含 .pt —
+                        // 统一补上 .pt 以便 <option value> 与 activeModelName/slot 名匹配
+                        const normalize = (name: string): string => {
+                            if (name.endsWith('.pt') || name.endsWith('.onnx')) return name;
+                            return name + '.pt';
+                        };
+                        type Cat = 'custom-seg' | 'builtin-seg' | 'custom-det' | 'builtin-det';
+                        const pickFor = (cat: Cat): string | null => {
+                            const slotName = cat.endsWith('seg') ? segSlotName : detSlotName;
+                            if (slotName) {
+                                const slotIsCustom = isCustomName(slotName);
+                                const slotMatchesCat = cat.startsWith('custom') ? slotIsCustom : !slotIsCustom;
+                                if (slotMatchesCat) return slotName;
+                            }
+                            // custom 类别：只显示当前 slot 里的那个自定义，不扫描磁盘
+                            // 避免历史遗留的 custom 文件出现在下拉里
+                            if (cat.startsWith('custom')) return null;
+                            const found = cat === 'builtin-seg'
+                                ? availableModels.find(m => m.type === 'segmentation')
+                                : availableModels.find(m => m.type === 'detection');
+                            return found ? normalize(found.name) : null;
+                        };
+                        const catOrder: Array<{ cat: Cat; label: string }> = [
+                            { cat: 'custom-seg',  label: zh ? '自定义' : 'Custom' },
+                            { cat: 'builtin-seg', label: zh ? '分割模型' : 'Segmentation' },
+                            { cat: 'custom-det',  label: zh ? '自定义' : 'Custom' },
+                            { cat: 'builtin-det', label: zh ? '检测模型' : 'Detection' },
+                        ];
+                        const seen = new Set<string>();
+                        const entries: Array<{ name: string; label: string }> = [];
+                        for (const { cat, label } of catOrder) {
+                            const name = pickFor(cat);
+                            if (name && !seen.has(name)) {
+                                seen.add(name);
+                                entries.push({ name, label });
+                            }
+                        }
+                        return entries.map(e =>
+                            <option key={e.name} value={e.name}>{e.label} ({e.name})</option>
                         );
                     })()}
                 </select>
