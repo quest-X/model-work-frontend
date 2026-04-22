@@ -152,7 +152,9 @@ class LabelInputField extends React.Component<IProps, IState> {
         const total = Object.values(counts).reduce((s, n) => s + n, 0);
 
         const recentIds = LabelInputField.getRecentLabelIds();
-        const sorted = [...this.props.options].sort((a, b) => {
+        const lastUsedId = recentIds.length > 0 ? recentIds[0] : null;
+        const lastUsed = lastUsedId ? this.props.options.filter(o => o.id === lastUsedId) : [];
+        const rest = [...this.props.options.filter(o => o.id !== lastUsedId)].sort((a, b) => {
             const ai = recentIds.indexOf(a.id);
             const bi = recentIds.indexOf(b.id);
             if (ai !== -1 && bi !== -1) return ai - bi;
@@ -161,7 +163,7 @@ class LabelInputField extends React.Component<IProps, IState> {
             return 0;
         });
 
-        return sorted.map((option: LabelName) => {
+        const renderOption = (option: LabelName) => {
             const count = counts[option.id] || 0;
             const pct = total > 0 ? Math.round(count / total * 100) : 0;
             const countLabel = count > 0 ? `(${count}/${total}, ${pct}%)` : null;
@@ -173,8 +175,15 @@ class LabelInputField extends React.Component<IProps, IState> {
             >
                 <span>{truncate(option.name, {length: Settings.MAX_DROPDOWN_OPTION_LENGTH})}</span>
                 {countLabel && <span className='DropdownOptionCount'>{countLabel}</span>}
-            </div>
-        })
+            </div>;
+        };
+
+        const result: React.ReactNode[] = lastUsed.map(renderOption);
+        if (lastUsed.length > 0 && rest.length > 0) {
+            result.push(<div className='DropdownDivider' key='__divider__' />);
+        }
+        result.push(...rest.map(renderOption));
+        return result;
     };
 
     private mouseEnterHandler = () => {

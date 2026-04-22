@@ -120,6 +120,14 @@
             background-color: $darkThemeThirdColor;
           }
 
+          .DropdownDivider {
+            align-self: stretch;
+            height: 1px;
+            background-color: rgba(255, 255, 255, 0.15);
+            margin: 3px 10px;
+            flex-shrink: 0;
+          }
+
           .DropdownOptionCount {
             font-size: 12px;
             color: #999999;
