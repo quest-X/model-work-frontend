@@ -77,7 +77,7 @@ export class LabelMeExporter {
 
                 imageFileMap.forEach((file, id) => {
                     const imageData = allImagesData.find(img => img.id === id);
-                    if (imageData) zip.file(`images/${imageData.fileData.name}`, file);
+                    if (imageData) zip.file(imageData.fileData.name, file);
                 });
 
                 zip.generateAsync({ type: 'blob' }).then((blob: Blob) => {
