@@ -85,15 +85,22 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
             );
             return <>
                 <div className='Message'>{exportTexts.selectFormat}</div>
-                <div className='Options'>
-                    <div className='OptionsItem' onClick={() => setExportTarget('labelme')}>
-                        {check(exportTarget === 'labelme')}{exportTexts.labelmePackageButton}
+                <div className='ModeToggle'>
+                    <div
+                        className={`ModeButton${exportTarget === 'labelme' ? ' active' : ''}`}
+                        onClick={() => setExportTarget('labelme')}
+                    >
+                        {exportTexts.labelmePackageButton}
+                        <span className='ModeDesc'>{exportTexts.labelmePackageDesc}</span>
                     </div>
-                    <div className='OptionsItem' onClick={() => setExportTarget('yolo')}>
-                        {check(exportTarget === 'yolo')}{exportTexts.yoloPackageButton}
+                    <div
+                        className={`ModeButton${exportTarget === 'yolo' ? ' active' : ''}`}
+                        onClick={() => setExportTarget('yolo')}
+                    >
+                        {exportTexts.yoloPackageButton}
+                        <span className='ModeDesc'>{exportTexts.yoloPackageDesc}</span>
                     </div>
                 </div>
-                <div className='Message' style={{paddingTop: 0}}>{zh ? '导出模式' : 'Export mode'}</div>
                 <div className='Options'>
                     <div className='OptionsItem' onClick={() => setExportMode('simple')}>
                         {check(exportMode === 'simple')}{zh ? '简单（仅标签文件）' : 'Simple (labels only)'}
