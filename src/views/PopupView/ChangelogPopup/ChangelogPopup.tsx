@@ -16,7 +16,7 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
-        version: '2.1.10',
+        version: '2.2.0',
         date: '2026-04-22',
         changes: [
             { zh: '【功能】LabelMe JSON 导入：支持 rectangle / polygon / mask 三种 shape_type；mask 类型以 bounding box 作为矩形导入；多 JSON 文件自动识别为 LabelMe 格式，单 JSON 文件 async peek 区分 LabelMe vs COCO；zip 文件名以 labelme_ 开头时强制 LabelMe 模式', en: '[Feature] LabelMe JSON import: handles rectangle, polygon, and mask shape_type; mask is imported as bounding-box rect; multiple JSON files auto-detected as LabelMe, single JSON async-peeked for shapes+imagePath keys to distinguish LabelMe from COCO; zip files prefixed labelme_ force LabelMe mode' },
