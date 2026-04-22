@@ -163,14 +163,19 @@ class LabelInputField extends React.Component<IProps, IState> {
             return 0;
         });
 
-        const renderOption = (option: LabelName) => {
+        const hasDivider = lastUsed.length > 0 && rest.length > 0;
+
+        const renderOption = (option: LabelName, withDividerBelow = false) => {
             const count = counts[option.id] || 0;
             const pct = total > 0 ? Math.round(count / total * 100) : 0;
             const countLabel = count > 0 ? `(${count}/${total}, ${pct}%)` : null;
             return <div
                 className='DropdownOption'
                 key={option.id}
-                style={{height: this.dropdownOptionHeight}}
+                style={{
+                    height: this.dropdownOptionHeight,
+                    ...(withDividerBelow ? {borderBottom: '1px solid rgba(255,255,255,0.6)'} : {}),
+                }}
                 onClick={wrapOnClick(option.id)}
             >
                 <span>{truncate(option.name, {length: Settings.MAX_DROPDOWN_OPTION_LENGTH})}</span>
@@ -178,12 +183,10 @@ class LabelInputField extends React.Component<IProps, IState> {
             </div>;
         };
 
-        const result: React.ReactNode[] = lastUsed.map(renderOption);
-        if (lastUsed.length > 0 && rest.length > 0) {
-            result.push(<div key='__divider__' style={{width:'100%',borderTop:'1px solid rgba(255,255,255,0.6)',margin:'4px 0',flexShrink:0}} />);
-        }
-        result.push(...rest.map(renderOption));
-        return result;
+        return [
+            ...lastUsed.map((opt, i) => renderOption(opt, hasDivider && i === lastUsed.length - 1)),
+            ...rest.map(opt => renderOption(opt)),
+        ];
     };
 
     private mouseEnterHandler = () => {
