@@ -66,6 +66,12 @@
 						color: #f5a623;
 					}
 				}
+
+				.info-label {
+					&.warn {
+						color: #f5a623;
+					}
+				}
 			}
 		}
 

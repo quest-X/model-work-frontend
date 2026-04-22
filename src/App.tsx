@@ -65,9 +65,14 @@ const App: React.FC<IProps> = (
             const dataInfo = await ProjectRestoreService.checkForStoredData();
             setStoredDataInfo(dataInfo);
 
-            if (dataInfo.hasSettings || dataInfo.hasProject) {
+            if (dataInfo.hasProject) {
+                // 有实际可恢复的图像数据 → 弹对话框
                 setShowRestorePrompt(true);
             } else {
+                // 无项目数据（仅设置或空数据）→ 静默恢复设置后直接进入
+                if (dataInfo.hasSettings) {
+                    await ProjectRestoreService.restoreSettings();
+                }
                 setIsRestoring(false);
             }
         } catch (error) {
@@ -128,23 +133,25 @@ const App: React.FC<IProps> = (
                                 <span className="info-value">{storedDataInfo.isVideoProject ? '视频' : '图像'}</span>
                             </div>
                         )}
-                        {storedDataInfo.imageCount !== undefined && (
+                        {storedDataInfo.validImageCount !== undefined && storedDataInfo.validImageCount > 0 && (
                             <div className="info-row">
                                 <span className="info-label">
                                     {storedDataInfo.isVideoProject ? '已标注帧' : '已标注图像'}
                                 </span>
                                 <span className="info-value">
-                                    {storedDataInfo.labelCount ?? 0} / {storedDataInfo.imageCount} {storedDataInfo.isVideoProject ? '帧' : '张'}
+                                    {storedDataInfo.labelCount ?? 0} / {storedDataInfo.validImageCount} {storedDataInfo.isVideoProject ? '帧' : '张'}
                                 </span>
                             </div>
                         )}
-                        {storedDataInfo.validImageCount !== undefined && storedDataInfo.validImageCount !== storedDataInfo.imageCount && (
+                        {storedDataInfo.validImageCount !== undefined &&
+                         storedDataInfo.imageCount !== undefined &&
+                         storedDataInfo.validImageCount < storedDataInfo.imageCount && (
                             <div className="info-row">
-                                <span className="info-label">
-                                    可恢复{storedDataInfo.isVideoProject ? '帧' : '图像'}
+                                <span className="info-label warn">
+                                    数据丢失
                                 </span>
-                                <span className={`info-value${storedDataInfo.validImageCount === 0 ? ' warn' : ''}`}>
-                                    {storedDataInfo.validImageCount} / {storedDataInfo.imageCount} {storedDataInfo.isVideoProject ? '帧' : '张'}
+                                <span className="info-value warn">
+                                    {storedDataInfo.imageCount - storedDataInfo.validImageCount} / {storedDataInfo.imageCount} {storedDataInfo.isVideoProject ? '帧' : '张'}
                                 </span>
                             </div>
                         )}
