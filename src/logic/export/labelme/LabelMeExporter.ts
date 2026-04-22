@@ -18,6 +18,9 @@ export class LabelMeExporter {
         const activeVideo = VideoSelector.getActiveVideo();
         const videoSize = activeVideo?.videoSize;
 
+        const prefix = mode === 'simple' ? 'labelme_simple' : 'labelme_full';
+        const folderName = ExporterUtil.getExportFileName(prefix);
+
         const zip = new JSZip();
         let fileCount = 0;
 
@@ -46,7 +49,7 @@ export class LabelMeExporter {
             const width = videoSize?.width ?? 0;
             const height = videoSize?.height ?? 0;
             zip.file(
-                `${imageData.fileData.name.replace(/\.[^/.]+$/, '')}.json`,
+                `${folderName}/${imageData.fileData.name.replace(/\.[^/.]+$/, '')}.json`,
                 JSON.stringify({ version: '5.10.1', flags: {}, shapes, imagePath: imageData.fileData.name, imageHeight: height, imageWidth: width }, null, 2)
             );
             fileCount++;
@@ -56,7 +59,7 @@ export class LabelMeExporter {
 
         if (mode === 'simple') {
             zip.generateAsync({ type: 'blob' }).then((blob: Blob) => {
-                saveAs(blob, `${ExporterUtil.getExportFileName('labelme_simple')}.zip`);
+                saveAs(blob, `${folderName}.zip`);
             });
             return;
         }
@@ -77,11 +80,11 @@ export class LabelMeExporter {
 
                 imageFileMap.forEach((file, id) => {
                     const imageData = allImagesData.find(img => img.id === id);
-                    if (imageData) zip.file(imageData.fileData.name, file);
+                    if (imageData) zip.file(`${folderName}/${imageData.fileData.name}`, file);
                 });
 
                 zip.generateAsync({ type: 'blob' }).then((blob: Blob) => {
-                    saveAs(blob, `${ExporterUtil.getExportFileName('labelme_full')}.zip`);
+                    saveAs(blob, `${folderName}.zip`);
                 });
             })
             .catch(() => {

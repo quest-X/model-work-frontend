@@ -90,6 +90,7 @@ export class YOLOPackExporter {
         const videoSize = activeVideo?.videoSize;
 
         if (mode === 'simple') {
+            const folderName = ExporterUtil.getExportFileName('yolo_simple');
             const zip = new JSZip();
             for (const imageData of allImagesData) {
                 const size = resolveImageSize(imageData, allImagesData, videoSize);
@@ -97,16 +98,17 @@ export class YOLOPackExporter {
                 const content = buildLabelFileContent(imageData, labelNames, size, useSegmentation);
                 if (content) {
                     const txtName = imageData.fileData.name.replace(/\.[^/.]+$/, '.txt');
-                    zip.file(txtName, content);
+                    zip.file(`${folderName}/${txtName}`, content);
                 }
             }
-            zip.file('labels.txt', labelNames.map(l => l.name).join('\n'));
+            zip.file(`${folderName}/labels.txt`, labelNames.map(l => l.name).join('\n'));
             zip.generateAsync({type: 'blob'}).then((blob: Blob) => {
-                saveAs(blob, `${ExporterUtil.getExportFileName('yolo_simple')}.zip`);
+                saveAs(blob, `${folderName}.zip`);
             });
             return;
         }
 
+        const folderName = ExporterUtil.getExportFileName('yolo_train');
         resolveExportImageFiles(allImagesData, activeVideo)
             .then(imageFileMap => {
                 const missing = allImagesData.filter(img =>
@@ -131,13 +133,13 @@ export class YOLOPackExporter {
                             const content = buildLabelFileContent(imageData, labelNames, size, useSegmentation);
                             if (content) {
                                 const txtName = imageData.fileData.name.replace(/\.[^/.]+$/, '.txt');
-                                zip.file(`labels/${splitName}/${txtName}`, content);
+                                zip.file(`${folderName}/labels/${splitName}/${txtName}`, content);
                             }
                         }
 
                         const file = imageFileMap.get(imageData.id);
                         if (file) {
-                            zip.file(`images/${splitName}/${imageData.fileData.name}`, file);
+                            zip.file(`${folderName}/images/${splitName}/${imageData.fileData.name}`, file);
                         }
                     }
                 }
@@ -151,11 +153,11 @@ export class YOLOPackExporter {
                     `nc: ${classNames.length}`,
                     `names: [${classNames.map(n => `'${n}'`).join(', ')}]`,
                 ].join('\n');
-                zip.file('data.yaml', yaml);
-                zip.file('labels.txt', classNames.join('\n'));
+                zip.file(`${folderName}/data.yaml`, yaml);
+                zip.file(`${folderName}/labels.txt`, classNames.join('\n'));
 
                 zip.generateAsync({type: 'blob'}).then((blob: Blob) => {
-                    saveAs(blob, `${ExporterUtil.getExportFileName('yolo_train')}.zip`);
+                    saveAs(blob, `${folderName}.zip`);
                 });
             })
             .catch(() => {
