@@ -142,6 +142,14 @@ class LabelInputField extends React.Component<IProps, IState> {
             };
         }
 
+        // Count annotations per labelId across all images
+        const counts: Record<string, number> = {};
+        for (const img of LabelsSelector.getImagesData()) {
+            for (const a of [...img.labelRects, ...img.labelPolygons, ...img.labelPoints, ...img.labelLines]) {
+                if (a.labelId) counts[a.labelId] = (counts[a.labelId] || 0) + 1;
+            }
+        }
+
         const recentIds = LabelInputField.getRecentLabelIds();
         const sorted = [...this.props.options].sort((a, b) => {
             const ai = recentIds.indexOf(a.id);
@@ -153,13 +161,15 @@ class LabelInputField extends React.Component<IProps, IState> {
         });
 
         return sorted.map((option: LabelName) => {
+            const count = counts[option.id] || 0;
             return <div
                 className='DropdownOption'
                 key={option.id}
                 style={{height: this.dropdownOptionHeight}}
                 onClick={wrapOnClick(option.id)}
             >
-                {truncate(option.name, {length: Settings.MAX_DROPDOWN_OPTION_LENGTH})}
+                <span>{truncate(option.name, {length: Settings.MAX_DROPDOWN_OPTION_LENGTH})}</span>
+                {count > 0 && <span className='DropdownOptionCount'>{count}</span>}
             </div>
         })
     };
