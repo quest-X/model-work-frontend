@@ -17,12 +17,24 @@ export class ProjectRestoreService {
         hasSettings: boolean;
         hasProject: boolean;
         lastSaved: number;
+        imageCount?: number;
+        labelCount?: number;
+        isVideoProject?: boolean;
     }> {
         const hasSettings = LocalStorageManager.hasStoredSettings();
-        const hasProject = await IndexedDBManager.hasStoredProject();
         const lastSaved = LocalStorageManager.getLastSavedTime();
-        
-        return { hasSettings, hasProject, lastSaved };
+        // 一次 IDB 读取同时判断是否存在并取得元数据，避免两次读同一条记录
+        const meta = await IndexedDBManager.getProjectMeta();
+        const hasProject = meta !== null && meta.imageCount > 0;
+
+        return {
+            hasSettings,
+            hasProject,
+            lastSaved,
+            imageCount: meta?.imageCount,
+            labelCount: meta?.labelCount,
+            isVideoProject: meta?.isVideoProject,
+        };
     }
     
     public static async restoreSettings(): Promise<boolean> {
@@ -50,21 +62,23 @@ export class ProjectRestoreService {
         }
     }
     
-    public static async restoreProject(): Promise<boolean> {
+    public static async restoreProject(onProgress?: (msg: string) => void): Promise<boolean> {
         try {
             const storedProject = await IndexedDBManager.loadProject();
-            
+
             if (!storedProject || storedProject.images.length === 0) {
                 console.log('没有存储的项目需要恢复');
                 return false;
             }
-            
+
             // 恢复标签名称
+            onProgress?.('正在恢复标签信息...');
             if (storedProject.labelNames.length > 0) {
                 store.dispatch(updateLabelNames(storedProject.labelNames));
             }
 
             // 恢复队列数据
+            onProgress?.('正在恢复队列数据...');
             if (storedProject.queueItems && storedProject.queueItems.length > 0) {
                 store.dispatch(addQueueItems(storedProject.queueItems));
                 if (storedProject.activeQueueItemId) {
@@ -78,6 +92,7 @@ export class ProjectRestoreService {
             }
 
             // 恢复图像数据 - ArrayBuffer → File，设置loadStatus为false让组件重新加载图像
+            onProgress?.(`正在恢复图像数据 (${storedProject.images.length} 张)...`);
             const restoredImages: ImageData[] = storedProject.images.map((storedImage): ImageData => ({
                 id: storedImage.id,
                 fileData: new File([storedImage.fileData], storedImage.fileName, { type: storedImage.fileType || '' }),
@@ -120,6 +135,7 @@ export class ProjectRestoreService {
             ));
 
             if (isVideoProject) {
+                onProgress?.('正在恢复视频帧...');
                 const meta = storedProject.extractionMetadata;
                 // 从恢复的 ImageData 重建 preExtractedFrames（每帧就是一个小 JPEG File）
                 const preExtractedFrames = restoredImages.map(img => img.fileData);
@@ -159,6 +175,7 @@ export class ProjectRestoreService {
             );
             store.dispatch(updateActiveImageIndex(validImageIndex));
             
+            onProgress?.('恢复完成');
             console.log('项目恢复成功:', {
                 恢复图像数量: storedProject.images.length,
                 标签名称数量: storedProject.labelNames.length,
