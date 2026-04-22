@@ -1,34 +1,98 @@
 @import '../../../settings/Settings';
 
-.ExportCards {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 20px 40px;
+.GenericLabelTypePopupContent {
 
-  .ExportCard {
-    padding: 16px 20px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
+  .RightContainer {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    align-items: center;
+    align-content: flex-start;
 
-    &:hover {
-      background: rgba(255, 255, 255, 0.13);
-      border-color: rgba(255, 255, 255, 0.2);
-    }
-
-    .CardTitle {
+    .Message {
+      align-self: stretch;
       color: white;
-      font-size: 15px;
-      font-weight: 600;
-      margin-bottom: 4px;
+      font-size: 14px;
+      padding: 20px 40px 10px 40px;
     }
 
-    .CardDesc {
-      color: rgba(255, 255, 255, 0.5);
-      font-size: 12px;
+    .ModeToggle {
+      align-self: stretch;
+      display: flex;
+      margin: 6px 40px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 3px;
+
+      .ModeButton {
+        flex: 1;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.45);
+        cursor: pointer;
+        user-select: none;
+        font-size: 13px;
+        font-weight: 500;
+        transition: all 0.15s ease;
+
+        &:hover {
+          color: rgba(255, 255, 255, 0.7);
+        }
+
+        &.active {
+          color: white;
+          background: rgba(255, 255, 255, 0.12);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        .ModeDesc {
+          font-size: 11px;
+          font-weight: 400;
+          opacity: 0.6;
+        }
+      }
+    }
+
+    .Options {
+      align-self: stretch;
+      padding: 10px 40px 20px 40px;
+
+      display: flex;
+      flex-direction: column;
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+      align-items: flex-start;
+      align-content: flex-start;
+
+      .OptionsItem {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        justify-content: center;
+        align-items: center;
+        align-content: center;
+        color: white;
+
+        cursor: pointer;
+        user-select: none;
+        font-size: 14px;
+        padding: 5px 0;
+
+        > img {
+          max-width: 20px;
+          max-height: 20px;
+          margin-right: 10px;
+          filter: invert(1) brightness(35%) sepia(100%) hue-rotate(172deg) saturate(2000%);
+          filter: invert(1) brightness(35%) sepia(100%) hue-rotate(var(--hue-value)) saturate(2000%);
+          user-select: none;
+        }
+      }
     }
   }
 }
