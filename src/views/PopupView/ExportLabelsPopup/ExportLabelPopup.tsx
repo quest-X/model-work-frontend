@@ -17,6 +17,7 @@ import { LabelMeExporter } from '../../../logic/export/labelme/LabelMeExporter';
 import { YOLOPackExporter } from '../../../logic/export/yolo/YOLOPackExporter';
 
 export type ExportMode = 'simple' | 'complete';
+type ExportTarget = 'labelme' | 'yolo';
 
 interface IProps {
     activeLabelType: LabelType;
@@ -29,16 +30,18 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
     const effectiveLabelType = activeLabelType === LabelType.ALL ? LabelType.RECT : activeLabelType;
     const [labelType, setLabelType] = useState(effectiveLabelType);
     const [exportFormatType, setExportFormatType] = useState<AnnotationFormatType>(null);
+    const [exportTarget, setExportTarget] = useState<ExportTarget>('labelme');
     const [exportMode, setExportMode] = useState<ExportMode>('simple');
 
     const isDetectionOrSegmentation = labelType === LabelType.RECT || labelType === LabelType.POLYGON;
+    const zh = language === Language.CHINESE;
 
     const onAccept = (type: LabelType) => {
         if (type === LabelType.RECT || type === LabelType.POLYGON) {
-            if (exportMode === 'simple') {
-                LabelMeExporter.export();
+            if (exportTarget === 'labelme') {
+                LabelMeExporter.export(exportMode);
             } else {
-                YOLOPackExporter.export();
+                YOLOPackExporter.export(exportMode);
             }
         } else {
             switch (type) {
@@ -81,18 +84,34 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
                 <div className='Message'>{exportTexts.selectFormat}</div>
                 <div className='ModeToggle'>
                     <div
-                        className={`ModeButton${exportMode === 'simple' ? ' active' : ''}`}
-                        onClick={() => setExportMode('simple')}
+                        className={`ModeButton${exportTarget === 'labelme' ? ' active' : ''}`}
+                        onClick={() => setExportTarget('labelme')}
                     >
                         {exportTexts.labelmePackageButton}
                         <span className='ModeDesc'>{exportTexts.labelmePackageDesc}</span>
                     </div>
                     <div
-                        className={`ModeButton${exportMode === 'complete' ? ' active' : ''}`}
-                        onClick={() => setExportMode('complete')}
+                        className={`ModeButton${exportTarget === 'yolo' ? ' active' : ''}`}
+                        onClick={() => setExportTarget('yolo')}
                     >
                         {exportTexts.yoloPackageButton}
                         <span className='ModeDesc'>{exportTexts.yoloPackageDesc}</span>
+                    </div>
+                </div>
+                <div className='ModeToggle'>
+                    <div
+                        className={`ModeButton${exportMode === 'simple' ? ' active' : ''}`}
+                        onClick={() => setExportMode('simple')}
+                    >
+                        {zh ? '简单' : 'Simple'}
+                        <span className='ModeDesc'>{zh ? '仅标签文件' : 'Labels only'}</span>
+                    </div>
+                    <div
+                        className={`ModeButton${exportMode === 'complete' ? ' active' : ''}`}
+                        onClick={() => setExportMode('complete')}
+                    >
+                        {zh ? '完整' : 'Complete'}
+                        <span className='ModeDesc'>{zh ? '标签 + 图像' : 'Labels + images'}</span>
                     </div>
                 </div>
             </>;

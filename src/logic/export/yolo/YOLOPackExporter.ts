@@ -76,7 +76,7 @@ const buildLabelFileContent = (
 };
 
 export class YOLOPackExporter {
-    public static export(): void {
+    public static export(mode: 'simple' | 'complete' = 'complete'): void {
         const allImagesData: ImageData[] = LabelsSelector.getImagesData();
         const labelNames: LabelName[] = LabelsSelector.getLabelNames();
 
@@ -88,6 +88,24 @@ export class YOLOPackExporter {
         const useSegmentation = hasPolygons;
         const activeVideo = VideoSelector.getActiveVideo();
         const videoSize = activeVideo?.videoSize;
+
+        if (mode === 'simple') {
+            const zip = new JSZip();
+            for (const imageData of allImagesData) {
+                const size = resolveImageSize(imageData, allImagesData, videoSize);
+                if (!size) continue;
+                const content = buildLabelFileContent(imageData, labelNames, size, useSegmentation);
+                if (content) {
+                    const txtName = imageData.fileData.name.replace(/\.[^/.]+$/, '.txt');
+                    zip.file(txtName, content);
+                }
+            }
+            zip.file('labels.txt', labelNames.map(l => l.name).join('\n'));
+            zip.generateAsync({type: 'blob'}).then((blob: Blob) => {
+                saveAs(blob, `${ExporterUtil.getExportFileName('yolo_simple')}.zip`);
+            });
+            return;
+        }
 
         resolveExportImageFiles(allImagesData, activeVideo)
             .then(imageFileMap => {

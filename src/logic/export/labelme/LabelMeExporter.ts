@@ -9,7 +9,7 @@ import JSZip from 'jszip';
 import {saveAs} from 'file-saver';
 
 export class LabelMeExporter {
-    public static export(): void {
+    public static export(mode: 'simple' | 'complete' = 'complete'): void {
         const allImagesData: ImageData[] = LabelsSelector.getImagesData();
         const labelNames: LabelName[] = LabelsSelector.getLabelNames();
         const labelNameMap: Record<string, string> = {};
@@ -53,6 +53,13 @@ export class LabelMeExporter {
         });
 
         if (fileCount === 0) return;
+
+        if (mode === 'simple') {
+            zip.generateAsync({ type: 'blob' }).then((blob: Blob) => {
+                saveAs(blob, `${ExporterUtil.getExportFileName('labelme_simple')}.zip`);
+            });
+            return;
+        }
 
         resolveExportImageFiles(allImagesData, activeVideo)
             .then(imageFileMap => {
