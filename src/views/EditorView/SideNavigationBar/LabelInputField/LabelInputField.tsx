@@ -149,6 +149,7 @@ class LabelInputField extends React.Component<IProps, IState> {
                 if (a.labelId) counts[a.labelId] = (counts[a.labelId] || 0) + 1;
             }
         }
+        const total = Object.values(counts).reduce((s, n) => s + n, 0);
 
         const recentIds = LabelInputField.getRecentLabelIds();
         const sorted = [...this.props.options].sort((a, b) => {
@@ -162,6 +163,8 @@ class LabelInputField extends React.Component<IProps, IState> {
 
         return sorted.map((option: LabelName) => {
             const count = counts[option.id] || 0;
+            const pct = total > 0 ? Math.round(count / total * 100) : 0;
+            const countLabel = count > 0 ? `(${count}/${total}, ${pct}%)` : null;
             return <div
                 className='DropdownOption'
                 key={option.id}
@@ -169,7 +172,7 @@ class LabelInputField extends React.Component<IProps, IState> {
                 onClick={wrapOnClick(option.id)}
             >
                 <span>{truncate(option.name, {length: Settings.MAX_DROPDOWN_OPTION_LENGTH})}</span>
-                {count > 0 && <span className='DropdownOptionCount'>{count}</span>}
+                {countLabel && <span className='DropdownOptionCount'>{countLabel}</span>}
             </div>
         })
     };

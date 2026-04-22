@@ -121,11 +121,11 @@
           }
 
           .DropdownOptionCount {
-            font-size: 14px;
-            font-weight: 600;
-            color: #e05a5a;
+            font-size: 12px;
+            color: #999999;
             margin-left: 8px;
             flex-shrink: 0;
+            white-space: nowrap;
           }
         }
       }
