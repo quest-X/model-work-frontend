@@ -78,7 +78,7 @@ export class LabelMeImporter extends AnnotationImporter {
         });
 
         if (imageData.length === 0) {
-            throw new Error('此标注包不含图像文件，请先在主界面加载对应的视频或图片，再导入标注');
+            throw new Error('此标注包不含图像文件，请先在主界面加载对应的图像，再导入标注');
         }
 
         const cleanImageData = imageData.map(img => ImageDataUtil.cleanAnnotations(img));
@@ -90,7 +90,7 @@ export class LabelMeImporter extends AnnotationImporter {
         const matchedNames = new Set(annotations.map(ann => ann.imagePath.split('/').pop() || ann.imagePath));
         const hasMatch = Array.from(matchedNames).some(name => imageDataByName[name]);
         if (!hasMatch) {
-            throw new Error('标注文件与已加载图像文件名不匹配，请确认加载了正确的视频或图片');
+            throw new Error('标注文件与已加载图像文件名不匹配，请确认加载了正确的图像');
         }
 
         for (const ann of annotations) {
