@@ -1,143 +1,57 @@
-import React, { useState } from 'react';
+import React from 'react';
 import './ExportLabelPopup.scss';
-import { AnnotationFormatType } from '../../../data/enums/AnnotationFormatType';
-import { RectLabelsExporter } from '../../../logic/export/RectLabelsExporter';
-import { LabelType } from '../../../data/enums/LabelType';
-import { ILabelFormatData } from '../../../interfaces/ILabelFormatData';
-import { PointLabelsExporter } from '../../../logic/export/PointLabelsExporter';
-import { PopupActions } from '../../../logic/actions/PopupActions';
-import { LineLabelsExporter } from '../../../logic/export/LineLabelsExporter';
-import { PolygonLabelsExporter } from '../../../logic/export/polygon/PolygonLabelsExporter';
-import { TagLabelsExporter } from '../../../logic/export/TagLabelsExporter';
-import GenericLabelTypePopup from '../GenericLabelTypePopup/GenericLabelTypePopup';
-import { getExportFormatData } from '../../../data/ExportFormatData';
-import { AppState } from '../../../store';
-import { connect } from 'react-redux';
+import {PopupActions} from '../../../logic/actions/PopupActions';
+import {LabelMeExporter} from '../../../logic/export/labelme/LabelMeExporter';
+import {YOLOPackExporter} from '../../../logic/export/yolo/YOLOPackExporter';
+import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
+import {AppState} from '../../../store';
+import {connect} from 'react-redux';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 export type ExportMode = 'simple' | 'complete';
 
 interface IProps {
-    activeLabelType: LabelType,
     language: Language;
 }
 
-const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
-    const currentTexts = LanguageConfig[language];
-    const effectiveLabelType = activeLabelType === LabelType.ALL ? LabelType.RECT : activeLabelType;
-    const [labelType, setLabelType] = useState(effectiveLabelType);
-    const [exportFormatType, setExportFormatType] = useState(null);
-    const [exportMode, setExportMode] = useState<ExportMode>('simple');
+const ExportLabelPopup: React.FC<IProps> = ({language}) => {
+    const texts = LanguageConfig[language];
+    const zh = language === Language.CHINESE;
 
-    const zhTexts = language === Language.CHINESE;
-
-    const onAccept = (type: LabelType) => {
-        switch (type) {
-            case LabelType.RECT:
-                RectLabelsExporter.export(exportFormatType, exportMode);
-                break;
-            case LabelType.POINT:
-                PointLabelsExporter.export(exportFormatType);
-                break;
-            case LabelType.LINE:
-                LineLabelsExporter.export(exportFormatType);
-                break;
-            case LabelType.POLYGON:
-                PolygonLabelsExporter.export(exportFormatType, exportMode);
-                break;
-            case LabelType.IMAGE_RECOGNITION:
-                TagLabelsExporter.export(exportFormatType);
-                break;
-        }
-        PopupActions.close();
-    };
-
-    const onReject = (type: LabelType) => {
-        PopupActions.close();
-    };
-
-    const onSelect = (type: AnnotationFormatType) => {
-        setExportFormatType(type);
-    };
-
-    const getOptions = (exportFormatData: ILabelFormatData[]) => {
-        return exportFormatData.map((entry: ILabelFormatData) => {
-            return <div
-                className='OptionsItem'
-                onClick={() => onSelect(entry.type)}
-                key={entry.type}
-            >
-                {entry.type === exportFormatType ?
-                    <img
-                        draggable={false}
-                        src={'ico/checkbox-checked.png'}
-                        alt={'checked'}
-                    /> :
-                    <img
-                        draggable={false}
-                        src={'ico/checkbox-unchecked.png'}
-                        alt={'unchecked'}
-                    />}
-                {entry.label}
-            </div>;
-        });
-    };
-
-    const renderInternalContent = (type: LabelType) => {
-        return <>
-            <div className='Message'>
-                {currentTexts.popups.exportAnnotations.selectFormat}
-            </div>
-            <div className='ModeToggle'>
-                <div
-                    className={`ModeButton${exportMode === 'simple' ? ' active' : ''}`}
-                    onClick={() => setExportMode('simple')}
-                >
-                    {zhTexts ? '简单' : 'Simple'}
-                    <span className='ModeDesc'>{zhTexts ? '仅标签' : 'Labels only'}</span>
-                </div>
-                <div
-                    className={`ModeButton${exportMode === 'complete' ? ' active' : ''}`}
-                    onClick={() => setExportMode('complete')}
-                >
-                    {zhTexts ? '完整' : 'Complete'}
-                    <span className='ModeDesc'>{zhTexts ? '标签 + 图像 + 数据集划分' : 'Labels + images + dataset split'}</span>
+    const renderContent = () => (
+        <div className='ExportCards'>
+            <div className='ExportCard' onClick={() => { LabelMeExporter.export('complete'); PopupActions.close(); }}>
+                <div className='CardTitle'>LabelMe 标注包</div>
+                <div className='CardDesc'>
+                    {zh
+                        ? 'LabelMe格式 · 含原图 · 支持二次标注'
+                        : 'LabelMe format · with images · for re-annotation'}
                 </div>
             </div>
-            <div className='Options'>
-                {getOptions(getExportFormatData(language)[type])}
+            <div className='ExportCard' onClick={() => { YOLOPackExporter.export(); PopupActions.close(); }}>
+                <div className='CardTitle'>YOLO 训练包</div>
+                <div className='CardDesc'>
+                    {zh
+                        ? 'YOLO格式 · 含原图 · 检测/分割训练集'
+                        : 'YOLO format · with images · detection/segmentation dataset'}
+                </div>
             </div>
-        </>;
-    };
-
-    const onLabelTypeChange = (type: LabelType) => {
-        setLabelType(type);
-        setExportFormatType(null);
-    };
+        </div>
+    );
 
     return (
-        <GenericLabelTypePopup
-            activeLabelType={labelType}
-            title={currentTexts.popups.exportAnnotations.title}
-            onLabelTypeChange={onLabelTypeChange}
-            acceptLabel={currentTexts.popups.exportAnnotations.acceptButton}
-            onAccept={onAccept}
-            disableAcceptButton={!exportFormatType}
-            rejectLabel={currentTexts.popups.exportAnnotations.rejectButton}
-            onReject={onReject}
-            renderInternalContent={renderInternalContent}
+        <GenericYesNoPopup
+            title={texts.popups.exportAnnotations.title}
+            renderContent={renderContent}
+            skipAcceptButton={true}
+            rejectLabel={texts.popups.exportAnnotations.rejectButton}
+            onReject={PopupActions.close}
         />
     );
 };
 
-const mapDispatchToProps = {};
-
 const mapStateToProps = (state: AppState) => ({
-    activeLabelType: state.labels.activeLabelType,
     language: state.general.language
 });
 
-export default connect(
-    mapStateToProps,
-    mapDispatchToProps
-)(ExportLabelPopup);
+export default connect(mapStateToProps, {})(ExportLabelPopup);
