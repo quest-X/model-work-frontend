@@ -712,10 +712,10 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                             return found ? normalize(found.name) : null;
                         };
                         const catOrder: Array<{ cat: Cat; label: string }> = [
-                            { cat: 'custom-seg',  label: zh ? '自定义' : 'Custom' },
-                            { cat: 'builtin-seg', label: zh ? '分割模型' : 'Segmentation' },
                             { cat: 'custom-det',  label: zh ? '自定义' : 'Custom' },
+                            { cat: 'custom-seg',  label: zh ? '自定义' : 'Custom' },
                             { cat: 'builtin-det', label: zh ? '检测模型' : 'Detection' },
+                            { cat: 'builtin-seg', label: zh ? '分割模型' : 'Segmentation' },
                         ];
                         const seen = new Set<string>();
                         const entries: Array<{ name: string; label: string }> = [];
