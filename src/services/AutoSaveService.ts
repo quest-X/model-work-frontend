@@ -139,7 +139,7 @@ export class AutoSaveService {
                     return null;
                 }
             })
-        )).filter((img): img is StoredImageData => img !== null);
+        )).filter((img): img is StoredImageData => img !== null && img.fileData.byteLength > 0);
 
         // 转换 imageSegmentationResults Map 到普通对象以便序列化
         const imageSegmentationResultsObj: Record<string, any[]> = {};

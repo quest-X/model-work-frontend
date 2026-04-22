@@ -31,6 +31,7 @@ interface StoredDataInfo {
     hasProject: boolean;
     lastSaved: number;
     imageCount?: number;
+    validImageCount?: number;
     labelCount?: number;
     isVideoProject?: boolean;
 }
@@ -134,6 +135,16 @@ const App: React.FC<IProps> = (
                                 </span>
                                 <span className="info-value">
                                     {storedDataInfo.labelCount ?? 0} / {storedDataInfo.imageCount} {storedDataInfo.isVideoProject ? '帧' : '张'}
+                                </span>
+                            </div>
+                        )}
+                        {storedDataInfo.validImageCount !== undefined && storedDataInfo.validImageCount !== storedDataInfo.imageCount && (
+                            <div className="info-row">
+                                <span className="info-label">
+                                    可恢复{storedDataInfo.isVideoProject ? '帧' : '图像'}
+                                </span>
+                                <span className={`info-value${storedDataInfo.validImageCount === 0 ? ' warn' : ''}`}>
+                                    {storedDataInfo.validImageCount} / {storedDataInfo.imageCount} {storedDataInfo.isVideoProject ? '帧' : '张'}
                                 </span>
                             </div>
                         )}

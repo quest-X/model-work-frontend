@@ -18,20 +18,21 @@ export class ProjectRestoreService {
         hasProject: boolean;
         lastSaved: number;
         imageCount?: number;
+        validImageCount?: number;
         labelCount?: number;
         isVideoProject?: boolean;
     }> {
         const hasSettings = LocalStorageManager.hasStoredSettings();
         const lastSaved = LocalStorageManager.getLastSavedTime();
-        // 一次 IDB 读取同时判断是否存在并取得元数据，避免两次读同一条记录
         const meta = await IndexedDBManager.getProjectMeta();
-        const hasProject = meta !== null && meta.imageCount > 0;
+        const hasProject = meta !== null && meta.validImageCount > 0;
 
         return {
             hasSettings,
             hasProject,
             lastSaved,
             imageCount: meta?.imageCount,
+            validImageCount: meta?.validImageCount,
             labelCount: meta?.labelCount,
             isVideoProject: meta?.isVideoProject,
         };
@@ -91,9 +92,10 @@ export class ProjectRestoreService {
                 });
             }
 
-            // 恢复图像数据 - ArrayBuffer → File，设置loadStatus为false让组件重新加载图像
-            onProgress?.(`正在恢复图像数据 (${storedProject.images.length} 张)...`);
-            const restoredImages: ImageData[] = storedProject.images.map((storedImage): ImageData => ({
+            // 恢复图像数据 - 过滤 0 字节条目（视频按需加载模式的空占位帧）
+            const validStoredImages = storedProject.images.filter(img => img.fileData?.byteLength > 0);
+            onProgress?.(`正在恢复图像数据 (${validStoredImages.length} 张)...`);
+            const restoredImages: ImageData[] = validStoredImages.map((storedImage): ImageData => ({
                 id: storedImage.id,
                 fileData: new File([storedImage.fileData], storedImage.fileName, { type: storedImage.fileType || '' }),
                 loadStatus: false, // 重要：设置为false让ImagePreview重新加载
@@ -177,7 +179,8 @@ export class ProjectRestoreService {
             
             onProgress?.('恢复完成');
             console.log('项目恢复成功:', {
-                恢复图像数量: storedProject.images.length,
+                总记录数: storedProject.images.length,
+                有效恢复数量: validStoredImages.length,
                 标签名称数量: storedProject.labelNames.length,
                 当前图像索引: storedProject.currentImageIndex,
                 Redux状态: store.getState().labels.imagesData.length

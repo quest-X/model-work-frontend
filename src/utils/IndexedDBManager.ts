@@ -152,6 +152,7 @@ export class IndexedDBManager {
      */
     public static async getProjectMeta(): Promise<{
         imageCount: number;
+        validImageCount: number;
         labelCount: number;
         isVideoProject: boolean;
         lastModified: number;
@@ -165,7 +166,8 @@ export class IndexedDBManager {
                 const r = request.result;
                 if (!r) { resolve(null); return; }
                 const images: StoredImageData[] = r.images ?? [];
-                const annotatedCount = images.filter(img =>
+                const validImages = images.filter(img => img.fileData?.byteLength > 0);
+                const annotatedCount = validImages.filter(img =>
                     (img.labelRects?.length > 0) ||
                     (img.labelPolygons?.length > 0) ||
                     (img.labelPoints?.length > 0) ||
@@ -173,6 +175,7 @@ export class IndexedDBManager {
                 ).length;
                 resolve({
                     imageCount: images.length,
+                    validImageCount: validImages.length,
                     labelCount: annotatedCount,
                     isVideoProject: !!r.isVideoProject,
                     lastModified: r.lastModified ?? 0,
@@ -184,7 +187,7 @@ export class IndexedDBManager {
 
     public static async hasStoredProject(): Promise<boolean> {
         const meta = await this.getProjectMeta();
-        return meta !== null && meta.imageCount > 0;
+        return meta !== null && meta.validImageCount > 0;
     }
     
     public static async clearProject(): Promise<boolean> {

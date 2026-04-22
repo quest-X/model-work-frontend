@@ -61,6 +61,10 @@
 				.info-value {
 					color: #d0d0d0;
 					font-weight: 500;
+
+					&.warn {
+						color: #f5a623;
+					}
 				}
 			}
 		}
