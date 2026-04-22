@@ -15,36 +15,27 @@ interface IProps {
 }
 
 const ExportLabelPopup: React.FC<IProps> = ({language}) => {
-    const texts = LanguageConfig[language];
-    const zh = language === Language.CHINESE;
+    const texts = LanguageConfig[language].popups.exportAnnotations;
 
     const renderContent = () => (
         <div className='ExportCards'>
-            <div className='ExportCard' onClick={() => { LabelMeExporter.export('complete'); PopupActions.close(); }}>
-                <div className='CardTitle'>LabelMe 标注包</div>
-                <div className='CardDesc'>
-                    {zh
-                        ? 'LabelMe格式 · 含原图 · 支持二次标注'
-                        : 'LabelMe format · with images · for re-annotation'}
-                </div>
+            <div className='ExportCard' onClick={() => { LabelMeExporter.export(); PopupActions.close(); }}>
+                <div className='CardTitle'>{texts.labelmePackageButton}</div>
+                <div className='CardDesc'>{texts.labelmePackageDesc}</div>
             </div>
             <div className='ExportCard' onClick={() => { YOLOPackExporter.export(); PopupActions.close(); }}>
-                <div className='CardTitle'>YOLO 训练包</div>
-                <div className='CardDesc'>
-                    {zh
-                        ? 'YOLO格式 · 含原图 · 检测/分割训练集'
-                        : 'YOLO format · with images · detection/segmentation dataset'}
-                </div>
+                <div className='CardTitle'>{texts.yoloPackageButton}</div>
+                <div className='CardDesc'>{texts.yoloPackageDesc}</div>
             </div>
         </div>
     );
 
     return (
         <GenericYesNoPopup
-            title={texts.popups.exportAnnotations.title}
+            title={texts.title}
             renderContent={renderContent}
             skipAcceptButton={true}
-            rejectLabel={texts.popups.exportAnnotations.rejectButton}
+            rejectLabel={texts.rejectButton}
             onReject={PopupActions.close}
         />
     );

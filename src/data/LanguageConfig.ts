@@ -128,6 +128,10 @@ export interface LanguageTexts {
             acceptButton: string;
             rejectButton: string;
             selectFormat: string;
+            labelmePackageButton: string;
+            labelmePackageDesc: string;
+            yoloPackageButton: string;
+            yoloPackageDesc: string;
         };
         importAnnotations: {
             title: string;
@@ -574,7 +578,11 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 title: '导出标注',
                 acceptButton: '确认',
                 rejectButton: '取消',
-                selectFormat: '选择您要用于导出标注的文件格式。'
+                selectFormat: '选择您要用于导出标注的文件格式。',
+                labelmePackageButton: 'LabelMe 标注包',
+                labelmePackageDesc: 'LabelMe格式 · 含原图 · 支持二次标注',
+                yoloPackageButton: 'YOLO 训练包',
+                yoloPackageDesc: 'YOLO格式 · 含原图 · 检测/分割训练集'
             },
             importAnnotations: {
                 title: '导入标注',
@@ -1019,7 +1027,11 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 title: 'Export annotations',
                 acceptButton: 'Confirm',
                 rejectButton: 'Cancel',
-                selectFormat: 'Select file format you would like to use to export annotations.'
+                selectFormat: 'Select file format you would like to use to export annotations.',
+                labelmePackageButton: 'LabelMe Package',
+                labelmePackageDesc: 'LabelMe format · with images · for re-annotation',
+                yoloPackageButton: 'YOLO Training Pack',
+                yoloPackageDesc: 'YOLO format · with images · detection/segmentation dataset'
             },
             importAnnotations: {
                 title: 'Import annotations',
