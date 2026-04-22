@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import './App.scss';
 import EditorView from './views/EditorView/EditorView';
-import MainView from './views/MainView/MainView';
 import {ProjectType} from './data/enums/ProjectType';
 import {AppState} from './store';
 import {connect} from 'react-redux';
@@ -16,7 +15,6 @@ import NotificationsView from './views/NotificationsView/NotificationsView';
 import { RoboflowAPIDetails } from './store/ai/types';
 import { AutoSaveService } from './services/AutoSaveService';
 import { ProjectRestoreService } from './services/ProjectRestoreService';
-import { store } from './index';
 
 interface IProps {
     projectType: ProjectType;
@@ -25,6 +23,16 @@ interface IProps {
     isPoseDetectionLoaded: boolean;
     isYOLOV5ObjectDetectorLoaded: boolean;
     roboflowAPIDetails: RoboflowAPIDetails;
+}
+
+// storedDataInfo 的类型，兼容 checkForStoredData 可能返回的扩展字段
+interface StoredDataInfo {
+    hasSettings: boolean;
+    hasProject: boolean;
+    lastSaved: number;
+    imageCount?: number;
+    labelCount?: number;
+    isVideoProject?: boolean;
 }
 
 const App: React.FC<IProps> = (
@@ -39,11 +47,9 @@ const App: React.FC<IProps> = (
 ) => {
     const [isRestoring, setIsRestoring] = useState(true);
     const [showRestorePrompt, setShowRestorePrompt] = useState(false);
-    const [storedDataInfo, setStoredDataInfo] = useState<{
-        hasSettings: boolean;
-        hasProject: boolean;
-        lastSaved: number;
-    } | null>(null);
+    const [storedDataInfo, setStoredDataInfo] = useState<StoredDataInfo | null>(null);
+    const [restoreError, setRestoreError] = useState<string | null>(null);
+    const [restoreStatus, setRestoreStatus] = useState<string>('正在加载...');
 
     useEffect(() => {
         initializeApp();
@@ -53,11 +59,11 @@ const App: React.FC<IProps> = (
         try {
             // 初始化自动保存服务
             await AutoSaveService.initialize();
-            
+
             // 检查是否有存储的数据
             const dataInfo = await ProjectRestoreService.checkForStoredData();
             setStoredDataInfo(dataInfo);
-            
+
             if (dataInfo.hasSettings || dataInfo.hasProject) {
                 setShowRestorePrompt(true);
             } else {
@@ -70,40 +76,39 @@ const App: React.FC<IProps> = (
     };
 
     const handleRestoreConfirm = async () => {
+        setRestoreError(null);
         try {
-            console.log('开始恢复数据...');
-            setShowRestorePrompt(false);
-            
             // 恢复设置
+            setRestoreStatus('正在恢复设置...');
             if (storedDataInfo?.hasSettings) {
-                console.log('恢复设置...');
-                const settingsRestored = await ProjectRestoreService.restoreSettings();
-                console.log('设置恢复结果:', settingsRestored);
+                await ProjectRestoreService.restoreSettings();
             }
-            
+
             // 恢复项目数据
+            setRestoreStatus('正在恢复项目数据...');
             if (storedDataInfo?.hasProject) {
-                console.log('恢复项目数据...');
-                const projectRestored = await ProjectRestoreService.restoreProject();
-                console.log('项目数据恢复结果:', projectRestored);
+                await ProjectRestoreService.restoreProject((msg: string) => setRestoreStatus(msg));
             }
-            
-            // 延迟确保Redux状态更新完成和组件准备就绪
+
+            setRestoreStatus('恢复完成');
+            setShowRestorePrompt(false);
+
+            // 延迟确保 Redux 状态更新完成和组件准备就绪
             setTimeout(() => {
-                console.log('数据恢复完成');
                 setIsRestoring(false);
-            }, 500); // 增加延迟时间，确保组件完全初始化
+            }, 500);
         } catch (error) {
             console.error('数据恢复失败:', error);
-            setIsRestoring(false);
+            // 保留对话框可见，以便错误 UI 能正常显示
+            setRestoreError('恢复失败，可能是数据损坏。请清除数据重新开始。');
         }
     };
 
+    // 重新开始：清除 IndexedDB 旧数据，避免下次刷新再次弹出恢复提示
     const handleRestoreCancel = async () => {
         setShowRestorePrompt(false);
         setIsRestoring(false);
-        // 可选：清除旧数据
-        // await ProjectRestoreService.clearAllStoredData();
+        await ProjectRestoreService.clearAllStoredData();
     };
 
     if (isRestoring && showRestorePrompt && storedDataInfo) {
@@ -114,14 +119,32 @@ const App: React.FC<IProps> = (
                     <p>
                         上次保存时间: {ProjectRestoreService.formatLastSavedTime(storedDataInfo.lastSaved)}
                     </p>
-                    <div className="restore-buttons">
-                        <button onClick={handleRestoreCancel} className="btn-danger">
-                            重新开始
-                        </button>
-                        <button onClick={handleRestoreConfirm} className="btn-success">
-                            恢复工作
-                        </button>
-                    </div>
+                    {/* 项目摘要信息（若存在） */}
+                    {storedDataInfo.isVideoProject !== undefined && (
+                        <p>项目类型：{storedDataInfo.isVideoProject ? '视频' : '图像'}</p>
+                    )}
+                    {storedDataInfo.imageCount !== undefined && (
+                        <p>图像/帧数量：{storedDataInfo.imageCount} 张</p>
+                    )}
+                    {/* 恢复失败错误提示 */}
+                    {restoreError && (
+                        <div className="error-message">
+                            <p>{restoreError}</p>
+                            <button onClick={handleRestoreCancel} className="btn-danger">
+                                清除数据，重新开始
+                            </button>
+                        </div>
+                    )}
+                    {!restoreError && (
+                        <div className="restore-buttons">
+                            <button onClick={handleRestoreCancel} className="btn-danger">
+                                重新开始
+                            </button>
+                            <button onClick={handleRestoreConfirm} className="btn-success">
+                                恢复工作
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         );
@@ -131,15 +154,16 @@ const App: React.FC<IProps> = (
         return (
             <div className="App loading">
                 <div className="loading-indicator">
-                    <p>正在加载...</p>
+                    <p className="restore-status">{restoreStatus}</p>
                 </div>
             </div>
         );
     }
+
     const selectRoute = () => {
         if (!!PlatformModel.mobileDeviceData.manufacturer && !!PlatformModel.mobileDeviceData.os)
             return <MobileMainView/>;
-        
+
         // 直接进入EditorView，跳过MainView和项目类型选择
         if (windowSize.height < Settings.EDITOR_MIN_HEIGHT || windowSize.width < Settings.EDITOR_MIN_WIDTH) {
             return <SizeItUpView/>;
@@ -147,6 +171,7 @@ const App: React.FC<IProps> = (
             return <EditorView/>;
         }
     };
+
     const isAILoaded = isObjectDetectorLoaded
         || isPoseDetectionLoaded
         || isYOLOV5ObjectDetectorLoaded
