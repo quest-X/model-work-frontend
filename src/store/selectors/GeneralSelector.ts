@@ -25,6 +25,14 @@ export class GeneralSelector {
         return store.getState().general.smartAnnotationActive;
     }
 
+    public static getTrackingMode(): boolean {
+        return store.getState().general.trackingMode;
+    }
+
+    public static getTrackingInProgress(): boolean {
+        return store.getState().general.trackingInProgress;
+    }
+
     public static getCustomCursorStyle(): CustomCursorStyle {
         return store.getState().general.customCursorStyle;
     }

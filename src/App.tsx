@@ -116,16 +116,28 @@ const App: React.FC<IProps> = (
             <div className="App restore-prompt">
                 <div className="restore-dialog">
                     <h2>是否恢复之前的工作?</h2>
-                    <p>
-                        上次保存时间: {ProjectRestoreService.formatLastSavedTime(storedDataInfo.lastSaved)}
-                    </p>
-                    {/* 项目摘要信息（若存在） */}
-                    {storedDataInfo.isVideoProject !== undefined && (
-                        <p>项目类型：{storedDataInfo.isVideoProject ? '视频' : '图像'}</p>
-                    )}
-                    {storedDataInfo.imageCount !== undefined && (
-                        <p>图像/帧数量：{storedDataInfo.imageCount} 张</p>
-                    )}
+                    <div className="restore-info">
+                        <div className="info-row">
+                            <span className="info-label">上次保存</span>
+                            <span className="info-value">{ProjectRestoreService.formatLastSavedTime(storedDataInfo.lastSaved)}</span>
+                        </div>
+                        {storedDataInfo.isVideoProject !== undefined && (
+                            <div className="info-row">
+                                <span className="info-label">项目类型</span>
+                                <span className="info-value">{storedDataInfo.isVideoProject ? '视频' : '图像'}</span>
+                            </div>
+                        )}
+                        {storedDataInfo.imageCount !== undefined && (
+                            <div className="info-row">
+                                <span className="info-label">
+                                    {storedDataInfo.isVideoProject ? '已标注帧' : '已标注图像'}
+                                </span>
+                                <span className="info-value">
+                                    {storedDataInfo.labelCount ?? 0} / {storedDataInfo.imageCount} {storedDataInfo.isVideoProject ? '帧' : '张'}
+                                </span>
+                            </div>
+                        )}
+                    </div>
                     {/* 恢复失败错误提示 */}
                     {restoreError && (
                         <div className="error-message">

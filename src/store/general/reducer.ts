@@ -13,6 +13,8 @@ const initialState: GeneralState = {
     preventCustomCursor: false,
     imageDragMode: false,
     smartAnnotationActive: false,
+    trackingMode: false,
+    trackingInProgress: false,
     eraserMode: false,
     eraserFineMode: false,
     enablePerClassColoration: true,
@@ -69,6 +71,18 @@ export function generalReducer(
             return {
                 ...state,
                 smartAnnotationActive: action.payload.smartAnnotationActive
+            }
+        }
+        case Action.UPDATE_TRACKING_MODE_STATUS: {
+            return {
+                ...state,
+                trackingMode: action.payload.trackingMode
+            }
+        }
+        case Action.UPDATE_TRACKING_IN_PROGRESS_STATUS: {
+            return {
+                ...state,
+                trackingInProgress: action.payload.trackingInProgress
             }
         }
         case Action.UPDATE_ERASER_MODE: {

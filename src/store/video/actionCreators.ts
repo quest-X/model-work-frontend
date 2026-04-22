@@ -79,3 +79,10 @@ export const clearAllVideos = () => ({
     type: CLEAR_ALL_VIDEOS
 });
 
+export const UPDATE_VIDEO_SESSION_ID = '@@UPDATE_VIDEO_SESSION_ID';
+
+export const updateVideoSessionId = (videoId: string, sessionId: string) => ({
+    type: UPDATE_VIDEO_SESSION_ID,
+    payload: { videoId, sessionId },
+});
+

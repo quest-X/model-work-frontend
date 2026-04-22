@@ -1,6 +1,7 @@
 import {AnnotationFormatType} from "../../../data/enums/AnnotationFormatType";
 import {VGGExporter} from "./VGGExporter";
 import {COCOExporter} from "./COCOExporter";
+import {LabelMeExporter} from "../labelme/LabelMeExporter";
 import {ExportMode} from '../../../views/PopupView/ExportLabelsPopup/ExportLabelPopup';
 
 export class PolygonLabelsExporter {
@@ -11,6 +12,9 @@ export class PolygonLabelsExporter {
                 break;
             case AnnotationFormatType.COCO:
                 COCOExporter.export(mode);
+                break;
+            case AnnotationFormatType.LABELME:
+                LabelMeExporter.export(mode);
                 break;
             default:
                 return;

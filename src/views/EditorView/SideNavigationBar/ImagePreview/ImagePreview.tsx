@@ -108,7 +108,7 @@ class ImagePreview extends React.Component<IProps, IState> {
             const saveLoadedImagePartial = (image: HTMLImageElement) => this.saveLoadedImage(image, imageData);
             FileUtil.loadImage(imageData.fileData)
                 .then((image: HTMLImageElement) => saveLoadedImagePartial(image))
-                .catch((error) => this.handleLoadImageError())
+                .catch((error) => this.handleLoadImageError(imageData, error))
         }
     };
 
@@ -150,7 +150,12 @@ class ImagePreview extends React.Component<IProps, IState> {
         }
     };
 
-    private handleLoadImageError = () => { };
+    private handleLoadImageError = (imageData?: ImageData, error?: any) => {
+        this.isLoading = false;
+        if (imageData) {
+            console.error(`[ImagePreview] 图像加载失败: ${imageData.fileData?.name} (size=${imageData.fileData?.size})`, error);
+        }
+    };
 
     private hasAnyLabels = (): boolean => {
         const { imageData } = this.props;

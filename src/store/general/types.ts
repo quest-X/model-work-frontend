@@ -18,6 +18,8 @@ export type GeneralState = {
     preventCustomCursor: boolean;
     imageDragMode: boolean;
     smartAnnotationActive: boolean;
+    trackingMode: boolean;
+    trackingInProgress: boolean;
     eraserMode: boolean;
     eraserFineMode: boolean;
     enablePerClassColoration: boolean;
@@ -104,6 +106,20 @@ interface UpdateLanguage {
     }
 }
 
+interface UpdateTrackingModeStatus {
+    type: typeof Action.UPDATE_TRACKING_MODE_STATUS;
+    payload: {
+        trackingMode: boolean;
+    }
+}
+
+interface UpdateTrackingInProgressStatus {
+    type: typeof Action.UPDATE_TRACKING_IN_PROGRESS_STATUS;
+    payload: {
+        trackingInProgress: boolean;
+    }
+}
+
 interface UpdateEraserMode {
     type: typeof Action.UPDATE_ERASER_MODE;
     payload: {
@@ -126,6 +142,8 @@ export type GeneralActionTypes = UpdateProjectData
     | UpdatePreventCustomCursorStatus
     | UpdateImageDragModeStatus
     | UpdateSmartAnnotationActiveStatus
+    | UpdateTrackingModeStatus
+    | UpdateTrackingInProgressStatus
     | UpdateEraserMode
     | UpdateEraserFineMode
     | UpdateZoom

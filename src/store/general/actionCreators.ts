@@ -69,6 +69,24 @@ export function updateSmartAnnotationActiveStatus(smartAnnotationActive: boolean
     };
 }
 
+export function updateTrackingModeStatus(trackingMode: boolean): GeneralActionTypes {
+    return {
+        type: Action.UPDATE_TRACKING_MODE_STATUS,
+        payload: {
+            trackingMode,
+        },
+    };
+}
+
+export function updateTrackingInProgressStatus(trackingInProgress: boolean): GeneralActionTypes {
+    return {
+        type: Action.UPDATE_TRACKING_IN_PROGRESS_STATUS,
+        payload: {
+            trackingInProgress,
+        },
+    };
+}
+
 export function updateProjectData(projectData: ProjectData): GeneralActionTypes {
     return {
         type: Action.UPDATE_PROJECT_DATA,

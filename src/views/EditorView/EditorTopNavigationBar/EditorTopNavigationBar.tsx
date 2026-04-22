@@ -5,7 +5,7 @@ import classNames from 'classnames';
 import { AppState } from '../../../store';
 import { store } from '../../../index';
 import { connect } from 'react-redux';
-import { updateSmartAnnotationActiveStatus, updateImageDragModeStatus, updateActivePopupType, updateCustomCursorStyle, updateEraserMode, updateEraserFineMode } from '../../../store/general/actionCreators';
+import { updateSmartAnnotationActiveStatus, updateImageDragModeStatus, updateActivePopupType, updateCustomCursorStyle, updateEraserMode, updateEraserFineMode, updateTrackingModeStatus } from '../../../store/general/actionCreators';
 import { PopupWindowType } from '../../../data/enums/PopupWindowType';
 import { CustomCursorStyle } from '../../../data/enums/CustomCursorStyle';
 import { GeneralSelector } from '../../../store/selectors/GeneralSelector';
@@ -32,6 +32,8 @@ import { AIStateStorageManager } from '../../../utils/AIStateStorageManager';
 import { AIModelsSelector } from '../../../store/selectors/AIModelsSelector';
 import { YOLO_MODEL_FAMILIES, SEG_MODEL_FAMILIES } from '../../PopupView/CallModelPopup/CallModelPopup';
 import { EditorActions } from '../../../logic/actions/EditorActions';
+import { submitNewNotification, deleteNotificationById } from '../../../store/notifications/actionCreators';
+import { NotificationUtil } from '../../../utils/NotificationUtil';
 const BUTTON_SIZE: ISize = { width: 30, height: 30 };
 const BUTTON_PADDING: number = 10;
 
@@ -120,6 +122,9 @@ interface IProps {
     activeContext: ContextType;
     updateImageDragModeStatusAction: (imageDragMode: boolean) => any;
     updateSmartAnnotationActiveStatusAction: (smartAnnotationActive: boolean) => any;
+    updateTrackingModeStatusAction: (trackingMode: boolean) => any;
+    trackingMode: boolean;
+    trackingInProgress: boolean;
     updateActivePopupTypeAction: (popupType: PopupWindowType) => any;
     updateFullImageInferenceStatus: (isInProgress: boolean) => any;
     toggleImageAILabelsVisibility: (imageId: string) => any;
@@ -148,6 +153,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         activeContext,
         updateImageDragModeStatusAction,
         updateSmartAnnotationActiveStatusAction,
+        updateTrackingModeStatusAction,
+        trackingMode,
+        trackingInProgress,
         updateActivePopupTypeAction,
         updateFullImageInferenceStatus,
         toggleImageAILabelsVisibility,
@@ -220,6 +228,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
             // 未激活 → 整体擦除
             updateEraserModeAction(true);
             if (smartAnnotationActive) updateSmartAnnotationActiveStatusAction(false);
+            if (trackingMode) updateTrackingModeStatusAction(false);
             if (imageDragMode) updateImageDragModeStatusAction(false);
             updateActiveLabelType(LabelType.ALL);
             store.dispatch(updateCustomCursorStyle(CustomCursorStyle.DEFAULT));
@@ -227,8 +236,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
             // 已激活 → 在整体/局部之间切换
             store.dispatch(updateEraserFineMode(!eraserFineMode));
         }
-    }, [eraserMode, eraserFineMode, smartAnnotationActive, imageDragMode, updateEraserModeAction,
-        updateSmartAnnotationActiveStatusAction, updateImageDragModeStatusAction, updateActiveLabelType]);
+    }, [eraserMode, eraserFineMode, smartAnnotationActive, trackingMode, imageDragMode, updateEraserModeAction,
+        updateSmartAnnotationActiveStatusAction, updateTrackingModeStatusAction, updateImageDragModeStatusAction, updateActiveLabelType]);
 
     // 显示/隐藏标签按钮 —— 同时控制矩形框和多边形
     // 默认可见：未被显式隐藏前两个 flag 都是 true
@@ -271,7 +280,13 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 
     // 智能标注需要 SAM 系列分割模型；检查已加载模型中是否有 SAM 家族
     const isSAMLoaded = useMemo(
-        () => loadedModels.some(name => /^(sam2|sam_|mobile_sam|FastSAM)/i.test(name)),
+        () => loadedModels.some(name => /^(sam2|sam3|sam_|mobile_sam|FastSAM)/i.test(name)),
+        [loadedModels]
+    );
+    // 目标跟踪需要 memory-based SAM 家族（SAM 2 / SAM 3），只有它们有跨帧 memory attention
+    // SAM 1 / MobileSAM / FastSAM / YOLO-seg 没有 tracking 能力，按钮保持 disabled
+    const isTrackingModelLoaded = useMemo(
+        () => loadedModels.some(name => /^(sam2|sam3)/i.test(name)),
         [loadedModels]
     );
 
@@ -288,6 +303,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         if (willActivate) {
             // 激活：挂 AllLabelsRenderEngine（smart 劫持走 rectEngine）
             updateActiveLabelType(LabelType.ALL);
+            if (trackingMode) updateTrackingModeStatusAction(false);
             if (imageDragMode) {
                 updateImageDragModeStatusAction(false);
             }
@@ -296,12 +312,34 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
             // 在检测视图里就落到绘制矩形框，查看全部里就落到 ALL 手拖模式。
             updateActiveLabelType(activeLabelViewType);
         }
-    }, [isSAMLoaded, smartAnnotationActive, imageDragMode, activeLabelViewType, updateSmartAnnotationActiveStatusAction, updateImageDragModeStatusAction, updateActiveLabelType, updateActivePopupTypeAction]);
+    }, [isSAMLoaded, smartAnnotationActive, trackingMode, imageDragMode, activeLabelViewType, updateSmartAnnotationActiveStatusAction, updateTrackingModeStatusAction, updateImageDragModeStatusAction, updateActiveLabelType, updateActivePopupTypeAction]);
+
+    // 目标跟踪按钮：仅 SAM 2 / SAM 3 已加载时可用
+    // 激活后：进入跟踪模式 → 用户在画面上框 bbox → RectRenderEngine 打开 ObjectTrackingPopup
+    const trackingOnClick = useCallback(() => {
+        if (!isTrackingModelLoaded) {
+            updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
+            return;
+        }
+        const willActivate = !trackingMode;
+        updateTrackingModeStatusAction(willActivate);
+        if (willActivate) {
+            // 和智能标注一样切到 ALL 视图，让 AllLabelsRenderEngine 把事件路由给 RectRenderEngine
+            updateActiveLabelType(LabelType.ALL);
+            if (smartAnnotationActive) updateSmartAnnotationActiveStatusAction(false);
+            if (imageDragMode) updateImageDragModeStatusAction(false);
+        } else {
+            // 关闭时同步回侧栏视图
+            updateActiveLabelType(activeLabelViewType);
+        }
+    }, [isTrackingModelLoaded, trackingMode, smartAnnotationActive, imageDragMode, activeLabelViewType,
+        updateTrackingModeStatusAction, updateSmartAnnotationActiveStatusAction,
+        updateImageDragModeStatusAction, updateActiveLabelType, updateActivePopupTypeAction]);
 
     // 智能标注激活时自动切换到 SAM 模型
     useEffect(() => {
         if (smartAnnotationActive) {
-            const samModel = loadedModels.find(name => /^(sam2|sam_|mobile_sam|FastSAM)/i.test(name));
+            const samModel = loadedModels.find(name => /^(sam2|sam3|sam_|mobile_sam|FastSAM)/i.test(name));
             if (samModel && samModel !== activeModelName) {
                 const url = DetectionAPIDetector.getConfig().url.replace('/detect', '/switch-model');
                 fetch(url, {
@@ -395,7 +433,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         () => {
             const task = modelTasks[activeModelName];
             if (task) return task === 'segment';
-            return /^(sam2|sam_|mobile_sam|FastSAM)/i.test(activeModelName) || /-seg/i.test(activeModelName);
+            return /^(sam2|sam3|sam_|mobile_sam|FastSAM)/i.test(activeModelName) || /-seg/i.test(activeModelName);
         },
         [activeModelName, modelTasks]
     );
@@ -406,7 +444,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         const resolvedTask: string | null = task
             ? task
             : activeModelName
-                ? ((/^(sam2|sam_|mobile_sam|FastSAM)/i.test(activeModelName) || /-seg/i.test(activeModelName))
+                ? ((/^(sam2|sam3|sam_|mobile_sam|FastSAM)/i.test(activeModelName) || /-seg/i.test(activeModelName))
                     ? 'segment'
                     : 'detect')
                 : null;
@@ -589,6 +627,18 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         undefined,
                         smartAnnotationOnClick
                     )}
+                    {getButtonWithTooltip(
+                        'object-tracking',
+                        trackingMode
+                            ? (language === 'zh' ? '退出目标跟踪' : 'Exit Object Tracking')
+                            : (language === 'zh' ? '目标跟踪（需 SAM 2 / SAM 3）' : 'Object Tracking (needs SAM 2 / SAM 3)'),
+                        'ico/tracking.png',
+                        'object-tracking',
+                        trackingMode && !eraserMode,
+                        undefined,
+                        (isTrackingModelLoaded && !trackingInProgress) ? trackingOnClick : undefined,
+                        !isTrackingModelLoaded || trackingInProgress,
+                    )}
                     {hasAnyLabel && getButtonWithTooltip(
                         'eraser',
                         language === 'zh'
@@ -601,7 +651,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         eraserOnClick
                     )}
                 </div>;
-            }, [imageAIStates, imagesData, activeImageIndex, toggleAILabelsOnClick, isSAMLoaded, smartAnnotationActive, smartAnnotationOnClick, currentTexts, eraserMode, eraserFineMode, eraserOnClick, language])}
+            }, [imageAIStates, imagesData, activeImageIndex, toggleAILabelsOnClick, isSAMLoaded, smartAnnotationActive, smartAnnotationOnClick, isTrackingModelLoaded, trackingOnClick, trackingMode, trackingInProgress, currentTexts, eraserMode, eraserFineMode, eraserOnClick, language])}
             <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 6, height: '100%' }}>
                 <select
                     value={activeModelName}
@@ -738,6 +788,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 const mapDispatchToProps = {
     updateImageDragModeStatusAction: updateImageDragModeStatus,
     updateSmartAnnotationActiveStatusAction: updateSmartAnnotationActiveStatus,
+    updateTrackingModeStatusAction: updateTrackingModeStatus,
     updateActivePopupTypeAction: updateActivePopupType,
     updateFullImageInferenceStatus,
     toggleImageAILabelsVisibility,
@@ -752,6 +803,8 @@ const mapStateToProps = (state: AppState) => ({
     activeContext: state.general.activeContext,
     imageDragMode: state.general.imageDragMode,
     smartAnnotationActive: state.general.smartAnnotationActive,
+    trackingMode: state.general.trackingMode ?? false,
+    trackingInProgress: state.general.trackingInProgress ?? false,
     eraserMode: state.general.eraserMode ?? false,
     eraserFineMode: state.general.eraserFineMode ?? false,
     isFullImageInferenceInProgress: state.ai.isFullImageInferenceInProgress,

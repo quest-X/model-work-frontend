@@ -125,6 +125,14 @@ interface ClearAllVideos {
     type: typeof Action.CLEAR_ALL_VIDEOS;
 }
 
+interface UpdateVideoSessionId {
+    type: typeof Action.UPDATE_VIDEO_SESSION_ID;
+    payload: {
+        videoId: string;
+        sessionId: string;
+    };
+}
+
 export type VideoActionTypes =
     | UpdateVideoMode
     | AddVideoData
@@ -136,5 +144,6 @@ export type VideoActionTypes =
     | UpdateVideoFrameAnnotationStatus
     | MarkVideoFrameAsKeyframe
     | RemoveVideoData
-    | ClearAllVideos;
+    | ClearAllVideos
+    | UpdateVideoSessionId;
 

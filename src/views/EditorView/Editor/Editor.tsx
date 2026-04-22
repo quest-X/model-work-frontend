@@ -170,7 +170,7 @@ class Editor extends React.Component<IProps, IState> {
                 const saveLoadedImagePartial = (image: HTMLImageElement) => this.saveLoadedImage(image, imageData);
                 FileUtil.loadImage(imageData.fileData)
                     .then((image:HTMLImageElement) => saveLoadedImagePartial(image))
-                    .catch((error) => this.handleLoadImageError())
+                    .catch((error) => this.handleLoadImageError(error))
             }
         }
     };
@@ -185,8 +185,9 @@ class Editor extends React.Component<IProps, IState> {
         this.updateModelAndRender()
     };
 
-    private handleLoadImageError = () => {
+    private handleLoadImageError = (error?: any) => {
         EditorActions.setLoadingStatus(false);
+        console.error(`[Editor] 图像加载失败: ${this.props.imageData?.fileData?.name} (size=${this.props.imageData?.fileData?.size})`, error);
     };
 
     // =================================================================================================================

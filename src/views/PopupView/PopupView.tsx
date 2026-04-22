@@ -23,6 +23,7 @@ import ChangelogPopup from './ChangelogPopup/ChangelogPopup';
 import PipelinePreprocessPopup from './PipelinePopup/PipelinePreprocessPopup';
 import PipelineInferencePopup from './PipelinePopup/PipelineInferencePopup';
 import PipelinePostprocessPopup from './PipelinePopup/PipelinePostprocessPopup';
+import ObjectTrackingPopup from './ObjectTrackingPopup/ObjectTrackingPopup';
 
 interface IProps {
     activePopupType: PopupWindowType;
@@ -95,6 +96,8 @@ const PopupView: React.FC<IProps> = ({ activePopupType }) => {
                 return <PipelineInferencePopup />;
             case PopupWindowType.PIPELINE_POSTPROCESS:
                 return <PipelinePostprocessPopup />;
+            case PopupWindowType.OBJECT_TRACKING:
+                return <ObjectTrackingPopup />;
             case PopupWindowType.LOADER:
                 return <ClipLoader
                     size={50}

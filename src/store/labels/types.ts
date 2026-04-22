@@ -32,6 +32,7 @@ export type LabelPolygon = Annotation & {
     status: LabelStatus;
     suggestedLabel: string;
     confidence?: number; // AI 分割置信度 (0-1)
+    trackingGroupId?: string; // 同一次目标跟踪产出的所有帧 polygon 共享此 ID
 }
 
 export type LabelLine = Annotation & {

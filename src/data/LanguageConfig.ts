@@ -207,12 +207,16 @@ export interface LanguageTexts {
             vggPolygon: string;
             cocoPolygon: string;
             jsonImageRecognition: string;
+            labelmeRect: string;
+            labelmePolygon: string;
         };
         import: {
             cocoRect: string;
             cocoPolygon: string;
             yoloRect: string;
             vocRect: string;
+            labelmeRect: string;
+            labelmePolygon: string;
         };
     };
     
@@ -648,13 +652,17 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 csvGeneric: 'CSV — 所有标注合并为一个表格',
                 vggPolygon: 'VGG JSON — 多边形顶点坐标',
                 cocoPolygon: 'COCO JSON — 实例分割标准格式',
-                jsonImageRecognition: 'JSON — 图像分类标签'
+                jsonImageRecognition: 'JSON — 图像分类标签',
+                labelmeRect: 'LabelMe JSON (.zip) — 矩形标注框',
+                labelmePolygon: 'LabelMe JSON (.zip) — 多边形标注'
             },
             import: {
                 cocoRect: 'COCO JSON — 检测框标准格式',
                 cocoPolygon: 'COCO JSON — 实例分割标准格式',
                 yoloRect: 'YOLO (.txt + labels.txt) — 归一化坐标',
-                vocRect: 'VOC XML — 像素坐标'
+                vocRect: 'VOC XML — 像素坐标',
+                labelmeRect: 'LabelMe JSON — 矩形标注框',
+                labelmePolygon: 'LabelMe JSON — 多边形标注'
             }
         },
 
@@ -1088,13 +1096,17 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 csvGeneric: 'CSV — all annotations in a single table',
                 vggPolygon: 'VGG JSON — polygon vertex coordinates',
                 cocoPolygon: 'COCO JSON — instance segmentation standard',
-                jsonImageRecognition: 'JSON — image classification labels'
+                jsonImageRecognition: 'JSON — image classification labels',
+                labelmeRect: 'LabelMe JSON (.zip) — rectangle annotations',
+                labelmePolygon: 'LabelMe JSON (.zip) — polygon annotations'
             },
             import: {
                 cocoRect: 'COCO JSON — detection standard',
                 cocoPolygon: 'COCO JSON — instance segmentation standard',
                 yoloRect: 'YOLO (.txt + labels.txt) — normalized coords',
-                vocRect: 'VOC XML — pixel coords'
+                vocRect: 'VOC XML — pixel coords',
+                labelmeRect: 'LabelMe JSON — rectangle annotations',
+                labelmePolygon: 'LabelMe JSON — polygon annotations'
             }
         },
 

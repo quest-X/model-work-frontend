@@ -10,7 +10,8 @@ import {
     UPDATE_VIDEO_FRAME_ANNOTATION_STATUS,
     MARK_VIDEO_FRAME_AS_KEYFRAME,
     REMOVE_VIDEO_DATA,
-    CLEAR_ALL_VIDEOS
+    CLEAR_ALL_VIDEOS,
+    UPDATE_VIDEO_SESSION_ID,
 } from './actionCreators';
 
 const initialState: VideoState = {
@@ -215,6 +216,20 @@ export function videoReducer(state = initialState, action: any): VideoState {
 
         case CLEAR_ALL_VIDEOS:
             return initialState;
+
+        case UPDATE_VIDEO_SESSION_ID:
+            return {
+                ...state,
+                videos: state.videos.map(v =>
+                    v.id === action.payload.videoId
+                        ? { ...v, sessionId: action.payload.sessionId }
+                        : v
+                ),
+                activeVideo:
+                    state.activeVideo?.id === action.payload.videoId
+                        ? { ...state.activeVideo, sessionId: action.payload.sessionId }
+                        : state.activeVideo,
+            };
 
         default:
             return state;

@@ -21,6 +21,10 @@ export const getImportFormatData = (language: Language): ImportFormatDataMap => 
             {
                 type: AnnotationFormatType.VOC,
                 label: texts.formats.import.vocRect
+            },
+            {
+                type: AnnotationFormatType.LABELME,
+                label: texts.formats.import.labelmeRect
             }
         ],
         [LabelType.POINT]: [],
@@ -29,6 +33,10 @@ export const getImportFormatData = (language: Language): ImportFormatDataMap => 
             {
                 type: AnnotationFormatType.COCO,
                 label: texts.formats.import.cocoPolygon
+            },
+            {
+                type: AnnotationFormatType.LABELME,
+                label: texts.formats.import.labelmePolygon
             }
         ],
         [LabelType.IMAGE_RECOGNITION]: []

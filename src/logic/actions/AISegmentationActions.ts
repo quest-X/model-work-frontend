@@ -256,7 +256,8 @@ export class AISegmentationActions {
     public static applySingleResult(
         imageData: ImageData,
         results: SegmentationResult[],
-        source: 'batch' | 'smart' = 'batch'
+        source: 'batch' | 'smart' | 'tracking' = 'batch',
+        trackingGroupId?: string,
     ): void {
         if (!results || results.length === 0) return;
 
@@ -296,6 +297,7 @@ export class AISegmentationActions {
                     status: LabelStatus.ACCEPTED,
                     suggestedLabel: labelId ? null : result.info.name,
                     confidence: result.info.confidence ?? 0,
+                    trackingGroupId,
                 };
             });
 

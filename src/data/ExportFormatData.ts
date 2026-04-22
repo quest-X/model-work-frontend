@@ -21,6 +21,10 @@ export const getExportFormatData = (language: Language): ExportFormatDataMap => 
             {
                 type: AnnotationFormatType.CSV,
                 label: texts.formats.export.csvGeneric
+            },
+            {
+                type: AnnotationFormatType.LABELME,
+                label: texts.formats.export.labelmeRect
             }
         ],
         [LabelType.POINT]: [
@@ -43,6 +47,10 @@ export const getExportFormatData = (language: Language): ExportFormatDataMap => 
             {
                 type: AnnotationFormatType.COCO,
                 label: texts.formats.export.cocoPolygon
+            },
+            {
+                type: AnnotationFormatType.LABELME,
+                label: texts.formats.export.labelmePolygon
             }
         ],
         [LabelType.IMAGE_RECOGNITION]: [

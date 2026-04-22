@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.1.10',
+        date: '2026-04-22',
+        changes: [
+            { zh: '【功能】LabelMe JSON 导入：支持 rectangle / polygon / mask 三种 shape_type；mask 类型以 bounding box 作为矩形导入；多 JSON 文件自动识别为 LabelMe 格式，单 JSON 文件 async peek 区分 LabelMe vs COCO；zip 文件名以 labelme_ 开头时强制 LabelMe 模式', en: '[Feature] LabelMe JSON import: handles rectangle, polygon, and mask shape_type; mask is imported as bounding-box rect; multiple JSON files auto-detected as LabelMe, single JSON async-peeked for shapes+imagePath keys to distinguish LabelMe from COCO; zip files prefixed labelme_ force LabelMe mode' },
+            { zh: '【功能】LabelMe JSON 导出：矩形 / 多边形模式均新增 LabelMe JSON (.zip) 导出选项；简单模式仅导出标注 JSON，完整模式同时导出图片；视频 preExtractedFrames 模式直接用内存帧，sessionId 按需模式从后端批量拉取有标注的帧（相邻帧合并请求），无法获取全分辨率时报错提示，不降级保存缩略图', en: '[Export] LabelMe JSON export added for both rect and polygon label types; simple mode exports annotation JSON only, complete mode bundles images; preExtractedFrames are used directly, sessionId on-demand mode batch-fetches annotated frames from the backend (merging nearby indices into one request); fails with an error notification if full-resolution images are unavailable — never falls back to thumbnails' },
+        ]
+    },
+    {
         version: '2.1.9',
         date: '2026-04-19',
         changes: [

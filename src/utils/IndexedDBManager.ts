@@ -164,9 +164,16 @@ export class IndexedDBManager {
             request.onsuccess = () => {
                 const r = request.result;
                 if (!r) { resolve(null); return; }
+                const images: StoredImageData[] = r.images ?? [];
+                const annotatedCount = images.filter(img =>
+                    (img.labelRects?.length > 0) ||
+                    (img.labelPolygons?.length > 0) ||
+                    (img.labelPoints?.length > 0) ||
+                    (img.labelLines?.length > 0)
+                ).length;
                 resolve({
-                    imageCount: r.images?.length ?? 0,
-                    labelCount: r.labelNames?.length ?? 0,
+                    imageCount: images.length,
+                    labelCount: annotatedCount,
                     isVideoProject: !!r.isVideoProject,
                     lastModified: r.lastModified ?? 0,
                 });

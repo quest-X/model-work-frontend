@@ -58,6 +58,12 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
             return;
         }
 
+        // 目标跟踪模式：同样路由到 rectEngine，让它的 mouseUpHandler 劫持 bbox 打开 popup
+        if (GeneralSelector.getTrackingMode()) {
+            this.rectEngine.update(data);
+            return;
+        }
+
         // 橡皮擦模式
         if (GeneralSelector.getEraserMode()) {
             if (!data.event) return;
@@ -109,6 +115,7 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
 
     public render(data: EditorData): void {
         const isSmart = GeneralSelector.getSmartAnnotationActiveStatus();
+        const isTracking = GeneralSelector.getTrackingMode();
         const isEraser = GeneralSelector.getEraserMode();
         const isFineMod = GeneralSelector.getEraserFineMode();
 
@@ -124,11 +131,13 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
 
         if (showRects) {
             if (isSmart) {
-                // 智能标注模式：完整 rectEngine.render（带 cursor 逻辑 + in-progress 矩形）
+                // 智能标注：完整 rectEngine.render（带 cursor 逻辑 + in-progress 矩形）
                 this.rectEngine.render(data);
+            } else if (isTracking) {
+                // 目标跟踪：绘制已存在矩形 + 在建 bbox，跳过 cursor dispatch 避免无限渲染循环
+                this.rectEngine.drawRectsAndInProgress(data);
             } else {
-                // 非智能标注 ALL 视图：纯绘制 rect，不 dispatch cursor
-                // —— 避免 rectEngine.updateCursorStyle 与 hand-cursor dispatch 互相翻转造成无限循环
+                // 非劫持 ALL 视图：纯绘制 rect，不 dispatch cursor
                 this.rectEngine.drawExistingRects(data);
             }
         }

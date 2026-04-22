@@ -1,6 +1,7 @@
 import {AnnotationFormatType} from '../../data/enums/AnnotationFormatType';
 import {ImageData, LabelName, LabelRect} from '../../store/labels/types';
 import {ImageRepository} from '../imageRepository/ImageRepository';
+import {LabelMeExporter} from './labelme/LabelMeExporter';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import {LabelsSelector} from '../../store/selectors/LabelsSelector';
@@ -14,6 +15,8 @@ import {RectUtil} from '../../utils/RectUtil';
 import {Settings} from '../../settings/Settings';
 import {DatasetSplitUtil} from '../../utils/DatasetSplitUtil';
 import {ExportMode} from '../../views/PopupView/ExportLabelsPopup/ExportLabelPopup';
+import {VideoSelector} from '../../store/selectors/VideoSelector';
+import {FrameExtractorService} from '../../services/FrameExtractorService';
 
 export class RectLabelsExporter {
     public static export(exportFormatType: AnnotationFormatType, mode: ExportMode = 'simple'): void {
@@ -27,18 +30,33 @@ export class RectLabelsExporter {
             case AnnotationFormatType.CSV:
                 RectLabelsExporter.exportAsCSV(mode);
                 break;
+            case AnnotationFormatType.LABELME:
+                LabelMeExporter.export(mode);
+                break;
             default:
                 return;
         }
     }
 
-    private static exportAsYOLO(mode: ExportMode): void {
+    // On-demand frames are placeholders (size=0). Fetch real data from backend when needed.
+    private static async resolveFileData(imageData: ImageData, sessionId?: string): Promise<File> {
+        if (!imageData.fileData || imageData.fileData.size > 0 || !sessionId) {
+            return imageData.fileData;
+        }
+        const match = imageData.fileData.name.match(/(\d+)\.jpg$/);
+        const frameIdx = match ? parseInt(match[1], 10) : 0;
+        const frames = await FrameExtractorService.fetchFrameRange(sessionId, frameIdx, 1);
+        return frames[0] ?? imageData.fileData;
+    }
+
+    private static async exportAsYOLO(mode: ExportMode): Promise<void> {
         const zip = new JSZip();
         const imagesData = LabelsSelector.getImagesData();
 
         if (mode === 'complete') {
             const split = DatasetSplitUtil.split(imagesData);
             const labelNames = LabelsSelector.getLabelNames();
+            const sessionId = VideoSelector.getActiveVideo()?.sessionId;
 
             for (const [splitName, splitImages] of Object.entries(split)) {
                 for (const imageData of splitImages) {
@@ -48,7 +66,8 @@ export class RectLabelsExporter {
                         zip.file(`labels/${splitName}/${txtName}`, fileContent);
                     }
                     if (imageData.fileData) {
-                        zip.file(`images/${splitName}/${imageData.fileData.name}`, imageData.fileData);
+                        const file = await RectLabelsExporter.resolveFileData(imageData, sessionId);
+                        zip.file(`images/${splitName}/${file.name}`, file);
                     }
                 }
             }
@@ -78,9 +97,8 @@ export class RectLabelsExporter {
         }
 
         const prefix = mode === 'complete' ? 'yolo_full' : 'yolo_simple';
-        zip.generateAsync({type:'blob'}).then((content: Blob) => {
-            saveAs(content, `${ExporterUtil.getExportFileName(prefix)}.zip`);
-        });
+        const content = await zip.generateAsync({type:'blob'});
+        saveAs(content, `${ExporterUtil.getExportFileName(prefix)}.zip`);
     }
 
     public static wrapRectLabelIntoYOLO(labelRect: LabelRect, labelNames: LabelName[], imageSize: ISize): string {
@@ -132,16 +150,22 @@ export class RectLabelsExporter {
             return null;
 
         const labelNames: LabelName[] = LabelsSelector.getLabelNames();
-        const image: HTMLImageElement = ImageRepository.getById(imageData.id);
+        // In video mode, ImageRepository stores 150px thumbnails, not full-res frames.
+        // Use the actual video dimensions to avoid normalizing against the wrong size.
+        const videoSize = VideoSelector.getActiveVideo()?.videoSize;
         let imageSize: ISize;
-        if (image) {
-            imageSize = {width: image.width, height: image.height};
+        if (videoSize?.width && videoSize.height) {
+            imageSize = videoSize;
         } else {
-            // Fallback for video frames not loaded in DOM: use first loaded image's size
-            const fallback = LabelsSelector.getImagesData().find(d => d.loadStatus);
-            const fallbackImg = fallback ? ImageRepository.getById(fallback.id) : null;
-            if (!fallbackImg) return null;
-            imageSize = {width: fallbackImg.width, height: fallbackImg.height};
+            const image: HTMLImageElement = ImageRepository.getById(imageData.id);
+            if (image) {
+                imageSize = {width: image.width, height: image.height};
+            } else {
+                const fallback = LabelsSelector.getImagesData().find(d => d.loadStatus);
+                const fallbackImg = fallback ? ImageRepository.getById(fallback.id) : null;
+                if (!fallbackImg) return null;
+                imageSize = {width: fallbackImg.width, height: fallbackImg.height};
+            }
         }
         const labelRectsString: string[] = imageData.labelRects
             .filter((labelRect: LabelRect) => labelRect.labelId !== null)
@@ -151,13 +175,13 @@ export class RectLabelsExporter {
         return labelRectsString.join('\n');
     }
 
-    private static exportAsVOC(mode: ExportMode): void {
+    private static async exportAsVOC(mode: ExportMode): Promise<void> {
         const zip = new JSZip();
         const imagesData = LabelsSelector.getImagesData();
 
         if (mode === 'complete') {
             const split = DatasetSplitUtil.split(imagesData);
-            const allImages: ImageData[] = [];
+            const sessionId = VideoSelector.getActiveVideo()?.sessionId;
 
             for (const [splitName, splitImages] of Object.entries(split)) {
                 const fileNames: string[] = [];
@@ -169,9 +193,9 @@ export class RectLabelsExporter {
                         fileNames.push(imageData.fileData.name.replace(/\.[^/.]+$/, ''));
                     }
                     if (imageData.fileData) {
-                        zip.file(`JPEGImages/${imageData.fileData.name}`, imageData.fileData);
+                        const file = await RectLabelsExporter.resolveFileData(imageData, sessionId);
+                        zip.file(`JPEGImages/${file.name}`, file);
                     }
-                    allImages.push(imageData);
                 }
                 zip.file(`ImageSets/Main/${splitName}.txt`, fileNames.join('\n'));
             }
@@ -186,9 +210,8 @@ export class RectLabelsExporter {
         }
 
         const vocPrefix = mode === 'complete' ? 'voc_full' : 'voc_simple';
-        zip.generateAsync({type:'blob'}).then(content => {
-            saveAs(content, `${ExporterUtil.getExportFileName(vocPrefix)}.zip`);
-        });
+        const content = await zip.generateAsync({type:'blob'});
+        saveAs(content, `${ExporterUtil.getExportFileName(vocPrefix)}.zip`);
     }
 
     private static wrapRectLabelsIntoVOC(imageData: ImageData): string {
@@ -223,13 +246,18 @@ export class RectLabelsExporter {
 
         if (labels) {
             let imgW = 0, imgH = 0;
-            const image: HTMLImageElement = ImageRepository.getById(imageData.id);
-            if (image) {
-                imgW = image.width; imgH = image.height;
+            const videoSize = VideoSelector.getActiveVideo()?.videoSize;
+            if (videoSize?.width && videoSize.height) {
+                imgW = videoSize.width; imgH = videoSize.height;
             } else {
-                const fallback = LabelsSelector.getImagesData().find(d => d.loadStatus);
-                const fb = fallback ? ImageRepository.getById(fallback.id) : null;
-                if (fb) { imgW = fb.width; imgH = fb.height; }
+                const image: HTMLImageElement = ImageRepository.getById(imageData.id);
+                if (image) {
+                    imgW = image.width; imgH = image.height;
+                } else {
+                    const fallback = LabelsSelector.getImagesData().find(d => d.loadStatus);
+                    const fb = fallback ? ImageRepository.getById(fallback.id) : null;
+                    if (fb) { imgW = fb.width; imgH = fb.height; }
+                }
             }
             return [
                 `<annotation>`,
@@ -252,12 +280,13 @@ export class RectLabelsExporter {
     }
 
 
-    private static exportAsCSV(mode: ExportMode): void {
+    private static async exportAsCSV(mode: ExportMode): Promise<void> {
         const imagesData = LabelsSelector.getImagesData();
 
         if (mode === 'complete') {
             const zip = new JSZip();
             const split = DatasetSplitUtil.split(imagesData);
+            const sessionId = VideoSelector.getActiveVideo()?.sessionId;
 
             for (const [splitName, splitImages] of Object.entries(split)) {
                 const entries: string[] = splitImages
@@ -268,14 +297,14 @@ export class RectLabelsExporter {
 
                 for (const imageData of splitImages) {
                     if (imageData.fileData) {
-                        zip.file(`images/${splitName}/${imageData.fileData.name}`, imageData.fileData);
+                        const file = await RectLabelsExporter.resolveFileData(imageData, sessionId);
+                        zip.file(`images/${splitName}/${file.name}`, file);
                     }
                 }
             }
 
-            zip.generateAsync({type:'blob'}).then((content: Blob) => {
-                saveAs(content, `${ExporterUtil.getExportFileName('csv_full')}.zip`);
-            });
+            const content = await zip.generateAsync({type:'blob'});
+            saveAs(content, `${ExporterUtil.getExportFileName('csv_full')}.zip`);
         } else {
             const contentEntries: string[] = imagesData
                 .map((imageData: ImageData) => RectLabelsExporter.wrapRectLabelsIntoCSV(imageData))
@@ -291,9 +320,15 @@ export class RectLabelsExporter {
         if (imageData.labelRects.length === 0 || !imageData.loadStatus)
             return null;
 
-        const image: HTMLImageElement = ImageRepository.getById(imageData.id);
         const labelNames: LabelName[] = LabelsSelector.getLabelNames();
-        const imageSize: ISize = {width: image.width, height: image.height}
+        const videoSize = VideoSelector.getActiveVideo()?.videoSize;
+        let imageSize: ISize;
+        if (videoSize?.width && videoSize.height) {
+            imageSize = videoSize;
+        } else {
+            const image: HTMLImageElement = ImageRepository.getById(imageData.id);
+            imageSize = {width: image?.width ?? 0, height: image?.height ?? 0};
+        }
         const labelRectsString: string[] = imageData.labelRects
             .filter((labelRect: LabelRect) => labelRect.labelId !== null)
             .map((labelRect: LabelRect) => RectLabelsExporter.wrapRectLabelIntoCSV(

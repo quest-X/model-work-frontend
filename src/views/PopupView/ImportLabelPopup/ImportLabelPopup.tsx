@@ -81,10 +81,11 @@ const ImportLabelPopup: React.FC<IProps> = ({
         if (lower.startsWith('coco_')) return { format: AnnotationFormatType.COCO, isFull };
         if (lower.startsWith('vgg_')) return { format: AnnotationFormatType.VGG, isFull };
         if (lower.startsWith('csv_')) return { format: AnnotationFormatType.CSV, isFull };
+        if (lower.startsWith('labelme_')) return { format: AnnotationFormatType.LABELME, isFull };
         return { format: null, isFull: false };
     };
 
-    // Detect format from file contents/extensions
+    // Detect format from file extensions (synchronous; JSON defaults to COCO for zip-internal use)
     const detectFormatFromFiles = (files: File[]): AnnotationFormatType | null => {
         const names = files.map(f => f.name.toLowerCase());
         if (names.some(n => n === 'labels.txt')) return AnnotationFormatType.YOLO;
@@ -93,6 +94,20 @@ const ImportLabelPopup: React.FC<IProps> = ({
         if (exts.some(e => e === 'json')) return AnnotationFormatType.COCO;
         if (exts.some(e => e === 'txt')) return AnnotationFormatType.YOLO;
         return null;
+    };
+
+    // Async JSON format detection: peek inside to distinguish LabelMe vs COCO
+    const detectJsonFormat = (jsonFiles: File[]): Promise<AnnotationFormatType> => {
+        if (jsonFiles.length > 1) return Promise.resolve(AnnotationFormatType.LABELME);
+        return FileUtil.readFile(jsonFiles[0]).then(text => {
+            try {
+                const obj = JSON.parse(text);
+                if (obj.shapes !== undefined && obj.imagePath !== undefined) {
+                    return AnnotationFormatType.LABELME;
+                }
+            } catch {}
+            return AnnotationFormatType.COCO;
+        });
     };
 
     const loadImageDimensions = (file: File): Promise<{ file: File; width: number; height: number }> => {
@@ -250,12 +265,19 @@ const ImportLabelPopup: React.FC<IProps> = ({
                         onAnnotationsLoadFailure(err instanceof Error ? err : new Error(String(err)));
                     });
             } else {
-                const format = detectFormatFromFiles(accepted);
-                if (!format) {
-                    onAnnotationsLoadFailure(new Error('Cannot detect annotation format'));
-                    return;
+                const jsonFiles = accepted.filter(f => f.name.toLowerCase().endsWith('.json'));
+                if (jsonFiles.length > 0) {
+                    detectJsonFormat(jsonFiles).then(format => {
+                        doImport(accepted, format);
+                    }).catch(() => onAnnotationsLoadFailure(new Error('Cannot read annotation file')));
+                } else {
+                    const format = detectFormatFromFiles(accepted);
+                    if (!format) {
+                        onAnnotationsLoadFailure(new Error('Cannot detect annotation format'));
+                        return;
+                    }
+                    doImport(accepted, format);
                 }
-                doImport(accepted, format);
             }
         }
     });
