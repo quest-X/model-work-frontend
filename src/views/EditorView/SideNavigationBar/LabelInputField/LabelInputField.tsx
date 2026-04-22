@@ -174,7 +174,7 @@ class LabelInputField extends React.Component<IProps, IState> {
                 key={option.id}
                 style={{
                     height: this.dropdownOptionHeight,
-                    ...(withDividerBelow ? {borderBottom: '1px solid rgba(255,255,255,0.6)'} : {}),
+                    ...(withDividerBelow ? {borderBottom: '1px solid rgba(255,255,255,0.25)'} : {}),
                 }}
                 onClick={wrapOnClick(option.id)}
             >
