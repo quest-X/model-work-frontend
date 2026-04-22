@@ -101,6 +101,13 @@
         align-items: center;
         align-content: center;
 
+        .DropdownDivider {
+          width: 100%;
+          border-top: 1px solid white;
+          margin: 4px 0;
+          flex-shrink: 0;
+        }
+
         .DropdownOption {
           align-self: stretch;
 
@@ -118,13 +125,6 @@
 
           &:hover {
             background-color: $darkThemeThirdColor;
-          }
-
-          .DropdownDivider {
-            width: 100%;
-            border-top: 1px solid white;
-            margin: 4px 0;
-            flex-shrink: 0;
           }
 
           .DropdownOptionCount {
