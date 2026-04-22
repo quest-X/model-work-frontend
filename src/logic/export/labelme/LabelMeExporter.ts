@@ -2,68 +2,11 @@ import {ImageData, LabelName, LabelPolygon, LabelRect} from '../../../store/labe
 import {LabelsSelector} from '../../../store/selectors/LabelsSelector';
 import {VideoSelector} from '../../../store/selectors/VideoSelector';
 import {ExporterUtil} from '../../../utils/ExporterUtil';
-import {FrameExtractorService} from '../../../services/FrameExtractorService';
-import {VideoData} from '../../../store/video/types';
 import {submitNewNotification} from '../../../store/notifications/actionCreators';
 import {NotificationUtil} from '../../../utils/NotificationUtil';
+import {resolveExportImageFiles} from '../ExportImageResolver';
 import JSZip from 'jszip';
 import {saveAs} from 'file-saver';
-
-const resolveImageFiles = async (
-    allImagesData: ImageData[],
-    activeVideo: VideoData | null
-): Promise<Map<string, File | Blob>> => {
-    const map = new Map<string, File | Blob>();
-
-    if (!activeVideo) {
-        allImagesData.forEach(img => {
-            if (img.fileData.size > 0) map.set(img.id, img.fileData);
-        });
-        return map;
-    }
-
-    if (activeVideo.preExtractedFrames?.length) {
-        allImagesData.forEach((img, idx) => {
-            const f = activeVideo.preExtractedFrames![idx];
-            if (f) map.set(img.id, f);
-        });
-        return map;
-    }
-
-    if (activeVideo.sessionId) {
-        const annotated = allImagesData
-            .map((img, idx) => ({ img, idx }))
-            .filter(({ img }) => img.labelRects.length > 0 || img.labelPolygons.length > 0);
-
-        // Merge indices with gap ≤ 10 into one batch request
-        const ranges: { start: number; end: number; indices: Set<number> }[] = [];
-        for (const { idx } of annotated) {
-            const last = ranges[ranges.length - 1];
-            if (last && idx - last.end <= 10) {
-                last.end = idx;
-                last.indices.add(idx);
-            } else {
-                ranges.push({ start: idx, end: idx, indices: new Set([idx]) });
-            }
-        }
-
-        for (const range of ranges) {
-            const frames = await FrameExtractorService.fetchFrameRange(
-                activeVideo.sessionId, range.start, range.end - range.start + 1
-            );
-            for (let i = 0; i < frames.length; i++) {
-                const globalIdx = range.start + i;
-                const targetImg = allImagesData[globalIdx];
-                if (targetImg && range.indices.has(globalIdx)) {
-                    map.set(targetImg.id, frames[i]);
-                }
-            }
-        }
-        return map;
-    }
-
-    return map;
-};
 
 export class LabelMeExporter {
     public static export(): void {
@@ -111,9 +54,8 @@ export class LabelMeExporter {
 
         if (fileCount === 0) return;
 
-        resolveImageFiles(allImagesData, activeVideo)
+        resolveExportImageFiles(allImagesData, activeVideo)
             .then(imageFileMap => {
-                // Verify every annotated frame resolved
                 const missing = allImagesData.filter(img =>
                     (img.labelRects.length > 0 || img.labelPolygons.length > 0) &&
                     !imageFileMap.has(img.id)
