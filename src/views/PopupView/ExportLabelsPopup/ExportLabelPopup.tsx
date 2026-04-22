@@ -80,38 +80,26 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
 
     const renderInternalContent = (type: LabelType) => {
         if (type === LabelType.RECT || type === LabelType.POLYGON) {
+            const check = (active: boolean) => (
+                <img draggable={false} src={active ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'} alt={active ? 'checked' : 'unchecked'} />
+            );
             return <>
                 <div className='Message'>{exportTexts.selectFormat}</div>
-                <div className='ModeToggle'>
-                    <div
-                        className={`ModeButton${exportTarget === 'labelme' ? ' active' : ''}`}
-                        onClick={() => setExportTarget('labelme')}
-                    >
-                        {exportTexts.labelmePackageButton}
-                        <span className='ModeDesc'>{exportTexts.labelmePackageDesc}</span>
+                <div className='Options'>
+                    <div className='OptionsItem' onClick={() => setExportTarget('labelme')}>
+                        {check(exportTarget === 'labelme')}{exportTexts.labelmePackageButton}
                     </div>
-                    <div
-                        className={`ModeButton${exportTarget === 'yolo' ? ' active' : ''}`}
-                        onClick={() => setExportTarget('yolo')}
-                    >
-                        {exportTexts.yoloPackageButton}
-                        <span className='ModeDesc'>{exportTexts.yoloPackageDesc}</span>
+                    <div className='OptionsItem' onClick={() => setExportTarget('yolo')}>
+                        {check(exportTarget === 'yolo')}{exportTexts.yoloPackageButton}
                     </div>
                 </div>
-                <div className='ModeToggle'>
-                    <div
-                        className={`ModeButton${exportMode === 'simple' ? ' active' : ''}`}
-                        onClick={() => setExportMode('simple')}
-                    >
-                        {zh ? '简单' : 'Simple'}
-                        <span className='ModeDesc'>{zh ? '仅标签文件' : 'Labels only'}</span>
+                <div className='Message' style={{paddingTop: 0}}>{zh ? '导出模式' : 'Export mode'}</div>
+                <div className='Options'>
+                    <div className='OptionsItem' onClick={() => setExportMode('simple')}>
+                        {check(exportMode === 'simple')}{zh ? '简单（仅标签文件）' : 'Simple (labels only)'}
                     </div>
-                    <div
-                        className={`ModeButton${exportMode === 'complete' ? ' active' : ''}`}
-                        onClick={() => setExportMode('complete')}
-                    >
-                        {zh ? '完整' : 'Complete'}
-                        <span className='ModeDesc'>{zh ? '标签 + 图像' : 'Labels + images'}</span>
+                    <div className='OptionsItem' onClick={() => setExportMode('complete')}>
+                        {check(exportMode === 'complete')}{zh ? '完整（标签 + 图像）' : 'Complete (labels + images)'}
                     </div>
                 </div>
             </>;
