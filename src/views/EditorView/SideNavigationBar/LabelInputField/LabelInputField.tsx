@@ -180,7 +180,7 @@ class LabelInputField extends React.Component<IProps, IState> {
 
         const result: React.ReactNode[] = lastUsed.map(renderOption);
         if (lastUsed.length > 0 && rest.length > 0) {
-            result.push(<div className='DropdownDivider' key='__divider__' />);
+            result.push(<div key='__divider__' style={{width:'100%',borderTop:'1px solid rgba(255,255,255,0.6)',margin:'4px 0',flexShrink:0}} />);
         }
         result.push(...rest.map(renderOption));
         return result;
