@@ -31,7 +31,7 @@ export class RectLabelsExporter {
                 RectLabelsExporter.exportAsCSV(mode);
                 break;
             case AnnotationFormatType.LABELME:
-                LabelMeExporter.export(mode);
+                LabelMeExporter.export();
                 break;
             default:
                 return;

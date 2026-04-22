@@ -22,6 +22,10 @@ import { LabelNamesNotUniqueError } from '../../../logic/import/yolo/YOLOErrors'
 import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { GenericYesNoPopup } from '../GenericYesNoPopup/GenericYesNoPopup';
 import JSZip from 'jszip';
+import { v4 as uuidv4 } from 'uuid';
+import { ArrayUtil } from '../../../utils/ArrayUtil';
+import { Settings } from '../../../settings/Settings';
+import { LabelUtil } from '../../../utils/LabelUtil';
 
 interface IProps {
     activeLabelType: LabelType;
@@ -169,6 +173,67 @@ const ImportLabelPopup: React.FC<IProps> = ({
             .catch(err => onAnnotationsLoadFailure(err instanceof Error ? err : new Error(String(err))));
     };
 
+    const doFullLabelMeImport = (imageFiles: File[], annotationFiles: File[]) => {
+        const jsonFiles = annotationFiles.filter(f => f.name.toLowerCase().endsWith('.json'));
+        const annotationsPromise = Promise.all(jsonFiles.map(f =>
+            FileUtil.readFile(f).then(text => JSON.parse(text))
+        ));
+
+        annotationsPromise.then(annotations => {
+            const allLabels = new Set<string>();
+            annotations.forEach((ann: any) => (ann.shapes || []).forEach((s: any) => allLabels.add(s.label)));
+
+            let colorIdx = 0;
+            const labelNameMap: Record<string, LabelName> = {};
+            allLabels.forEach(name => {
+                labelNameMap[name] = {
+                    id: uuidv4(),
+                    name,
+                    color: ArrayUtil.getByInfiniteIndex(Settings.LABEL_COLORS_PALETTE, colorIdx++)
+                };
+            });
+
+            const imageDataByName: Record<string, ImageData> = {};
+            const resultImageData: ImageData[] = imageFiles.map(file => {
+                const imgData = ImageDataUtil.createImageDataFromFileData(file);
+                imageDataByName[file.name] = imgData;
+                return imgData;
+            });
+
+            const pushRect = (imgData: ImageData, labelId: string, points: [number, number][]) => {
+                const [[x1, y1], [x2, y2]] = points;
+                imgData.labelRects.push(LabelUtil.createLabelRect(labelId, {
+                    x: Math.min(x1, x2), y: Math.min(y1, y2),
+                    width: Math.abs(x2 - x1), height: Math.abs(y2 - y1)
+                }));
+            };
+
+            for (const ann of annotations) {
+                const baseName = ann.imagePath?.split('/').pop() || ann.imagePath;
+                const imgData = imageDataByName[baseName];
+                if (!imgData) continue;
+
+                for (const shape of (ann.shapes || [])) {
+                    const labelId = labelNameMap[shape.label]?.id;
+                    if (!labelId) continue;
+
+                    if (shape.shape_type === 'rectangle') {
+                        pushRect(imgData, labelId, shape.points);
+                    } else if (shape.shape_type === 'polygon') {
+                        imgData.labelPolygons.push(LabelUtil.createLabelPolygon(
+                            labelId, shape.points.map(([x, y]: [number, number]) => ({ x, y }))
+                        ));
+                    } else if (shape.shape_type === 'mask' && shape.points.length >= 2) {
+                        pushRect(imgData, labelId, shape.points);
+                    }
+                }
+            }
+
+            resultImageData.sort((a, b) => a.fileData.name.localeCompare(b.fileData.name, undefined, { numeric: true }));
+            onAnnotationLoadSuccess(resultImageData, Object.values(labelNameMap));
+        }).catch(err => onAnnotationsLoadFailure(err instanceof Error ? err : new Error(String(err))));
+    };
+
     const doImport = (files: File[], format: AnnotationFormatType) => {
         if (!ImporterSpecData[format]) {
             onAnnotationsLoadFailure(new Error('Unsupported file format'));
@@ -241,8 +306,10 @@ const ImportLabelPopup: React.FC<IProps> = ({
                             if (isFull && imageFiles.length > 0 && zipFormat === AnnotationFormatType.YOLO) {
                                 // Full YOLO import: load images, parse annotations, build ImageData with labels in one pass
                                 doFullYOLOImport(imageFiles, annotationFiles);
+                            } else if (isFull && imageFiles.length > 0 && zipFormat === AnnotationFormatType.LABELME) {
+                                doFullLabelMeImport(imageFiles, annotationFiles);
                             } else if (isFull && imageFiles.length > 0) {
-                                // Full non-YOLO: add images first, then import labels
+                                // Full non-YOLO (non-LabelMe): add images first, then import labels
                                 const newImageData = imageFiles.map(f => ImageDataUtil.createImageDataFromFileData(f));
                                 addImageDataAction(newImageData);
                                 const format = zipFormat || detectFormatFromFiles(annotationFiles);

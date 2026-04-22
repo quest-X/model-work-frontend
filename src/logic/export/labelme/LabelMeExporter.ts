@@ -8,7 +8,6 @@ import {submitNewNotification} from '../../../store/notifications/actionCreators
 import {NotificationUtil} from '../../../utils/NotificationUtil';
 import JSZip from 'jszip';
 import {saveAs} from 'file-saver';
-import {ExportMode} from '../../../views/PopupView/ExportLabelsPopup/ExportLabelPopup';
 
 const resolveImageFiles = async (
     allImagesData: ImageData[],
@@ -67,7 +66,7 @@ const resolveImageFiles = async (
 };
 
 export class LabelMeExporter {
-    public static export(mode: ExportMode = 'simple'): void {
+    public static export(): void {
         const allImagesData: ImageData[] = LabelsSelector.getImagesData();
         const labelNames: LabelName[] = LabelsSelector.getLabelNames();
         const labelNameMap: Record<string, string> = {};
@@ -79,7 +78,6 @@ export class LabelMeExporter {
         const zip = new JSZip();
         let fileCount = 0;
 
-        // Phase 1: annotation JSONs (sync, always)
         allImagesData.forEach((imageData: ImageData) => {
             if (!imageData.labelRects.length && !imageData.labelPolygons.length) return;
 
@@ -113,14 +111,6 @@ export class LabelMeExporter {
 
         if (fileCount === 0) return;
 
-        if (mode !== 'complete') {
-            zip.generateAsync({ type: 'blob' }).then((blob: Blob) => {
-                saveAs(blob, `${ExporterUtil.getExportFileName('labelme')}.zip`);
-            });
-            return;
-        }
-
-        // Phase 2: full-resolution images (async)
         resolveImageFiles(allImagesData, activeVideo)
             .then(imageFileMap => {
                 // Verify every annotated frame resolved
@@ -142,7 +132,7 @@ export class LabelMeExporter {
                 });
 
                 zip.generateAsync({ type: 'blob' }).then((blob: Blob) => {
-                    saveAs(blob, `${ExporterUtil.getExportFileName('labelme')}.zip`);
+                    saveAs(blob, `${ExporterUtil.getExportFileName('labelme_full')}.zip`);
                 });
             })
             .catch(() => {
