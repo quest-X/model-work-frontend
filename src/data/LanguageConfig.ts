@@ -215,6 +215,7 @@ export interface LanguageTexts {
             cocoPolygon: string;
             yoloRect: string;
             vocRect: string;
+            vggPolygon: string;
             labelmeRect: string;
             labelmePolygon: string;
         };
@@ -661,6 +662,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 cocoPolygon: 'COCO JSON — 实例分割标准格式',
                 yoloRect: 'YOLO (.txt + labels.txt) — 归一化坐标',
                 vocRect: 'VOC XML — 像素坐标',
+                vggPolygon: 'VGG JSON — 多边形顶点坐标',
                 labelmeRect: 'LabelMe JSON — 矩形标注框',
                 labelmePolygon: 'LabelMe JSON — 多边形标注'
             }
@@ -1105,6 +1107,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 cocoPolygon: 'COCO JSON — instance segmentation standard',
                 yoloRect: 'YOLO (.txt + labels.txt) — normalized coords',
                 vocRect: 'VOC XML — pixel coords',
+                vggPolygon: 'VGG JSON — polygon vertex coordinates',
                 labelmeRect: 'LabelMe JSON — rectangle annotations',
                 labelmePolygon: 'LabelMe JSON — polygon annotations'
             }

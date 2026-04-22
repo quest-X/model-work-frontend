@@ -77,11 +77,21 @@ export class LabelMeImporter extends AnnotationImporter {
             };
         });
 
+        if (imageData.length === 0) {
+            throw new Error('请先加载图片或视频，再导入 LabelMe 标注');
+        }
+
         const cleanImageData = imageData.map(img => ImageDataUtil.cleanAnnotations(img));
         const imageDataByName: Record<string, ImageData> = {};
         cleanImageData.forEach(img => {
             imageDataByName[img.fileData.name] = img;
         });
+
+        const matchedNames = new Set(annotations.map(ann => ann.imagePath.split('/').pop() || ann.imagePath));
+        const hasMatch = Array.from(matchedNames).some(name => imageDataByName[name]);
+        if (!hasMatch) {
+            throw new Error('标注文件与当前图片不匹配，请确认已加载对应视频或图片');
+        }
 
         for (const ann of annotations) {
             const baseName = ann.imagePath.split('/').pop() || ann.imagePath;

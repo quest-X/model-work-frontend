@@ -35,6 +35,10 @@ export const getImportFormatData = (language: Language): ImportFormatDataMap => 
                 label: texts.formats.import.cocoPolygon
             },
             {
+                type: AnnotationFormatType.VGG,
+                label: texts.formats.import.vggPolygon
+            },
+            {
                 type: AnnotationFormatType.LABELME,
                 label: texts.formats.import.labelmePolygon
             }
