@@ -145,9 +145,39 @@ export class IndexedDBManager {
         });
     }
     
+    /**
+     * 轻量查询：只读取元数据字段，不加载图像 ArrayBuffer 内容。
+     * IndexedDB 读取 record 是原子的，但我们立即丢弃 images 引用，让 GC 回收 ArrayBuffer。
+     * 用于恢复对话框展示信息，避免视频项目几百帧时的全量加载开销。
+     */
+    public static async getProjectMeta(): Promise<{
+        imageCount: number;
+        labelCount: number;
+        isVideoProject: boolean;
+        lastModified: number;
+    } | null> {
+        return new Promise((resolve) => {
+            if (!this.db) { resolve(null); return; }
+            const transaction = this.db.transaction([this.STORE_NAME], 'readonly');
+            const store = transaction.objectStore(this.STORE_NAME);
+            const request = store.get(this.PROJECT_ID);
+            request.onsuccess = () => {
+                const r = request.result;
+                if (!r) { resolve(null); return; }
+                resolve({
+                    imageCount: r.images?.length ?? 0,
+                    labelCount: r.labelNames?.length ?? 0,
+                    isVideoProject: !!r.isVideoProject,
+                    lastModified: r.lastModified ?? 0,
+                });
+            };
+            request.onerror = () => resolve(null);
+        });
+    }
+
     public static async hasStoredProject(): Promise<boolean> {
-        const project = await this.loadProject();
-        return !!project && project.images.length > 0;
+        const meta = await this.getProjectMeta();
+        return meta !== null && meta.imageCount > 0;
     }
     
     public static async clearProject(): Promise<boolean> {
