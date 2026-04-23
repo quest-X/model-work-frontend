@@ -54,16 +54,16 @@ export class VGGExporter {
 
     private static mapImagesDataToVGGObject(imagesData: ImageData[], labelNames: LabelName[]): VGGObject {
         return imagesData.reduce((data: VGGObject, image: ImageData) => {
-            const fileData: VGGFileData = VGGExporter.mapImageDataToVGGFileData(image, labelNames);
-            if (!!fileData) {
+            const fileData: VGGFileData | null = VGGExporter.mapImageDataToVGGFileData(image, labelNames);
+            if (fileData) {
                 data[image.fileData.name] = fileData
             }
             return data;
         }, {});
     }
 
-    private static mapImageDataToVGGFileData(imageData: ImageData, labelNames: LabelName[]): VGGFileData {
-        const regionsData: VGGRegionsData = VGGExporter.mapImageDataToVGG(imageData, labelNames);
+    private static mapImageDataToVGGFileData(imageData: ImageData, labelNames: LabelName[]): VGGFileData | null {
+        const regionsData: VGGRegionsData | null = VGGExporter.mapImageDataToVGG(imageData, labelNames);
         if (!regionsData) return null;
         return {
             fileref: "",
@@ -75,7 +75,7 @@ export class VGGExporter {
         }
     }
 
-    public static mapImageDataToVGG(imageData: ImageData, labelNames: LabelName[]): VGGRegionsData {
+    public static mapImageDataToVGG(imageData: ImageData, labelNames: LabelName[]): VGGRegionsData | null {
         if (!imageData.loadStatus || !imageData.labelPolygons || !imageData.labelPolygons.length ||
             !labelNames || !labelNames.length) return null;
 
@@ -85,7 +85,7 @@ export class VGGExporter {
 
         return validLabels.reduce((data: VGGRegionsData, label: LabelPolygon, index: number) => {
             const labelName: LabelName = findLast(labelNames, {id: label.labelId});
-            if (!!labelName) {
+            if (labelName) {
                 data[index.toString()] = {
                     shape_attributes: VGGExporter.mapPolygonToVGG(label.vertices),
                     region_attributes: {
@@ -102,7 +102,7 @@ export class VGGExporter {
             label.labelId !== null && !!label.vertices.length);
     }
 
-    public static mapPolygonToVGG(path: IPoint[]): VGGPolygon {
+    public static mapPolygonToVGG(path: IPoint[]): VGGPolygon | null {
         if (!path || !path.length) return null;
 
         const all_points_x: number[] = path.map((point: IPoint) => point.x).concat(path[0].x);
