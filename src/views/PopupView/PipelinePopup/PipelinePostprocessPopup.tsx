@@ -45,8 +45,8 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
     // 检测后处理
     const [minBboxArea, setMinBboxArea] = useState<number>(initialDet.min_bbox_area);
     const [bboxPadding, setBboxPadding] = useState<number>(initialDet.bbox_padding);
-    const [minBboxAreaEnabled, setMinBboxAreaEnabled] = useState<boolean>(detSectionActive && initialDet.min_bbox_area_enabled !== false);
-    const [bboxPaddingEnabled, setBboxPaddingEnabled] = useState<boolean>(detSectionActive && initialDet.bbox_padding_enabled !== false);
+    const [minBboxAreaEnabled, setMinBboxAreaEnabled] = useState<boolean>(detSectionActive && initialDet.min_bbox_area_enabled !== false && initialDet.min_bbox_area > 0);
+    const [bboxPaddingEnabled, setBboxPaddingEnabled] = useState<boolean>(detSectionActive && initialDet.bbox_padding_enabled !== false && initialDet.bbox_padding > 0);
 
     // 分割后处理
     const [epsilon, setEpsilon] = useState<number>(initialSeg.polygon_epsilon);
@@ -54,10 +54,10 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
     const [largestOnly, setLargestOnly] = useState<boolean>(initialSeg.largest_cc_only);
     const [maskDilate, setMaskDilate] = useState<number>(initialSeg.mask_dilate);
     const [maxPolygonPoints, setMaxPolygonPoints] = useState<number>(initialSeg.max_polygon_points);
-    const [epsilonEnabled, setEpsilonEnabled] = useState<boolean>(segSectionActive && initialSeg.polygon_epsilon_enabled !== false);
-    const [minAreaEnabled, setMinAreaEnabled] = useState<boolean>(segSectionActive && initialSeg.min_mask_area_enabled !== false);
-    const [maskDilateEnabled, setMaskDilateEnabled] = useState<boolean>(segSectionActive && initialSeg.mask_dilate_enabled !== false);
-    const [maxPolygonPointsEnabled, setMaxPolygonPointsEnabled] = useState<boolean>(segSectionActive && initialSeg.max_polygon_points_enabled !== false);
+    const [epsilonEnabled, setEpsilonEnabled] = useState<boolean>(segSectionActive && initialSeg.polygon_epsilon_enabled !== false && initialSeg.polygon_epsilon > 0);
+    const [minAreaEnabled, setMinAreaEnabled] = useState<boolean>(segSectionActive && initialSeg.min_mask_area_enabled !== false && initialSeg.min_mask_area > 0);
+    const [maskDilateEnabled, setMaskDilateEnabled] = useState<boolean>(segSectionActive && initialSeg.mask_dilate_enabled !== false && initialSeg.mask_dilate > 0);
+    const [maxPolygonPointsEnabled, setMaxPolygonPointsEnabled] = useState<boolean>(segSectionActive && initialSeg.max_polygon_points_enabled !== false && initialSeg.max_polygon_points > 0);
 
     const onAccept = () => {
         DetectionAPIDetector.setPostprocessParams({
@@ -123,7 +123,7 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                 </div>
 
                 {!detCollapsed && <>{/* min_bbox_area */}
-                <div className={`ParamRow${!minBboxAreaEnabled ? ' param-disabled' : ''}`}>
+                <div className={`ParamRow${!minBboxAreaEnabled ? ' param-disabled' : minBboxArea === 0 ? ' param-zero' : ''}`}>
                     <div className='ParamHeader'>
                         <label className='ParamLabelRow'>
                             <input type='checkbox' checked={minBboxAreaEnabled}
@@ -153,7 +153,7 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                 </div>
 
                 {/* bbox_padding */}
-                <div className={`ParamRow${!bboxPaddingEnabled ? ' param-disabled' : ''}`}>
+                <div className={`ParamRow${!bboxPaddingEnabled ? ' param-disabled' : bboxPadding === 0 ? ' param-zero' : ''}`}>
                     <div className='ParamHeader'>
                         <label className='ParamLabelRow'>
                             <input type='checkbox' checked={bboxPaddingEnabled}
@@ -192,37 +192,8 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                     <span className={`SectionChevron${!segCollapsed ? ' open' : ''}`}>▾</span>
                 </div>
 
-                {!segCollapsed && <>{/* polygon_epsilon */}
-                <div className={`ParamRow${!epsilonEnabled ? ' param-disabled' : ''}`}>
-                    <div className='ParamHeader'>
-                        <label className='ParamLabelRow'>
-                            <input type='checkbox' checked={epsilonEnabled}
-                                onChange={(e) => setEpsilonEnabled(e.target.checked)} />
-                            <span className='ParamLabel'>
-                                {zh ? 'Polygon 抽稀 epsilon' : 'Polygon simplify (epsilon)'}
-                            </span>
-                        </label>
-                        <div className='ParamValueGroup'>
-                            <span className='ParamValue'>{epsilonLabel(epsilon)}</span>
-                            {epsilon !== DEF.polygon_epsilon && epsilonEnabled && (
-                                <button className='ParamResetBtn' onClick={() => setEpsilon(DEF.polygon_epsilon)}>
-                                    ↺ {epsilonLabel(DEF.polygon_epsilon)}
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                    <input type='range' min={0} max={10} step={0.1} value={epsilon}
-                        disabled={!epsilonEnabled}
-                        onChange={(e) => setEpsilon(Number(e.target.value))} />
-                    <div className='ParamDesc'>
-                        {zh
-                            ? 'Douglas–Peucker 算法简化多边形，像素距离阈值。0 = 不抽稀；越大顶点越少、越好手改，但可能丢细节。典型值 1–3 px。'
-                            : 'Douglas–Peucker polygon simplification (pixel tolerance). 0 = off; larger = fewer vertices, easier to edit but may lose detail. Typical 1–3 px.'}
-                    </div>
-                </div>
-
-                {/* min_mask_area */}
-                <div className={`ParamRow${!minAreaEnabled ? ' param-disabled' : ''}`}>
+                {!segCollapsed && <>{/* min_mask_area */}
+                <div className={`ParamRow${!minAreaEnabled ? ' param-disabled' : minArea === 0 ? ' param-zero' : ''}`}>
                     <div className='ParamHeader'>
                         <label className='ParamLabelRow'>
                             <input type='checkbox' checked={minAreaEnabled}
@@ -251,62 +222,37 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                     </div>
                 </div>
 
-                {/* largest_cc_only */}
-                <div className={`ParamRow${!largestOnly ? ' param-disabled' : ''}`}>
+                {/* polygon_epsilon */}
+                <div className={`ParamRow${!epsilonEnabled ? ' param-disabled' : epsilon === 0 ? ' param-zero' : ''}`}>
                     <div className='ParamHeader'>
                         <label className='ParamLabelRow'>
-                            <input type='checkbox' checked={largestOnly}
-                                onChange={(e) => setLargestOnly(e.target.checked)} />
+                            <input type='checkbox' checked={epsilonEnabled}
+                                onChange={(e) => setEpsilonEnabled(e.target.checked)} />
                             <span className='ParamLabel'>
-                                {zh ? '仅保留最大 mask' : 'Keep only the largest mask'}
+                                {zh ? 'Polygon 抽稀 epsilon' : 'Polygon simplify (epsilon)'}
                             </span>
                         </label>
                         <div className='ParamValueGroup'>
-                            <span className='ParamValue'>
-                                {largestOnly ? (zh ? '开启' : 'on') : (zh ? '关闭' : 'off')}
-                            </span>
-                        </div>
-                    </div>
-                    <div className='ParamDesc'>
-                        {zh
-                            ? '单图只保留面积最大的一个 mask，其余丢弃。适合"一张图一个主目标"的场景（例如钢液炉口）。'
-                            : 'Keep only the single mask with the largest area per image. Good for "one main target per image" cases.'}
-                    </div>
-                </div>
-
-                {/* mask_dilate */}
-                <div className={`ParamRow${!maskDilateEnabled ? ' param-disabled' : ''}`}>
-                    <div className='ParamHeader'>
-                        <label className='ParamLabelRow'>
-                            <input type='checkbox' checked={maskDilateEnabled}
-                                onChange={(e) => setMaskDilateEnabled(e.target.checked)} />
-                            <span className='ParamLabel'>
-                                {zh ? 'Mask 膨胀半径 (mask_dilate)' : 'Mask dilation radius (mask_dilate)'}
-                            </span>
-                        </label>
-                        <div className='ParamValueGroup'>
-                            <span className='ParamValue'>
-                                {maskDilate === 0 ? (zh ? '关闭' : 'off') : `${maskDilate} px`}
-                            </span>
-                            {maskDilate !== DEF.mask_dilate && maskDilateEnabled && (
-                                <button className='ParamResetBtn' onClick={() => setMaskDilate(DEF.mask_dilate)}>
-                                    ↺ {DEF.mask_dilate === 0 ? (zh ? '关闭' : 'off') : `${DEF.mask_dilate} px`}
+                            <span className='ParamValue'>{epsilonLabel(epsilon)}</span>
+                            {epsilon !== DEF.polygon_epsilon && epsilonEnabled && (
+                                <button className='ParamResetBtn' onClick={() => setEpsilon(DEF.polygon_epsilon)}>
+                                    ↺ {epsilonLabel(DEF.polygon_epsilon)}
                                 </button>
                             )}
                         </div>
                     </div>
-                    <input type='range' min={0} max={20} step={1} value={maskDilate}
-                        disabled={!maskDilateEnabled}
-                        onChange={(e) => setMaskDilate(Number(e.target.value))} />
+                    <input type='range' min={0} max={10} step={0.1} value={epsilon}
+                        disabled={!epsilonEnabled}
+                        onChange={(e) => setEpsilon(Number(e.target.value))} />
                     <div className='ParamDesc'>
                         {zh
-                            ? '对 mask 进行椭圆核形态学膨胀，向外扩张边界（半径像素）。0 = 不膨胀。可用于扩大标注区域或填补边缘空洞。'
-                            : 'Morphological dilation with an elliptical kernel (radius in pixels). 0 = off. Useful for expanding mask boundaries or filling edge gaps.'}
+                            ? 'Douglas–Peucker 算法简化多边形，像素距离阈值。0 = 不抽稀；越大顶点越少、越好手改，但可能丢细节。典型值 1–3 px。'
+                            : 'Douglas–Peucker polygon simplification (pixel tolerance). 0 = off; larger = fewer vertices, easier to edit but may lose detail. Typical 1–3 px.'}
                     </div>
                 </div>
 
                 {/* max_polygon_points */}
-                <div className={`ParamRow${!maxPolygonPointsEnabled ? ' param-disabled' : ''}`}>
+                <div className={`ParamRow${!maxPolygonPointsEnabled ? ' param-disabled' : maxPolygonPoints === 0 ? ' param-zero' : ''}`}>
                     <div className='ParamHeader'>
                         <label className='ParamLabelRow'>
                             <input type='checkbox' checked={maxPolygonPointsEnabled}
@@ -334,6 +280,60 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                         {zh
                             ? '限制输出多边形的最大顶点数。使用自适应 RDP 算法压缩到指定点数以内，便于手动修改标签。0 = 不限制。建议值：50–200。'
                             : 'Limit the maximum number of polygon vertices. Uses adaptive RDP to reduce to the target count, making labels easier to edit. 0 = no limit. Suggested: 50–200.'}
+                    </div>
+                </div>
+
+                {/* mask_dilate */}
+                <div className={`ParamRow${!maskDilateEnabled ? ' param-disabled' : maskDilate === 0 ? ' param-zero' : ''}`}>
+                    <div className='ParamHeader'>
+                        <label className='ParamLabelRow'>
+                            <input type='checkbox' checked={maskDilateEnabled}
+                                onChange={(e) => setMaskDilateEnabled(e.target.checked)} />
+                            <span className='ParamLabel'>
+                                {zh ? 'Mask 膨胀半径 (mask_dilate)' : 'Mask dilation radius (mask_dilate)'}
+                            </span>
+                        </label>
+                        <div className='ParamValueGroup'>
+                            <span className='ParamValue'>
+                                {maskDilate === 0 ? (zh ? '关闭' : 'off') : `${maskDilate} px`}
+                            </span>
+                            {maskDilate !== DEF.mask_dilate && maskDilateEnabled && (
+                                <button className='ParamResetBtn' onClick={() => setMaskDilate(DEF.mask_dilate)}>
+                                    ↺ {DEF.mask_dilate === 0 ? (zh ? '关闭' : 'off') : `${DEF.mask_dilate} px`}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <input type='range' min={1} max={20} step={1} value={maskDilate}
+                        disabled={!maskDilateEnabled}
+                        onChange={(e) => setMaskDilate(Number(e.target.value))} />
+                    <div className='ParamDesc'>
+                        {zh
+                            ? '对 mask 进行椭圆核形态学膨胀，向外扩张边界（半径像素）。0 = 不膨胀。可用于扩大标注区域或填补边缘空洞。'
+                            : 'Morphological dilation with an elliptical kernel (radius in pixels). 0 = off. Useful for expanding mask boundaries or filling edge gaps.'}
+                    </div>
+                </div>
+
+                {/* largest_cc_only */}
+                <div className={`ParamRow${!largestOnly ? ' param-disabled' : ''}`}>
+                    <div className='ParamHeader'>
+                        <label className='ParamLabelRow'>
+                            <input type='checkbox' checked={largestOnly}
+                                onChange={(e) => setLargestOnly(e.target.checked)} />
+                            <span className='ParamLabel'>
+                                {zh ? '仅保留最大 mask' : 'Keep only the largest mask'}
+                            </span>
+                        </label>
+                        <div className='ParamValueGroup'>
+                            <span className='ParamValue'>
+                                {largestOnly ? (zh ? '开启' : 'on') : (zh ? '关闭' : 'off')}
+                            </span>
+                        </div>
+                    </div>
+                    <div className='ParamDesc'>
+                        {zh
+                            ? '单图只保留面积最大的一个 mask，其余丢弃。适合"一张图一个主目标"的场景（例如钢液炉口）。'
+                            : 'Keep only the single mask with the largest area per image. Good for "one main target per image" cases.'}
                     </div>
                 </div>
                 </>}

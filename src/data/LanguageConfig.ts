@@ -603,7 +603,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 rejectButton: '取消'
             },
             callModel: {
-                title: '调用模型',
+                title: '模型设置',
                 selectModel: '选择要加载的模型：',
                 acceptButton: '进入',
                 rejectButton: '关闭',
@@ -797,7 +797,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
 
         // AI Model Management
         modelManagement: {
-            callModels: '调用模型',
+            callModels: '模型设置',
             modelEngines: '模型引擎',
             manage: '管理',
             noModels: '暂无AI模型',

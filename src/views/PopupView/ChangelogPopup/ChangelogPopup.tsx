@@ -16,6 +16,22 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.2.4',
+        date: '2026-04-23',
+        changes: [
+            { zh: '【移除】后处理"修复自交多边形"参数：前端 UI 与后端接口全部清除，减少用户认知负担', en: '[Remove] Post-process "fix self-intersecting polygon" param: removed from both frontend UI and backend API to reduce cognitive overhead' },
+            { zh: '【改进】Pipeline 三阶段默认全部不激活：去除 localStorage 持久化，每次打开弹窗均从全关状态开始，避免遗忘激活状态导致误传参数', en: '[Improve] Pipeline three stages default to all inactive: removed localStorage persistence so each popup open starts from a clean off state, preventing accidental param injection' },
+            { zh: '【功能】推理结果面板支持检测与分割同时显示：同时加载检测 + 分割引擎时，面板新增"全部 / 检测 / 分割"Tab 切换，不再仅显示最后一次结果', en: '[Feature] Inference results panel now shows detection and segmentation simultaneously: when both engine types are loaded, a tab bar (All / Detection / Segmentation) appears so results from both runs are always visible' },
+            { zh: '【功能】多模型后处理参数分区折叠展开：同时加载检测 + 分割引擎时，非当前激活模型对应的参数 Section 自动折叠并置灰不可交互，点击标题行可展开预览', en: '[Feature] Multi-model post-process sections collapse/expand: when both engines are loaded, the inactive model section collapses and dims automatically; click the section title to expand for preview' },
+            { zh: '【改进】数值为 0 的参数标题行灰显但输入仍可交互（param-zero 样式）：区别于禁用态（param-disabled），滑块可拖动、数字框可输入，仅视觉上提示"当前无效"', en: '[Improve] Zero-value params show greyed label row (param-zero style) while keeping inputs interactive: distinct from disabled state — sliders are draggable, inputs editable, purely a visual "currently inactive" hint' },
+            { zh: '【改进】分割后处理推荐默认值：polygon_epsilon=1.5 px，min_mask_area=200 px²，max_polygon_points=30，mask_dilate=1 px；版本号升至 v3 使旧缓存失效', en: '[Improve] Segmentation post-process recommended defaults: polygon_epsilon=1.5 px, min_mask_area=200 px², max_polygon_points=30, mask_dilate=1 px; cache bumped to v3 to invalidate old stored values' },
+            { zh: '【改进】mask_dilate 滑动条起始值改为 1（移除 0），默认不勾选：最小膨胀像素从 1 起计，开箱即用；默认关闭以保持可选性', en: '[Improve] mask_dilate slider minimum changed to 1 (removed 0), unchecked by default: minimum dilation starts at 1 px so enabling it immediately takes effect; off by default to keep it opt-in' },
+            { zh: '【改进】关闭态布尔参数（augment / agnostic_nms / retina_masks）标题行置灰，与关闭态数值参数视觉一致', en: '[Improve] Disabled boolean params (augment / agnostic_nms / retina_masks) now grey their label row, matching the visual treatment of zero-value numeric params' },
+            { zh: '【改进】classes 参数空值时默认不勾选：避免发送空字符串给后端，与"留空=全部类别"语义一致', en: '[Improve] classes param defaults to unchecked when empty: prevents sending an empty string to the backend; semantically consistent with "empty = all classes"' },
+            { zh: '【重命名】"调用模型"→"模型设置"，"流程参数"→"推理流程"：语义更准确，减少歧义', en: '[Rename] "Call Model" → "Model Settings", "Pipeline Params" → "Inference Pipeline": more precise labels, less ambiguity' },
+        ]
+    },
+    {
         version: '2.2.3',
         date: '2026-04-23',
         changes: [

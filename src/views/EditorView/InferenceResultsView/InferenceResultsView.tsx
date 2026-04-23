@@ -60,6 +60,9 @@ interface IProps {
 
 const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, segmentationResults, activeImageData, labelNames, isVideoMode, updateSegmentationResults, updateActiveLabelId}) => {
     const currentTexts = LanguageConfig[language];
+    const zh = language === Language.CHINESE;
+
+    const [activeTab, setActiveTab] = React.useState<'all' | 'detect' | 'segment'>('all');
 
     const handleDeleteSegmentationResult = (result: SegmentationResult, index: number) => {
         const newSegmentationResults = segmentationResults.filter((_, i) => i !== index);
@@ -297,54 +300,43 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         });
     };
 
-    // 生成当前帧的推理结果显示数据
-    // 视频模式下：
-    //   - 优先使用 segmentationResults（分割推理结果，按 imageId 存储在 Redux 中）
-    //   - 回退到 labelRects（检测推理结果存在每帧的 labelRects 中）
-    // 图片模式下：直接使用 segmentationResults
-    const displayResults = React.useMemo(() => {
-        if (!isVideoMode) {
-            // 图片模式：优先推理结果 Map，空则兜底 labelPolygons（智能标注 & dispatch 丢失场景）
-            if (segmentationResults && segmentationResults.length > 0) return segmentationResults;
-            if (!activeImageData) return [];
-            const aiPolys = activeImageData.labelPolygons.filter(p => p.isCreatedByAI);
-            if (aiPolys.length > 0) return polygonsToDisplay(aiPolys, labelNames);
-            return [];
-        }
+    // 检测结果：从 labelRects 读取 AI 创建的矩形
+    const allDetResults = React.useMemo(() => {
         if (!activeImageData) return [];
-
-        // 视频模式：优先 segmentationResults（分割结果已按 imageId 索引）
-        if (segmentationResults && segmentationResults.length > 0) {
-            return segmentationResults;
-        }
-
-        // 回退 1：labelPolygons（分割结果，包含智能标注 & dispatch 未命中 imageId 的场景）
-        const aiPolys = activeImageData.labelPolygons.filter(p => p.isCreatedByAI);
-        if (aiPolys.length > 0) return polygonsToDisplay(aiPolys, labelNames);
-
-        // 回退 2：从 labelRects 读取检测结果
         const aiRects = activeImageData.labelRects.filter(r => r.isCreatedByAI);
-        if (aiRects.length === 0) return [];
         return aiRects.map((rect, idx) => {
-            const labelName = labelNames.find(ln => ln.id === rect.labelId);
-            const name = labelName?.name || rect.suggestedLabel || 'unknown';
+            const name = labelNames.find(ln => ln.id === rect.labelId)?.name || rect.suggestedLabel || 'unknown';
             return {
                 class_id: idx,
                 class_name: name,
                 confidence: rect.confidence || 0,
-                bbox: {
-                    x1: rect.rect.x,
-                    y1: rect.rect.y,
-                    x2: rect.rect.x + rect.rect.width,
-                    y2: rect.rect.y + rect.rect.height,
-                    width: rect.rect.width,
-                    height: rect.rect.height
-                },
+                info: { id: idx, name, confidence: rect.confidence || 0 },
+                bbox: { x1: rect.rect.x, y1: rect.rect.y, x2: rect.rect.x + rect.rect.width, y2: rect.rect.y + rect.rect.height, width: rect.rect.width, height: rect.rect.height },
                 mask: null,
-                _labelRectId: rect.id // 用于关联
+                _labelRectId: rect.id,
             };
         });
-    }, [segmentationResults, activeImageData, labelNames, isVideoMode]);
+    }, [activeImageData, labelNames]);
+
+    // 分割结果：优先 Redux segmentationResults，回退 labelPolygons
+    const allSegResults = React.useMemo(() => {
+        if (segmentationResults && segmentationResults.length > 0) return segmentationResults;
+        if (!activeImageData) return [];
+        const aiPolys = activeImageData.labelPolygons.filter(p => p.isCreatedByAI);
+        return aiPolys.length > 0 ? polygonsToDisplay(aiPolys, labelNames) : [];
+    }, [segmentationResults, activeImageData, labelNames]);
+
+    // 合并并按 activeTab 过滤
+    const displayResults = React.useMemo(() => {
+        const all = [...allSegResults, ...allDetResults];
+        if (activeTab === 'detect') return all.filter(r => !r.mask);
+        if (activeTab === 'segment') return all.filter(r => !!r.mask);
+        return all;
+    }, [allSegResults, allDetResults, activeTab]);
+
+    const hasDet = allDetResults.length > 0;
+    const hasSeg = allSegResults.length > 0;
+    const showTabs = hasDet && hasSeg;
 
     const [thumbnails, setThumbnails] = React.useState<{[key: number]: string}>({});
     const generatedSetRef = React.useRef(new Set<string>()); // 已生成的 key: "imageId_index"
@@ -360,6 +352,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
     React.useEffect(() => {
         setThumbnails({});
         generatedSetRef.current = new Set();
+        setActiveTab('all');
     }, [activeImageData?.id]);
 
     // 为新增结果生成缩略图
@@ -440,6 +433,19 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
             <div className="Header">
                 <div className="HeaderText">{currentTexts.aiInference.results.title}</div>
             </div>
+            {showTabs && (
+                <div className="TabBar">
+                    <button className={`Tab${activeTab === 'all' ? ' active' : ''}`} onClick={() => setActiveTab('all')}>
+                        {zh ? '全部' : 'All'}
+                    </button>
+                    <button className={`Tab${activeTab === 'detect' ? ' active' : ''}`} onClick={() => setActiveTab('detect')}>
+                        {zh ? '检测' : 'Detection'}
+                    </button>
+                    <button className={`Tab${activeTab === 'segment' ? ' active' : ''}`} onClick={() => setActiveTab('segment')}>
+                        {zh ? '分割' : 'Segmentation'}
+                    </button>
+                </div>
+            )}
             <div className="Content">
                 {displayResults.length > 0 ? (
                     <div className="SegmentationResultsList">

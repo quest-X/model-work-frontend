@@ -56,6 +56,7 @@ export interface SegmentationPostprocessParams {
 
 const INFERENCE_PARAMS_STORAGE_KEY = 'segmentationAPI.inferenceParams';
 const POSTPROCESS_PARAMS_STORAGE_KEY = 'segmentationAPI.postprocessParams';
+const POSTPROCESS_PARAMS_VERSION = 3; // 升版本使旧缓存失效，强制用新默认值
 
 export const DEFAULT_SEGMENTATION_INFERENCE_PARAMS: SegmentationInferenceParams = {
     conf: 0.25,
@@ -77,15 +78,15 @@ export const DEFAULT_SEGMENTATION_INFERENCE_PARAMS: SegmentationInferenceParams 
 };
 
 export const DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS: SegmentationPostprocessParams = {
-    polygon_epsilon: 0,
-    min_mask_area: 0,
+    polygon_epsilon: 1.5,
+    min_mask_area: 200,
     largest_cc_only: false,
-    mask_dilate: 0,
-    max_polygon_points: 0,
+    mask_dilate: 1,
+    max_polygon_points: 30,
     polygon_epsilon_enabled: true,
     min_mask_area_enabled: true,
-    largest_cc_only_enabled: true,
-    mask_dilate_enabled: true,
+    largest_cc_only_enabled: false,
+    mask_dilate_enabled: false,
     max_polygon_points_enabled: true,
 };
 
@@ -122,6 +123,7 @@ function loadSegPostprocessParams(): SegmentationPostprocessParams {
         const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(POSTPROCESS_PARAMS_STORAGE_KEY) : null;
         if (!raw) return { ...DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS };
         const p = JSON.parse(raw);
+        if (p._version !== POSTPROCESS_PARAMS_VERSION) return { ...DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS };
         return {
             polygon_epsilon: typeof p.polygon_epsilon === 'number' ? p.polygon_epsilon : DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS.polygon_epsilon,
             min_mask_area: typeof p.min_mask_area === 'number' ? p.min_mask_area : DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS.min_mask_area,
@@ -182,7 +184,7 @@ export class SegmentationAPIDetector {
         this.postprocessParams = { ...this.postprocessParams, ...partial };
         try {
             if (typeof localStorage !== 'undefined') {
-                localStorage.setItem(POSTPROCESS_PARAMS_STORAGE_KEY, JSON.stringify(this.postprocessParams));
+                localStorage.setItem(POSTPROCESS_PARAMS_STORAGE_KEY, JSON.stringify({ ...this.postprocessParams, _version: POSTPROCESS_PARAMS_VERSION }));
             }
         } catch { /* ignore */ }
     }

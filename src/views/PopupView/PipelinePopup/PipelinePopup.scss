@@ -129,6 +129,21 @@
       }
     }
 
+    // 已勾选但值为 0（等于关闭）：视觉同 param-disabled，但控件仍可交互
+    &.param-zero {
+      .ParamLabel        { opacity: 0.35; }
+      .ParamValueGroup   { opacity: 0.35; }
+      .ParamDesc         { opacity: 0.2;  }
+      .ParamResetBtn     { display: none; }
+
+      input[type='range'],
+      input[type='number'],
+      input[type='text'],
+      select {
+        opacity: 0.3;
+      }
+    }
+
     .ParamHeader {
       display: flex;
       justify-content: space-between;

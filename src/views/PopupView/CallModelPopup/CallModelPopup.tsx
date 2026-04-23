@@ -180,7 +180,7 @@ const CallModelPopup: React.FC<IProps> = ({
     const renderContent = () => {
         return <div className='CallModelPopupContent'>
             <div className='ModelSection'>
-                <div className='SectionHeader'>{zhTexts ? '流程参数' : 'Pipeline'}</div>
+                <div className='SectionHeader'>{zhTexts ? '推理流程' : 'Pipeline'}</div>
                 <PipelineCanvas zh={zhTexts} onOpenPopup={updateActivePopupType} />
             </div>
             <div className='ModelSection'>

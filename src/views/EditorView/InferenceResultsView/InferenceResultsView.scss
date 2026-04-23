@@ -301,4 +301,32 @@
     scrollbar-width: thin;
     scrollbar-color: $darkThemeThirdColor $darkThemeSecondColor;
   }
+
+  .TabBar {
+    display: flex;
+    gap: 4px;
+    padding: 6px 10px 0;
+    align-self: stretch;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+
+    .Tab {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.4);
+      font-size: 12px;
+      padding: 4px 10px;
+      cursor: pointer;
+      border-radius: 3px 3px 0 0;
+      border-bottom: 2px solid transparent;
+
+      &:hover {
+        color: rgba(255,255,255,0.7);
+      }
+
+      &.active {
+        color: #fff;
+        border-bottom-color: #4da6ff;
+      }
+    }
+  }
 }

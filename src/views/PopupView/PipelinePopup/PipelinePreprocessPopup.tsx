@@ -152,7 +152,7 @@ const PipelinePreprocessPopup: React.FC<IProps> = ({language}) => {
                 </div>
 
                 {/* augment */}
-                <div className='ParamRow'>
+                <div className={`ParamRow${!augment ? ' param-disabled' : ''}`}>
                     <div className='ParamHeader'>
                         <label className='ParamLabelRow'>
                             <input type='checkbox' checked={augment}

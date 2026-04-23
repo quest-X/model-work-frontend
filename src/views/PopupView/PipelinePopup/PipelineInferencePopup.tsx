@@ -34,7 +34,7 @@ const PipelineInferencePopup: React.FC<IProps> = ({language, activeModelType}) =
     const [confEnabled, setConfEnabled] = useState<boolean>(initial.conf_enabled !== false);
     const [iouEnabled, setIouEnabled] = useState<boolean>(initial.iou_enabled !== false);
     const [maxDetEnabled, setMaxDetEnabled] = useState<boolean>(initial.max_det_enabled !== false);
-    const [classesEnabled, setClassesEnabled] = useState<boolean>(initial.classes_enabled !== false);
+    const [classesEnabled, setClassesEnabled] = useState<boolean>(initial.classes_enabled !== false && initial.classes.trim() !== '');
     // retina_masks: segmentation-only param — load from SegmentationAPIDetector
     const [retinaMasks, setRetinaMasks] = useState<boolean>(initialSeg.retina_masks);
 
@@ -159,7 +159,7 @@ const PipelineInferencePopup: React.FC<IProps> = ({language, activeModelType}) =
                 </div>
 
                 {/* agnostic_nms */}
-                <div className='ParamRow'>
+                <div className={`ParamRow${!agnosticNms ? ' param-disabled' : ''}`}>
                     <div className='ParamHeader'>
                         <label className='ParamLabelRow'>
                             <input type='checkbox' checked={agnosticNms}
@@ -182,7 +182,7 @@ const PipelineInferencePopup: React.FC<IProps> = ({language, activeModelType}) =
                 </div>
 
                 {/* classes */}
-                <div className={`ParamRow${!classesEnabled ? ' param-disabled' : ''}`}>
+                <div className={`ParamRow${!classesEnabled ? ' param-disabled' : classes.trim() === '' ? ' param-zero' : ''}`}>
                     <div className='ParamHeader'>
                         <label className='ParamLabelRow'>
                             <input type='checkbox' checked={classesEnabled}
@@ -218,7 +218,7 @@ const PipelineInferencePopup: React.FC<IProps> = ({language, activeModelType}) =
                 <div className='ParamSectionTitle'>{zh ? '[ 分割参数 ]' : '[ Segmentation ]'}</div>
 
                 {/* retina_masks */}
-                <div className='ParamRow'>
+                <div className={`ParamRow${!retinaMasks ? ' param-disabled' : ''}`}>
                     <div className='ParamHeader'>
                         <label className='ParamLabelRow'>
                             <input type='checkbox' checked={retinaMasks}
