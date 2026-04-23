@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.2.6',
+        date: '2026-04-23',
+        changes: [
+            { zh: '【修复】on-demand 视频模式单帧检测失败：0字节占位文件检测现直接从后端按帧索引获取原始 blob 发送给推理 API，不再走 canvas 捕获路径（videoFrameImage 尺寸为 0 时 toBlob 返回 null）', en: '[Fix] Single-frame detection failure in on-demand video mode: 0-byte placeholder frames now fetch the raw blob from the backend by frame index and send it directly to the inference API, bypassing the canvas capture path (which failed when videoFrameImage had zero dimensions causing toBlob to return null)' },
+            { zh: '【修复】视频帧缩略图显示"?"破图：blob URL 在 img.onload 内提前撤销（revokeObjectURL）导致 <img src> 指向已失效 URL；改为仅在加载失败时撤销', en: '[Fix] Video frame thumbnails showing broken "?" icon: blob URL was revoked inside img.onload before React rendered the <img src>, causing a broken image; now only revoked on error' },
+        ]
+    },
+    {
         version: '2.2.5',
         date: '2026-04-23',
         changes: [
