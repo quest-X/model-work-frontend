@@ -15,6 +15,7 @@ import { connect } from 'react-redux';
 import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { LabelMeExporter } from '../../../logic/export/labelme/LabelMeExporter';
 import { YOLOPackExporter } from '../../../logic/export/yolo/YOLOPackExporter';
+import { ImageData } from '../../../store/labels/types';
 
 export type ExportMode = 'simple' | 'complete';
 type ExportTarget = 'labelme' | 'yolo';
@@ -22,13 +23,28 @@ type ExportTarget = 'labelme' | 'yolo';
 interface IProps {
     activeLabelType: LabelType;
     language: Language;
+    imagesData: ImageData[];
 }
 
-const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
+const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language, imageData }) => {
     const currentTexts = LanguageConfig[language];
     const exportTexts = currentTexts.popups.exportAnnotations;
-    const effectiveLabelType = activeLabelType === LabelType.ALL ? LabelType.RECT : activeLabelType;
-    const [labelType, setLabelType] = useState(effectiveLabelType);
+
+    const hasRects = imagesData.some(img => img.labelRects.length > 0);
+    const hasPolygons = imagesData.some(img => img.labelPolygons.length > 0);
+    const allowedLabelTypes: LabelType[] = [];
+    if (hasRects) allowedLabelTypes.push(LabelType.RECT);
+    if (hasPolygons) allowedLabelTypes.push(LabelType.POLYGON);
+
+    const resolveInitialType = (): LabelType => {
+        if (activeLabelType !== LabelType.ALL && activeLabelType !== LabelType.RECT && activeLabelType !== LabelType.POLYGON)
+            return activeLabelType;
+        if (hasPolygons && !hasRects) return LabelType.POLYGON;
+        if (hasRects || !hasPolygons) return LabelType.RECT;
+        return activeLabelType === LabelType.ALL ? LabelType.RECT : activeLabelType;
+    };
+
+    const [labelType, setLabelType] = useState(resolveInitialType());
     const [exportFormatType, setExportFormatType] = useState<AnnotationFormatType>(null);
     const [exportTarget, setExportTarget] = useState<ExportTarget>('labelme');
     const [exportMode, setExportMode] = useState<ExportMode>('complete');
@@ -136,13 +152,15 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
             rejectLabel={exportTexts.rejectButton}
             onReject={onReject}
             renderInternalContent={renderInternalContent}
+            allowedLabelTypes={allowedLabelTypes.length > 0 ? allowedLabelTypes : undefined}
         />
     );
 };
 
 const mapStateToProps = (state: AppState) => ({
     activeLabelType: state.labels.activeLabelType,
-    language: state.general.language
+    language: state.general.language,
+    imageData: state.labels.imagesData,
 });
 
 export default connect(mapStateToProps, {})(ExportLabelPopup);

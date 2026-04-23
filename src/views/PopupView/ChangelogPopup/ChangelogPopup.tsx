@@ -16,6 +16,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.2.5',
+        date: '2026-04-23',
+        changes: [
+            { zh: '【性能】消除批量推理 dispatch storm：检测与分割路径的 applySingleResult() 中，fullRender() 改为仅在当前展示帧完成时触发（原：每帧一次 → 修复后：批量期间 0-1 次），大幅降低主线程压力', en: '[Perf] Eliminate batch inference dispatch storm: in both detection and segmentation applySingleResult(), fullRender() now only fires when the currently displayed frame finishes inference (was: once per frame → now: 0-1 times during a batch), dramatically reducing main-thread pressure' },
+            { zh: '【性能】updateActiveLabelViewType/Type 移出热路径：原每帧 dispatch 一次改为批量开始前统一设置一次，100帧批量节省约 200 次 Redux dispatch', en: '[Perf] updateActiveLabelViewType/Type moved out of the hot path: was dispatched once per frame, now set once before the concurrency loop — saves ~200 Redux dispatches per 100-frame batch' },
+            { zh: '【性能】EditorContainer 批量完成检测改为事件驱动：原 setInterval(1000ms) 轮询改为监听 batchInferenceComplete CustomEvent，消除周期性唤醒', en: "[Perf] EditorContainer batch-completion detection changed to event-driven: replaced setInterval(1000ms) polling with a 'batchInferenceComplete' CustomEvent listener, eliminating periodic wakeups" },
+            { zh: '【性能】InferenceResultsView 加入 shallowEqual：避免非当前帧的推理结果写入触发不必要的 re-render', en: '[Perf] InferenceResultsView now uses shallowEqual in connect(): prevents unnecessary re-renders triggered by inference results from non-active frames' },
+        ]
+    },
+    {
         version: '2.2.4',
         date: '2026-04-23',
         changes: [

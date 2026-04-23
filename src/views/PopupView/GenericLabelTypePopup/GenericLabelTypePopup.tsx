@@ -22,6 +22,7 @@ interface IProps {
     onReject: (labelType: LabelType) => any;
     renderInternalContent: (labelType: LabelType) => any;
     language: Language;
+    allowedLabelTypes?: LabelType[];
 }
 
 const GenericLabelTypePopup: React.FC<IProps> = (
@@ -37,7 +38,8 @@ const GenericLabelTypePopup: React.FC<IProps> = (
         rejectLabel,
         onReject,
         renderInternalContent,
-        language
+        language,
+        allowedLabelTypes,
     }) => {
 
     const [labelType, setLabelType] = useState(activeLabelType);
@@ -45,7 +47,13 @@ const GenericLabelTypePopup: React.FC<IProps> = (
     const getSidebarButtons = () => {
         const labelToolkitData = getLabelToolkitData(language);
         return labelToolkitData
-            .filter((label: ILabelToolkit) => label.projectType === projectType && label.labelType !== LabelType.ALL && label.labelType !== LabelType.POINT && label.labelType !== LabelType.LINE)
+            .filter((label: ILabelToolkit) =>
+                label.projectType === projectType &&
+                label.labelType !== LabelType.ALL &&
+                label.labelType !== LabelType.POINT &&
+                label.labelType !== LabelType.LINE &&
+                (!allowedLabelTypes || allowedLabelTypes.includes(label.labelType))
+            )
             .map((label: ILabelToolkit) => {
                 return <ImageButton
                     key={label.labelType}

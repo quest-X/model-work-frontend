@@ -581,7 +581,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 selectFormat: '选择您要用于导出标注的文件格式。',
                 labelmePackageButton: 'LabelMe 标注包',
                 labelmePackageDesc: 'LabelMe格式 · 含原图 · 支持二次标注',
-                yoloPackageButton: 'YOLO 训练包',
+                yoloPackageButton: 'YOLO 训练集',
                 yoloPackageDesc: 'YOLO格式 · 含原图 · 检测/分割训练集'
             },
             importAnnotations: {
@@ -1030,7 +1030,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 selectFormat: 'Select file format you would like to use to export annotations.',
                 labelmePackageButton: 'LabelMe Package',
                 labelmePackageDesc: 'LabelMe format · with images · for re-annotation',
-                yoloPackageButton: 'YOLO Training Pack',
+                yoloPackageButton: 'YOLO Dataset',
                 yoloPackageDesc: 'YOLO format · with images · detection/segmentation dataset'
             },
             importAnnotations: {
