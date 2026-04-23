@@ -99,13 +99,17 @@ export class IndexedDBManager {
                 ...projectData,
                 id: this.PROJECT_ID,
                 lastModified: Date.now(),
-                version: '2.1.0'
+                version: '2.2.3'
             };
-            
+
             const request = store.put(saveData);
-            
+
+            transaction.onabort = () => {
+                console.error('[IDB] saveProject transaction aborted:', transaction.error);
+                resolve(false);
+            };
+
             request.onsuccess = () => {
-                // 静默保存
                 resolve(true);
             };
             
@@ -127,7 +131,12 @@ export class IndexedDBManager {
             const transaction = this.db.transaction([this.STORE_NAME], 'readonly');
             const store = transaction.objectStore(this.STORE_NAME);
             const request = store.get(this.PROJECT_ID);
-            
+
+            transaction.onabort = () => {
+                console.error('[IDB] loadProject transaction aborted:', transaction.error);
+                resolve(null);
+            };
+
             request.onsuccess = () => {
                 if (request.result) {
                     console.log('从IndexedDB加载项目数据成功');
@@ -162,6 +171,10 @@ export class IndexedDBManager {
             const transaction = this.db.transaction([this.STORE_NAME], 'readonly');
             const store = transaction.objectStore(this.STORE_NAME);
             const request = store.get(this.PROJECT_ID);
+            transaction.onabort = () => {
+                console.error('[IDB] getProjectMeta transaction aborted:', transaction.error);
+                resolve(null);
+            };
             request.onsuccess = () => {
                 const r = request.result;
                 if (!r) { resolve(null); return; }
@@ -200,7 +213,12 @@ export class IndexedDBManager {
             const transaction = this.db.transaction([this.STORE_NAME], 'readwrite');
             const store = transaction.objectStore(this.STORE_NAME);
             const request = store.delete(this.PROJECT_ID);
-            
+
+            transaction.onabort = () => {
+                console.error('[IDB] clearProject transaction aborted:', transaction.error);
+                resolve(false);
+            };
+
             request.onsuccess = () => {
                 console.log('项目数据已从IndexedDB清除');
                 resolve(true);
