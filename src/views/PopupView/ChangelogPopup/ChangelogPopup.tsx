@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.2.1',
+        date: '2026-04-23',
+        changes: [
+            { zh: '【UI】标签下拉菜单新增标注数量统计：每个标签名右侧显示 (x/y, z%)，x 为该标签总标注数，y 为所有标签总标注数，z 为百分比；遍历全部 imagesData 的 rect/polygon/point/line 实时计算', en: '[UI] Label dropdown shows per-label annotation count: each option displays (x/y, z%) where x is the label\'s total annotation count across all images, y is the grand total, and z is the percentage; computed live from all imagesData rect/polygon/point/line arrays' },
+            { zh: '【UI】标签下拉菜单：最近一次使用的标签固定置顶，灰色细线分隔，分割线以下按原有使用频次排序', en: '[UI] Label dropdown: the most recently used label is pinned to the top, separated from the rest by a subtle gray divider line; items below the divider retain the original recency-based sort order' },
+            { zh: '【UI】模型下拉菜单固定顺序：自定义 → 检测模型 → 分割模型', en: '[UI] Model dropdown order fixed: Custom → Detection → Segmentation' },
+        ]
+    },
+    {
         version: '2.2.0',
         date: '2026-04-22',
         changes: [
