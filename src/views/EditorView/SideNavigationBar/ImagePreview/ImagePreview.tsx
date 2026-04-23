@@ -135,7 +135,7 @@ class ImagePreview extends React.Component<IProps, IState> {
             const objectUrl = URL.createObjectURL(blob);
             const img = new Image();
             img.onload = () => {
-                URL.revokeObjectURL(objectUrl);
+                // 不撤销 objectUrl：img.src 仍指向它，撤销后渲染会显示破图"?"
                 this.saveLoadedImage(img, imageData);
             };
             img.onerror = () => {
