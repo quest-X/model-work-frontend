@@ -60,6 +60,11 @@ export class LabelMeExporter {
         if (mode === 'simple') {
             zip.generateAsync({ type: 'blob' }).then((blob: Blob) => {
                 saveAs(blob, `${folderName}.zip`);
+            }).catch((err: Error) => {
+                submitNewNotification(NotificationUtil.createErrorNotification({
+                    header: '导出失败',
+                    description: err?.message || '生成压缩包时出错，请重试。'
+                }));
             });
             return;
         }

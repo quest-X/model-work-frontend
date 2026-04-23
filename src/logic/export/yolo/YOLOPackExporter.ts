@@ -104,6 +104,11 @@ export class YOLOPackExporter {
             zip.file(`${folderName}/labels.txt`, labelNames.map(l => l.name).join('\n'));
             zip.generateAsync({type: 'blob'}).then((blob: Blob) => {
                 saveAs(blob, `${folderName}.zip`);
+            }).catch((err: Error) => {
+                submitNewNotification(NotificationUtil.createErrorNotification({
+                    header: '导出失败',
+                    description: err?.message || '生成压缩包时出错，请重试。'
+                }));
             });
             return;
         }
