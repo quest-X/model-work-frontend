@@ -50,7 +50,7 @@ export class LabelMeExporter {
             const height = videoSize?.height ?? 0;
             zip.file(
                 `${folderName}/${imageData.fileData.name.replace(/\.[^/.]+$/, '')}.json`,
-                JSON.stringify({ version: '5.10.1', flags: {}, shapes, imagePath: imageData.fileData.name, imageHeight: height, imageWidth: width }, null, 2)
+                JSON.stringify({ version: '5.10.1', flags: {}, shapes, imagePath: imageData.fileData.name, imageData: null, imageHeight: height, imageWidth: width }, null, 2)
             );
             fileCount++;
         });
