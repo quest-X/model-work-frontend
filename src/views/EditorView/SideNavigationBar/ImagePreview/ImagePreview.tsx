@@ -11,6 +11,8 @@ import { updateImageDataById, deleteImageById, deleteSelectedImages } from "../.
 import { ImageData } from "../../../../store/labels/types";
 import { FileUtil } from "../../../../utils/FileUtil";
 import { RectUtil } from "../../../../utils/RectUtil";
+import { EditorModel } from "../../../../staticModels/EditorModel";
+import { FrameExtractorService } from "../../../../services/FrameExtractorService";
 import './ImagePreview.scss';
 import { CSSHelper } from "../../../../logic/helpers/CSSHelper";
 
@@ -104,11 +106,45 @@ class ImagePreview extends React.Component<IProps, IState> {
             )) {
                 return;
             }
+            // 0字节占位文件 = on-demand 视频帧 → 从后端按需拉取缩略图
+            if (imageData.fileData && imageData.fileData.size === 0) {
+                this.loadVideoFrameThumbnail(imageData);
+                return;
+            }
             this.isLoading = true;
             const saveLoadedImagePartial = (image: HTMLImageElement) => this.saveLoadedImage(image, imageData);
             FileUtil.loadImage(imageData.fileData)
                 .then((image: HTMLImageElement) => saveLoadedImagePartial(image))
                 .catch((error) => this.handleLoadImageError(imageData, error))
+        }
+    };
+
+    private loadVideoFrameThumbnail = async (imageData: ImageData) => {
+        const sessionId = EditorModel.videoSessionId;
+        if (!sessionId || this.isLoading) return;
+
+        const match = imageData.fileData?.name?.match(/frame_(\d+)/);
+        if (!match) return;
+        const frameIdx = parseInt(match[1], 10);
+
+        this.isLoading = true;
+        try {
+            const frames = await FrameExtractorService.fetchFrameRange(sessionId, frameIdx, 1);
+            if (!frames || frames.length === 0) { this.isLoading = false; return; }
+            const blob = frames[0] as Blob;
+            const objectUrl = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = () => {
+                URL.revokeObjectURL(objectUrl);
+                this.saveLoadedImage(img, imageData);
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(objectUrl);
+                this.handleLoadImageError();
+            };
+            img.src = objectUrl;
+        } catch {
+            this.isLoading = false;
         }
     };
 
