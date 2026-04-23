@@ -10,7 +10,6 @@ import {updateActiveLabelId} from '../../../store/labels/actionCreators';
 import {LabelActions} from '../../../logic/actions/LabelActions';
 import {EditorActions} from '../../../logic/actions/EditorActions';
 import {EditorModel} from '../../../staticModels/EditorModel';
-import {FrameExtractorService} from '../../../services/FrameExtractorService';
 
 // 把 labelPolygons（分割标注）映射成展示用结构，兜底 segmentationResults Map 为空的情况
 // 返回 shape 与 SegmentationAPIDetector.convertToUnifiedFormat 一致
@@ -362,8 +361,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
     const resultCount = displayResults.length;
     const imageId = activeImageData?.id;
 
-    /** 从 CanvasImageSource 裁剪 bbox 区域并返回 dataURL */
-    const cropToDataURL = (source: CanvasImageSource, result: SegmentationResult): string => {
+    const cropFromSource = (source: CanvasImageSource, result: SegmentationResult): string => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         if (!ctx) return '';
@@ -400,7 +398,9 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         } else {
             ctx.drawImage(source, x1, y1, bw, bh, 0, 0, size, size);
         }
-        return canvas.toDataURL();
+        const url = canvas.toDataURL();
+        // toDataURL returns "data:," for a 0×0 canvas — treat as failure
+        return url && url !== 'data:,' ? url : '';
     };
 
     React.useEffect(() => {
@@ -412,49 +412,42 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
             if (generatedSetRef.current.has(key)) return;
             generatedSetRef.current.add(key);
 
-            const fileData = activeImageData?.fileData;
-            const isOnDemandFrame = fileData instanceof File && fileData.size === 0 && !!EditorModel.videoSessionId;
+            const trySource = (): CanvasImageSource | null => {
+                const vfi = EditorModel.videoFrameImage;
+                if (vfi && (vfi.naturalWidth > 0 || vfi.width > 0)) return vfi;
+                const vc = document.querySelector('.VideoCanvas') as HTMLCanvasElement;
+                if (vc && vc.width > 0) return vc;
+                return null;
+            };
 
-            // on-demand mode: fetch the frame blob from backend (reliable, no race with videoFrameImage)
-            if (isOnDemandFrame) {
-                try {
-                    const match = fileData.name?.match(/frame_(\d+)/);
-                    if (!match) return;
-                    const frameIdx = parseInt(match[1], 10);
-                    const frames = await FrameExtractorService.fetchFrameRange(EditorModel.videoSessionId, frameIdx, 1);
-                    if (!frames || frames.length === 0) return;
-                    const blob = frames[0] as Blob;
-                    const objectUrl = URL.createObjectURL(blob);
-                    const img = new Image();
-                    await new Promise<void>((res, rej) => {
-                        img.onload = () => res();
-                        img.onerror = () => rej();
-                        img.src = objectUrl;
-                    });
-                    const url = cropToDataURL(img, result);
-                    URL.revokeObjectURL(objectUrl);
-                    if (url && imageId === lastImageIdRef.current) {
-                        setThumbnails(prev => ({...prev, [index]: url}));
-                    }
-                } catch { /* silent */ }
-                return;
-            }
-
-            // video mode (pre-extracted frames): use videoFrameImage or VideoCanvas
-            const vc = document.querySelector('.VideoCanvas') as HTMLCanvasElement;
-            const source: CanvasImageSource | null = EditorModel.videoFrameImage || (vc && vc.width > 0 ? vc : null);
-
+            // 尝试同步裁剪（零延迟）
+            let source = trySource();
             if (source) {
                 try {
-                    const url = cropToDataURL(source, result);
+                    const url = cropFromSource(source, result);
                     if (url && imageId === lastImageIdRef.current) {
                         setThumbnails(prev => ({...prev, [index]: url}));
+                        return;
                     }
                 } catch { /* silent */ }
-                return;
             }
 
-            // 普通图片模式
+            // videoFrameImage 还没就绪（on-demand 异步加载中）：稍后重试一次
+            if (!source) {
+                await new Promise(r => setTimeout(r, 400));
+                source = trySource();
+                if (source) {
+                    try {
+                        const url = cropFromSource(source, result);
+                        if (url && imageId === lastImageIdRef.current) {
+                            setThumbnails(prev => ({...prev, [index]: url}));
+                            return;
+                        }
+                    } catch { /* silent */ }
+                }
+            }
+
+            // 最终回退：普通图片模式
             const url = await generateThumbnail(result);
             if (url && imageId === lastImageIdRef.current) {
                 setThumbnails(prev => ({...prev, [index]: url}));
