@@ -171,11 +171,9 @@ export class ProjectRestoreService {
             }
             
             // 设置当前图像索引，确保在有效范围内
-            const validImageIndex = Math.min(
-                Math.max(0, storedProject.currentImageIndex), 
-                restoredImages.length - 1
-            );
-            store.dispatch(updateActiveImageIndex(validImageIndex));
+            const validIdx = Math.max(0, Math.min(storedProject.currentImageIndex, restoredImages.length - 1));
+            store.dispatch(updateActiveImageIndex(validIdx));
+            // Note: if frames were filtered out, validIdx may point to a different frame than originally viewed.
             
             onProgress?.('恢复完成');
             console.log('项目恢复成功:', {
