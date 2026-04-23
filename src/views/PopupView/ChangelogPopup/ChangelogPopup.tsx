@@ -23,6 +23,9 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '【性能】updateActiveLabelViewType/Type 移出热路径：原每帧 dispatch 一次改为批量开始前统一设置一次，100帧批量节省约 200 次 Redux dispatch', en: '[Perf] updateActiveLabelViewType/Type moved out of the hot path: was dispatched once per frame, now set once before the concurrency loop — saves ~200 Redux dispatches per 100-frame batch' },
             { zh: '【性能】EditorContainer 批量完成检测改为事件驱动：原 setInterval(1000ms) 轮询改为监听 batchInferenceComplete CustomEvent，消除周期性唤醒', en: "[Perf] EditorContainer batch-completion detection changed to event-driven: replaced setInterval(1000ms) polling with a 'batchInferenceComplete' CustomEvent listener, eliminating periodic wakeups" },
             { zh: '【性能】InferenceResultsView 加入 shallowEqual：避免非当前帧的推理结果写入触发不必要的 re-render', en: '[Perf] InferenceResultsView now uses shallowEqual in connect(): prevents unnecessary re-renders triggered by inference results from non-active frames' },
+            { zh: '【改进】后处理分割参数按常用度重新排序：最小面积 → 抽稀 epsilon → 最大顶点数 → 膨胀半径 → 仅保留最大', en: '[Improve] Segmentation post-process params reordered by usage frequency: min area → epsilon → max points → dilate → largest only' },
+            { zh: '【重命名】导出面板"YOLO 训练包"→"YOLO 训练集"（英文 "YOLO Training Pack" → "YOLO Dataset"）', en: '[Rename] Export panel "YOLO Training Pack" renamed to "YOLO Dataset"' },
+            { zh: '【改进】导出标注弹窗根据实际标签类型隐藏无关 tab：仅有检测框时隐藏多边形选项，仅有多边形时隐藏检测框选项', en: '[Improve] Export popup hides irrelevant label-type tabs: polygon tab hidden when only rect labels exist, and vice versa' },
         ]
     },
     {

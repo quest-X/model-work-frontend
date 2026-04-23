@@ -26,7 +26,7 @@ interface IProps {
     imagesData: ImageData[];
 }
 
-const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language, imageData }) => {
+const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language, imagesData }) => {
     const currentTexts = LanguageConfig[language];
     const exportTexts = currentTexts.popups.exportAnnotations;
 
@@ -160,7 +160,7 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language, imageDa
 const mapStateToProps = (state: AppState) => ({
     activeLabelType: state.labels.activeLabelType,
     language: state.general.language,
-    imageData: state.labels.imagesData,
+    imagesData: state.labels.imagesData,
 });
 
 export default connect(mapStateToProps, {})(ExportLabelPopup);
