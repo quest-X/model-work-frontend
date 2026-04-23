@@ -80,7 +80,13 @@ export class TrackingAPIService {
                         if (!line) continue;
                         let msg: any;
                         try { msg = JSON.parse(line); }
-                        catch { continue; }
+                        catch {
+                            if (line.startsWith('{')) {
+                                cb.onError(new Error(`Malformed tracking response: ${line.slice(0, 100)}`));
+                                return;
+                            }
+                            continue;
+                        }
                         if (msg.error) { cb.onError(new Error(msg.error)); return; }
                         if (msg.done) { cb.onDone(msg.total ?? 0); return; }
                         if (typeof msg.frame_idx === 'number') {
