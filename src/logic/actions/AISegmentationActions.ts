@@ -158,6 +158,12 @@ export class AISegmentationActions {
             const inferStartTime = Date.now();
             console.log('[Segment] Streaming start', { captureTotal, concurrency: 4 });
 
+            // 批量推理前统一设置标签视图（避免对每帧 dispatch 一次）
+            store.dispatch(updateActiveLabelViewType(LabelType.POLYGON));
+            if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
+                store.dispatch(updateActiveLabelType(LabelType.POLYGON));
+            }
+
             const tasks = capturedBlobs.map((blob, i) => {
                 return async (): Promise<SegmentationResult[] | null> => {
                     if (!blob) {
@@ -198,6 +204,12 @@ export class AISegmentationActions {
                 ? imagesToSegment.filter(img => !img.labelPolygons.some(p => p.isCreatedByAI))
                 : imagesToSegment;
             successCount = total - imageQueue.length;
+
+            // 批量推理前统一设置标签视图（避免对每帧 dispatch 一次）
+            store.dispatch(updateActiveLabelViewType(LabelType.POLYGON));
+            if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
+                store.dispatch(updateActiveLabelType(LabelType.POLYGON));
+            }
 
             const imageTasks = imageQueue.map((imageData) => async (): Promise<SegmentationResult[] | null> => {
                 try {
@@ -243,6 +255,7 @@ export class AISegmentationActions {
 
         if (successCount > 2) {
             EditorModel.lastBatchInferenceImageCount = successCount;
+            window.dispatchEvent(new CustomEvent('batchInferenceComplete', { detail: { count: successCount } }));
         }
 
         EditorActions.fullRender();
@@ -307,15 +320,6 @@ export class AISegmentationActions {
                 labelPolygons: [...currentImg.labelPolygons, ...newPolygons]
             };
             store.dispatch(updateImageDataById(imageData.id, updatedImg));
-            // 批量推理后自动切到分割视图（view + tool 同步）；智能标注路径让用户自己控制视图
-            // （智能标注是连续交互，每次点击都抢视图会打断用户的节奏）
-            if (source === 'batch') {
-                store.dispatch(updateActiveLabelViewType(LabelType.POLYGON));
-                // 橡皮擦激活时不强制切换工具，避免中断用户的擦除操作
-                if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
-                    store.dispatch(updateActiveLabelType(LabelType.POLYGON));
-                }
-            }
         }
 
         // 智能标注是一次性 prompt 推理，不该污染推理结果面板和历史
@@ -326,6 +330,11 @@ export class AISegmentationActions {
         }
         // 注：smart 路径不再需要手动设 segmentationLabelsVisible=true —— reducer lazy-init 默认就是 true
 
-        EditorActions.fullRender();
+        // 仅当推理帧正是当前展示帧时才刷新，避免批量推理中对每帧都重绘
+        const activeIdx = store.getState().labels.activeImageIndex;
+        const activeImgId = store.getState().labels.imagesData[activeIdx]?.id;
+        if (activeImgId === imageData.id) {
+            EditorActions.fullRender();
+        }
     }
 }
