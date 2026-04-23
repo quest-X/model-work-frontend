@@ -105,19 +105,19 @@ export class LabelMeImporter extends AnnotationImporter {
                 if (shape.shape_type === 'rectangle' && this.labelType.includes(LabelType.RECT)) {
                     const [[x1, y1], [x2, y2]] = shape.points;
                     const rect: IRect = { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
-                    imgData.labelRects.push(LabelUtil.createLabelRect(labelId, rect));
+                    imgData.labelRects.push({ ...LabelUtil.createLabelRect(labelId, rect), isCreatedByAI: true });
                 }
 
                 if (shape.shape_type === 'polygon' && this.labelType.includes(LabelType.POLYGON)) {
                     const vertices: IPoint[] = shape.points.map(([x, y]) => ({ x, y }));
-                    imgData.labelPolygons.push(LabelUtil.createLabelPolygon(labelId, vertices));
+                    imgData.labelPolygons.push({ ...LabelUtil.createLabelPolygon(labelId, vertices), isCreatedByAI: true });
                 }
 
                 // mask: import bounding box as rect when in rect mode
                 if (shape.shape_type === 'mask' && shape.points.length >= 2 && this.labelType.includes(LabelType.RECT)) {
                     const [[x1, y1], [x2, y2]] = shape.points;
                     const rect: IRect = { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
-                    imgData.labelRects.push(LabelUtil.createLabelRect(labelId, rect));
+                    imgData.labelRects.push({ ...LabelUtil.createLabelRect(labelId, rect), isCreatedByAI: true });
                 }
             }
         }

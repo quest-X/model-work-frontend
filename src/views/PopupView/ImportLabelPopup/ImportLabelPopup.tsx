@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import './ImportLabelPopup.scss';
 import { LabelType } from '../../../data/enums/LabelType';
+import { EditorModel } from '../../../staticModels/EditorModel';
 import { PopupActions } from '../../../logic/actions/PopupActions';
 import { AppState } from '../../../store';
 import { connect } from 'react-redux';
@@ -361,6 +362,16 @@ const ImportLabelPopup: React.FC<IProps> = ({
             }
             updateLabelNamesAction(loadedLabelNames);
             updateActiveLabelTypeAction(labelType);
+
+            // 导入后若有 AI 标注（isCreatedByAI），触发统计面板自动展开
+            const annotatedCount = loadedImageData.filter(img =>
+                img.labelRects.some(r => r.isCreatedByAI) ||
+                img.labelPolygons.some(p => p.isCreatedByAI)
+            ).length;
+            if (annotatedCount > 0) {
+                EditorModel.lastBatchInferenceImageCount = annotatedCount;
+            }
+
             PopupActions.close();
         }
     };
