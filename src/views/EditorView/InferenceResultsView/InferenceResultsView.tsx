@@ -260,8 +260,10 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         const fileData = activeImageData.fileData;
         const isVideo = fileData.type?.startsWith('video/') ||
             /\.(mp4|webm|mov|avi|mkv)$/i.test(fileData.name || '');
+        // on-demand frames: 0-byte placeholder with image/jpeg type
+        const isOnDemandFrame = fileData instanceof File && fileData.size === 0 && !!EditorModel.videoSessionId;
 
-        if (isVideo) {
+        if (isVideo || isOnDemandFrame) {
             // 视频帧缩略图：需要原始分辨率的图像源（检测坐标在原始分辨率空间）
             // 优先级：videoFrameImage（原始分辨率 Image）→ VideoCanvas（FramePlayer canvas，原始分辨率）→ <video>
             return new Promise<string>((resolve) => {
