@@ -29,7 +29,7 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '【UI】操作菜单顺序：上传文件移至编辑标签前，符合先上传再标注的操作流', en: '[UI] Actions menu reordered: Upload Files moved before Edit Labels to match the natural upload-first workflow' },
             { zh: '【UI】标签下拉菜单：最近使用标签置顶并用灰色分隔线隔开；计数格式改为 (x/y, z%) 浅灰显示', en: '[UI] Label dropdown: most recently used label pinned to top with a gray divider; count format changed to (x/y, z%) in light gray' },
             { zh: '【UI】模型下拉菜单排序固定：自定义 → 检测 → 分割，与工具栏顺序对齐', en: '[UI] Model dropdown order fixed: Custom → Detection → Segmentation' },
-        ]        ]
+        ]
     },
     {
         version: '2.2.0',
