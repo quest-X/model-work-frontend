@@ -70,11 +70,13 @@ export class COCOExporter {
         labelNames: LabelName[],
         projectName: string
     ): COCOObject {
+        const annotatedImages = imagesData
+            .filter(d => d.loadStatus && d.labelPolygons.length !== 0);
         return {
             "info": COCOExporter.getInfoComponent(projectName),
-            "images": COCOExporter.getImagesComponent(imagesData),
-            "annotations": COCOExporter.getAnnotationsComponent(imagesData, labelNames),
-            "categories":COCOExporter.getCategoriesComponent(labelNames)
+            "images": COCOExporter.getImagesComponent(annotatedImages),
+            "annotations": COCOExporter.getAnnotationsComponent(annotatedImages, labelNames),
+            "categories": COCOExporter.getCategoriesComponent(labelNames)
         }
     }
 
@@ -95,10 +97,9 @@ export class COCOExporter {
 
     public static getImagesComponent(imagesData: ImageData[]): COCOImage[] {
         return imagesData
-            .filter((imagesData: ImageData) => imagesData.loadStatus)
-            .filter((imagesData: ImageData) => imagesData.labelPolygons.length !== 0)
             .map((imageData: ImageData, index: number) => {
                 const image: HTMLImageElement = ImageRepository.getById(imageData.id);
+                if (!image) return null;
                 return {
                     "id": index + 1,
                     "width": image.width,
@@ -106,28 +107,25 @@ export class COCOExporter {
                     "file_name": imageData.fileData.name
                 }
             })
+            .filter((img): img is COCOImage => img !== null)
     }
 
     public static getAnnotationsComponent(imagesData: ImageData[], labelNames: LabelName[]): COCOAnnotation[] {
         const labelsMap: LabelDataMap = COCOExporter.mapLabelsData(labelNames);
         let id = 0;
-        const annotations: COCOAnnotation[][] = imagesData
-            .filter((imagesData: ImageData) => imagesData.loadStatus)
-            .filter((imagesData: ImageData) => imagesData.labelPolygons.length !== 0)
-            .map((imageData: ImageData, index: number) => {
-                return imageData.labelPolygons.map((labelPolygon: LabelPolygon) => {
-                    return {
-                        "id": id++,
-                        "iscrowd": 0,
-                        "image_id": index + 1,
-                        "category_id": labelsMap[labelPolygon.labelId],
-                        "segmentation": COCOExporter.getCOCOSegmentation(labelPolygon.vertices),
-                        "bbox": COCOExporter.getCOCOBbox(labelPolygon.vertices),
-                        "area": COCOExporter.getCOCOArea(labelPolygon.vertices)
-                    }
-                })
-            })
-        return flatten(annotations);
+        return imagesData.flatMap((imageData: ImageData, index: number) =>
+            imageData.labelPolygons
+                .filter((labelPolygon: LabelPolygon) => labelPolygon.labelId !== null)
+                .map((labelPolygon: LabelPolygon) => ({
+                    "id": id++,
+                    "iscrowd": 0,
+                    "image_id": index + 1,
+                    "category_id": labelsMap[labelPolygon.labelId],
+                    "segmentation": COCOExporter.getCOCOSegmentation(labelPolygon.vertices),
+                    "bbox": COCOExporter.getCOCOBbox(labelPolygon.vertices),
+                    "area": COCOExporter.getCOCOArea(labelPolygon.vertices)
+                }))
+        );
     }
 
     public static mapLabelsData(labelNames: LabelName[]): LabelDataMap {
@@ -143,6 +141,7 @@ export class COCOExporter {
     }
 
     public static getCOCOBbox(vertices: IPoint[]): COCOBBox {
+        if (vertices.length === 0) return [0, 0, 0, 0];
         let xMin: number = vertices[0].x;
         let xMax: number = vertices[0].x;
         let yMin: number = vertices[0].y;
@@ -157,6 +156,7 @@ export class COCOExporter {
     }
 
     public static getCOCOArea(vertices: IPoint[]): number {
+        if (vertices.length === 0) return 0;
         let area = 0;
         let j = vertices.length - 1;
         for (let  i = 0; i < vertices.length; i++) {
