@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.2.7',
+        date: '2026-04-23',
+        changes: [
+            { zh: '【修复】on-demand 视频模式推理卡片缩略图缺失：改回同步从内存 videoFrameImage 裁剪 bbox（零网络延迟），新增 naturalWidth > 0 校验和 "data:," 过滤防止显示破图', en: '[Fix] Inference card thumbnails missing in on-demand video mode: restored synchronous bbox crop from in-memory videoFrameImage (zero network latency), added naturalWidth > 0 guard and "data:," filter to prevent broken image display' },
+            { zh: '【修复】on-demand 视频模式单帧检测失败：0字节占位帧检测直接从后端按帧索引获取原始 blob 发送给推理 API，绕过 canvas 捕获（videoFrameImage 尺寸为 0 时 toBlob 返回 null）', en: '[Fix] Single-frame detection failure in on-demand video mode: 0-byte placeholder frames now fetch raw blob from backend by frame index and send directly to inference API, bypassing canvas capture (toBlob returned null when videoFrameImage had zero dimensions)' },
+            { zh: '【修复】视频帧侧边栏缩略图 blob URL 过早撤销：改为仅在加载失败时 revokeObjectURL，不再在 onload 内撤销（撤销后 <img src> 指向已失效 URL 显示破图）', en: '[Fix] Video frame sidebar thumbnail blob URL revoked too early: now only revokes on error path, no longer revokes in onload (revoking in onload caused <img src> to point to an invalid URL showing a broken image)' },
+        ]
+    },
+    {
         version: '2.2.6',
         date: '2026-04-23',
         changes: [
