@@ -318,7 +318,10 @@ const ImportLabelPopup: React.FC<IProps> = ({
                                     onAnnotationsLoadFailure(new Error('Cannot detect annotation format'));
                                     return;
                                 }
-                                setTimeout(() => doImport(annotationFiles, format), 500);
+                                // Wait for Redux to flush the addImageData dispatch before importing labels.
+                                // 800ms is a conservative budget for slow devices; a proper fix would use a
+                                // Redux subscription or Promise-based dispatch, but that requires a larger refactor.
+                                setTimeout(() => doImport(annotationFiles, format), 800);
                             } else {
                                 const format = zipFormat || detectFormatFromFiles(annotationFiles);
                                 if (!format) {
@@ -351,6 +354,7 @@ const ImportLabelPopup: React.FC<IProps> = ({
     });
 
     const onAccept = () => {
+        EditorModel.lastBatchInferenceImageCount = 0;
         if (loadedLabelNames.length !== 0 && loadedImageData.length !== 0) {
             // If loaded images have fileData (from full import), add them; otherwise update existing
             const hasNewImages = loadedImageData.some(d => d.fileData && d.id && !LabelsSelector.getImagesData().find(e => e.id === d.id));
@@ -377,6 +381,7 @@ const ImportLabelPopup: React.FC<IProps> = ({
     };
 
     const onReject = () => {
+        EditorModel.lastBatchInferenceImageCount = 0;
         PopupActions.close();
     };
 
