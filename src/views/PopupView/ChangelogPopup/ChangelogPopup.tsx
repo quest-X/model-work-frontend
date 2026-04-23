@@ -16,21 +16,6 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
-        version: '2.2.2',
-        date: '2026-04-23',
-        changes: [
-            { zh: '【功能】导出默认改为完整模式（含图片），原默认为仅标注的简单模式', en: '[Feature] Export defaults to complete mode (includes images); was previously labels-only simple mode' },
-            { zh: '【功能】YOLO 训练包支持重新导入平台：自动识别检测格式（5列：class cx cy w h）与分割格式（>5列：class x1 y1…）并还原为矩形框或多边形', en: '[Feature] YOLO training packs can be re-imported: auto-detects detection format (5 columns: class cx cy w h) vs segmentation format (>5 columns: class x1 y1…) and restores rects or polygons accordingly' },
-            { zh: '【功能】所有下拉菜单改为自定义实现：始终朝下展开，光标为默认样式，已选项在末尾显示勾号', en: '[Feature] All dropdowns replaced with custom implementation: always open downward, default cursor, selected item marked with ✓ at end' },
-            { zh: '【修复】弹窗内下拉菜单被 overflow:hidden 裁切：改用 position:fixed + getBoundingClientRect() 定位，下拉层完整显示在弹窗之上', en: '[Fix] Popup dropdowns clipped by overflow:hidden container: switched to position:fixed + getBoundingClientRect() so the dropdown renders above the popup stack' },
-            { zh: '【修复】模型管理弹窗编号圆圈对齐偏移：.ModelEntry 统一预留 border-left 空间，选中项仅改变边框颜色，不再产生水平偏移', en: '[Fix] Number badge misalignment in ManageAIModelsPopup: .ModelEntry always reserves border-left space; selection only changes border color with no layout shift' },
-            { zh: '【功能】分割后处理新增"修复自交多边形"开关：勾选后后端用 fillPoly→findContours 重采样轮廓消除自交（蝴蝶结形状），默认关闭以保留模型原始输出', en: '[Feature] Segmentation postprocess: new "Fix self-intersecting polygon" toggle — backend uses fillPoly→findContours to clean up bowtie artifacts; off by default to preserve raw model output' },
-            { zh: '【修复】快捷键 Esc 取消标注改用标准接口：矩形引擎新增 cancelLabelCreation()，替换原有 (as any).startCreateRectPoint = null 的类型规避写法', en: '[Fix] Esc cancel-annotation now uses a proper public API: RectRenderEngine gains cancelLabelCreation(), replacing the (as any).startCreateRectPoint = null workaround' },
-            { zh: '【修复】快捷键 Backspace 和 Delete 删除标签全平台兼容：原仅按系统平台注册其中一个键，现两个键均注册同一删除动作，Mac 和 Windows/Linux 均可用', en: '[Fix] Backspace and Delete both delete the active label on all platforms; previously only one key was registered per platform, so the other was silently ignored' },
-            { zh: '【修复】Backspace/Delete 删除多边形和折线无效：LabelActions.deleteImageLabelById 原仅处理 POINT 和 RECT，补入 POLYGON 和 LINE 分支', en: '[Fix] Backspace/Delete failed to delete polygons and lines: LabelActions.deleteImageLabelById handled only POINT and RECT; POLYGON and LINE cases now added' },
-        ]
-    },
-    {
         version: '2.2.3',
         date: '2026-04-23',
         changes: [
@@ -47,6 +32,21 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '【修复】追踪会话过期重传时 finalize() 提前调用：重传成功并发起重试前 finalize() 已删除进度通知，导致重传期间无 UI 反馈；改为重试路径中先完成 finalize 再启动新追踪，行为与之前一致但时序正确', en: '[Fix] Tracking session re-upload called finalize() before the retry started: finalize() deleted the progress notification before the re-upload completed, leaving no UI feedback during re-upload; finalize() is now called after the re-upload resolves, then startTracking fires synchronously' },
             { zh: '【修复】VGGExporter 返回类型不安全：mapPolygonToVGG / mapImageDataToVGGFileData / mapImageDataToVGG 返回类型标为非 null 但实际返回 null；三个函数返回类型均修正为 | null', en: '[Fix] VGGExporter unsafe null return types: mapPolygonToVGG / mapImageDataToVGGFileData / mapImageDataToVGG were typed as non-null but returned null; all three return types corrected to include | null' },
             { zh: '【修复】恢复后活跃图像索引越界：过滤 0 字节帧后 validStoredImages 长度可能小于原数组，storedProject.currentImageIndex 可能超出范围；现 clamp 到 [0, restoredImages.length - 1]', en: '[Fix] Active image index out of bounds after restore: filtering 0-byte frames can shorten validStoredImages below the stored currentImageIndex; the index is now clamped to [0, restoredImages.length - 1]' },
+        ]
+    },
+    {
+        version: '2.2.2',
+        date: '2026-04-23',
+        changes: [
+            { zh: '【功能】导出默认改为完整模式（含图片），原默认为仅标注的简单模式', en: '[Feature] Export defaults to complete mode (includes images); was previously labels-only simple mode' },
+            { zh: '【功能】YOLO 训练包支持重新导入平台：自动识别检测格式（5列：class cx cy w h）与分割格式（>5列：class x1 y1…）并还原为矩形框或多边形', en: '[Feature] YOLO training packs can be re-imported: auto-detects detection format (5 columns: class cx cy w h) vs segmentation format (>5 columns: class x1 y1…) and restores rects or polygons accordingly' },
+            { zh: '【功能】所有下拉菜单改为自定义实现：始终朝下展开，光标为默认样式，已选项在末尾显示勾号', en: '[Feature] All dropdowns replaced with custom implementation: always open downward, default cursor, selected item marked with ✓ at end' },
+            { zh: '【修复】弹窗内下拉菜单被 overflow:hidden 裁切：改用 position:fixed + getBoundingClientRect() 定位，下拉层完整显示在弹窗之上', en: '[Fix] Popup dropdowns clipped by overflow:hidden container: switched to position:fixed + getBoundingClientRect() so the dropdown renders above the popup stack' },
+            { zh: '【修复】模型管理弹窗编号圆圈对齐偏移：.ModelEntry 统一预留 border-left 空间，选中项仅改变边框颜色，不再产生水平偏移', en: '[Fix] Number badge misalignment in ManageAIModelsPopup: .ModelEntry always reserves border-left space; selection only changes border color with no layout shift' },
+            { zh: '【功能】分割后处理新增"修复自交多边形"开关：勾选后后端用 fillPoly→findContours 重采样轮廓消除自交（蝴蝶结形状），默认关闭以保留模型原始输出', en: '[Feature] Segmentation postprocess: new "Fix self-intersecting polygon" toggle — backend uses fillPoly→findContours to clean up bowtie artifacts; off by default to preserve raw model output' },
+            { zh: '【修复】快捷键 Esc 取消标注改用标准接口：矩形引擎新增 cancelLabelCreation()，替换原有 (as any).startCreateRectPoint = null 的类型规避写法', en: '[Fix] Esc cancel-annotation now uses a proper public API: RectRenderEngine gains cancelLabelCreation(), replacing the (as any).startCreateRectPoint = null workaround' },
+            { zh: '【修复】快捷键 Backspace 和 Delete 删除标签全平台兼容：原仅按系统平台注册其中一个键，现两个键均注册同一删除动作，Mac 和 Windows/Linux 均可用', en: '[Fix] Backspace and Delete both delete the active label on all platforms; previously only one key was registered per platform, so the other was silently ignored' },
+            { zh: '【修复】Backspace/Delete 删除多边形和折线无效：LabelActions.deleteImageLabelById 原仅处理 POINT 和 RECT，补入 POLYGON 和 LINE 分支', en: '[Fix] Backspace/Delete failed to delete polygons and lines: LabelActions.deleteImageLabelById handled only POINT and RECT; POLYGON and LINE cases now added' },
         ]
     },
     {
