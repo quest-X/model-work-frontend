@@ -31,7 +31,7 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language }) => {
     const [labelType, setLabelType] = useState(effectiveLabelType);
     const [exportFormatType, setExportFormatType] = useState<AnnotationFormatType>(null);
     const [exportTarget, setExportTarget] = useState<ExportTarget>('labelme');
-    const [exportMode, setExportMode] = useState<ExportMode>('simple');
+    const [exportMode, setExportMode] = useState<ExportMode>('complete');
 
     const isDetectionOrSegmentation = labelType === LabelType.RECT || labelType === LabelType.POLYGON;
     const zh = language === Language.CHINESE;

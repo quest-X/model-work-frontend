@@ -139,6 +139,7 @@
               cursor: pointer;
               color: white;
               border-bottom: solid 1px rgba(255, 255, 255, 0.1);
+              border-left: solid 3px transparent;
               transition: background-color 0.2s ease;
 
               &:hover {
@@ -147,7 +148,7 @@
 
               &.selected {
                 background-color: rgba(42, 245, 152, 0.1);
-                border-left: solid 3px $primaryColor;
+                border-left-color: $primaryColor;
               }
 
               .ModelIndex {

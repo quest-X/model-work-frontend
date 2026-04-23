@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PopupActions } from '../../../logic/actions/PopupActions';
 import { AppState } from '../../../store';
 import { connect } from 'react-redux';
@@ -50,6 +50,21 @@ const ModelEnginePopup: React.FC<IProps> = (
     const [modelType, setModelType] = useState<'detection' | 'segmentation'>('detection');
     const [apiKey, setApiKey] = useState(DEFAULT_API_KEY_BY_TYPE.detection);
     const [isConnecting, setIsConnecting] = useState(false);
+    const [modelTypeOpen, setModelTypeOpen] = useState(false);
+    const modelTypeRef = useRef<HTMLDivElement>(null);
+    const modelTypeTriggerRef = useRef<HTMLDivElement>(null);
+    const [modelTypePos, setModelTypePos] = useState({ top: 0, left: 0, width: 0 });
+
+    useEffect(() => {
+        if (!modelTypeOpen) return;
+        const handler = (e: MouseEvent) => {
+            if (modelTypeRef.current && !modelTypeRef.current.contains(e.target as Node)) {
+                setModelTypeOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [modelTypeOpen]);
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -256,33 +271,75 @@ const ModelEnginePopup: React.FC<IProps> = (
                             <label style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 4, display: 'block' }}>
                                 {currentTexts.popups.modelEngine.modelType}
                             </label>
-                            <select
-                                value={modelType}
-                                onChange={(e) => {
-                                    const newType = e.target.value as 'detection' | 'segmentation';
-                                    setModelType(newType);
-                                    setApiKey(DEFAULT_API_KEY_BY_TYPE[newType]);
-                                    setModelUrl(getDefaultBackendUrl(newType === 'detection' ? '/detect' : '/segment'));
-                                }}
-                                style={{
-                                    width: '100%',
-                                    background: 'transparent',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderBottom: '1px solid white',
-                                    fontSize: 14,
-                                    padding: '6px 0',
-                                    outline: 'none',
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                <option value="detection" style={{ background: '#333' }}>
-                                    {currentTexts.popups.modelEngine.taskTypeDetection}
-                                </option>
-                                <option value="segmentation" style={{ background: '#333' }}>
-                                    {currentTexts.popups.modelEngine.taskTypeSegmentation}
-                                </option>
-                            </select>
+                            <div ref={modelTypeRef} style={{ position: 'relative', width: '100%' }}>
+                                <div
+                                    ref={modelTypeTriggerRef}
+                                    onClick={() => {
+                                        if (!modelTypeOpen && modelTypeTriggerRef.current) {
+                                            const r = modelTypeTriggerRef.current.getBoundingClientRect();
+                                            setModelTypePos({ top: r.bottom + 2, left: r.left, width: r.width });
+                                        }
+                                        setModelTypeOpen(v => !v);
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        background: 'transparent',
+                                        color: 'white',
+                                        borderBottom: '1px solid white',
+                                        fontSize: 14,
+                                        padding: '6px 20px 6px 0',
+                                        cursor: 'default',
+                                        userSelect: 'none',
+                                        boxSizing: 'border-box',
+                                        position: 'relative',
+                                    }}
+                                >
+                                    {modelType === 'detection'
+                                        ? currentTexts.popups.modelEngine.taskTypeDetection
+                                        : currentTexts.popups.modelEngine.taskTypeSegmentation}
+                                    <span style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 9 }}>▼</span>
+                                </div>
+                                {modelTypeOpen && (
+                                    <div style={{
+                                        position: 'fixed',
+                                        top: modelTypePos.top,
+                                        left: modelTypePos.left,
+                                        width: modelTypePos.width,
+                                        zIndex: 9999,
+                                        background: '#2a2a2a',
+                                        border: '1px solid #555',
+                                        borderRadius: 4,
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                        overflow: 'hidden',
+                                    }}>
+                                        {(['detection', 'segmentation'] as const).map(t => (
+                                            <div
+                                                key={t}
+                                                onClick={() => {
+                                                    setModelType(t);
+                                                    setApiKey(DEFAULT_API_KEY_BY_TYPE[t]);
+                                                    setModelUrl(getDefaultBackendUrl(t === 'detection' ? '/detect' : '/segment'));
+                                                    setModelTypeOpen(false);
+                                                }}
+                                                style={{
+                                                    padding: '8px 12px',
+                                                    fontSize: 13,
+                                                    cursor: 'default',
+                                                    color: t === modelType ? '#fff' : '#ccc',
+                                                    background: t === modelType ? '#c62828' : 'transparent',
+                                                }}
+                                                onMouseEnter={ev => { if (t !== modelType) (ev.currentTarget as HTMLDivElement).style.background = '#3a3a3a'; }}
+                                                onMouseLeave={ev => { if (t !== modelType) (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                                            >
+                                                {t === 'detection'
+                                                    ? currentTexts.popups.modelEngine.taskTypeDetection
+                                                    : currentTexts.popups.modelEngine.taskTypeSegmentation}
+                                                {t === modelType ? ' ✓' : ''}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </FormControl>
                     </div>
                 </div>

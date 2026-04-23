@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useRef, useEffect} from 'react';
 import {connect} from 'react-redux';
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
 import {store} from '../../../index';
@@ -26,6 +26,21 @@ const PipelinePreprocessPopup: React.FC<IProps> = ({language}) => {
     const [imgsz, setImgsz] = useState<number>(initial.imgsz);
     const [imgszEnabled, setImgszEnabled] = useState<boolean>(initial.imgsz_enabled !== false);
     const [augment, setAugment] = useState<boolean>(initial.augment);
+    const [imgszOpen, setImgszOpen] = useState(false);
+    const imgszRef = useRef<HTMLDivElement>(null);
+    const imgszTriggerRef = useRef<HTMLDivElement>(null);
+    const [imgszPos, setImgszPos] = useState({ top: 0, left: 0, width: 0 });
+
+    useEffect(() => {
+        if (!imgszOpen) return;
+        const handler = (e: MouseEvent) => {
+            if (imgszRef.current && !imgszRef.current.contains(e.target as Node)) {
+                setImgszOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [imgszOpen]);
 
     const onAccept = () => {
         DetectionAPIDetector.setInferenceParams({imgsz, imgsz_enabled: imgszEnabled, augment, augment_enabled: augment});
@@ -67,10 +82,68 @@ const PipelinePreprocessPopup: React.FC<IProps> = ({language}) => {
                             )}
                         </div>
                     </div>
-                    <select value={imgsz} onChange={(e) => setImgsz(Number(e.target.value))}
-                        disabled={!imgszEnabled}>
-                        {IMGSZ_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
+                    <div ref={imgszRef} style={{ position: 'relative' }}>
+                        <div
+                            ref={imgszTriggerRef}
+                            onClick={() => {
+                                if (imgszEnabled) {
+                                    if (!imgszOpen && imgszTriggerRef.current) {
+                                        const r = imgszTriggerRef.current.getBoundingClientRect();
+                                        setImgszPos({ top: r.bottom + 2, left: r.left, width: r.width });
+                                    }
+                                    setImgszOpen(v => !v);
+                                }
+                            }}
+                            style={{
+                                background: '#333',
+                                color: imgszEnabled ? '#ccc' : '#666',
+                                border: '1px solid #555',
+                                borderRadius: 4,
+                                fontSize: 11,
+                                padding: '3px 22px 3px 8px',
+                                cursor: 'default',
+                                userSelect: 'none',
+                                position: 'relative',
+                                display: 'inline-block',
+                                minWidth: 60,
+                            }}
+                        >
+                            {imgsz}
+                            <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9 }}>▼</span>
+                        </div>
+                        {imgszOpen && imgszEnabled && (
+                            <div style={{
+                                position: 'fixed',
+                                top: imgszPos.top,
+                                left: imgszPos.left,
+                                width: imgszPos.width,
+                                zIndex: 9999,
+                                background: '#2a2a2a',
+                                border: '1px solid #555',
+                                borderRadius: 4,
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                overflow: 'hidden',
+                            }}>
+                                {IMGSZ_OPTIONS.map(v => (
+                                    <div
+                                        key={v}
+                                        onClick={() => { setImgsz(v); setImgszOpen(false); }}
+                                        style={{
+                                            padding: '5px 10px',
+                                            fontSize: 11,
+                                            cursor: 'default',
+                                            color: v === imgsz ? '#fff' : '#ccc',
+                                            background: v === imgsz ? '#c62828' : 'transparent',
+                                        }}
+                                        onMouseEnter={ev => { if (v !== imgsz) (ev.currentTarget as HTMLDivElement).style.background = '#3a3a3a'; }}
+                                        onMouseLeave={ev => { if (v !== imgsz) (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                                    >
+                                        {v}{v === imgsz ? ' ✓' : ''}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                     <div className='ParamDesc'>
                         {zh
                             ? '模型推理时的输入图像边长（正方形 letterbox）。越大精度越高但越慢；默认 640。'

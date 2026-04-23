@@ -33,16 +33,20 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
     const initialSeg = SegmentationAPIDetector.getPostprocessParams();
     const initialDet = DetectionAPIDetector.getPostprocessParams();
 
-    // 根据当前选中模型类型决定各参数的初始勾选状态：
-    // 选中分割模型 → 检测参数默认不勾选；选中检测模型 → 分割参数默认不勾选
-    const detActive = selectedModelTask !== 'segment'; // 非分割模型时检测参数激活
-    const segActive = selectedModelTask !== 'detect';  // 非检测模型时分割参数激活
+    // 多模型时只有当前 task 对应的 section 激活；单模型或未选 task 时两侧均激活
+    const isMultiModel = activeModelType === 'custom';
+    const detSectionActive = !isMultiModel || !selectedModelTask || selectedModelTask === 'detect';
+    const segSectionActive = !isMultiModel || !selectedModelTask || selectedModelTask === 'segment';
+
+    // 折叠状态：非激活 section 默认折叠
+    const [detCollapsed, setDetCollapsed] = useState<boolean>(!detSectionActive);
+    const [segCollapsed, setSegCollapsed] = useState<boolean>(!segSectionActive);
 
     // 检测后处理
     const [minBboxArea, setMinBboxArea] = useState<number>(initialDet.min_bbox_area);
     const [bboxPadding, setBboxPadding] = useState<number>(initialDet.bbox_padding);
-    const [minBboxAreaEnabled, setMinBboxAreaEnabled] = useState<boolean>(detActive && initialDet.min_bbox_area_enabled !== false);
-    const [bboxPaddingEnabled, setBboxPaddingEnabled] = useState<boolean>(detActive && initialDet.bbox_padding_enabled !== false);
+    const [minBboxAreaEnabled, setMinBboxAreaEnabled] = useState<boolean>(detSectionActive && initialDet.min_bbox_area_enabled !== false);
+    const [bboxPaddingEnabled, setBboxPaddingEnabled] = useState<boolean>(detSectionActive && initialDet.bbox_padding_enabled !== false);
 
     // 分割后处理
     const [epsilon, setEpsilon] = useState<number>(initialSeg.polygon_epsilon);
@@ -50,10 +54,10 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
     const [largestOnly, setLargestOnly] = useState<boolean>(initialSeg.largest_cc_only);
     const [maskDilate, setMaskDilate] = useState<number>(initialSeg.mask_dilate);
     const [maxPolygonPoints, setMaxPolygonPoints] = useState<number>(initialSeg.max_polygon_points);
-    const [epsilonEnabled, setEpsilonEnabled] = useState<boolean>(segActive && initialSeg.polygon_epsilon_enabled !== false);
-    const [minAreaEnabled, setMinAreaEnabled] = useState<boolean>(segActive && initialSeg.min_mask_area_enabled !== false);
-    const [maskDilateEnabled, setMaskDilateEnabled] = useState<boolean>(segActive && initialSeg.mask_dilate_enabled !== false);
-    const [maxPolygonPointsEnabled, setMaxPolygonPointsEnabled] = useState<boolean>(segActive && initialSeg.max_polygon_points_enabled !== false);
+    const [epsilonEnabled, setEpsilonEnabled] = useState<boolean>(segSectionActive && initialSeg.polygon_epsilon_enabled !== false);
+    const [minAreaEnabled, setMinAreaEnabled] = useState<boolean>(segSectionActive && initialSeg.min_mask_area_enabled !== false);
+    const [maskDilateEnabled, setMaskDilateEnabled] = useState<boolean>(segSectionActive && initialSeg.mask_dilate_enabled !== false);
+    const [maxPolygonPointsEnabled, setMaxPolygonPointsEnabled] = useState<boolean>(segSectionActive && initialSeg.max_polygon_points_enabled !== false);
 
     const onAccept = () => {
         DetectionAPIDetector.setPostprocessParams({
@@ -111,10 +115,14 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                 </div>
             )}
 
-            {showDet && <div className='ParamSection'>
-                <div className='ParamSectionTitle'>{zh ? '[ 检测参数 ]' : '[ Detection ]'}</div>
+            {showDet && <div className={`ParamSection${!detSectionActive ? ' section-inactive' : ''}`}>
+                <div className='ParamSectionTitle' onClick={() => setDetCollapsed(c => !c)}>
+                    {zh ? '[ 检测参数 ]' : '[ Detection ]'}
+                    <span className='SectionTitleLine' />
+                    <span className={`SectionChevron${!detCollapsed ? ' open' : ''}`}>▾</span>
+                </div>
 
-                {/* min_bbox_area */}
+                {!detCollapsed && <>{/* min_bbox_area */}
                 <div className={`ParamRow${!minBboxAreaEnabled ? ' param-disabled' : ''}`}>
                     <div className='ParamHeader'>
                         <label className='ParamLabelRow'>
@@ -136,7 +144,7 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                     <input type='number' min={0} step={100} value={minBboxArea}
                         disabled={!minBboxAreaEnabled}
                         onFocus={(e) => e.target.select()}
-                        onChange={(e) => setMinBboxArea(Math.max(0, Math.floor(Number(e.target.value) || 0)))} />
+                        onChange={(e) => { const v = Math.max(0, Math.floor(Number(e.target.value) || 0)); setMinBboxArea(v); e.target.value = String(v); }} />
                     <div className='ParamDesc'>
                         {zh
                             ? '过滤掉面积（宽×高）小于此阈值的检测框（像素²）。用来去除零散小目标。0 = 不过滤。'
@@ -174,12 +182,17 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                             : 'Expand each detection box outward by N pixels on all sides (clipped to image bounds). Useful for adding context around crops. 0 = off.'}
                     </div>
                 </div>
+                </>}
             </div>}
 
-            {showSeg && <div className='ParamSection'>
-                <div className='ParamSectionTitle'>{zh ? '[ 分割参数 ]' : '[ Segmentation ]'}</div>
+            {showSeg && <div className={`ParamSection${!segSectionActive ? ' section-inactive' : ''}`}>
+                <div className='ParamSectionTitle' onClick={() => setSegCollapsed(c => !c)}>
+                    {zh ? '[ 分割参数 ]' : '[ Segmentation ]'}
+                    <span className='SectionTitleLine' />
+                    <span className={`SectionChevron${!segCollapsed ? ' open' : ''}`}>▾</span>
+                </div>
 
-                {/* polygon_epsilon */}
+                {!segCollapsed && <>{/* polygon_epsilon */}
                 <div className={`ParamRow${!epsilonEnabled ? ' param-disabled' : ''}`}>
                     <div className='ParamHeader'>
                         <label className='ParamLabelRow'>
@@ -230,7 +243,7 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                     <input type='number' min={0} step={100} value={minArea}
                         disabled={!minAreaEnabled}
                         onFocus={(e) => e.target.select()}
-                        onChange={(e) => setMinArea(Math.max(0, Math.floor(Number(e.target.value) || 0)))} />
+                        onChange={(e) => { const v = Math.max(0, Math.floor(Number(e.target.value) || 0)); setMinArea(v); e.target.value = String(v); }} />
                     <div className='ParamDesc'>
                         {zh
                             ? '过滤掉面积小于此阈值的 mask（像素平方）。用来去除零散碎块。0 = 不过滤。'
@@ -239,7 +252,7 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                 </div>
 
                 {/* largest_cc_only */}
-                <div className='ParamRow'>
+                <div className={`ParamRow${!largestOnly ? ' param-disabled' : ''}`}>
                     <div className='ParamHeader'>
                         <label className='ParamLabelRow'>
                             <input type='checkbox' checked={largestOnly}
@@ -316,13 +329,14 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                     <input type='number' min={0} max={2000} step={10} value={maxPolygonPoints}
                         disabled={!maxPolygonPointsEnabled}
                         onFocus={(e) => e.target.select()}
-                        onChange={(e) => setMaxPolygonPoints(Math.max(0, Math.floor(Number(e.target.value) || 0)))} />
+                        onChange={(e) => { const v = Math.max(0, Math.floor(Number(e.target.value) || 0)); setMaxPolygonPoints(v); e.target.value = String(v); }} />
                     <div className='ParamDesc'>
                         {zh
                             ? '限制输出多边形的最大顶点数。使用自适应 RDP 算法压缩到指定点数以内，便于手动修改标签。0 = 不限制。建议值：50–200。'
                             : 'Limit the maximum number of polygon vertices. Uses adaptive RDP to reduce to the target count, making labels easier to edit. 0 = no limit. Suggested: 50–200.'}
                     </div>
                 </div>
+                </>}
             </div>}
 
             <div className='ResetRow'>

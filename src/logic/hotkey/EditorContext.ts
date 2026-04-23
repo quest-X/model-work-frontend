@@ -11,6 +11,7 @@ import {PlatformUtil} from "../../utils/PlatformUtil";
 import {LabelActions} from "../actions/LabelActions";
 import {LineRenderEngine} from "../render/LineRenderEngine";
 import {PolygonRenderEngine} from "../render/PolygonRenderEngine";
+import {RectRenderEngine} from "../render/RectRenderEngine";
 import {AutoSaveService} from "../../services/AutoSaveService";
 import {UndoActions} from "../actions/UndoActions";
 
@@ -46,7 +47,7 @@ export class EditorContext extends BaseContext {
                 if (EditorModel.supportRenderingEngine) {
                     switch (EditorModel.supportRenderingEngine.labelType) {
                         case LabelType.RECT:
-                            (EditorModel.supportRenderingEngine as any).startCreateRectPoint = null;
+                            (EditorModel.supportRenderingEngine as RectRenderEngine).cancelLabelCreation();
                             break;
                         case LabelType.LINE:
                             (EditorModel.supportRenderingEngine as LineRenderEngine).cancelLabelCreation();
@@ -112,7 +113,13 @@ export class EditorContext extends BaseContext {
             }
         },
         {
-            keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Backspace"] : ["Delete"],
+            keyCombo: ["Backspace"],
+            action: (event: KeyboardEvent) => {
+                LabelActions.deleteActiveLabel();
+            }
+        },
+        {
+            keyCombo: ["Delete"],
             action: (event: KeyboardEvent) => {
                 LabelActions.deleteActiveLabel();
             }

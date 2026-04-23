@@ -28,3 +28,4 @@ yarn-error.log*
 # model files
 *.pt
 server/models/
+.claude/

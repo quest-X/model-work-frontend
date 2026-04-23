@@ -1,11 +1,8 @@
 /**
  * 流水线激活状态 —— 单一真相源。
  *
- * 用户在「调用模型」的"流程参数"画布中把模块（前处理/推理/后处理）拖入
- * 画布代表激活；没拖的模块在推理时不参与参数下发，由后端使用默认值。
- *
- * 存储：localStorage，键 `pipeline.activatedStages`。
- * 默认：三个阶段都未激活 —— 新用户沿用后端默认行为，不受前端 UI 改动影响。
+ * 默认三阶段全部激活（不过滤），用户可在「调用模型」画布中拖出阶段来
+ * 临时跳过参数下发；状态不持久化，刷新后恢复默认全激活。
  */
 
 export type PipelineStage = 'preprocess' | 'inference' | 'postprocess';
@@ -16,10 +13,6 @@ export interface PipelineActivation {
     postprocess: boolean;
 }
 
-const STORAGE_KEY = 'pipeline.activatedStages';
-
-// 默认全激活 —— 新用户默认三阶段都走"下发前端参数",
-// 与老行为一致（popup 保存的值会被发到后端）。用户可主动移除阶段退到后端默认。
 export const DEFAULT_ACTIVATION: PipelineActivation = {
     preprocess: true,
     inference: true,
@@ -29,30 +22,7 @@ export const DEFAULT_ACTIVATION: PipelineActivation = {
 type Listener = (next: PipelineActivation) => void;
 const listeners = new Set<Listener>();
 
-function loadActivation(): PipelineActivation {
-    try {
-        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-        if (!raw) return { ...DEFAULT_ACTIVATION };
-        const parsed = JSON.parse(raw);
-        return {
-            preprocess: !!parsed.preprocess,
-            inference: !!parsed.inference,
-            postprocess: !!parsed.postprocess,
-        };
-    } catch {
-        return { ...DEFAULT_ACTIVATION };
-    }
-}
-
-let _activation: PipelineActivation = loadActivation();
-
-function persist() {
-    try {
-        if (typeof localStorage !== 'undefined') {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(_activation));
-        }
-    } catch { /* ignore */ }
-}
+let _activation: PipelineActivation = { ...DEFAULT_ACTIVATION };
 
 export const PipelineStore = {
     getActivation(): PipelineActivation {
@@ -66,7 +36,6 @@ export const PipelineStore = {
     setStage(stage: PipelineStage, active: boolean) {
         if (_activation[stage] === active) return;
         _activation = { ..._activation, [stage]: active };
-        persist();
         listeners.forEach((l) => l(_activation));
     },
 

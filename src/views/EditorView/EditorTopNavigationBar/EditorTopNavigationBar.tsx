@@ -426,6 +426,48 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [showInferenceMenu]);
 
+    // 模型下拉选项（useMemo 避免重复计算）
+    const modelDropdownEntries = useMemo(() => {
+        const zh = language === 'zh';
+        const allBuiltins = [...YOLO_MODEL_FAMILIES, ...SEG_MODEL_FAMILIES].flatMap(f => f.variants);
+        const isCustomName = (name: string) => !allBuiltins.includes(name.replace(/\.(pt|onnx)$/i, ''));
+        const normalize = (name: string): string =>
+            name.endsWith('.pt') || name.endsWith('.onnx') ? name : name + '.pt';
+        type Cat = 'custom-seg' | 'builtin-seg' | 'custom-det' | 'builtin-det';
+        const pickFor = (cat: Cat): string | null => {
+            const slotName = cat.endsWith('seg') ? segSlotName : detSlotName;
+            if (slotName) {
+                const slotIsCustom = isCustomName(slotName);
+                const slotMatchesCat = cat.startsWith('custom') ? slotIsCustom : !slotIsCustom;
+                if (slotMatchesCat) return slotName;
+            }
+            if (cat.startsWith('custom')) return null;
+            const found = cat === 'builtin-seg'
+                ? availableModels.find(m => m.type === 'segmentation')
+                : availableModels.find(m => m.type === 'detection');
+            return found ? normalize(found.name) : null;
+        };
+        const catOrder: Array<{ cat: Cat; label: string }> = [
+            { cat: 'custom-det',  label: zh ? '自定义' : 'Custom' },
+            { cat: 'custom-seg',  label: zh ? '自定义' : 'Custom' },
+            { cat: 'builtin-det', label: zh ? '检测模型' : 'Detection' },
+            { cat: 'builtin-seg', label: zh ? '分割模型' : 'Segmentation' },
+        ];
+        const seen = new Set<string>();
+        const entries: Array<{ name: string; label: string }> = [];
+        for (const { cat, label } of catOrder) {
+            const name = pickFor(cat);
+            if (name && !seen.has(name)) { seen.add(name); entries.push({ name, label }); }
+        }
+        return entries;
+    }, [language, availableModels, detSlotName, segSlotName]);
+
+    // 当前选中项的显示文本
+    const activeModelEntry = modelDropdownEntries.find(e => e.name === activeModelName);
+    const activeModelLabel = activeModelEntry
+        ? `${activeModelEntry.label} (${activeModelEntry.name})`
+        : loadedModels.length === 0 ? (language === 'zh' ? '未加载模型' : 'No model') : activeModelName;
+
     // 判断当前活跃模型是否为分割类型:
     // 1. 优先使用后端 model_tasks（精确，通过 model.task 属性获取）
     // 2. 回退到名称正则（SAM 家族 / *-seg 模型）
@@ -653,84 +695,64 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 </div>;
             }, [imageAIStates, imagesData, activeImageIndex, toggleAILabelsOnClick, isSAMLoaded, smartAnnotationActive, smartAnnotationOnClick, isTrackingModelLoaded, trackingOnClick, trackingMode, trackingInProgress, currentTexts, eraserMode, eraserFineMode, eraserOnClick, language])}
             <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 6, height: '100%' }}>
-                <select
-                    value={activeModelName}
-                    onChange={e => switchModel(e.target.value)}
-                    disabled={isFullImageInferenceInProgress || loadedModels.length === 0}
-                    style={{
-                        background: '#333',
-                        color: imagesData.length === 0 || loadedModels.length === 0 ? '#666' : '#ccc',
-                        border: '1px solid #555',
-                        borderRadius: 4,
-                        fontSize: 11,
-                        padding: '2px 4px',
-                        cursor: 'pointer',
-                        outline: 'none',
-                        maxWidth: 220,
-                    }}
-                >
-                    {loadedModels.length === 0 && (
-                        <option value="">{language === 'zh' ? '未加载模型' : 'No model'}</option>
+                <div ref={inferenceMenuRef} style={{ position: 'relative' }}>
+                    <button
+                        disabled={isFullImageInferenceInProgress || loadedModels.length === 0}
+                        onClick={() => setShowInferenceMenu(v => !v)}
+                        style={{
+                            background: '#333',
+                            color: imagesData.length === 0 || loadedModels.length === 0 ? '#666' : '#ccc',
+                            border: '1px solid #555',
+                            borderRadius: 4,
+                            fontSize: 11,
+                            padding: '2px 20px 2px 6px',
+                            cursor: 'default',
+                            outline: 'none',
+                            maxWidth: 220,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            position: 'relative',
+                            textAlign: 'left',
+                        }}
+                    >
+                        {activeModelLabel}
+                        <span style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 9, pointerEvents: 'none' }}>▼</span>
+                    </button>
+                    {showInferenceMenu && modelDropdownEntries.length > 0 && (
+                        <div style={{
+                            position: 'absolute',
+                            top: 'calc(100% + 2px)',
+                            left: 0,
+                            zIndex: 9999,
+                            background: '#2a2a2a',
+                            border: '1px solid #555',
+                            borderRadius: 4,
+                            minWidth: '100%',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                            overflow: 'hidden',
+                        }}>
+                            {modelDropdownEntries.map(e => (
+                                <div
+                                    key={e.name}
+                                    onClick={() => { switchModel(e.name); setShowInferenceMenu(false); }}
+                                    style={{
+                                        padding: '5px 10px',
+                                        fontSize: 11,
+                                        cursor: 'default',
+                                        color: e.name === activeModelName ? '#fff' : '#ccc',
+                                        background: e.name === activeModelName ? '#c62828' : 'transparent',
+                                        whiteSpace: 'nowrap',
+                                    }}
+                                    onMouseEnter={ev => { if (e.name !== activeModelName) (ev.currentTarget as HTMLDivElement).style.background = '#3a3a3a'; }}
+                                    onMouseLeave={ev => { if (e.name !== activeModelName) (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                                >
+                                    {e.label} ({e.name}){e.name === activeModelName ? ' ✓' : ''}
+                                </div>
+                            ))}
+                        </div>
                     )}
-                    {(() => {
-                        const zh = language === 'zh';
-                        const allBuiltins = [...YOLO_MODEL_FAMILIES, ...SEG_MODEL_FAMILIES].flatMap(f => f.variants);
-                        const isCustomName = (name: string) => {
-                            const baseName = name.replace(/\.(pt|onnx)$/i, '');
-                            return !allBuiltins.includes(baseName);
-                        };
-                        // 自定义模型按名字推断 det/seg（与后端 _detect_model_service 规则一致）
-                        const classifyCustom = (name: string): 'detection' | 'segmentation' => {
-                            const lower = name.toLowerCase();
-                            if (lower.startsWith('seg_')) return 'segmentation';
-                            if (lower.startsWith('det_')) return 'detection';
-                            if (lower.includes('seg') || lower.includes('sam')) return 'segmentation';
-                            return 'detection';
-                        };
-                        // 4 个类别：每类最多 1 个最新代表
-                        // 优先用当前 slot 里的模型（如果类别匹配），否则用 /available-models 兜底
-                        // /available-models 返回的 .pt 模型是裸 stem（无扩展名），slot 名含 .pt —
-                        // 统一补上 .pt 以便 <option value> 与 activeModelName/slot 名匹配
-                        const normalize = (name: string): string => {
-                            if (name.endsWith('.pt') || name.endsWith('.onnx')) return name;
-                            return name + '.pt';
-                        };
-                        type Cat = 'custom-seg' | 'builtin-seg' | 'custom-det' | 'builtin-det';
-                        const pickFor = (cat: Cat): string | null => {
-                            const slotName = cat.endsWith('seg') ? segSlotName : detSlotName;
-                            if (slotName) {
-                                const slotIsCustom = isCustomName(slotName);
-                                const slotMatchesCat = cat.startsWith('custom') ? slotIsCustom : !slotIsCustom;
-                                if (slotMatchesCat) return slotName;
-                            }
-                            // custom 类别：只显示当前 slot 里的那个自定义，不扫描磁盘
-                            // 避免历史遗留的 custom 文件出现在下拉里
-                            if (cat.startsWith('custom')) return null;
-                            const found = cat === 'builtin-seg'
-                                ? availableModels.find(m => m.type === 'segmentation')
-                                : availableModels.find(m => m.type === 'detection');
-                            return found ? normalize(found.name) : null;
-                        };
-                        const catOrder: Array<{ cat: Cat; label: string }> = [
-                            { cat: 'custom-det',  label: zh ? '自定义' : 'Custom' },
-                            { cat: 'custom-seg',  label: zh ? '自定义' : 'Custom' },
-                            { cat: 'builtin-det', label: zh ? '检测模型' : 'Detection' },
-                            { cat: 'builtin-seg', label: zh ? '分割模型' : 'Segmentation' },
-                        ];
-                        const seen = new Set<string>();
-                        const entries: Array<{ name: string; label: string }> = [];
-                        for (const { cat, label } of catOrder) {
-                            const name = pickFor(cat);
-                            if (name && !seen.has(name)) {
-                                seen.add(name);
-                                entries.push({ name, label });
-                            }
-                        }
-                        return entries.map(e =>
-                            <option key={e.name} value={e.name}>{e.label} ({e.name})</option>
-                        );
-                    })()}
-                </select>
+                </div>
                 <button
                     disabled={imagesData.length === 0}
                     onClick={() => isFullImageInferenceInProgress ? updateFullImageInferenceStatus(false) : runInference('detection')}

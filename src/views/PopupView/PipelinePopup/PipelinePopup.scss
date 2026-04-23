@@ -54,6 +54,21 @@
     & + .ParamSection {
       margin-top: 10px;
     }
+
+    &.section-inactive {
+      .ParamSectionTitle {
+        opacity: 0.3;
+
+        &:hover {
+          opacity: 0.5;
+        }
+      }
+
+      .ParamRow {
+        opacity: 0.25;
+        pointer-events: none;
+      }
+    }
   }
 
   // section 标题行
@@ -64,16 +79,32 @@
     font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    user-select: none;
 
-    &::after {
-      content: '';
+    &:hover {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .SectionTitleLine {
       flex: 1;
       height: 1px;
       background: currentColor;
       opacity: 0.18;
     }
 
-    color: rgba(255, 255, 255, 0.5);
+    .SectionChevron {
+      font-size: 20px;
+      display: inline-block;
+      transform: rotate(-90deg);
+      transition: transform 0.15s ease;
+      opacity: 0.6;
+
+      &.open {
+        transform: rotate(0deg);
+      }
+    }
   }
 
   .ParamRow {

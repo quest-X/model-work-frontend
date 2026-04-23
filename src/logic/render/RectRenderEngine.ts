@@ -51,6 +51,10 @@ export class RectRenderEngine extends BaseRenderEngine {
         this.labelType = LabelType.RECT;
     }
 
+    public cancelLabelCreation(): void {
+        this.startCreateRectPoint = null;
+    }
+
     // =================================================================================================================
     // EVENT HANDLERS
     // =================================================================================================================

@@ -80,8 +80,9 @@ const ImportLabelPopup: React.FC<IProps> = ({
     // Detect format and mode from zip filename prefix
     const detectFromZipName = (name: string): { format: AnnotationFormatType | null; isFull: boolean } => {
         const lower = name.toLowerCase();
+        // yolo_train_* = full pack with images; yolo_simple_* = labels only
+        if (lower.startsWith('yolo_')) return { format: AnnotationFormatType.YOLO, isFull: !lower.startsWith('yolo_simple') };
         const isFull = lower.includes('_full');
-        if (lower.startsWith('yolo_')) return { format: AnnotationFormatType.YOLO, isFull };
         if (lower.startsWith('voc_')) return { format: AnnotationFormatType.VOC, isFull };
         if (lower.startsWith('coco_')) return { format: AnnotationFormatType.COCO, isFull };
         if (lower.startsWith('vgg_')) return { format: AnnotationFormatType.VGG, isFull };
@@ -132,39 +133,52 @@ const ImportLabelPopup: React.FC<IProps> = ({
     };
 
     const doFullYOLOImport = (imageFiles: File[], annotationFiles: File[]) => {
-        // 1. Find labels.txt
         const labelsFile = annotationFiles.find(f => f.name.toLowerCase() === 'labels.txt');
         if (!labelsFile) {
             onAnnotationsLoadFailure(new Error('labels.txt not found in zip'));
             return;
         }
 
-        // 2. Read labels.txt + load all image dimensions in parallel
         const labelsPromise = FileUtil.readFile(labelsFile).then(content => YOLOUtils.parseLabelsNamesFromString(content));
         const imagesPromise = Promise.all(imageFiles.map(f => loadImageDimensions(f)));
-
-        // 3. Read all annotation .txt files (excluding labels.txt)
         const txtFiles = annotationFiles.filter(f => f.name.toLowerCase() !== 'labels.txt' && f.name.endsWith('.txt'));
         const txtContentsPromise = Promise.all(txtFiles.map(f => FileUtil.readFile(f)));
 
         Promise.all([labelsPromise, imagesPromise, txtContentsPromise])
             .then(([labelNames, loadedImages, txtContents]) => {
-                // Build annotation map: basename → content
                 const annotationMap: Record<string, string> = {};
                 txtFiles.forEach((f, i) => {
                     const baseName = f.name.replace(/\.[^/.]+$/, '');
                     annotationMap[baseName] = txtContents[i];
                 });
 
-                // Create ImageData with annotations for each image
                 const resultImageData: ImageData[] = loadedImages.map(({ file, width, height }) => {
                     const imageData = ImageDataUtil.createImageDataFromFileData(file);
                     const baseName = file.name.replace(/\.[^/.]+$/, '');
-                    const annotationContent = annotationMap[baseName];
-                    if (annotationContent) {
-                        imageData.labelRects = YOLOUtils.parseYOLOAnnotationsFromString(
-                            annotationContent, labelNames, { width, height }, file.name
-                        );
+                    const content = annotationMap[baseName];
+                    if (content) {
+                        content.split(/[\r\n]/).filter(Boolean).forEach(line => {
+                            const parts = line.trim().split(' ');
+                            const classIdx = parseInt(parts[0]);
+                            const labelId = labelNames[classIdx]?.id;
+                            if (!labelId) return;
+                            if (parts.length === 5) {
+                                // Detection format: class cx cy w h
+                                imageData.labelRects.push(LabelUtil.createLabelRect(labelId, {
+                                    x: (parseFloat(parts[1]) - parseFloat(parts[3]) / 2) * width,
+                                    y: (parseFloat(parts[2]) - parseFloat(parts[4]) / 2) * height,
+                                    width: parseFloat(parts[3]) * width,
+                                    height: parseFloat(parts[4]) * height,
+                                }));
+                            } else if (parts.length > 5 && (parts.length - 1) % 2 === 0) {
+                                // Segmentation format: class x1 y1 x2 y2 ...
+                                const vertices = [];
+                                for (let i = 1; i < parts.length; i += 2) {
+                                    vertices.push({ x: parseFloat(parts[i]) * width, y: parseFloat(parts[i + 1]) * height });
+                                }
+                                imageData.labelPolygons.push(LabelUtil.createLabelPolygon(labelId, vertices));
+                            }
+                        });
                     }
                     return imageData;
                 });
@@ -365,7 +379,10 @@ const ImportLabelPopup: React.FC<IProps> = ({
                 updateImageDataAction(loadedImageData);
             }
             updateLabelNamesAction(loadedLabelNames);
-            updateActiveLabelTypeAction(labelType);
+            const hasPolygons = loadedImageData.some(d => d.labelPolygons.length > 0);
+            const hasRects = loadedImageData.some(d => d.labelRects.length > 0);
+            const resolvedLabelType = hasPolygons ? LabelType.POLYGON : hasRects ? LabelType.RECT : labelType;
+            updateActiveLabelTypeAction(resolvedLabelType);
 
             // 导入后若有 AI 标注（isCreatedByAI），触发统计面板自动展开
             const annotatedCount = loadedImageData.filter(img =>
