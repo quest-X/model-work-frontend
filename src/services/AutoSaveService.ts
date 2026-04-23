@@ -64,15 +64,15 @@ export class AutoSaveService {
         try {
             // 保存轻量设置到localStorage
             await this.saveSettings();
-            
+
             // 保存AI状态到localStorage
             await this.saveAIState();
-            
+
             // 保存重型数据到IndexedDB
-            await this.saveProjectData();
-            
-            // 通知 UI 层保存完成
-            if (this.onSaveComplete) this.onSaveComplete();
+            const saved = await this.saveProjectData();
+
+            // 通知 UI 层保存完成（仅在保存成功时触发）
+            if (saved && this.onSaveComplete) this.onSaveComplete();
         } catch (error) {
             console.error('保存当前状态失败:', error);
         }
@@ -101,20 +101,20 @@ export class AutoSaveService {
         AIStateStorageManager.saveImageAIStates(state.ai.imageAIStates);
     }
     
-    private static async saveProjectData(): Promise<void> {
+    private static async saveProjectData(): Promise<boolean> {
         const state = store.getState();
         const imagesData = state.labels.imagesData;
         const labelNames = state.labels.labels;
 
         if (imagesData.length === 0) {
-            return;
+            return true;
         }
 
         // 估算总数据大小，超过 500MB 跳过（防止 OOM）
         const totalSize = imagesData.reduce((sum, img) => sum + (img.fileData?.size || 0), 0);
         if (totalSize > 500 * 1024 * 1024) {
             console.warn(`自动保存跳过：数据量过大 (${(totalSize / 1024 / 1024).toFixed(0)}MB)`);
-            return;
+            return false;
         }
 
         // 转换ImageData到StoredImageData格式（File → ArrayBuffer 以支持 IndexedDB 持久化）
@@ -178,10 +178,17 @@ export class AutoSaveService {
             activeQueueItemId: activeQueueItemId,
         };
 
-        await IndexedDBManager.saveProject(projectData);
+        const saved = await IndexedDBManager.saveProject(projectData);
+        if (!saved) {
+            console.warn('[AutoSave] IndexedDB save failed — project data may not be persisted. Check storage quota.');
+        }
+        return saved;
     }
     
     private static saveBeforeUnload = (): void => {
+        // NOTE: IndexedDB writes are async and cannot be reliably completed in beforeunload.
+        // Only synchronous localStorage settings are saved here. Project data relies on the
+        // 60-second autosave interval.
         // 同步保存（页面关闭时）
         try {
             const state = store.getState();
