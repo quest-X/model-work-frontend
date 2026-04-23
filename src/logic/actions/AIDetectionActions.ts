@@ -372,6 +372,12 @@ export class AIDetectionActions {
             const inferStartTime = Date.now();
             console.log('[Inference] Streaming start', { captureTotal, concurrency: 4 });
 
+            // 批量推理前统一设置标签视图（避免对每帧 dispatch 一次）
+            store.dispatch(updateActiveLabelViewType(LabelType.RECT));
+            if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
+                store.dispatch(updateActiveLabelType(LabelType.RECT));
+            }
+
             const tasks = capturedBlobs.map((blob, i) => {
                 return async (): Promise<DetectionResult[] | null> => {
                     if (!blob) {
@@ -413,6 +419,12 @@ export class AIDetectionActions {
                 img => !img.labelRects.some((r: LabelRect) => r.isCreatedByAI)
             );
             successCount = total - imageQueue.length;
+
+            // 批量推理前统一设置标签视图（避免对每帧 dispatch 一次）
+            store.dispatch(updateActiveLabelViewType(LabelType.RECT));
+            if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
+                store.dispatch(updateActiveLabelType(LabelType.RECT));
+            }
 
             const imageTasks = imageQueue.map((imageData) => async (): Promise<DetectionResult[] | null> => {
                 try {
@@ -463,6 +475,7 @@ export class AIDetectionActions {
         // Signal batch completion to EditorContainer for auto-showing statistics panel
         if (successCount > 2) {
             EditorModel.lastBatchInferenceImageCount = successCount;
+            window.dispatchEvent(new CustomEvent('batchInferenceComplete', { detail: { count: successCount } }));
         }
 
         EditorActions.fullRender();
@@ -515,13 +528,6 @@ export class AIDetectionActions {
                 labelRects: [...currentImg.labelRects, ...newRects]
             };
             store.dispatch(updateImageDataById(imageData.id, updatedImg));
-            // 推理结果落地后自动切到检测标签页（view + tool 同步，这样渲染引擎一起切过去，
-            // 画布只显示检测框而不会泄漏分割 mask）
-            // 橡皮擦激活时不强制切换工具，避免中断用户的擦除操作
-            store.dispatch(updateActiveLabelViewType(LabelType.RECT));
-            if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
-                store.dispatch(updateActiveLabelType(LabelType.RECT));
-            }
             // 同步缓存 + playbackImageData
             const latestData = store.getState().labels.imagesData;
             EditorModel.latestImagesData = latestData;
@@ -550,8 +556,12 @@ export class AIDetectionActions {
             store.dispatch(toggleImageAILabelsVisibility(imageData.id));
         }
 
-        // 刷新画布
-        EditorActions.fullRender();
+        // 仅当推理帧正是当前展示帧时才刷新，避免批量推理中对每帧都重绘
+        const activeIdx = store.getState().labels.activeImageIndex;
+        const activeImgId = store.getState().labels.imagesData[activeIdx]?.id;
+        if (activeImgId === imageData.id) {
+            EditorActions.fullRender();
+        }
     }
 
     /**

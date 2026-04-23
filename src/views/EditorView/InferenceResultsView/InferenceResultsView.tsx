@@ -1,6 +1,6 @@
 import React from 'react';
 import './InferenceResultsView.scss';
-import {connect} from 'react-redux';
+import {connect, shallowEqual} from 'react-redux';
 import {AppState} from '../../../store';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {SegmentationResult} from '../../../store/ai/types';
@@ -545,4 +545,4 @@ const mapDispatchToProps = {
     updateActiveLabelId
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(InferenceResultsView);
+export default connect(mapStateToProps, mapDispatchToProps, null, { areStatePropsEqual: shallowEqual })(InferenceResultsView);

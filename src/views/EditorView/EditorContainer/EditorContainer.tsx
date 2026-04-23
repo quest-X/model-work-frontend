@@ -180,15 +180,17 @@ const EditorContainer: React.FC<IProps> = (
 
     // 批量推理完成后自动弹出统计面板
     useEffect(() => {
-        const checkBatchCompletion = setInterval(() => {
-            if (EditorModel.lastBatchInferenceImageCount > 2) {
+        const handleBatchComplete = (e: Event) => {
+            const count = (e as CustomEvent).detail?.count ?? 0;
+            if (count > 2) {
                 EditorModel.lastBatchInferenceImageCount = 0;
                 setRightTabStatus(true);
                 setShowBatchStatistics(true);
                 setShowInferenceResults(false);
             }
-        }, 1000);
-        return () => clearInterval(checkBatchCompletion);
+        };
+        window.addEventListener('batchInferenceComplete', handleBatchComplete);
+        return () => window.removeEventListener('batchInferenceComplete', handleBatchComplete);
     }, []);
 
     // 监听数据变化并触发自动保存
