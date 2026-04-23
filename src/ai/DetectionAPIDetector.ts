@@ -6,6 +6,7 @@ import {store} from '../index';
 import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
 import {getDefaultBackendUrl} from '../utils/DefaultBackendUrl';
 import {PipelineStore} from './PipelineStore';
+import {FrameExtractorService} from '../services/FrameExtractorService';
 
 export interface InferenceParams {
     conf: number;
@@ -264,11 +265,20 @@ export class DetectionAPIDetector {
             const formData = new FormData();
 
             // Determine capture strategy based on the active playback mode.
-            // In raw_browser_mode the fileData is the entire video file (cannot send directly);
-            // in fast_ffmpeg_mode the decoded frame Image is available via EditorModel.videoFrameImage.
             const isVideoFile = imageData.fileData && imageData.fileData.type.startsWith('video/');
+            // on-demand mode: 0-byte placeholder + backend session
+            const isOnDemandFrame = imageData.fileData && imageData.fileData.size === 0 && !!EditorModel.videoSessionId;
 
-            if (isVideoFile) {
+            if (isOnDemandFrame) {
+                // Fetch the frame directly from the backend — same path as batch detection.
+                // Avoids canvas capture entirely (videoFrameImage may not be ready yet).
+                const match = imageData.fileData.name?.match(/frame_(\d+)/);
+                if (!match) throw new Error('Cannot determine frame index from filename');
+                const frameIdx = parseInt(match[1], 10);
+                const frames = await FrameExtractorService.fetchFrameRange(EditorModel.videoSessionId, frameIdx, 1);
+                if (!frames || frames.length === 0) throw new Error('Failed to fetch frame from backend');
+                formData.append('file', frames[0] as Blob, imageData.fileData.name || 'frame.jpg');
+            } else if (isVideoFile) {
                 // raw_browser_mode: capture current frame at full resolution from <video> element
                 const video = EditorModel.videoElement;
                 if (!video || video.readyState < 2) {
@@ -287,13 +297,16 @@ export class DetectionAPIDetector {
                 });
                 formData.append('file', blob, 'video_frame.png');
             } else if (EditorModel.videoFrameImage) {
-                // fast_ffmpeg_mode (full-load or on-demand): capture pixels from the decoded frame Image
+                // fast_ffmpeg_mode with pre-extracted frames: capture pixels from the decoded frame Image
                 const img = EditorModel.videoFrameImage;
+                const w = img.naturalWidth || img.width;
+                const h = img.naturalHeight || img.height;
+                if (!w || !h) throw new Error('Frame image has no dimensions');
                 const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth || img.width;
-                canvas.height = img.naturalHeight || img.height;
+                canvas.width = w;
+                canvas.height = h;
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, w, h);
                 const blob: Blob = await new Promise((resolve, reject) => {
                     canvas.toBlob((b) => {
                         if (b) resolve(b);
