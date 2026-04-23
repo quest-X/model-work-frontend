@@ -10,6 +10,7 @@ import {updateActiveLabelId} from '../../../store/labels/actionCreators';
 import {LabelActions} from '../../../logic/actions/LabelActions';
 import {EditorActions} from '../../../logic/actions/EditorActions';
 import {EditorModel} from '../../../staticModels/EditorModel';
+import {FrameExtractorService} from '../../../services/FrameExtractorService';
 
 // 把 labelPolygons（分割标注）映射成展示用结构，兜底 segmentationResults Map 为空的情况
 // 返回 shape 与 SegmentationAPIDetector.convertToUnifiedFormat 一致
@@ -360,6 +361,48 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
     // 为新增结果生成缩略图
     const resultCount = displayResults.length;
     const imageId = activeImageData?.id;
+
+    /** 从 CanvasImageSource 裁剪 bbox 区域并返回 dataURL */
+    const cropToDataURL = (source: CanvasImageSource, result: SegmentationResult): string => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return '';
+        const size = 60;
+        canvas.width = size;
+        canvas.height = size;
+        const {x1, y1, x2, y2} = result.bbox;
+        const bw = x2 - x1;
+        const bh = y2 - y1;
+        if (bw <= 0 || bh <= 0) return '';
+
+        const maskPoly: [number, number][] | undefined =
+            Array.isArray(result.mask) ? result.mask
+            : result.mask?.mask_data ? result.mask.mask_data
+            : undefined;
+
+        if (maskPoly && maskPoly.length > 2) {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, size, size);
+            ctx.save();
+            ctx.beginPath();
+            const scaleX = size / bw;
+            const scaleY = size / bh;
+            maskPoly.forEach(([mx, my], i) => {
+                const cx = (mx - x1) * scaleX;
+                const cy = (my - y1) * scaleY;
+                if (i === 0) ctx.moveTo(cx, cy);
+                else ctx.lineTo(cx, cy);
+            });
+            ctx.closePath();
+            ctx.clip();
+            ctx.drawImage(source, x1, y1, bw, bh, 0, 0, size, size);
+            ctx.restore();
+        } else {
+            ctx.drawImage(source, x1, y1, bw, bh, 0, 0, size, size);
+        }
+        return canvas.toDataURL();
+    };
+
     React.useEffect(() => {
         if (resultCount === 0 || !imageId) return;
 
@@ -367,65 +410,54 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         currentResults.forEach(async (result, index) => {
             const key = `${imageId}_${index}`;
             if (generatedSetRef.current.has(key)) return;
-            generatedSetRef.current.add(key); // 标记为正在生成，避免重复
+            generatedSetRef.current.add(key);
 
-            // 直接用 VideoCanvas 裁剪（绕过 generateThumbnail 的复杂逻辑）
-            const vc = document.querySelector('.VideoCanvas') as HTMLCanvasElement;
-            const source: CanvasImageSource | null = EditorModel.videoFrameImage || (vc && vc.width > 0 ? vc : null);
+            const fileData = activeImageData?.fileData;
+            const isOnDemandFrame = fileData instanceof File && fileData.size === 0 && !!EditorModel.videoSessionId;
 
-            if (!source) {
-                // 非视频模式：走原有 generateThumbnail
-                const url = await generateThumbnail(result);
-                if (url && imageId === lastImageIdRef.current) {
-                    setThumbnails(prev => ({...prev, [index]: url}));
-                }
+            // on-demand mode: fetch the frame blob from backend (reliable, no race with videoFrameImage)
+            if (isOnDemandFrame) {
+                try {
+                    const match = fileData.name?.match(/frame_(\d+)/);
+                    if (!match) return;
+                    const frameIdx = parseInt(match[1], 10);
+                    const frames = await FrameExtractorService.fetchFrameRange(EditorModel.videoSessionId, frameIdx, 1);
+                    if (!frames || frames.length === 0) return;
+                    const blob = frames[0] as Blob;
+                    const objectUrl = URL.createObjectURL(blob);
+                    const img = new Image();
+                    await new Promise<void>((res, rej) => {
+                        img.onload = () => res();
+                        img.onerror = () => rej();
+                        img.src = objectUrl;
+                    });
+                    const url = cropToDataURL(img, result);
+                    URL.revokeObjectURL(objectUrl);
+                    if (url && imageId === lastImageIdRef.current) {
+                        setThumbnails(prev => ({...prev, [index]: url}));
+                    }
+                } catch { /* silent */ }
                 return;
             }
 
-            try {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                const size = 60;
-                canvas.width = size;
-                canvas.height = size;
-                const {x1, y1, x2, y2} = result.bbox;
-                const bw = x2 - x1;
-                const bh = y2 - y1;
+            // video mode (pre-extracted frames): use videoFrameImage or VideoCanvas
+            const vc = document.querySelector('.VideoCanvas') as HTMLCanvasElement;
+            const source: CanvasImageSource | null = EditorModel.videoFrameImage || (vc && vc.width > 0 ? vc : null);
 
-                // 提取 mask 多边形（与 generateThumbnail 一致）
-                const maskPoly: [number, number][] | undefined =
-                    Array.isArray(result.mask) ? result.mask
-                    : result.mask?.mask_data ? result.mask.mask_data
-                    : undefined;
+            if (source) {
+                try {
+                    const url = cropToDataURL(source, result);
+                    if (url && imageId === lastImageIdRef.current) {
+                        setThumbnails(prev => ({...prev, [index]: url}));
+                    }
+                } catch { /* silent */ }
+                return;
+            }
 
-                if (maskPoly && maskPoly.length > 2) {
-                    // mask 外部填黑色
-                    ctx.fillStyle = '#000';
-                    ctx.fillRect(0, 0, size, size);
-                    ctx.save();
-                    ctx.beginPath();
-                    const scaleX = size / bw;
-                    const scaleY = size / bh;
-                    maskPoly.forEach(([mx, my], i) => {
-                        const cx = (mx - x1) * scaleX;
-                        const cy = (my - y1) * scaleY;
-                        if (i === 0) ctx.moveTo(cx, cy);
-                        else ctx.lineTo(cx, cy);
-                    });
-                    ctx.closePath();
-                    ctx.clip();
-                    ctx.drawImage(source, x1, y1, bw, bh, 0, 0, size, size);
-                    ctx.restore();
-                } else {
-                    ctx.drawImage(source, x1, y1, bw, bh, 0, 0, size, size);
-                }
-
-                const url = canvas.toDataURL();
-                if (url && imageId === lastImageIdRef.current) {
-                    setThumbnails(prev => ({...prev, [index]: url}));
-                }
-            } catch {
-                // 裁剪失败，静默忽略
+            // 普通图片模式
+            const url = await generateThumbnail(result);
+            if (url && imageId === lastImageIdRef.current) {
+                setThumbnails(prev => ({...prev, [index]: url}));
             }
         });
     }, [resultCount, imageId]);
