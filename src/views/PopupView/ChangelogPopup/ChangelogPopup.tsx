@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.1',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【修复】v2.3.0 长视频体验回归：PREEXTRACT_MAX_DURATION_SEC 从 60s → 600s，10 分钟内的视频回到全量预拆模式（缩略图条秒开）', en: '[Fix] v2.3.0 long-video regression: PREEXTRACT_MAX_DURATION_SEC 60s → 600s; videos under 10 minutes now use full pre-extraction (timeline thumbnails snappy again)' },
+            { zh: '【性能】on-demand 模式小请求自动扩成对齐窗口：count<10 时实际拆 50 帧（按 50 倍数对齐）并整窗入 LRU，相邻 count=1 请求命中缓存，FFmpeg 子进程数 ↓50×', en: '[Perf] On-demand small-request auto-expand: count<10 fetches a 50-frame aligned window into LRU; adjacent count=1 fetches hit cache, FFmpeg subprocess count ↓50×' },
+            { zh: '【性能】on-demand LRU 容量 2 → 6 个 batch（≈300 帧），随机拖动时间轴更友好', en: '[Perf] On-demand LRU capacity 2 → 6 batches (~300 frames cached); friendlier for random timeline scrubbing' },
+        ]
+    },
+    {
         version: '2.3.0',
         date: '2026-05-05',
         changes: [
