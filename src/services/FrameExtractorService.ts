@@ -17,6 +17,69 @@ import axios from 'axios';
 import JSZip from 'jszip';
 import {getDefaultBackendBase} from '../utils/DefaultBackendUrl';
 
+// ── ZIP-parse worker ──────────────────────────────────────────────────────
+// Vite picks up `new Worker(new URL(...), { type: 'module' })` and emits a
+// chunk for the worker module. Falls back to main-thread JSZip if Worker
+// construction throws (very old browsers / SSR / tests).
+const WORKER_TIMEOUT_MS = 30_000;
+let workerSeq = 0;
+let cachedWorker: Worker | null = null;
+
+function getWorker(): Worker | null {
+    if (cachedWorker) return cachedWorker;
+    try {
+        cachedWorker = new Worker(
+            new URL('../workers/FrameExtractorWorker.ts', import.meta.url),
+            { type: 'module' }
+        );
+    } catch (err) {
+        console.warn('[FrameExtractor] Worker init failed, using main thread:', (err as Error).message);
+        cachedWorker = null;
+    }
+    return cachedWorker;
+}
+
+interface WorkerEntry { name: string; blob: Blob; }
+
+function unzipInWorker(buffer: ArrayBuffer): Promise<WorkerEntry[]> {
+    const worker = getWorker();
+    if (!worker) {
+        // Fallback path: main-thread JSZip (legacy behaviour).
+        return JSZip.loadAsync(buffer).then(async (zip) => {
+            const names = Object.keys(zip.files).filter(n => n.endsWith('.jpg')).sort();
+            const out: WorkerEntry[] = [];
+            for (const name of names) {
+                out.push({ name, blob: await zip.files[name].async('blob') });
+            }
+            return out;
+        });
+    }
+
+    const id = ++workerSeq;
+    return new Promise<WorkerEntry[]>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            worker.removeEventListener('message', onMessage);
+            reject(new Error(`Worker unzip timeout after ${WORKER_TIMEOUT_MS}ms`));
+        }, WORKER_TIMEOUT_MS);
+
+        const onMessage = (ev: MessageEvent) => {
+            const data = ev.data;
+            if (!data || data.id !== id) return;
+            clearTimeout(timer);
+            worker.removeEventListener('message', onMessage);
+            if (data.ok) {
+                resolve(data.entries as WorkerEntry[]);
+            } else {
+                reject(new Error(data.error || 'Worker unzip failed'));
+            }
+        };
+
+        worker.addEventListener('message', onMessage);
+        // Transfer the ArrayBuffer to avoid a structured-clone copy.
+        worker.postMessage({ id, buffer }, [buffer]);
+    });
+}
+
 export interface FrameExtractionResult {
     fps: number;
     duration: number;
@@ -133,19 +196,21 @@ export class FrameExtractorService {
             try { metadata = JSON.parse(metadataHeader); } catch { /* ignore */ }
         }
 
-        // 解压 ZIP
-        const zip = await JSZip.loadAsync(response.data);
-        const frameNames = Object.keys(zip.files).filter(n => n.endsWith('.jpg')).sort();
+        // 解压 ZIP（Web Worker，避免阻塞主线程）
+        const entries = await unzipInWorker(response.data as ArrayBuffer);
 
         const frames: File[] = [];
-        for (let i = 0; i < frameNames.length; i++) {
-            const blob = await zip.files[frameNames[i]].async('blob');
+        for (let i = 0; i < entries.length; i++) {
             const globalIndex = start + i;
-            const file = new File([blob], `frame_${String(globalIndex).padStart(6, '0')}.jpg`, { type: 'image/jpeg' });
+            const file = new File(
+                [entries[i].blob],
+                `frame_${String(globalIndex).padStart(6, '0')}.jpg`,
+                { type: 'image/jpeg' }
+            );
             frames.push(file);
 
             if (onProgress && i % 10 === 0) {
-                onProgress('解压帧', i + 1, frameNames.length);
+                onProgress('解压帧', i + 1, entries.length);
             }
         }
 

@@ -16,6 +16,21 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.0',
+        date: '2026-05-05',
+        changes: [
+            { zh: '【性能】后端新增 /batch_detect：N 张图一次推理，固定开销摊薄', en: '[Perf] Backend /batch_detect: batched ultralytics inference for N images per request' },
+            { zh: '【性能】后端新增 /detect-session NDJSON 流式视频推理：消除前后端逐帧 RTT 乒乓', en: '[Perf] Backend /detect-session NDJSON stream: eliminates per-frame RTT ping-pong' },
+            { zh: '【性能】CUDA 设备分支补全（cuda > mps > cpu），推理路径全部包 torch.inference_mode()', en: '[Perf] CUDA device branch (cuda > mps > cpu); all inference paths wrapped in torch.inference_mode()' },
+            { zh: '【性能】FFmpeg 拆帧参数调优：-q:v 5 -threads 0 -an -sn -pix_fmt yuvj420p（磁盘占用 ↓30~50%）', en: '[Perf] FFmpeg extraction tuning: smaller JPEGs, multi-thread, skip audio/subtitle' },
+            { zh: '【性能】长视频（>60s）拆帧改 on-demand + LRU 缓存，避免一次性写出数 GB JPEG', en: '[Perf] Long video (>60s) extraction: on-demand + LRU cache; no more multi-GB JPEG dumps' },
+            { zh: '【性能】v1 ZIP 解压挪 Web Worker；Redux dispatch 合并 (requestIdleCallback)，主线程不再阻塞', en: '[Perf] v1: ZIP parsing in Web Worker; Redux dispatch coalesced via requestIdleCallback' },
+            { zh: '【性能】v1 图像加载分批解码 + ImageRepository LRU cap，4K 大批量内存占用大幅下降', en: '[Perf] v1: chunked image decode + ImageRepository LRU cap; large 4K batches no longer OOM' },
+            { zh: '【性能】v2 移植批量检测（/batch_detect + 4路并发）+ 视频推理路径（/detect-session 流）', en: '[Perf] v2: ported batch detect (concurrency + /batch_detect) + video inference via /detect-session stream' },
+            { zh: '【工程】新增 backend/models/ 目录约定 + .gitignore *.pt + 模型清单 README', en: '[Infra] New backend/models/ convention + .gitignore *.pt + model manifest README' },
+        ]
+    },
+    {
         version: '2.2.6',
         date: '2026-04-23',
         changes: [

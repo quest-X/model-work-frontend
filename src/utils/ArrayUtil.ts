@@ -65,4 +65,19 @@ export class ArrayUtil {
         const boundedIndex: number = index % array.length
         return array[boundedIndex]
     }
+
+    /**
+     * Split an array into consecutive sub-arrays of size `size`.
+     * The last chunk may be smaller. A non-positive size yields a single
+     * chunk containing the whole input (defensive against bad callers).
+     */
+    public static chunk<T>(items: T[], size: number): T[][] {
+        if (!Array.isArray(items) || items.length === 0) return [];
+        if (!Number.isFinite(size) || size <= 0) return [items.slice()];
+        const out: T[][] = [];
+        for (let i = 0; i < items.length; i += size) {
+            out.push(items.slice(i, i + size));
+        }
+        return out;
+    }
 }
