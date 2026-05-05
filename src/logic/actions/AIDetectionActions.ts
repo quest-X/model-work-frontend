@@ -3,7 +3,7 @@ import {DetectionAPIDetector, DetectionResult} from "../../ai/DetectionAPIDetect
 import {ImageData, LabelName, LabelRect} from "../../store/labels/types";
 import {LabelStatus} from "../../data/enums/LabelStatus";
 import {v4 as uuidv4} from "uuid";
-import {updateImageDataById, updateImageData, updateLabelNames, updateActiveImageIndex, updateActiveLabelType, updateActiveLabelViewType} from "../../store/labels/actionCreators";
+import {updateImageData, updateLabelNames, updateActiveImageIndex, updateActiveLabelType, updateActiveLabelViewType} from "../../store/labels/actionCreators";
 import {LabelType} from "../../data/enums/LabelType";
 import {updateFullImageInferenceStatus, addInferenceHistory, toggleImageAILabelsVisibility, updateSegmentationResults} from "../../store/ai/actionCreators";
 import {submitNewNotification, deleteNotificationById, updateNotificationById} from "../../store/notifications/actionCreators";
@@ -18,7 +18,71 @@ import {FrameExtractorService} from "../../services/FrameExtractorService";
 import {EditorActions} from "./EditorActions";
 import {EditorModel} from "../../staticModels/EditorModel";
 
+// ── Dispatch coalescing ───────────────────────────────────────────────────
+// Per-frame `updateImageDataById` during streaming inference mutates
+// `imagesData` and re-runs every connected selector — a render storm at
+// 200+ frames. Buffer pending image updates and flush as one
+// `updateImageData(...)` per idle tick.
+const pendingImageUpdates: Map<string, ImageData> = new Map();
+let flushScheduled = false;
+let flushIdleHandle: number | null = null;
+
+type IdleDeadline = { didTimeout: boolean; timeRemaining: () => number; };
+type RIC = (cb: (d: IdleDeadline) => void, opts?: { timeout?: number }) => number;
+type CIC = (handle: number) => void;
+
+const ric: RIC = (typeof (globalThis as any).requestIdleCallback === 'function')
+    ? (globalThis as any).requestIdleCallback.bind(globalThis)
+    : ((cb: (d: IdleDeadline) => void) => setTimeout(
+        () => cb({ didTimeout: true, timeRemaining: () => 0 }), 16
+    ) as unknown as number);
+
+const cic: CIC = (typeof (globalThis as any).cancelIdleCallback === 'function')
+    ? (globalThis as any).cancelIdleCallback.bind(globalThis)
+    : ((h: number) => clearTimeout(h));
+
+function flushPendingImageUpdates(): void {
+    flushScheduled = false;
+    flushIdleHandle = null;
+    if (pendingImageUpdates.size === 0) return;
+
+    const current: ImageData[] = [...store.getState().labels.imagesData];
+    let modified = false;
+    for (let i = 0; i < current.length; i++) {
+        const next = pendingImageUpdates.get(current[i].id);
+        if (next) {
+            current[i] = next;
+            modified = true;
+        }
+    }
+    pendingImageUpdates.clear();
+    if (modified) {
+        store.dispatch(updateImageData(current));
+        EditorModel.latestImagesData = current;
+    }
+}
+
+function scheduleFlush(): void {
+    if (flushScheduled) return;
+    flushScheduled = true;
+    flushIdleHandle = ric(() => flushPendingImageUpdates(), { timeout: 50 });
+}
+
+function forceFlushPendingImageUpdates(): void {
+    if (flushIdleHandle !== null) {
+        cic(flushIdleHandle);
+        flushIdleHandle = null;
+    }
+    flushScheduled = false;
+    flushPendingImageUpdates();
+}
+
 export class AIDetectionActions {
+
+    /** Flush hook for callers that finish a streaming batch. */
+    public static flushPendingImageUpdates(): void {
+        forceFlushPendingImageUpdates();
+    }
 
     /**
      * 执行全图目标检测
@@ -452,6 +516,8 @@ export class AIDetectionActions {
 
         // ── 完成 / 取消 ──
         // 流式推理：结果已实时写入，无需跳回第一帧，保持用户当前位置
+        // 强制 flush 挂起的图像更新（最后几帧的 idle 调度可能未触发）
+        forceFlushPendingImageUpdates();
         const wasCancelled = this.isCancelled();
         store.dispatch(deleteNotificationById(progressNotification.id));
         store.dispatch(updateFullImageInferenceStatus(false));
@@ -523,24 +589,22 @@ export class AIDetectionActions {
         });
 
         if (newRects.length > 0) {
-            const updatedImg = {
-                ...currentImg,
-                labelRects: [...currentImg.labelRects, ...newRects]
+            // 合并已挂起的更新（同帧多次推理叠加时不丢历史 rects）
+            const pendingPrev = pendingImageUpdates.get(imageData.id);
+            const baseRects = pendingPrev ? pendingPrev.labelRects : currentImg.labelRects;
+            const updatedImg: ImageData = {
+                ...(pendingPrev || currentImg),
+                labelRects: [...baseRects, ...newRects]
             };
-            store.dispatch(updateImageDataById(imageData.id, updatedImg));
-            // 同步缓存 + playbackImageData
-            const latestData = store.getState().labels.imagesData;
-            EditorModel.latestImagesData = latestData;
-            // 如果当前帧就是刚推理的帧，同步 playbackImageData
+            pendingImageUpdates.set(imageData.id, updatedImg);
+            scheduleFlush();
+            // 如果当前帧就是刚推理的帧，立即同步 playbackImageData，保证渲染立即看到最新框
             const videoState = store.getState().video;
             if (videoState.isVideoMode && videoState.activeVideo) {
                 const curFrame = videoState.activeVideo.currentFrame;
-                const latestImg = latestData.find(img => img.id === imageData.id);
-                if (latestImg) {
-                    const imgIdx = latestData.indexOf(latestImg);
-                    if (imgIdx === curFrame) {
-                        EditorModel.playbackImageData = latestImg;
-                    }
+                const imgIdx = currentImagesData.findIndex(img => img.id === imageData.id);
+                if (imgIdx === curFrame) {
+                    EditorModel.playbackImageData = updatedImg;
                 }
             }
         }
@@ -560,6 +624,8 @@ export class AIDetectionActions {
         const activeIdx = store.getState().labels.activeImageIndex;
         const activeImgId = store.getState().labels.imagesData[activeIdx]?.id;
         if (activeImgId === imageData.id) {
+            // 当前帧需立即在 store 中可见才能正确 fullRender
+            forceFlushPendingImageUpdates();
             EditorActions.fullRender();
         }
     }
