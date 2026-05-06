@@ -46,9 +46,12 @@ export class AutoSaveService {
         }
         
         this.saveTimer = setInterval(() => {
+            // 标签页/屏幕休眠时跳过：用户没在编辑，没新东西要存；
+            // 整夜每 N 秒一次序列化整个 store 写 IndexedDB 是 dev 模式下内存增长的主因之一。
+            if (typeof document !== 'undefined' && document.hidden) return;
             this.saveCurrentState();
         }, this.SAVE_INTERVAL);
-        
+
         console.log('自动保存定时器已启动');
     }
     

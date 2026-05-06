@@ -31,12 +31,13 @@ const EditorBottomNavigationBar: React.FC<IProps> = ({size, imageData, totalImag
         const initialTime = LocalStorageManager.getLastSavedTime();
         setLastSavedTime(initialTime);
         
-        // 每5秒更新一次保存时间显示
+        // 每5秒更新一次保存时间显示（标签页隐藏时跳过，省 idle 时无意义的 setState）
         const interval = setInterval(() => {
+            if (document.hidden) return;
             const currentTime = LocalStorageManager.getLastSavedTime();
             setLastSavedTime(currentTime);
         }, 5000);
-        
+
         return () => clearInterval(interval);
     }, []);
 

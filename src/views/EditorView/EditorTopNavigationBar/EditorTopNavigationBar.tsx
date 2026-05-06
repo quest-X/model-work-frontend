@@ -410,7 +410,10 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
             }).catch(() => {});
         };
         fetchModels();
-        const timer = setInterval(fetchModels, 5000);
+        // Page Visibility 守卫：标签页/屏幕休眠时暂停 poll，避免 idle 一整夜累积 ~5760 次 fetch
+        // 引发 dev 模式下的内存增长导致浏览器崩溃。
+        const tick = () => { if (!document.hidden) fetchModels(); };
+        const timer = setInterval(tick, 5000);
         return () => clearInterval(timer);
     }, []);
 

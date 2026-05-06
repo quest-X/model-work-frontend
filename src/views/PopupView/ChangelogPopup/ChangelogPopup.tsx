@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.11',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【内存】3 处 setInterval 加 Page Visibility 守卫，避免标签页/屏幕休眠时整夜空转：EditorTopNavigationBar (5s 拉 /load-status + /available-models)、EditorBottomNavigationBar (5s 读 localStorage)、AutoSaveService (周期序列化整个 store 写 IndexedDB)。8 小时睡眠从 ~5760 次 fetch + 数百次全 store 序列化 → 0；解决长时间挂起后浏览器崩溃', en: '[Memory] Three setIntervals now guard with Page Visibility API, skipping work while the tab or screen is asleep: EditorTopNavigationBar (5s /load-status + /available-models), EditorBottomNavigationBar (5s localStorage read), AutoSaveService (periodic full-store IndexedDB serialize). 8h idle drops from ~5760 fetches + hundreds of full-store serializes to 0; fixes browser-crashes-while-asleep' },
+        ]
+    },
+    {
         version: '2.3.10',
         date: '2026-05-06',
         changes: [
