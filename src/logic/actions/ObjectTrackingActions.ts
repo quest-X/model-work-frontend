@@ -11,10 +11,10 @@
  */
 import { v4 as uuidv4 } from 'uuid';
 import { store } from '../../index';
-import { ImageData } from '../../store/labels/types';
+import { ImageData, LabelName, LabelPolygon } from '../../store/labels/types';
+import { LabelStatus } from '../../data/enums/LabelStatus';
 import { SegmentationResult } from '../../ai/SegmentationAPIDetector';
 import { TrackingAPIService } from '../../ai/TrackingAPIService';
-import { AISegmentationActions } from './AISegmentationActions';
 import {
     submitNewNotification,
     deleteNotificationById,
@@ -22,9 +22,11 @@ import {
 } from '../../store/notifications/actionCreators';
 import { NotificationUtil } from '../../utils/NotificationUtil';
 import { updateTrackingInProgressStatus } from '../../store/general/actionCreators';
+import { updateImageData, updateLabelNames } from '../../store/labels/actionCreators';
 import { EditorActions } from './EditorActions';
 import { FrameExtractorService } from '../../services/FrameExtractorService';
 import { updateVideoSessionId } from '../../store/video/actionCreators';
+import { LabelUtil } from '../../utils/LabelUtil';
 
 type StartParams = {
     sessionId: string;
@@ -34,6 +36,79 @@ type StartParams = {
     modelName: string;
     className?: string; // 可选；未给时用 "tracked"
 };
+
+// ── Tracking dispatch coalescer ───────────────────────────────────────────────
+// Per-frame `updateImageDataById` during a 700-frame SAM 2 tracking run is a
+// dispatch storm: each one re-runs every connected selector and re-renders the
+// 8298-row thumbnail virtual list, which is the dominant memory/CPU pressure
+// during tracking and the most likely cause of long-run browser OOM.
+//
+// Buffer per-frame polygon additions in a Map keyed by imageId, flush once per
+// idle tick (≤ 50ms) as a single `updateImageData(allImages)`. Modeled on U9's
+// AIDetectionActions coalescer; intentionally duplicated here to keep tracking
+// self-contained (different polygon-build path).
+const pendingTrackingUpdates: Map<string, ImageData> = new Map();
+let trackingFlushScheduled = false;
+let trackingFlushHandle: number | null = null;
+
+type IdleDeadline = { didTimeout: boolean; timeRemaining: () => number };
+type RIC = (cb: (d: IdleDeadline) => void, opts?: { timeout?: number }) => number;
+type CIC = (handle: number) => void;
+
+const ric: RIC = (typeof (globalThis as any).requestIdleCallback === 'function')
+    ? (globalThis as any).requestIdleCallback.bind(globalThis)
+    : ((cb: (d: IdleDeadline) => void) => setTimeout(
+        () => cb({ didTimeout: true, timeRemaining: () => 0 }), 16
+    ) as unknown as number);
+
+const cic: CIC = (typeof (globalThis as any).cancelIdleCallback === 'function')
+    ? (globalThis as any).cancelIdleCallback.bind(globalThis)
+    : ((h: number) => clearTimeout(h));
+
+function flushTrackingUpdates(): void {
+    trackingFlushScheduled = false;
+    trackingFlushHandle = null;
+    if (pendingTrackingUpdates.size === 0) return;
+
+    const current: ImageData[] = [...store.getState().labels.imagesData];
+    let modified = false;
+    for (let i = 0; i < current.length; i++) {
+        const next = pendingTrackingUpdates.get(current[i].id);
+        if (next) {
+            current[i] = next;
+            modified = true;
+        }
+    }
+    pendingTrackingUpdates.clear();
+    if (modified) {
+        store.dispatch(updateImageData(current));
+    }
+}
+
+function scheduleTrackingFlush(): void {
+    if (trackingFlushScheduled) return;
+    trackingFlushScheduled = true;
+    trackingFlushHandle = ric(() => flushTrackingUpdates(), { timeout: 50 });
+}
+
+function forceFlushTrackingUpdates(): void {
+    if (trackingFlushHandle !== null) {
+        cic(trackingFlushHandle);
+        trackingFlushHandle = null;
+    }
+    trackingFlushScheduled = false;
+    flushTrackingUpdates();
+}
+
+/** Resolve a className → labelId, creating the LabelName if missing. */
+function ensureLabelId(className: string): string | null {
+    const existing: LabelName[] = store.getState().labels.labels;
+    const hit = existing.find(l => l.name.toLowerCase() === className.toLowerCase());
+    if (hit) return hit.id;
+    const created = LabelUtil.createLabelName(className);
+    store.dispatch(updateLabelNames([...existing, created]));
+    return created.id;
+}
 
 export class ObjectTrackingActions {
     private static currentController: AbortController | null = null;
@@ -46,6 +121,9 @@ export class ObjectTrackingActions {
         if (this.currentController) {
             this.currentController.abort();
             this.currentController = null;
+            // Drain any pending polygons before canceling so frames already
+            // received from backend before abort still land on screen.
+            forceFlushTrackingUpdates();
             store.dispatch(updateTrackingInProgressStatus(false));
         }
     }
@@ -76,6 +154,11 @@ export class ObjectTrackingActions {
         store.dispatch(updateTrackingInProgressStatus(true));
 
         const finalize = () => {
+            // Drain any per-frame polygons still waiting in the coalescer
+            // before tearing down the progress notification, otherwise the
+            // last batch can be dropped (the next dispatch could mask their
+            // pending state).
+            forceFlushTrackingUpdates();
             store.dispatch(updateTrackingInProgressStatus(false));
             store.dispatch(deleteNotificationById(progressNotification.id));
             this.currentController = null;
@@ -134,35 +217,43 @@ export class ObjectTrackingActions {
             {
                 onFrame: (f) => {
                     doneCount++;
+                    // Progress text updates dispatch through the notifications
+                    // reducer (queue capped to 1) — cheap, no coalescing needed.
                     updateProgress(2, `目标跟踪中 (${doneCount}/${totalExpected}) — 帧 ${f.frame_idx}`);
 
                     const mask = Array.isArray(f.mask) ? f.mask : [];
                     if (mask.length < 3) return;
 
-                    const imagesData = store.getState().labels.imagesData;
-                    const frameImg: ImageData | undefined = imagesData[f.frame_idx];
-                    if (!frameImg) return;
+                    // Read latest pending version first (so multiple polygons
+                    // landing on the same frame within one flush window stack
+                    // correctly), fall back to store.
+                    const baseImg = pendingTrackingUpdates.get(
+                        store.getState().labels.imagesData[f.frame_idx]?.id || ''
+                    ) || store.getState().labels.imagesData[f.frame_idx];
+                    if (!baseImg) return;
 
-                    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
-                    for (const [mx, my] of mask) {
-                        if (mx < x1) x1 = mx;
-                        if (my < y1) y1 = my;
-                        if (mx > x2) x2 = mx;
-                        if (my > y2) y2 = my;
-                    }
+                    const labelId = ensureLabelId(className);
 
-                    const result: SegmentationResult = {
-                        info: { id: 0, name: className, confidence: f.confidence || 0 },
-                        bbox: [x1, y1, x2, y2],
-                        mask,
-                    };
-
-                    AISegmentationActions.applySingleResult(
-                        frameImg,
-                        [result],
-                        'tracking',
+                    const polygon: LabelPolygon = {
+                        id: uuidv4(),
+                        labelId,
+                        vertices: mask
+                            .filter(([x, y]) => isFinite(x) && isFinite(y))
+                            .map(([x, y]) => ({ x, y })),
+                        isCreatedByAI: true,
+                        isVisible: true,
+                        status: LabelStatus.ACCEPTED,
+                        suggestedLabel: labelId ? null : className,
+                        confidence: f.confidence || 0,
                         trackingGroupId,
-                    );
+                    } as LabelPolygon;
+
+                    const updated: ImageData = {
+                        ...baseImg,
+                        labelPolygons: [...baseImg.labelPolygons, polygon],
+                    };
+                    pendingTrackingUpdates.set(baseImg.id, updated);
+                    scheduleTrackingFlush();
                 },
                 onStatus: (s) => {
                     if (s.status === 'clipping') {
