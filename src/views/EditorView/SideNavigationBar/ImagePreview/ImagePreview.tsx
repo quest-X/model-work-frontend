@@ -59,6 +59,13 @@ class ImagePreview extends React.Component<IProps, IState> {
         else if (!this.props.imageData.loadStatus && nextProps.imageData.loadStatus) {
             ImageLoadManager.addAndRun(this.loadImage(nextProps.imageData, nextProps.isScrolling));
         }
+        // Evicted-detection: when LRU drops this image (src cleared) we still
+        // hold the stale HTMLImageElement reference; on the NEXT re-render the
+        // <img src=""> would render as broken. Drop our reference + reload.
+        else if (this.state.image && !this.state.image.src && !this.isLoading) {
+            this.setState({ image: null });
+            ImageLoadManager.addAndRun(this.loadImage(nextProps.imageData, nextProps.isScrolling));
+        }
 
         if (this.props.isScrolling && !nextProps.isScrolling) {
             ImageLoadManager.addAndRun(this.loadImage(nextProps.imageData, false));

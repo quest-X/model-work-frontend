@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.14',
+        date: '2026-05-07',
+        changes: [
+            { zh: '【内存】跟踪 polygon 后端简化：tracking.py 加 cv2.approxPolyDP(epsilon=2px)，SAM 2 mask 顶点从 500-2000 → 30-100，~10-20× 压缩；NDJSON 流量、前端 Redux 占用、AutoSave 序列化体积同步下降。env 调控：TRACK_POLY_EPSILON_PX', en: '[Memory] Tracking polygons simplified server-side: tracking.py now applies cv2.approxPolyDP(epsilon=2px), so SAM 2 mask vertex count drops from 500-2000 to 30-100 (~10-20× compression). Cuts NDJSON bandwidth, Redux footprint, and AutoSave serialize size in lockstep. Tunable via TRACK_POLY_EPSILON_PX env' },
+            { zh: '【内存】视频模式 ImageRepository LRU cap 改回固定 1000 帧（之前 frames+100 = 8298 帧 ≈ 250MB 常驻）。ImagePreview 在 LRU 淘汰后能自动 reload：检测 state.image.src===\'\' 触发 setState({image:null}) + loadImage', en: '[Memory] ImageRepository LRU cap in video mode reset to a fixed 1000 (was frames+100 = 8298 ≈ 250MB resident). ImagePreview auto-reloads after LRU eviction by detecting state.image.src===\'\' and dispatching setState({image:null}) + loadImage' },
+            { zh: '【上下文】Chrome Aw-Snap (error code 5) = OOM。v2.3.13 修了 dispatch 风暴但内存基线没动；这次 v2.3.14 才动总量', en: '[Context] Chrome Aw-Snap (error code 5) = OOM. v2.3.13 reduced the dispatch storm but not the base memory footprint; v2.3.14 actually trims it' },
+        ]
+    },
+    {
         version: '2.3.13',
         date: '2026-05-06',
         changes: [
