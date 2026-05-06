@@ -219,6 +219,18 @@ export class AutoSaveService {
             })
         )).filter((img): img is StoredImageData => img !== null && img.fileData.byteLength > 0);
 
+        // 关键守卫：filter 后全空但 Redux 里其实有 entries（典型场景：视频 on-demand
+        // 模式下的 0-byte 占位帧，autosave 在帧数据真正解码前触发）。这种情况下绝不能
+        // 把 images:[] 写进 IDB，否则会覆盖之前真正有数据的快照，导致下次"恢复工作"
+        // 弹窗显示 0 张 / 0 帧、点击恢复后进到空白编辑器。
+        if (storedImages.length === 0 && imagesData.length > 0) {
+            console.warn(
+                `[AutoSave] all ${imagesData.length} imagesData entries filtered (byteLength=0 placeholders); ` +
+                `skipping IDB write to preserve prior snapshot`
+            );
+            return false;
+        }
+
         // 转换 imageSegmentationResults Map 到普通对象以便序列化
         const imageSegmentationResultsObj: Record<string, any[]> = {};
         if (state.ai?.imageSegmentationResults) {

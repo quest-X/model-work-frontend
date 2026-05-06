@@ -131,13 +131,14 @@ const App: React.FC<IProps> = (
                                 <span className="info-value">{storedDataInfo.isVideoProject ? '视频' : '图像'}</span>
                             </div>
                         )}
-                        {storedDataInfo.validImageCount !== undefined && storedDataInfo.validImageCount > 0 && (
+                        {storedDataInfo.validImageCount !== undefined && (
                             <div className="info-row">
-                                <span className="info-label">
+                                <span className={storedDataInfo.validImageCount === 0 ? 'info-label warn' : 'info-label'}>
                                     {storedDataInfo.isVideoProject ? '已标注帧' : '已标注图像'}
                                 </span>
-                                <span className="info-value">
+                                <span className={storedDataInfo.validImageCount === 0 ? 'info-value warn' : 'info-value'}>
                                     {storedDataInfo.labelCount ?? 0} / {storedDataInfo.validImageCount} {storedDataInfo.isVideoProject ? '帧' : '张'}
+                                    {storedDataInfo.validImageCount === 0 && '（无可恢复数据）'}
                                 </span>
                             </div>
                         )}
