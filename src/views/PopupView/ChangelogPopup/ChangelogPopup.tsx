@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.8',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【性能】SAM 2 视频跟踪改 FFmpeg 切片流程：之前 SAM2VideoPredictor 从帧 0 walk 到 end_frame 才 yield 第一帧（500 帧请求要预处理 7495 帧 ≈ 3.5 小时）；现在后端先用 FFmpeg 把视频切成 [start_frame, end_frame] 段（libx264 ultrafast，~5-15s），传切片给 predictor，预处理量从 end_frame → (end-start+1)。8298 帧视频上 [6995,7495] 区间，从 ~3.5h 降到 ~15min', en: '[Perf] SAM 2 video tracking now uses an FFmpeg-clipped subvideo: previously SAM2VideoPredictor walked frames 0..end_frame before yielding the first result (500-frame request preprocessed 7495 frames ≈ 3.5h); backend now FFmpeg-cuts the video to [start_frame, end_frame] (libx264 ultrafast, ~5-15s) and passes the clip to the predictor. Preprocessing drops from end_frame to (end-start+1). For [6995,7495] in an 8298-frame video, ~3.5h → ~15min' },
+            { zh: '【正确性】bbox prompt 现在应用到正确帧：之前传完整视频时 SAM 2 把 bbox 当作 frame 0 的提示，再 propagate 到 end_frame，跟踪结果可能漂移；切片后 clip frame 0 = 绝对 start_frame，bbox 自然落在用户实际框选的那一帧上', en: '[Correctness] bbox prompt now anchored to the correct frame: passing the full video made SAM 2 treat the bbox as a prompt at frame 0 and propagate to end_frame, which could drift; clip frame 0 = absolute start_frame, so the bbox lands on the frame the user actually drew on' },
+            { zh: '【UX】跟踪进度新增 clipping 阶段提示，TrackingAPIService 路由 status 消息到 onStatus 回调', en: '[UX] Tracking progress shows a clipping stage; TrackingAPIService routes status messages via onStatus callback' },
+        ]
+    },
+    {
         version: '2.3.7',
         date: '2026-05-06',
         changes: [
