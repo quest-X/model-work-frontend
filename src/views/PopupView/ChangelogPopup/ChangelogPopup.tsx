@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.10',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【UX】拖拽视频时不再蓝染顶部工具栏：拖拽捕获层（zIndex 500）从覆盖整个 EditorWrapper 改为 top:40px 起始（避开 EditorTopNavigationBar 的 40px 高度），工具栏保留原本的 dark theme 背景', en: '[UX] Top toolbar no longer tints blue while dragging a video: the drag-capture overlay (zIndex 500) now starts at top:40px instead of covering the entire EditorWrapper, leaving EditorTopNavigationBar (40px tall) with its normal dark theme background' },
+        ]
+    },
+    {
         version: '2.3.9',
         date: '2026-05-06',
         changes: [

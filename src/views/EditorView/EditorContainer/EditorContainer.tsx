@@ -541,7 +541,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '167px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.3.9</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.3.10</div>
             <div
                 className='SaveButtonBottom'
                 onClick={handleSave}
@@ -647,10 +647,14 @@ const EditorContainer: React.FC<IProps> = (
                 key='editor-wrapper'
             >
                 <input {...getInputProps()} style={{ display: 'none' }} />
-                {/* 拖拽捕获层：当 canvas/Scrollbars 存在时确保 drop 事件能被 dropzone 接收 */}
+                {/* 拖拽捕获层：当 canvas/Scrollbars 存在时确保 drop 事件能被 dropzone 接收。
+                    top: 40px 让 EditorTopNavigationBar（高度即 40px）保留自己的背景，
+                    避免拖拽时整条工具栏也被蓝色蒙层覆盖。 */}
                 {isWindowDragActive && (
                     <div style={{
-                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                        position: 'absolute',
+                        top: projectType === ProjectType.OBJECT_DETECTION ? 40 : 0,
+                        left: 0, right: 0, bottom: 0,
                         zIndex: 500, pointerEvents: 'all',
                         backgroundColor: isDragActive ? 'rgba(0, 120, 212, 0.08)' : 'transparent'
                     }} />
