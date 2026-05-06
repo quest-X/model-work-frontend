@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.7',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【UX】SAM 2 跟踪进度可见：之前 SAM 2 video predictor 要先 walk 视频从帧 0 到 end_frame 把 memory bank 建好才会 yield 第一帧，看上去像"卡在 0/N"；现在后端在 predict() 调用前 emit `status: preparing`，walk 阶段每 25 帧 emit 一次心跳，前端进度文案从"目标跟踪启动中"换成"预处理中：SAM 2 视频编码 X/Y"', en: '[UX] SAM 2 tracking now shows real progress: previously the SAM 2 video predictor had to walk every frame from 0 to end_frame to build its memory bank before yielding the first result, looking like "stuck at 0/N"; backend now emits `status: preparing` before predict() and a heartbeat every 25 walked frames; frontend renders "Preprocessing: SAM 2 video encoding X/Y" instead' },
+            { zh: '【已知】SAM 2 仍会 walk 整段视频从帧 0 开始（预处理 6995 帧才到 start_frame=6995），是 ultralytics SAM2VideoPredictor 的特性；后续 v2.4.0 计划用 FFmpeg 把视频切到 [start_frame, end_frame] 段再传给 predictor，把预处理量从 end_frame 降到 (end_frame - start_frame)', en: '[Known] SAM 2 still walks the full video from frame 0 (it processes 6995 frames before reaching start_frame=6995). This is an ultralytics SAM2VideoPredictor characteristic; v2.4.0 plans to FFmpeg-clip the video to [start_frame, end_frame] before passing to the predictor, reducing preprocessing from end_frame to (end_frame - start_frame)' },
+        ]
+    },
+    {
         version: '2.3.6',
         date: '2026-05-06',
         changes: [
