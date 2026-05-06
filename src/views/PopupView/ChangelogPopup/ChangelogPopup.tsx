@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.4.9',
+        date: '2026-05-07',
+        changes: [
+            { zh: '【修复】AutoSave 不再用空数组覆盖 IDB：filter byteLength>0 后如果全空但 Redux 里其实有 entries（典型场景：视频 on-demand 模式占位帧 / 帧未解码完），跳过 IDB 写入而非写 images:[]，避免之前真正有数据的快照被无效覆盖', en: '[Fix] AutoSave no longer overwrites IDB with empty arrays: when byteLength>0 filter empties everything but Redux had entries (typical: on-demand video placeholder frames / frames not yet decoded), skip the IDB write instead of saving images:[] and clobbering a prior valid snapshot' },
+            { zh: '【UX】恢复对话框始终显示数量：v2.4.8 之前数量行只在 validImageCount>0 时渲染，导致"saved 但 0 张"看不见原因。现在 0 也显示并标红"无可恢复数据"提示，避免用户点完恢复进到空白编辑器还不知道为什么', en: '[UX] Restore dialog always shows the count row: previously only rendered when validImageCount>0, hiding the "saved but empty" case. Now displays 0 too with a red "no recoverable data" hint, so users aren\'t confused by an empty editor after clicking Restore' },
+        ]
+    },
+    {
         version: '2.4.8',
         date: '2026-05-07',
         changes: [
