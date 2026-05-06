@@ -65,14 +65,12 @@ const App: React.FC<IProps> = (
             const dataInfo = await ProjectRestoreService.checkForStoredData();
             setStoredDataInfo(dataInfo);
 
-            if (dataInfo.hasProject) {
-                // 有实际可恢复的图像数据 → 弹对话框
+            // 恢复弹窗触发：v2.1.9 行为 — settings 或 project 任一存在就弹。
+            // v2.2.x 期间收紧到 hasProject-only 是为了不打扰，但用户偏好"积极地恢复"，
+            // 哪怕只有 settings 也想看到提示而不是被静默吞掉。
+            if (dataInfo.hasSettings || dataInfo.hasProject) {
                 setShowRestorePrompt(true);
             } else {
-                // 无项目数据（仅设置或空数据）→ 静默恢复设置后直接进入
-                if (dataInfo.hasSettings) {
-                    await ProjectRestoreService.restoreSettings();
-                }
                 setIsRestoring(false);
             }
         } catch (error) {
