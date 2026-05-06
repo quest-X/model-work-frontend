@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.6',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【修复】SAM 家族模型 dispatch 全错位：load_model 把完整路径传给 _create_model，prefix-check `startswith("FastSAM"/"sam2"/...)` 因路径以 / 开头永远不匹配，所有 SAM/FastSAM/MobileSAM 都被错误加载为 ultralytics.YOLO。FastSAM 推理 `bboxes` 报"not a valid YOLO argument"就是这个根因；改为按 basename 匹配', en: '[Fix] SAM-family dispatch was broken: load_model passed an absolute path into _create_model, but the `startswith("FastSAM"/"sam2"/...)` prefix-check never matched a leading `/`, so every SAM / FastSAM / MobileSAM was loaded as ultralytics.YOLO. The "FastSAM bboxes is not a valid YOLO argument" error stemmed from this. Now compares basename instead' },
+            { zh: '【数据】下载完整 SAM 家族 11 个模型到 backend/models/segment/：sam_b/l, mobile_sam, sam2_t/s/b/l, sam2.1_t/s/b, FastSAM-s（共 ~3.5GB）', en: '[Data] Downloaded the full SAM family (11 models, ~3.5GB) into backend/models/segment/: sam_b/l, mobile_sam, sam2_t/s/b/l, sam2.1_t/s/b, FastSAM-s' },
+        ]
+    },
+    {
         version: '2.3.5',
         date: '2026-05-06',
         changes: [
