@@ -334,6 +334,11 @@ const VideoEditor: React.FC<IProps> = ({
             try {
                 updateVideoMetadata(activeVideo.id, duration, fps, frames, videoSize);
 
+                // 视频模式下缩略图（150×150，~15KB）会被 FramePlayer 流式 storeImage 进 LRU，
+                // 默认 cap 300 会把早期帧挤掉，导致点击早期帧时其 <img src> 被清空显示破图。
+                // 抬到能装下所有帧 + 余量；典型 5min 1080p ≈ 9000 帧 × 15KB ≈ 135MB，可接受。
+                ImageRepository.setLiveImageCap(Math.max(frames + 100, 300));
+
                 const currentImagesData = imagesDataRef.current;
 
                 // ========== 检查是否已经有缓存的 imagesData ==========
