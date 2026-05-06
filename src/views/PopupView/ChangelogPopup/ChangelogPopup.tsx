@@ -16,15 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
-        version: '2.4.0',
+        version: '2.4.5',
         date: '2026-05-07',
         changes: [
-            { zh: '【版本】按惯例 patch 数 ≥ 10 时升 minor — 之前误把这次发布编号成了 v2.3.15，重命名为 v2.4.0；v2.3.0–v2.3.14 历史 tag 不动', en: '[Versioning] Convention: bump minor when patch hits ~10. Mis-numbered as v2.3.15 initially; renamed to v2.4.0. Historical v2.3.0–v2.3.14 tags untouched' },
+            { zh: '【版本】回溯重编号 v2.3.10..14 + v2.3.15 → v2.4.0..5：按惯例逢 10 进 minor。tag 重指（git tag -d 旧名 + 新名）；commit 内容不变，对应 commit 的 package.json 仍是历史值（不动）。v2.3.0..v2.3.9 保留', en: '[Versioning] Retroactive renumber v2.3.10..14 + v2.3.15 → v2.4.0..5: convention is bump minor at patch ~10. Tags moved (git tag -d + retag); commit contents untouched, so historical commits\' package.json still reads v2.3.10..14 (intentional). v2.3.0..v2.3.9 unchanged' },
             { zh: '【UX】更新日志"加载更多"按钮回归：v2.0 时代的 commit 86971c81 (2026-04-15) 把按钮悄悄换成了滚到底部 80px 自动加载 + 一行 11px / #555 的斜体 hint 文本，对比度太低基本看不见。现在恢复成显式 button（蓝色边框，hover 加深），保留滚动自动加载兼容', en: '[UX] Restored "Load more" button in changelog: an old refactor (commit 86971c81 on 2026-04-15) silently replaced the button with scroll-to-bottom autoload + an 11px/#555 italic hint that was effectively invisible. Now an explicit button (blue outline, deepens on hover) is back; scroll autoload still works as a fallback' },
         ]
     },
     {
-        version: '2.3.14',
+        version: '2.4.4',
         date: '2026-05-07',
         changes: [
             { zh: '【内存】跟踪 polygon 后端简化：tracking.py 加 cv2.approxPolyDP(epsilon=2px)，SAM 2 mask 顶点从 500-2000 → 30-100，~10-20× 压缩；NDJSON 流量、前端 Redux 占用、AutoSave 序列化体积同步下降。env 调控：TRACK_POLY_EPSILON_PX', en: '[Memory] Tracking polygons simplified server-side: tracking.py now applies cv2.approxPolyDP(epsilon=2px), so SAM 2 mask vertex count drops from 500-2000 to 30-100 (~10-20× compression). Cuts NDJSON bandwidth, Redux footprint, and AutoSave serialize size in lockstep. Tunable via TRACK_POLY_EPSILON_PX env' },
@@ -33,14 +33,14 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
         ]
     },
     {
-        version: '2.3.13',
+        version: '2.4.3',
         date: '2026-05-06',
         changes: [
             { zh: '【内存】SAM 2 跟踪不再 dispatch storm：每帧的 polygon 走 ObjectTrackingActions 内的合并器（Map<imgId, ImageData> + requestIdleCallback @ 50ms），700+ 帧 dispatch 从 700 → ~10-20 次单一 updateImageData，避免 8298 行虚拟列表反复 reconcile 导致浏览器崩溃。完成/取消时强制 flush 残留 polygon', en: '[Memory] SAM 2 tracking no longer triggers a dispatch storm: per-frame polygons funnel through an in-module coalescer (Map<imgId, ImageData> + requestIdleCallback @ 50ms), so a 700+-frame run drops from 700 dispatches to ~10-20 batched updateImageData calls. The 8298-row virtual thumbnail list no longer reconciles per frame. Force-flush on done/cancel so trailing polygons land' },
         ]
     },
     {
-        version: '2.3.12',
+        version: '2.4.2',
         date: '2026-05-06',
         changes: [
             { zh: '【内存】AutoSaveService 加 signature-based skip：每次 save 前先算个轻量签名（图片数、各 image 的 rect/point/line/polygon 数 + polygon 顶点总和、active idx、video session、queue），与上次比对相同就跳过整个 ArrayBuffer 序列化 + IndexedDB 写入。idle 时（如跟踪完成后）从"每 60s 写 ~400MB"变成 0', en: '[Memory] AutoSaveService now uses signature-based skip: before each save, computes a cheap signature (image count, per-image label/vertex counts, active idx, video session, queue) and compares to the previous; identical → skip the entire ArrayBuffer serialize + IndexedDB write. Idle scenarios (e.g. tracking finished) drop from "~400MB IDB write every 60s" to 0' },
@@ -48,14 +48,14 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
         ]
     },
     {
-        version: '2.3.11',
+        version: '2.4.1',
         date: '2026-05-06',
         changes: [
             { zh: '【内存】3 处 setInterval 加 Page Visibility 守卫，避免标签页/屏幕休眠时整夜空转：EditorTopNavigationBar (5s 拉 /load-status + /available-models)、EditorBottomNavigationBar (5s 读 localStorage)、AutoSaveService (周期序列化整个 store 写 IndexedDB)。8 小时睡眠从 ~5760 次 fetch + 数百次全 store 序列化 → 0；解决长时间挂起后浏览器崩溃', en: '[Memory] Three setIntervals now guard with Page Visibility API, skipping work while the tab or screen is asleep: EditorTopNavigationBar (5s /load-status + /available-models), EditorBottomNavigationBar (5s localStorage read), AutoSaveService (periodic full-store IndexedDB serialize). 8h idle drops from ~5760 fetches + hundreds of full-store serializes to 0; fixes browser-crashes-while-asleep' },
         ]
     },
     {
-        version: '2.3.10',
+        version: '2.4.0',
         date: '2026-05-06',
         changes: [
             { zh: '【UX】拖拽视频时不再蓝染顶部工具栏：拖拽捕获层（zIndex 500）从覆盖整个 EditorWrapper 改为 top:40px 起始（避开 EditorTopNavigationBar 的 40px 高度），工具栏保留原本的 dark theme 背景', en: '[UX] Top toolbar no longer tints blue while dragging a video: the drag-capture overlay (zIndex 500) now starts at top:40px instead of covering the entire EditorWrapper, leaving EditorTopNavigationBar (40px tall) with its normal dark theme background' },
