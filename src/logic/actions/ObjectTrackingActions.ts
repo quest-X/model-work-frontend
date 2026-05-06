@@ -13,7 +13,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { store } from '../../index';
 import { ImageData, LabelName, LabelPolygon } from '../../store/labels/types';
 import { LabelStatus } from '../../data/enums/LabelStatus';
-import { SegmentationResult } from '../../ai/SegmentationAPIDetector';
+import { SegmentationResult, SegmentationAPIDetector } from '../../ai/SegmentationAPIDetector';
+import { PipelineStore } from '../../ai/PipelineStore';
 import { TrackingAPIService } from '../../ai/TrackingAPIService';
 import {
     submitNewNotification,
@@ -206,6 +207,21 @@ export class ObjectTrackingActions {
             finalize();
         };
 
+        // 把 segmentation 的 post-processing 流水线状态传给 /track，让追踪 mask 也走
+        // polygon_epsilon / min_mask_area / mask_dilate / max_polygon_points。
+        // 双重过滤：① pipeline 'postprocess' 阶段必须激活；② 每个参数自身 enabled。
+        const postprocess = PipelineStore.isActivated('postprocess')
+            ? (() => {
+                const pp = SegmentationAPIDetector.getPostprocessParams();
+                const out: { polygon_epsilon?: number; min_mask_area?: number; mask_dilate?: number; max_polygon_points?: number } = {};
+                if (pp.polygon_epsilon_enabled !== false) out.polygon_epsilon = pp.polygon_epsilon;
+                if (pp.min_mask_area_enabled !== false) out.min_mask_area = pp.min_mask_area;
+                if (pp.mask_dilate_enabled !== false && pp.mask_dilate > 0) out.mask_dilate = pp.mask_dilate;
+                if (pp.max_polygon_points_enabled !== false && pp.max_polygon_points > 0) out.max_polygon_points = pp.max_polygon_points;
+                return Object.keys(out).length > 0 ? out : undefined;
+            })()
+            : undefined;
+
         this.currentController = TrackingAPIService.streamTrack(
             {
                 sessionId: params.sessionId,
@@ -213,6 +229,7 @@ export class ObjectTrackingActions {
                 endFrame: params.endFrameIdx,
                 bbox: params.bboxImageSpace,
                 modelName: params.modelName,
+                postprocess,
             },
             {
                 onFrame: (f) => {
