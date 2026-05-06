@@ -1,6 +1,6 @@
 {
   "name": "make-sense",
-  "version": "2.3.11",
+  "version": "2.3.12",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.9.3",
@@ -37,6 +37,7 @@
     "start": "vite --port 3001",
     "build": "vite build",
     "preview": "vite preview --host --port 3001",
+    "start:prod": "vite build && vite preview --host --port 3001",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "lint": "eslint src/**/*.ts src/**.tsx"

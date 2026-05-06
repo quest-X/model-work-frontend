@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.12',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【内存】AutoSaveService 加 signature-based skip：每次 save 前先算个轻量签名（图片数、各 image 的 rect/point/line/polygon 数 + polygon 顶点总和、active idx、video session、queue），与上次比对相同就跳过整个 ArrayBuffer 序列化 + IndexedDB 写入。idle 时（如跟踪完成后）从"每 60s 写 ~400MB"变成 0', en: '[Memory] AutoSaveService now uses signature-based skip: before each save, computes a cheap signature (image count, per-image label/vertex counts, active idx, video session, queue) and compares to the previous; identical → skip the entire ArrayBuffer serialize + IndexedDB write. Idle scenarios (e.g. tracking finished) drop from "~400MB IDB write every 60s" to 0' },
+            { zh: '【运维】新增 start_prod.sh + npm run start:prod：vite build → vite preview 模式启动，避免 dev 模式 HMR / source map / 模块缓存随时间增长。长时间挂机或部署用这个；npm run dev 仅用于开发热更新场景', en: '[Ops] Added start_prod.sh + `npm run start:prod`: builds and serves the production bundle via vite preview, avoiding the dev-mode HMR / source-map / module-cache growth that accumulates over hours. Use this for long-running sessions or deployment; reserve `npm run dev` for active development with hot reload' },
+        ]
+    },
+    {
         version: '2.3.11',
         date: '2026-05-06',
         changes: [

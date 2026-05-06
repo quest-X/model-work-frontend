@@ -63,8 +63,55 @@ export class AutoSaveService {
         }
     }
     
+    /**
+     * Cheap signature of the data slices we serialize, so we can skip the
+     * heavy IndexedDB write when nothing relevant has changed since the last
+     * save. Catches add/remove/move of any label or queue item, video mode
+     * toggle, and active selection. Does NOT catch in-place vertex drags
+     * where rect/polygon count stays constant — for that case we still rely
+     * on the manual Ctrl+S path; the periodic save is best-effort. Worth it
+     * because it turns "videos with 8000+ frame placeholders, idle, polling"
+     * from "serialize 400 MB to IDB every minute forever" into "no-op".
+     */
+    private static lastSavedSignature: string = '';
+    private static computeSignature(): string {
+        const state = store.getState();
+        const imagesData = state.labels.imagesData;
+        // Aggregate per-image label counts into one string. For 10k images
+        // this is ~150 KB string compare per tick — negligible vs. a full
+        // ArrayBuffer serialize.
+        const labelDetail = imagesData.map(i => {
+            const r = i.labelRects?.length || 0;
+            const p = i.labelPoints?.length || 0;
+            const l = i.labelLines?.length || 0;
+            // Polygon vertex total catches "added a vertex" without scanning coords.
+            const polyVerts = (i.labelPolygons || []).reduce(
+                (s, poly: any) => s + (poly?.vertices?.length || 0), 0
+            );
+            return `${r},${p},${l},${(i.labelPolygons?.length || 0)}/${polyVerts}`;
+        }).join('|');
+        return [
+            imagesData.length,
+            (state.labels.labels || []).length,
+            state.labels.activeImageIndex,
+            state.video?.isVideoMode ? 'V' : 'I',
+            state.video?.activeVideo?.id || '',
+            (state.queue?.items || []).length,
+            state.queue?.activeQueueItemId || '',
+            (state.ai?.segmentationResults || []).length,
+            labelDetail,
+        ].join('::');
+    }
+
     public static async saveCurrentState(): Promise<void> {
         try {
+            // Skip the entire heavy path when nothing changed since last save.
+            // First call always falls through (lastSavedSignature is empty).
+            const sig = this.computeSignature();
+            if (sig === this.lastSavedSignature && this.lastSavedSignature !== '') {
+                return;
+            }
+
             // 保存轻量设置到localStorage
             await this.saveSettings();
 
@@ -74,8 +121,10 @@ export class AutoSaveService {
             // 保存重型数据到IndexedDB
             const saved = await this.saveProjectData();
 
-            // 通知 UI 层保存完成（仅在保存成功时触发）
-            if (saved && this.onSaveComplete) this.onSaveComplete();
+            if (saved) {
+                this.lastSavedSignature = sig;
+                if (this.onSaveComplete) this.onSaveComplete();
+            }
         } catch (error) {
             console.error('保存当前状态失败:', error);
         }
