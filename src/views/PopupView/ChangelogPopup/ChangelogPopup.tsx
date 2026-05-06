@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.5',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【UX】目标跟踪按钮改为条件渲染：仅当已加载 SAM 2 / SAM 3 时才出现，与智能标注按钮（仅 SAM 加载时显示）行为一致；tooltip 也去掉冗余的"需 SAM 2 / SAM 3"说明', en: '[UX] Object-tracking button now conditional: only renders when SAM 2 / SAM 3 is loaded, matching the smart-annotation button pattern; tooltip drops the redundant "needs SAM 2 / SAM 3" qualifier' },
+        ]
+    },
+    {
         version: '2.3.4',
         date: '2026-05-06',
         changes: [

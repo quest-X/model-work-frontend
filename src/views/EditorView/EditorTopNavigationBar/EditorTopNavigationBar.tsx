@@ -669,17 +669,17 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         undefined,
                         smartAnnotationOnClick
                     )}
-                    {getButtonWithTooltip(
+                    {isTrackingModelLoaded && getButtonWithTooltip(
                         'object-tracking',
                         trackingMode
                             ? (language === 'zh' ? '退出目标跟踪' : 'Exit Object Tracking')
-                            : (language === 'zh' ? '目标跟踪（需 SAM 2 / SAM 3）' : 'Object Tracking (needs SAM 2 / SAM 3)'),
+                            : (language === 'zh' ? '目标跟踪' : 'Object Tracking'),
                         'ico/tracking.png',
                         'object-tracking',
                         trackingMode && !eraserMode,
                         undefined,
-                        (isTrackingModelLoaded && !trackingInProgress) ? trackingOnClick : undefined,
-                        !isTrackingModelLoaded || trackingInProgress,
+                        trackingInProgress ? undefined : trackingOnClick,
+                        trackingInProgress,
                     )}
                     {hasAnyLabel && getButtonWithTooltip(
                         'eraser',
