@@ -16,9 +16,10 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
-        version: '2.3.15',
+        version: '2.4.0',
         date: '2026-05-07',
         changes: [
+            { zh: '【版本】按惯例 patch 数 ≥ 10 时升 minor — 之前误把这次发布编号成了 v2.3.15，重命名为 v2.4.0；v2.3.0–v2.3.14 历史 tag 不动', en: '[Versioning] Convention: bump minor when patch hits ~10. Mis-numbered as v2.3.15 initially; renamed to v2.4.0. Historical v2.3.0–v2.3.14 tags untouched' },
             { zh: '【UX】更新日志"加载更多"按钮回归：v2.0 时代的 commit 86971c81 (2026-04-15) 把按钮悄悄换成了滚到底部 80px 自动加载 + 一行 11px / #555 的斜体 hint 文本，对比度太低基本看不见。现在恢复成显式 button（蓝色边框，hover 加深），保留滚动自动加载兼容', en: '[UX] Restored "Load more" button in changelog: an old refactor (commit 86971c81 on 2026-04-15) silently replaced the button with scroll-to-bottom autoload + an 11px/#555 italic hint that was effectively invisible. Now an explicit button (blue outline, deepens on hover) is back; scroll autoload still works as a fallback' },
         ]
     },
