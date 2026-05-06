@@ -404,13 +404,20 @@ const EditorContainer: React.FC<IProps> = (
                     } catch (err) {
                         console.error('[FFmpeg] Extraction failed, falling back to raw_browser_mode:', err);
                         setVideoProcessing(null);
-                        // 错误通知
+                        // Surface the backend's real error (e.g. "磁盘空间不足") instead of
+                        // a generic "FFmpeg failed" — axios attaches it on .response.data.detail.
+                        const detail = (err as any)?.response?.data?.detail;
+                        const description = typeof detail === 'string' && detail.trim()
+                            ? `${detail}\n（已回退到 raw_browser_mode）`
+                            : '已回退到 raw_browser_mode';
                         const errorNotification = NotificationUtil.createErrorNotification({
-                            header: `FFmpeg 拆帧失败: ${videoFile.name}`,
-                            description: '已回退到 raw_browser_mode'
+                            header: `视频上传失败: ${videoFile.name}`,
+                            description,
                         });
                         store.dispatch(submitNewNotification(errorNotification));
-                        setTimeout(() => store.dispatch(deleteNotificationById(errorNotification.id)), 5000);
+                        // Linger 12s for actionable error (disk message), 5s for generic.
+                        const ttl = typeof detail === 'string' && detail.trim() ? 12000 : 5000;
+                        setTimeout(() => store.dispatch(deleteNotificationById(errorNotification.id)), ttl);
                         // Fallback: raw_browser_mode (browser-native <video> element, no pre-extracted frames)
                         const thumbnail = await generateThumbnail(videoFile);
                         const item: QueueItem = {
@@ -541,7 +548,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '167px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.4.9</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.4.10</div>
             <div
                 className='SaveButtonBottom'
                 onClick={handleSave}

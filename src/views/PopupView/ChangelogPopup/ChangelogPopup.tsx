@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.4.10',
+        date: '2026-05-07',
+        changes: [
+            { zh: '【可靠性】后端启动时孤儿临时目录清扫：扫 tempfile.gettempdir() 下所有 opensight_video_* / opensight_track_clip_* / opensight_frames_* 目录全部 rmtree。pkill -9 强杀或意外崩溃后留下的几十个 GB 不再积累。本次启动一次性清掉 19 个孤儿目录，腾出 ~75GB', en: '[Reliability] Backend boot-time orphan temp-dir sweep: scans tempfile.gettempdir() for opensight_video_* / opensight_track_clip_* / opensight_frames_* and rmtree them all. Tens of GB no longer accumulate after pkill -9 or unexpected crashes. This release recovered 19 orphan dirs / ~75GB on first boot' },
+            { zh: '【UX】上传视频前 disk preflight：根据 Content-Length × 1.5 + 256MB 工作余量预检 shutil.disk_usage(tempdir).free，不够直接 400 返回"磁盘空间不足：当前可用 N MB，需 M MB"，前端把这条具体提示原样显示给你（不再傻 fallback 到 raw_browser_mode 还看不出原因）', en: '[UX] Disk preflight before video upload: backend checks shutil.disk_usage(tempdir).free against Content-Length × 1.5 + 256MB working room; if short, returns 400 with "disk full: N MB available, need M MB" detail. Frontend surfaces this verbatim instead of silently falling back to raw_browser_mode' },
+            { zh: '【UX】写盘失败 ENOSPC 也单独 catch：之前写到一半 OSError errno 28 给 generic 500，现在转 400 + "写到 NMB 时空间耗尽"信息', en: '[UX] Mid-write ENOSPC failures get their own message: was a generic 500 with stack trace, now a 400 with "ran out of space at N MB written"' },
+        ]
+    },
+    {
         version: '2.4.9',
         date: '2026-05-07',
         changes: [
