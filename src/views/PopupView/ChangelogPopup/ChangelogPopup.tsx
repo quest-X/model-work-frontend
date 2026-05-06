@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.2',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【修复】v2.3.0+ 长视频"页面无响应"卡死：VideoEditor 缓存重生成路径把 N 次 updateImageDataById 改成单次 bulk updateImageData，8298 帧场景下主线程从锁死 → 一次 dispatch', en: '[Fix] Long-video "page unresponsive" freeze (v2.3.0+): VideoEditor cache regeneration path replaces N updateImageDataById dispatches with a single bulk updateImageData; 8298-frame case goes from main-thread lockup to one dispatch' },
+            { zh: '【性能】ImageRepository LRU cap 默认 50 → 300：视频流场景常态滑动数千帧，50 太低导致频繁 evict + revokeObjectURL 抖动主线程', en: '[Perf] ImageRepository LRU cap default 50 → 300: video scenarios scroll through thousands of frames; 50 caused frequent evict + revokeObjectURL main-thread jitter' },
+        ]
+    },
+    {
         version: '2.3.1',
         date: '2026-05-06',
         changes: [

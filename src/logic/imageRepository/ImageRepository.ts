@@ -16,7 +16,9 @@ interface FileCache {
 // Entries that are evicted from `repository` remain reachable through
 // `fileCache.imageMap` if the user previously saved that file's snapshot —
 // the LRU cap only affects the active in-view set.
-const DEFAULT_LIVE_IMAGE_CAP = 50;
+// 视频流场景常态有数千帧滑动；50 太低导致频繁 evict + revokeObjectURL 抖动主线程。
+// 300 ≈ 一屏滚动可见 + 缓冲，evict 频率显著降低
+const DEFAULT_LIVE_IMAGE_CAP = 300;
 
 export class ImageRepository {
     private static repository: ImageMap = {};
