@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.4.7',
+        date: '2026-05-07',
+        changes: [
+            { zh: '【UX】视频缩略图全部常驻（再次回归 v2.3.3 行为）：v2.4.4 把 LRU cap 砍到 1000 是为堵 tracking OOM 的误伤，真正元凶（SAM 2 polygon 顶点数）已经在 v2.4.4 同期被 cv2.approxPolyDP 砍掉 10-20×。现在 cap = min(frames+100, 30000)，8000 帧解码 thumb ≈ 720MB，Chrome 4GB renderer 还有大量余量；30000 帧封顶（≈ 16min@30fps）作为变态视频兜底', en: '[UX] All video thumbnails resident again (back to v2.3.3 behavior). v2.4.4 cut the LRU cap to 1000 to plug a tracking OOM, but the actual culprit (SAM 2 polygon vertex count) was simultaneously fixed by cv2.approxPolyDP server-side. Cap is now min(frames+100, 30000); 8000 decoded thumbs ≈ 720MB, leaving plenty of headroom in Chrome\'s 4GB renderer. 30000 cap (~16min @30fps) as a sanity ceiling for absurd cases' },
+        ]
+    },
+    {
         version: '2.4.6',
         date: '2026-05-07',
         changes: [

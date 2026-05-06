@@ -334,12 +334,14 @@ const VideoEditor: React.FC<IProps> = ({
             try {
                 updateVideoMetadata(activeVideo.id, duration, fps, frames, videoSize);
 
-                // 视频模式下缩略图给一个有上限的 cap（非"全部驻留"）。之前 v2.3.3 抬到
-                // frames+100 可以治标"点击早期帧破图"，但 8298 帧视频会让 ImageRepository
-                // 撑到 250MB+；叠加 SAM 2 polygon 等其它 state 容易触发 Chrome OOM。
-                // 现在 cap 固定 1000 帧 ≈ 30MB，超出的旧帧由 LRU 淘汰，ImagePreview 在
-                // render 时自动重新拉缩略图（loadVideoFrameThumbnail / FileUtil.loadImage 路径）。
-                ImageRepository.setLiveImageCap(Math.min(frames + 100, 1000));
+                // 视频模式：缩略图全部常驻。
+                //   - 150×150 解码 RGBA ≈ 90KB；8000 帧 ≈ 720MB，Chrome renderer 4GB 还有大量余量
+                //   - v2.4.4 砍到 1000 是为堵 tracking OOM，但同期已经在 backend 用 cv2.approxPolyDP
+                //     把 SAM 2 polygon 顶点数砍掉 10-20×，那才是真正的内存元凶。LRU 那一刀属于误伤
+                //   - 用户体感反馈：低 cap 导致缩略图频繁失效（ImagePreview re-load 不稳）。常驻全部
+                //     是最简单的体验
+                //   - 30000 帧封顶（≈ 16min @ 30fps）作为变态视频的兜底，避免内存真的失控
+                ImageRepository.setLiveImageCap(Math.min(frames + 100, 30000));
 
                 const currentImagesData = imagesDataRef.current;
 
