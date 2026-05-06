@@ -164,6 +164,13 @@ export class ObjectTrackingActions {
                         trackingGroupId,
                     );
                 },
+                onStatus: (s) => {
+                    if (s.status === 'preparing') {
+                        updateProgress(1, `预处理中：SAM 2 视频编码 0/${s.frames_to_encode}（之后开始 yield 第 ${s.skip_until} 帧）`);
+                    } else if (s.status === 'walking') {
+                        updateProgress(1, `预处理中：SAM 2 视频编码 ${s.current}/${s.target}`);
+                    }
+                },
                 onDone: (total) => {
                     const done = NotificationUtil.createSuccessNotification({
                         header: '目标跟踪完成',

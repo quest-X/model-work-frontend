@@ -22,10 +22,15 @@ export type StreamTrackParams = {
     modelName: string;
 };
 
+export type TrackStatusMessage =
+    | { status: 'preparing'; frames_to_encode: number; skip_until: number; message: string }
+    | { status: 'walking'; current: number; target: number };
+
 export type StreamTrackCallbacks = {
     onFrame: (frame: TrackFrameResult) => void;
     onDone: (total: number) => void;
     onError: (err: Error) => void;
+    onStatus?: (status: TrackStatusMessage) => void;
 };
 
 export class TrackingAPIService {
@@ -89,6 +94,7 @@ export class TrackingAPIService {
                         }
                         if (msg.error) { cb.onError(new Error(msg.error)); return; }
                         if (msg.done) { cb.onDone(msg.total ?? 0); return; }
+                        if (msg.status) { cb.onStatus?.(msg as TrackStatusMessage); continue; }
                         if (typeof msg.frame_idx === 'number') {
                             cb.onFrame(msg as TrackFrameResult);
                         }
