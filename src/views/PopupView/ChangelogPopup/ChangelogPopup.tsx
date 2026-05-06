@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.4.6',
+        date: '2026-05-07',
+        changes: [
+            { zh: '【UX】恢复 v2.1.9 行为：IndexedDB 里只要有 settings 或 project 任一就弹"恢复工作"对话框（v2.2.0 期间收紧成 hasProject-only 让设置静默恢复，太被动）', en: '[UX] Restored v2.1.9 behavior: the "restore work" dialog now appears whenever settings OR project data exists in IndexedDB (v2.2.0 narrowed it to hasProject-only and silently restored settings — too passive)' },
+            { zh: '【可靠性】AutoSave 更激进：定时间隔 60s → 15s；Redux store subscribe + 3s debounce，编辑停 3 秒就自动存；visibilitychange→hidden 时强制 flush。配合 v2.4.2 的 signature-skip，无变化 tick 仍是 0 序列化', en: '[Reliability] More aggressive AutoSave: interval 60s → 15s; Redux store subscribe + 3s debounce so edits trigger a save 3s after the last action; force-flush on visibilitychange→hidden. v2.4.2 signature-skip still no-ops idle ticks' },
+        ]
+    },
+    {
         version: '2.4.5',
         date: '2026-05-07',
         changes: [

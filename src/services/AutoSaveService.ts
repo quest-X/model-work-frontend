@@ -8,34 +8,60 @@ import { ImageRepository } from '../logic/imageRepository/ImageRepository';
 
 export class AutoSaveService {
     private static saveTimer: NodeJS.Timeout | null = null;
-    private static readonly SAVE_INTERVAL = 60000; // 60秒自动保存一次
+    // 周期 save 间隔：60s 太稀疏，丢电/崩溃时容易丢数据。配 signature-skip
+    // (v2.4.2) 后无变化 tick 是 0 序列化的，所以可以放心调激进。
+    private static readonly SAVE_INTERVAL = 15000;
+    // Edit-driven debounce：每次 Redux dispatch 后 N 毫秒无新动作就 save。
+    // 比纯 interval 反应快，比"每个 dispatch 都 save"省得多。
+    private static readonly EDIT_DEBOUNCE_MS = 3000;
+    private static editDebounceTimer: NodeJS.Timeout | null = null;
+    private static unsubscribeStore: (() => void) | null = null;
+    private static visibilityListener: (() => void) | null = null;
     private static isInitialized = false;
     // 保存完成回调：UI 层注册，用于触发绿色闪烁等视觉反馈
     public static onSaveComplete: (() => void) | null = null;
-    
+
     public static async initialize(): Promise<void> {
         if (this.isInitialized) {
             console.log('自动保存服务已经初始化，跳过重复初始化');
             return;
         }
-        
+
         console.log('开始初始化自动保存服务...');
-        
+
         // 清理可能存在的旧定时器
         this.stopAutoSave();
-        
+
         // 初始化IndexedDB
         const dbInitialized = await IndexedDBManager.initialize();
         if (!dbInitialized) {
             console.warn('IndexedDB初始化失败，将只使用localStorage');
         }
-        
+
         // 设置定期自动保存
         this.startAutoSave();
-        
+
+        // Redux store 订阅：编辑后 EDIT_DEBOUNCE_MS 内无新动作就触发一次 save。
+        this.unsubscribeStore = store.subscribe(() => {
+            if (this.editDebounceTimer) clearTimeout(this.editDebounceTimer);
+            this.editDebounceTimer = setTimeout(() => {
+                if (typeof document !== 'undefined' && document.hidden) return;
+                this.saveCurrentState();
+            }, this.EDIT_DEBOUNCE_MS);
+        });
+
+        // 标签页切换到隐藏时强制 flush 一次（用户切走前这一刻可能有未持久化的编辑）。
+        // beforeunload 之外的额外保障，因为浏览器对 beforeunload 期间的 IDB 异步写入不可靠。
+        this.visibilityListener = () => {
+            if (typeof document !== 'undefined' && document.hidden) {
+                this.saveCurrentState();
+            }
+        };
+        document.addEventListener('visibilitychange', this.visibilityListener);
+
         // 监听页面关闭事件，确保保存
         window.addEventListener('beforeunload', this.saveBeforeUnload);
-        
+
         this.isInitialized = true;
         console.log('自动保存服务初始化完成');
     }
@@ -263,6 +289,18 @@ export class AutoSaveService {
     
     public static destroy(): void {
         this.stopAutoSave();
+        if (this.editDebounceTimer) {
+            clearTimeout(this.editDebounceTimer);
+            this.editDebounceTimer = null;
+        }
+        if (this.unsubscribeStore) {
+            this.unsubscribeStore();
+            this.unsubscribeStore = null;
+        }
+        if (this.visibilityListener) {
+            document.removeEventListener('visibilitychange', this.visibilityListener);
+            this.visibilityListener = null;
+        }
         window.removeEventListener('beforeunload', this.saveBeforeUnload);
         this.isInitialized = false;
         console.log('自动保存服务已销毁');
