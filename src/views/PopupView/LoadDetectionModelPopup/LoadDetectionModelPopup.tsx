@@ -148,8 +148,14 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
             } catch (e) {
                 setIsLoading(false);
                 setLoadState('');
-                submitNewNotificationAction(NotificationUtil.createErrorNotification(
-                    NotificationsDataMap[Notification.MODEL_DOWNLOAD_ERROR]));
+                // 优先显示后端真实错误（torch / 文件损坏 / 网络下载失败），
+                // 兜底才用通用文案"无法连接推理服务器"。
+                const base = NotificationsDataMap[Notification.MODEL_DOWNLOAD_ERROR];
+                const errMsg = (e as Error)?.message?.trim();
+                submitNewNotificationAction(NotificationUtil.createErrorNotification({
+                    header: base.header,
+                    description: errMsg || base.description,
+                }));
             }
         } else {
             if (!modelFile) return;
@@ -181,8 +187,12 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
             } catch (e) {
                 setIsLoading(false);
                 setLoadState('');
-                submitNewNotificationAction(NotificationUtil.createErrorNotification(
-                    NotificationsDataMap[Notification.MODEL_LOAD_ERROR]));
+                const base = NotificationsDataMap[Notification.MODEL_LOAD_ERROR];
+                const errMsg = (e as Error)?.message?.trim();
+                submitNewNotificationAction(NotificationUtil.createErrorNotification({
+                    header: base.header,
+                    description: errMsg || base.description,
+                }));
             }
         }
     };
