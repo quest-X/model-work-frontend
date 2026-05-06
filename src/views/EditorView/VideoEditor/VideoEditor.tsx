@@ -14,7 +14,7 @@ import {
     updateVideoPlayingStatus,
     updateVideoMetadata
 } from '../../../store/video/actionCreators';
-import { updateImageDataById, updateActiveImageIndex, addImageData, toggleImageSelection } from '../../../store/labels/actionCreators';
+import { updateImageDataById, updateImageData, updateActiveImageIndex, addImageData, toggleImageSelection } from '../../../store/labels/actionCreators';
 import { ImageDataUtil } from '../../../utils/ImageDataUtil';
 import { ImageRepository } from '../../../logic/imageRepository/ImageRepository';
 import { EditorActions } from '../../../logic/actions/EditorActions';
@@ -39,6 +39,7 @@ interface IProps {
     updateVideoPlayingStatus: (videoId: string, isPlaying: boolean) => void;
     updateVideoMetadata: (videoId: string, duration: number, fps: number, totalFrames: number, videoSize: ISize) => void;
     updateImageDataById: (id: string, newImageData: ImageData) => void;
+    updateImageData: (imageData: ImageData[]) => void;
     updateActiveImageIndex: (index: number) => void;
     addImageData: (imageData: ImageData[]) => void;
     toggleImageSelection: (imageId: string) => void;
@@ -54,6 +55,7 @@ const VideoEditor: React.FC<IProps> = ({
     updateVideoPlayingStatus,
     updateVideoMetadata,
     updateImageDataById,
+    updateImageData,
     updateActiveImageIndex,
     addImageData,
     toggleImageSelection
@@ -366,13 +368,13 @@ const VideoEditor: React.FC<IProps> = ({
                     let frameImageDataArray: ImageData[] = [];
 
                     if (hasExistingData) {
+                        // 一次性 bulk dispatch；之前是 N 次 updateImageDataById 循环，
+                        // 长视频（数千帧）会让主线程同步卡死，触发浏览器"页面无响应"对话框。
                         frameImageDataArray = currentImagesData.map(img => ({
                             ...img,
                             loadStatus: false
                         }));
-                        frameImageDataArray.forEach(img => {
-                            updateImageDataById(img.id, img);
-                        });
+                        updateImageData(frameImageDataArray);
                     } else {
                         for (let i = 0; i < frames; i++) {
                             const frameImageData = ImageDataUtil.createImageDataFromFileData(activeVideo.fileData);
@@ -696,6 +698,7 @@ const mapDispatchToProps = {
     updateVideoPlayingStatus,
     updateVideoMetadata,
     updateImageDataById,
+    updateImageData,
     updateActiveImageIndex,
     addImageData,
     toggleImageSelection
