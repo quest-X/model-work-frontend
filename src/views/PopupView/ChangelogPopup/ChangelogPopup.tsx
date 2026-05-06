@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.3',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【修复】点击长视频缩略图破图：FramePlayer 流式 storeImage 触发 LRU 淘汰，被淘汰帧 src 被清空，下次 isSelected 重渲染读到空 src 显示破图；视频元数据加载时把 cap 抬到 max(frames+100, 300)，所有缩略图常驻', en: '[Fix] Clicked long-video thumbnail showed broken-image icon: FramePlayer streaming storeImage evicted earlier frames via LRU, clearing their src; next isSelected re-render read the empty src. VideoEditor now bumps cap to max(frames+100, 300) on metadata load, keeping all thumbnails resident' },
+        ]
+    },
+    {
         version: '2.3.2',
         date: '2026-05-06',
         changes: [
