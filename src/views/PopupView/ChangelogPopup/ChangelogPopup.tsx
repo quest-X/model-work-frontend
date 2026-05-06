@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.4.8',
+        date: '2026-05-07',
+        changes: [
+            { zh: '【修复】"后处理"对目标跟踪不生效：之前 /track 完全没接 polygon_epsilon / min_mask_area / mask_dilate / max_polygon_points，前端 popup 设的全部被忽略；后端 hard-code 一个 2px 的 epsilon 充当兜底。现在 ObjectTrackingActions 读 PipelineStore + SegmentationAPIDetector.getPostprocessParams()，复用 segmentation 那套激活/enabled 双重过滤，POST 到 /track 的 postprocess 字段；tracking.py stream_tracking 复用 segmentation 的 _dilate_polygon / _polygon_area / _simplify_polygon / _limit_polygon_points', en: '[Fix] Post-processing didn\'t apply to object tracking: /track ignored polygon_epsilon / min_mask_area / mask_dilate / max_polygon_points entirely; backend used a hard-coded 2px epsilon as the only safeguard. ObjectTrackingActions now reads PipelineStore + SegmentationAPIDetector.getPostprocessParams() with the same activation+enabled double-filter as /segment, POSTs them as the postprocess field; tracking.py stream_tracking reuses segmentation\'s _dilate_polygon / _polygon_area / _simplify_polygon / _limit_polygon_points helpers' },
+        ]
+    },
+    {
         version: '2.4.7',
         date: '2026-05-07',
         changes: [

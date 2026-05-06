@@ -20,6 +20,15 @@ export type StreamTrackParams = {
     endFrame: number;
     bbox: [number, number, number, number]; // x1,y1,x2,y2 in image-space
     modelName: string;
+    /** Mirrors /segment postprocess. Only present keys are applied; absent =
+     *  use backend defaults (polygon_epsilon=2px memory baseline, others off).
+     *  Caller is responsible for honoring the pipeline activation toggle. */
+    postprocess?: {
+        polygon_epsilon?: number;
+        min_mask_area?: number;
+        mask_dilate?: number;
+        max_polygon_points?: number;
+    };
 };
 
 export type TrackStatusMessage =
@@ -56,6 +65,7 @@ export class TrackingAPIService {
                         end_frame: params.endFrame,
                         prompt: { bbox: params.bbox },
                         model: params.modelName,
+                        ...(params.postprocess ? { postprocess: params.postprocess } : {}),
                     }),
                 });
             } catch (e: any) {
