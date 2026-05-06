@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.9',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【修复】长视频跟踪报"N frames missing on disk"：tracking.py 还留着旧 guard 校验预拆 JPEG，但 v2.3.8 已经改成 FFmpeg 切视频不需要 JPEG。长视频走 on-demand 模式没全量预拆，guard 误判 501 帧缺失就直接退出。删除 stale guard + 删除不再使用的 _list_frame_paths helper', en: '[Fix] Long-video tracking failed with "N frames missing on disk": tracking.py kept a stale pre-extracted-JPEG existence check, but v2.3.8 switched the predictor source to an FFmpeg-cut subvideo that no longer needs the JPEGs. Long videos use on-demand mode (no full pre-extract), so the guard falsely reported missing frames and aborted. Removed stale guard + unused _list_frame_paths helper' },
+        ]
+    },
+    {
         version: '2.3.8',
         date: '2026-05-06',
         changes: [
