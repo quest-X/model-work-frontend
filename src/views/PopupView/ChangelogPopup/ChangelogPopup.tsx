@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.4',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【UX】模型加载失败弹窗显示后端真实错误：之前不论何因都套通用文案"无法连接推理服务器/请确认 detect_server.py 已启动"，掩盖 .pt 文件损坏、torch 解压失败、HF 下载超时等具体原因；现在直接展示后端 /load-status 返回的 error 字段', en: '[UX] Model-load failure dialog now shows the real backend error: previously every failure showed the canned "cannot connect to inference server" text, masking real causes (.pt corruption, torch unzip failure, HF download timeout); now displays the backend /load-status error verbatim' },
+            { zh: '【清理】已离队 1 个损坏模型 backend/yolo11x-seg.pt（42MB，正常应 119MB；torch zip central directory 缺失），重命名为 *.broken；后端 loader 不再误用，下次请求 yolo11x-seg 会从 ultralytics 自动下载新副本', en: '[Cleanup] Quarantined corrupted backend/yolo11x-seg.pt (42MB; should be 119MB; torch reported missing zip central directory), renamed to *.broken; backend loader will auto-download a fresh copy from ultralytics on next request' },
+        ]
+    },
+    {
         version: '2.3.3',
         date: '2026-05-06',
         changes: [
