@@ -334,10 +334,12 @@ const VideoEditor: React.FC<IProps> = ({
             try {
                 updateVideoMetadata(activeVideo.id, duration, fps, frames, videoSize);
 
-                // 视频模式下缩略图（150×150，~15KB）会被 FramePlayer 流式 storeImage 进 LRU，
-                // 默认 cap 300 会把早期帧挤掉，导致点击早期帧时其 <img src> 被清空显示破图。
-                // 抬到能装下所有帧 + 余量；典型 5min 1080p ≈ 9000 帧 × 15KB ≈ 135MB，可接受。
-                ImageRepository.setLiveImageCap(Math.max(frames + 100, 300));
+                // 视频模式下缩略图给一个有上限的 cap（非"全部驻留"）。之前 v2.3.3 抬到
+                // frames+100 可以治标"点击早期帧破图"，但 8298 帧视频会让 ImageRepository
+                // 撑到 250MB+；叠加 SAM 2 polygon 等其它 state 容易触发 Chrome OOM。
+                // 现在 cap 固定 1000 帧 ≈ 30MB，超出的旧帧由 LRU 淘汰，ImagePreview 在
+                // render 时自动重新拉缩略图（loadVideoFrameThumbnail / FileUtil.loadImage 路径）。
+                ImageRepository.setLiveImageCap(Math.min(frames + 100, 1000));
 
                 const currentImagesData = imagesDataRef.current;
 
