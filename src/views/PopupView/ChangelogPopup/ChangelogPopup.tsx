@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.13',
+        date: '2026-05-06',
+        changes: [
+            { zh: '【内存】SAM 2 跟踪不再 dispatch storm：每帧的 polygon 走 ObjectTrackingActions 内的合并器（Map<imgId, ImageData> + requestIdleCallback @ 50ms），700+ 帧 dispatch 从 700 → ~10-20 次单一 updateImageData，避免 8298 行虚拟列表反复 reconcile 导致浏览器崩溃。完成/取消时强制 flush 残留 polygon', en: '[Memory] SAM 2 tracking no longer triggers a dispatch storm: per-frame polygons funnel through an in-module coalescer (Map<imgId, ImageData> + requestIdleCallback @ 50ms), so a 700+-frame run drops from 700 dispatches to ~10-20 batched updateImageData calls. The 8298-row virtual thumbnail list no longer reconciles per frame. Force-flush on done/cancel so trailing polygons land' },
+        ]
+    },
+    {
         version: '2.3.12',
         date: '2026-05-06',
         changes: [
