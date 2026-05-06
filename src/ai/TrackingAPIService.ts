@@ -23,6 +23,7 @@ export type StreamTrackParams = {
 };
 
 export type TrackStatusMessage =
+    | { status: 'clipping'; n_frames: number; message: string }
     | { status: 'preparing'; frames_to_encode: number; skip_until: number; message: string }
     | { status: 'walking'; current: number; target: number };
 

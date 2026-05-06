@@ -165,9 +165,12 @@ export class ObjectTrackingActions {
                     );
                 },
                 onStatus: (s) => {
-                    if (s.status === 'preparing') {
-                        updateProgress(1, `预处理中：SAM 2 视频编码 0/${s.frames_to_encode}（之后开始 yield 第 ${s.skip_until} 帧）`);
+                    if (s.status === 'clipping') {
+                        updateProgress(1, `FFmpeg 切片 ${s.n_frames} 帧中...`);
+                    } else if (s.status === 'preparing') {
+                        updateProgress(1, `预处理中：SAM 2 视频编码 ${s.frames_to_encode} 帧（clip 已就位）`);
                     } else if (s.status === 'walking') {
+                        // 旧路径残留；clip 模式下不再触发，但保留以兼容
                         updateProgress(1, `预处理中：SAM 2 视频编码 ${s.current}/${s.target}`);
                     }
                 },
