@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.3.15',
+        date: '2026-05-07',
+        changes: [
+            { zh: '【UX】更新日志"加载更多"按钮回归：v2.0 时代的 commit 86971c81 (2026-04-15) 把按钮悄悄换成了滚到底部 80px 自动加载 + 一行 11px / #555 的斜体 hint 文本，对比度太低基本看不见。现在恢复成显式 button（蓝色边框，hover 加深），保留滚动自动加载兼容', en: '[UX] Restored "Load more" button in changelog: an old refactor (commit 86971c81 on 2026-04-15) silently replaced the button with scroll-to-bottom autoload + an 11px/#555 italic hint that was effectively invisible. Now an explicit button (blue outline, deepens on hover) is back; scroll autoload still works as a fallback' },
+        ]
+    },
+    {
         version: '2.3.14',
         date: '2026-05-07',
         changes: [
@@ -1166,9 +1173,15 @@ const ChangelogPopup: React.FC<IProps> = ({language}) => {
                     </div>
                 ))}
                 {hasMore && (
-                    <div className="LoadMoreHint">
-                        {isZh ? `继续滚动加载更多 (剩余 ${CHANGELOG_DATA.length - visibleCount})` : `Scroll for more (${CHANGELOG_DATA.length - visibleCount} remaining)`}
-                    </div>
+                    <button
+                        className="LoadMoreButton"
+                        onClick={() => setVisibleCount(c => Math.min(c + LOAD_STEP, CHANGELOG_DATA.length))}
+                        type="button"
+                    >
+                        {isZh
+                            ? `加载更多 (剩余 ${CHANGELOG_DATA.length - visibleCount})`
+                            : `Load more (${CHANGELOG_DATA.length - visibleCount} remaining)`}
+                    </button>
                 )}
             </div>
         );

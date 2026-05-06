@@ -1,6 +1,6 @@
 {
   "name": "make-sense",
-  "version": "2.3.14",
+  "version": "2.3.15",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.9.3",
