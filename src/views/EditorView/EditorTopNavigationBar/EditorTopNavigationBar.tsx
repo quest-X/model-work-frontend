@@ -731,7 +731,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                             border: '1px solid #555',
                             borderRadius: 4,
                             fontSize: 11,
-                            padding: '2px 20px 2px 6px',
+                            height: 22,
+                            lineHeight: '16px',
+                            padding: '0 20px 0 6px',
                             cursor: 'default',
                             outline: 'none',
                             maxWidth: 220,
@@ -740,6 +742,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                             textOverflow: 'ellipsis',
                             position: 'relative',
                             textAlign: 'left',
+                            boxSizing: 'border-box',
                         }}
                     >
                         {activeModelLabel}
@@ -787,10 +790,13 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         color: imagesData.length === 0 ? '#666' : isFullImageInferenceInProgress ? '#fff' : '#ccc',
                         border: '1px solid #555',
                         borderRadius: 4,
-                        padding: '2px 10px',
+                        height: 22,
+                        lineHeight: '16px',
+                        padding: '0 10px',
                         fontSize: 11,
                         cursor: imagesData.length === 0 ? 'not-allowed' : 'pointer',
                         whiteSpace: 'nowrap',
+                        boxSizing: 'border-box',
                     }}
                 >
                     {isFullImageInferenceInProgress
