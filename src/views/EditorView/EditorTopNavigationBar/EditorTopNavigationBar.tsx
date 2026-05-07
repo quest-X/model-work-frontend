@@ -33,6 +33,7 @@ import { AIModelsSelector } from '../../../store/selectors/AIModelsSelector';
 import { YOLO_MODEL_FAMILIES, SEG_MODEL_FAMILIES } from '../../PopupView/CallModelPopup/CallModelPopup';
 import { EditorActions } from '../../../logic/actions/EditorActions';
 import { submitNewNotification, deleteNotificationById } from '../../../store/notifications/actionCreators';
+import { getTimelineRange, FrameRange } from '../VideoTimeline/VideoTimeline';
 import { NotificationUtil } from '../../../utils/NotificationUtil';
 const BUTTON_SIZE: ISize = { width: 30, height: 30 };
 const BUTTON_PADDING: number = 10;
@@ -259,6 +260,14 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         queueMicrotask(() => { EditorActions.fullRender(); });
     }, [toggleImageAILabelsVisibility, toggleImageSegmentationLabelsVisibility, imageAIStates]);
 
+    // ── 时间轴选区（Shift+拖拽）──
+    const [timelineRange, setTimelineRange] = useState<FrameRange | null>(getTimelineRange());
+    useEffect(() => {
+        const handler = () => setTimelineRange(getTimelineRange());
+        window.addEventListener('timelineRangeChange', handler);
+        return () => window.removeEventListener('timelineRangeChange', handler);
+    }, []);
+
     // ── 推理下拉菜单 ──
     const [showInferenceMenu, setShowInferenceMenu] = useState(false);
     const inferenceMenuRef = useRef<HTMLDivElement>(null);
@@ -419,7 +428,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 
     // 点击外部关闭下拉
     useEffect(() => {
-        if (!showInferenceMenu) return;
+        if (!showInferenceMenu) return undefined;
         const handleClickOutside = (e: MouseEvent) => {
             if (inferenceMenuRef.current && !inferenceMenuRef.current.contains(e.target as Node)) {
                 setShowInferenceMenu(false);
@@ -502,6 +511,20 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 
         const activeImageData = LabelsSelector.getActiveImageData();
         if (!activeImageData) return;
+
+        // 时间轴选区优先：有选区时，从 imagesData 中切出对应帧范围
+        const range = getTimelineRange();
+        if (range) {
+            const targets = imagesData.slice(range.startFrame, range.endFrame + 1);
+            if (targets.length === 0) return;
+            updateFullImageInferenceStatus(true);
+            if (isSegModel) {
+                AISegmentationActions.segmentBatch(targets, true);
+            } else {
+                AIDetectionActions.detectBatch(targets);
+            }
+            return;
+        }
 
         const selectedImages = imagesData.filter((img: ImageData) => img.isSelected);
         const isBatchMode = selectedImages.length > 1;
@@ -773,9 +796,14 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                     {isFullImageInferenceInProgress
                         ? (language === 'zh' ? '停止' : 'Stop')
                         : (() => {
+                            const label = language === 'zh' ? '推理' : 'Infer';
+                            // 时间轴选区优先显示帧数
+                            if (timelineRange) {
+                                const rangeCount = timelineRange.endFrame - timelineRange.startFrame + 1;
+                                return `${label} x${rangeCount}${language === 'zh' ? '帧' : 'f'}`;
+                            }
                             const selected = imagesData.filter((img: ImageData) => img.isSelected);
                             const count = selected.length > 1 ? selected.length : imagesData.length > 0 ? 1 : 0;
-                            const label = language === 'zh' ? '推理' : 'Infer';
                             return count > 1 ? `${label} x${count}` : label;
                         })()}
                 </button>

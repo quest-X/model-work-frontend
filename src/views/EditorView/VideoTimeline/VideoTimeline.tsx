@@ -11,6 +11,17 @@ export interface FrameRange {
     endFrame: number;
 }
 
+/**
+ * 全局可读的当前选区范围。EditorTopNavigationBar 读此值决定推理按钮文案。
+ * 更新时 dispatch 'timelineRangeChange' CustomEvent 让订阅者 re-render。
+ */
+let _currentRange: FrameRange | null = null;
+export function getTimelineRange(): FrameRange | null { return _currentRange; }
+function setGlobalRange(r: FrameRange | null) {
+    _currentRange = r;
+    window.dispatchEvent(new CustomEvent('timelineRangeChange', { detail: r }));
+}
+
 interface IProps {
     duration: number; // 视频总时长（秒）
     currentTime: number; // 当前播放时间（秒）
@@ -26,8 +37,6 @@ interface IProps {
     isMuted?: boolean; // 是否静音
     onToggleMute?: () => void; // 切换静音回调
     language: Language;
-    /** 选区推理回调：传入帧范围，由 VideoEditor 负责组装 ImageData[] 调 detectBatch/segmentBatch */
-    onRangeInference?: (range: FrameRange) => void;
 }
 
 const VideoTimeline: React.FC<IProps> = ({
@@ -45,7 +54,6 @@ const VideoTimeline: React.FC<IProps> = ({
     isMuted = true,
     onToggleMute,
     language,
-    onRangeInference
 }) => {
     const texts = LanguageConfig[language];
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -348,6 +356,12 @@ const VideoTimeline: React.FC<IProps> = ({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [currentFrame, frames, fps, onFrameChange, selectionRange]);
 
+    // 同步选区到全局，让 EditorTopNavigationBar 的推理按钮能读到
+    useEffect(() => {
+        setGlobalRange(selectionRange);
+        return () => { setGlobalRange(null); }; // 卸载时清除
+    }, [selectionRange]);
+
     // 重绘时间轴
     useEffect(() => {
         drawTimeline();
@@ -370,20 +384,6 @@ const VideoTimeline: React.FC<IProps> = ({
         window.addEventListener('resize', updateSize);
         return () => window.removeEventListener('resize', updateSize);
     }, [size, drawTimeline]);
-
-    const rangeFrameCount = selectionRange
-        ? selectionRange.endFrame - selectionRange.startFrame + 1
-        : 0;
-
-    const handleRangeInference = () => {
-        if (selectionRange && onRangeInference) {
-            onRangeInference(selectionRange);
-        }
-    };
-
-    const handleClearRange = () => {
-        setSelectionRange(null);
-    };
 
     return (
         <div className="VideoTimeline" ref={containerRef}>
@@ -437,27 +437,10 @@ const VideoTimeline: React.FC<IProps> = ({
                 </div>
 
                 <div className="RightInfo">
-                    {selectionRange ? (
-                        <div className="RangeActions">
-                            <span className="RangeInfo">
-                                {texts.video.rangeFrames.replace('{count}', String(rangeFrameCount))}
-                            </span>
-                            {onRangeInference && (
-                                <button className="RangeInferButton" onClick={handleRangeInference}>
-                                    {texts.video.rangeInference}
-                                </button>
-                            )}
-                            <button className="RangeClearButton" onClick={handleClearRange} title={texts.video.rangeClear}>
-                                {texts.video.rangeClear}
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="HelpText">
-                            <span>{texts.video.shortcutMove1}</span>
-                            <span>{texts.video.shortcutPlayPause}</span>
-                            <span className="RangeHint">{texts.video.rangeHint}</span>
-                        </div>
-                    )}
+                    <div className="HelpText">
+                        <span>{texts.video.shortcutMove1}</span>
+                        <span>{texts.video.shortcutPlayPause}</span>
+                    </div>
                 </div>
             </div>
         </div>

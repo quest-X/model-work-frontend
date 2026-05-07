@@ -3,10 +3,9 @@ import { connect } from 'react-redux';
 import './VideoEditor.scss';
 import VideoPlayer from '../VideoPlayer/VideoPlayer';
 import FramePlayer from '../FramePlayer/FramePlayer';
-import VideoTimeline, { FrameRange } from '../VideoTimeline/VideoTimeline';
+import VideoTimeline from '../VideoTimeline/VideoTimeline';
 import Editor from '../Editor/Editor';
 import { AppState } from '../../../store';
-import { store } from '../../../index';
 import { VideoData } from '../../../store/video/types';
 import { ImageData } from '../../../store/labels/types';
 import { ISize } from '../../../interfaces/ISize';
@@ -16,14 +15,12 @@ import {
     updateVideoMetadata
 } from '../../../store/video/actionCreators';
 import { updateImageDataById, updateImageData, updateActiveImageIndex, addImageData, toggleImageSelection } from '../../../store/labels/actionCreators';
-import { updateFullImageInferenceStatus } from '../../../store/ai/actionCreators';
-import { AIDetectionActions } from '../../../logic/actions/AIDetectionActions';
 import { ImageDataUtil } from '../../../utils/ImageDataUtil';
 import { ImageRepository } from '../../../logic/imageRepository/ImageRepository';
 import { EditorActions } from '../../../logic/actions/EditorActions';
 import { ViewPortActions } from '../../../logic/actions/ViewPortActions';
 import { EditorModel } from '../../../staticModels/EditorModel';
-import { Language, LanguageConfig } from '../../../data/LanguageConfig';
+import { Language } from '../../../data/LanguageConfig';
 
 // Module-level stable empty array used as fallback for `frames` prop when
 // fast_ffmpeg_mode runs in on-demand mode (sessionId only, preExtractedFrames undefined).
@@ -473,30 +470,6 @@ const VideoEditor: React.FC<IProps> = ({
         setIsMuted(prev => !prev);
     }, []);
 
-    // Shift+拖拽选区 → 推理
-    const handleRangeInference = useCallback((range: FrameRange) => {
-        const currentImagesData = imagesDataRef.current;
-        const targets = currentImagesData.slice(range.startFrame, range.endFrame + 1);
-        if (targets.length === 0) return;
-
-        // 检查是否已有推理在进行
-        const state = store.getState();
-        if (state.ai.isFullImageInferenceInProgress) return;
-
-        store.dispatch(updateFullImageInferenceStatus(true));
-
-        // 根据当前模型类型路由：检测 vs 分割
-        const isSeg = state.aimodels?.selectedModelTask === 'segment';
-        if (isSeg) {
-            // 动态 import 避免循环依赖
-            import('../../../logic/actions/AISegmentationActions').then(m => {
-                m.AISegmentationActions.segmentBatch(targets, true);
-            });
-        } else {
-            AIDetectionActions.detectBatch(targets);
-        }
-    }, []);
-
     // 处理视频时间更新
     const lastFrameRef = React.useRef<number>(-1);
     const frameSkipCountRef = React.useRef<number>(0);
@@ -716,7 +689,6 @@ const VideoEditor: React.FC<IProps> = ({
                     onPlayPause={handlePlayPause}
                     isMuted={isMuted}
                     onToggleMute={handleToggleMute}
-                    onRangeInference={handleRangeInference}
                 />
             </div>
         </div>
