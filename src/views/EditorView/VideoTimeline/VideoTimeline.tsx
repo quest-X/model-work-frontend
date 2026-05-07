@@ -98,10 +98,10 @@ const VideoTimeline: React.FC<IProps> = ({
         if (selectionRange) {
             const x1 = frames > 1 ? (selectionRange.startFrame / (frames - 1)) * width : 0;
             const x2 = frames > 1 ? (selectionRange.endFrame / (frames - 1)) * width : width;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             ctx.fillRect(x1, 0, x2 - x1, height - 30);
             // 选区边界线
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
             ctx.lineWidth = 1;
             ctx.setLineDash([]);
             ctx.beginPath();
