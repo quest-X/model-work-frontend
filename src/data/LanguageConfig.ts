@@ -299,6 +299,10 @@ export interface LanguageTexts {
         shortcutMove1: string;
         shortcutMove10: string;
         shortcutPlayPause: string;
+        rangeInference: string;   // "对选区推理"
+        rangeFrames: string;      // "{count} 帧"
+        rangeClear: string;       // "取消选区"
+        rangeHint: string;        // "Shift+拖拽 选择范围"
     };
 
     // Notifications
@@ -797,6 +801,10 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             shortcutMove1: '← →: 移动 1 帧',
             shortcutMove10: 'A D 移动 10 帧',
             shortcutPlayPause: '空格: 播放/暂停',
+            rangeInference: '对选区推理',
+            rangeFrames: '{count} 帧',
+            rangeClear: '✕',
+            rangeHint: 'Shift+拖拽: 选择范围',
         },
 
         // Notifications
@@ -1270,6 +1278,10 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             shortcutMove1: '← →: Move 1 frame',
             shortcutMove10: 'A D Move 10 frames',
             shortcutPlayPause: 'Space: Play/Pause',
+            rangeInference: 'Infer selection',
+            rangeFrames: '{count} frames',
+            rangeClear: '✕',
+            rangeHint: 'Shift+drag: select range',
         },
 
         // Notifications
