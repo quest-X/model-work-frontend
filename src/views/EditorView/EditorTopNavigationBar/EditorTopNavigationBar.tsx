@@ -721,7 +721,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 </div>;
             }, [imageAIStates, imagesData, activeImageIndex, toggleAILabelsOnClick, isSAMLoaded, smartAnnotationActive, smartAnnotationOnClick, isTrackingModelLoaded, trackingOnClick, trackingMode, trackingInProgress, currentTexts, eraserMode, eraserFineMode, eraserOnClick, language])}
             <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 6, height: '100%' }}>
-                <div ref={inferenceMenuRef} style={{ position: 'relative' }}>
+                <div ref={inferenceMenuRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <button
                         disabled={isFullImageInferenceInProgress || loadedModels.length === 0}
                         onClick={() => setShowInferenceMenu(v => !v)}
