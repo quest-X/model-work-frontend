@@ -110,7 +110,7 @@
     cursor: pointer;
 
     &.on {
-      background-color: #fff;
+      background-color: #009efd;
     }
   }
 
@@ -126,7 +126,6 @@
 
     .TaskManagerPanel__switchTrack.on & {
       left: 16px;
-      background-color: #333;
     }
   }
 
