@@ -16,6 +16,17 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.5.3',
+        date: '2026-05-07',
+        changes: [
+            { zh: '【新功能】Shift+拖拽时间轴选区推理：按住 Shift 在时间轴上拖拽选取帧范围，顶部推理按钮自动显示"推理 ×N帧"，点击即可对选定范围执行批量推理', en: '[Feature] Shift+drag timeline range inference: hold Shift and drag on the timeline to select a frame range; the top inference button shows "Infer ×N frames" and runs batch inference on the selection' },
+            { zh: '【增强】任务管理器改进：Badge 显示全部任务数量（含已完成）；任务行带完整时间戳（YYYY-MM-DD HH:MM:SS）；自动保存每次创建独立记录不再覆盖；所有任务保留完整历史不再自动移除，底部开关控制已完成任务显示/隐藏', en: '[Enhance] Task Manager improvements: badge shows total task count (including completed); task rows display full timestamps (YYYY-MM-DD HH:MM:SS); each autosave creates an independent record instead of overwriting; all tasks are preserved in history (no auto-remove), with a footer toggle to show/hide completed tasks' },
+            { zh: '【UX】推理进度通知可点击关闭：推理过程中的进度条通知现在可以点击标题直接关闭，任务进度仍可在任务管理器查看', en: '[UX] Inference progress notifications are now dismissible: click to close during inference; progress is still visible in the Task Manager' },
+            { zh: '【修复】模型下拉与推理按钮高度对齐：统一 22px 高度 + flex 居中', en: '[Fix] Model dropdown and inference button height aligned: unified 22px height + flex centering' },
+            { zh: '【优化】自动保存频率降低：防抖从 1s 增加到 5s，移除不必要的依赖项（切帧不再触发保存）', en: '[Optimize] Autosave frequency reduced: debounce increased from 1s to 5s, removed unnecessary deps (frame switching no longer triggers save)' },
+        ]
+    },
+    {
         version: '2.5.2',
         date: '2026-05-07',
         changes: [
