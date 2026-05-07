@@ -5,6 +5,9 @@ import { AIStateStorageManager } from '../utils/AIStateStorageManager';
 import { LabelsSelector } from '../store/selectors/LabelsSelector';
 import { GeneralSelector } from '../store/selectors/GeneralSelector';
 import { ImageRepository } from '../logic/imageRepository/ImageRepository';
+import { TaskTracker } from './TaskTracker';
+import { TaskType } from '../store/tasks/types';
+import { LanguageConfig } from '../data/LanguageConfig';
 
 export class AutoSaveService {
     private static saveTimer: NodeJS.Timeout | null = null;
@@ -130,14 +133,28 @@ export class AutoSaveService {
     }
 
     public static async saveCurrentState(): Promise<void> {
-        try {
-            // Skip the entire heavy path when nothing changed since last save.
-            // First call always falls through (lastSavedSignature is empty).
-            const sig = this.computeSignature();
-            if (sig === this.lastSavedSignature && this.lastSavedSignature !== '') {
-                return;
-            }
+        // Skip the entire heavy path when nothing changed since last save.
+        // First call always falls through (lastSavedSignature is empty).
+        // 注意：信号无变化时直接 return，不创建 task — 避免每 3s 闪一次面板。
+        const sig = this.computeSignature();
+        if (sig === this.lastSavedSignature && this.lastSavedSignature !== '') {
+            return;
+        }
 
+        // 走到这里就是真正要写盘了，登记 P0 task。stableId='autosave' 确保
+        // 重复触发时是 upsert 替换，不刷屏；autoRemove 1500ms 让一次绿闪后立即消失。
+        const lang = store.getState().general.language;
+        const t = LanguageConfig[lang].taskManager;
+        const task = TaskTracker.startTask({
+            type: TaskType.AUTO_SAVE,
+            priority: 'P0',
+            title: t.types.autoSave,
+            cancellable: false,
+            stableId: 'autosave',
+            autoRemoveAfterMs: 1500,
+        });
+
+        try {
             // 保存轻量设置到localStorage
             await this.saveSettings();
 
@@ -150,9 +167,14 @@ export class AutoSaveService {
             if (saved) {
                 this.lastSavedSignature = sig;
                 if (this.onSaveComplete) this.onSaveComplete();
+                task.complete();
+            } else {
+                // 比如数据量超 500MB 守卫触发，跳过但不算失败
+                task.complete();
             }
         } catch (error) {
             console.error('保存当前状态失败:', error);
+            task.fail(error);
         }
     }
     

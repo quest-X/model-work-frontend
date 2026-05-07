@@ -6,6 +6,7 @@ import {notificationsReducer} from './notifications/reducer';
 import {aiModelsReducer} from './aimodels/reducer';
 import {videoReducer} from './video/reducer';
 import {queueReducer} from './queue/reducer';
+import {tasksReducer} from './tasks/reducer';
 
 export const rootReducer = combineReducers({
     general: generalReducer,
@@ -14,7 +15,8 @@ export const rootReducer = combineReducers({
     notifications: notificationsReducer,
     aimodels: aiModelsReducer,
     video: videoReducer,
-    queue: queueReducer
+    queue: queueReducer,
+    tasks: tasksReducer
 });
 
 export type AppState = ReturnType<typeof rootReducer>;

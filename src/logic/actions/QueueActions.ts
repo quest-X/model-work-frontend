@@ -8,12 +8,26 @@ import { ImageRepository } from '../imageRepository/ImageRepository';
 import { ImageDataUtil } from '../../utils/ImageDataUtil';
 import { VideoData } from '../../store/video/types';
 import { EditorModel } from '../../staticModels/EditorModel';
+import { TaskTracker } from '../../services/TaskTracker';
+import { TaskType } from '../../store/tasks/types';
+import { LanguageConfig } from '../../data/LanguageConfig';
 
 export class QueueActions {
     public static async switchToQueueItem(
         targetItem: QueueItem,
         currentImagesData: ImageData[]
     ): Promise<void> {
+        // P0 Task Manager 行：队列文件切换属于"基础数据加载"。
+        const tmTexts = LanguageConfig[store.getState().general.language].taskManager;
+        const task = TaskTracker.startTask({
+            type: TaskType.QUEUE_LOAD,
+            priority: 'P0',
+            title: tmTexts.types.queueLoad,
+            subtitle: targetItem.name,
+            cancellable: false,
+            autoRemoveAfterMs: 1500,
+        });
+
         // 1. 保存当前文件的标注缓存
         const currentFileId = ImageRepository.getActiveFileId();
         if (currentFileId && currentImagesData.length > 0) {
@@ -92,11 +106,13 @@ export class QueueActions {
             }
 
             store.dispatch(updateQueueItem(targetItem.id, { status: QueueItemStatus.COMPLETED }));
+            task.complete();
         } catch (error) {
             store.dispatch(updateQueueItem(targetItem.id, {
                 status: QueueItemStatus.ERROR,
                 error: error instanceof Error ? error.message : '加载失败'
             }));
+            task.fail(error);
         }
     }
 }

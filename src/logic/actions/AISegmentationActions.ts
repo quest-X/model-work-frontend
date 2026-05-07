@@ -14,6 +14,8 @@ import {LanguageConfig} from "../../data/LanguageConfig";
 import {FrameExtractorService} from "../../services/FrameExtractorService";
 import {EditorActions} from "./EditorActions";
 import {EditorModel} from "../../staticModels/EditorModel";
+import {TaskTracker} from "../../services/TaskTracker";
+import {TaskType} from "../../store/tasks/types";
 
 export class AISegmentationActions {
 
@@ -75,6 +77,16 @@ export class AISegmentationActions {
         const progressNotification = NotificationUtil.createInferenceProgressNotification();
         store.dispatch(submitNewNotification(progressNotification));
 
+        // P1 Task Manager 行：可取消，onCancel 走现有 isCancelled() 路径。
+        const tmTexts = LanguageConfig[store.getState().general.language].taskManager;
+        const task = TaskTracker.startTask({
+            type: TaskType.BATCH_SEGMENT,
+            priority: 'P1',
+            title: tmTexts.types.batchSegment,
+            cancellable: true,
+            onCancel: () => store.dispatch(updateFullImageInferenceStatus(false)),
+        });
+
         const videoState = store.getState().video;
         const isVideo = videoState.isVideoMode;
         const allImagesData: ImageData[] = store.getState().labels.imagesData;
@@ -93,6 +105,9 @@ export class AISegmentationActions {
                 stepDescription: stepDesc,
                 description: detail
             }));
+            const m = /^(\d+)%/.exec(detail);
+            const pct = m ? parseInt(m[1], 10) : undefined;
+            task.update(pct, stepDesc);
         };
 
         const preFrames = activeVideo?.preExtractedFrames;
@@ -117,6 +132,7 @@ export class AISegmentationActions {
             if (captureTotal === 0) {
                 store.dispatch(deleteNotificationById(progressNotification.id));
                 store.dispatch(updateFullImageInferenceStatus(false));
+                task.complete();
                 return;
             }
 
@@ -233,9 +249,11 @@ export class AISegmentationActions {
             });
         }
 
-        // ── 完成 ──
+        // ── 完成 / 取消 ──
+        const wasCancelled = this.isCancelled();
         store.dispatch(deleteNotificationById(progressNotification.id));
         store.dispatch(updateFullImageInferenceStatus(false));
+        if (wasCancelled) task.cancel(); else task.complete();
 
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log('[BatchSegment] Complete', { totalTime: totalTime + 's', successCount, failCount, totalObjects });

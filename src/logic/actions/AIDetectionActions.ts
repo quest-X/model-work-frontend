@@ -17,6 +17,8 @@ import {LanguageConfig} from "../../data/LanguageConfig";
 import {FrameExtractorService} from "../../services/FrameExtractorService";
 import {EditorActions} from "./EditorActions";
 import {EditorModel} from "../../staticModels/EditorModel";
+import {TaskTracker} from "../../services/TaskTracker";
+import {TaskType} from "../../store/tasks/types";
 
 // ── Dispatch coalescing ───────────────────────────────────────────────────
 // Per-frame `updateImageDataById` during streaming inference mutates
@@ -286,6 +288,16 @@ export class AIDetectionActions {
         const progressNotification = NotificationUtil.createInferenceProgressNotification();
         store.dispatch(submitNewNotification(progressNotification));
 
+        // P1 Task Manager 行：可取消，onCancel 走现有 isCancelled() 路径。
+        const tmTexts = LanguageConfig[store.getState().general.language].taskManager;
+        const task = TaskTracker.startTask({
+            type: TaskType.BATCH_DETECT,
+            priority: 'P1',
+            title: tmTexts.types.batchDetect,
+            cancellable: true,
+            onCancel: () => store.dispatch(updateFullImageInferenceStatus(false)),
+        });
+
         const videoState = store.getState().video;
         const isVideo = videoState.isVideoMode;
         const allImagesData: ImageData[] = store.getState().labels.imagesData;
@@ -297,6 +309,7 @@ export class AIDetectionActions {
             : 'image');
 
         // 通知辅助（节流 150ms）— 更新 stepDescription + currentStep
+        // 同步喂 Task Manager：解析 detail 里的 "{pct}% — ..." 提取 pct，没有就传 undefined。
         let lastNotifyTime = 0;
         const notify = (step: number, stepDesc: string, detail: string, force = false) => {
             const now = Date.now();
@@ -308,6 +321,9 @@ export class AIDetectionActions {
                 stepDescription: stepDesc,
                 description: detail
             }));
+            const m = /^(\d+)%/.exec(detail);
+            const pct = m ? parseInt(m[1], 10) : undefined;
+            task.update(pct, stepDesc);
         };
 
         // ======== Video mode (fast_ffmpeg_mode or raw_browser_mode) ========
@@ -333,6 +349,7 @@ export class AIDetectionActions {
             if (captureTotal === 0) {
                 store.dispatch(deleteNotificationById(progressNotification.id));
                 store.dispatch(updateFullImageInferenceStatus(false));
+                task.complete();
                 return;
             }
 
@@ -521,6 +538,17 @@ export class AIDetectionActions {
         const wasCancelled = this.isCancelled();
         store.dispatch(deleteNotificationById(progressNotification.id));
         store.dispatch(updateFullImageInferenceStatus(false));
+
+        // Task Manager 行收尾：cancel 已在 onCancel 路径登记过，这里走 complete
+        // （wasCancelled=true 时面板那边已经 dispatch 过 TASK_CANCEL，下面这次也是
+        // 幂等的 — reducer 只是覆盖 status，cancelled 优先级高于 completed 的语义
+        // 取决于谁后到。为避免被 complete() 反向覆盖成 completed，这里区分一下。）
+        if (wasCancelled) {
+            // 由 panel × 触发的取消已经 dispatch TASK_CANCEL；非 panel 路径下也走 cancel。
+            task.cancel();
+        } else {
+            task.complete();
+        }
 
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log(`[BatchDetect] ${wasCancelled ? 'Cancelled' : 'Complete'}`, { totalTime: totalTime + 's', successCount, failCount, totalObjects });

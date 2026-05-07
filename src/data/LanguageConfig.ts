@@ -451,6 +451,32 @@ export interface LanguageTexts {
             objectId: string; // "对象ID"
         };
     };
+
+    // Task Manager
+    taskManager: {
+        title: string;
+        tooltip: string; // "任务管理器 ({count})"
+        emptyState: string;
+        priorityP0: string;
+        priorityP1: string;
+        priorityP2: string;
+        statusRunning: string;
+        statusCompleted: string;
+        statusError: string;
+        statusCancelled: string;
+        cancel: string;
+        types: {
+            autoSave: string;
+            frameExtraction: string;
+            batchDetect: string;
+            batchSegment: string;
+            tracking: string;
+            export: string;
+            queueLoad: string;
+        };
+        subtitleFrames: string; // "{done}/{total} 帧"
+        showCompleted: string; // "显示已完成"
+    };
 }
 
 export const LanguageConfig: Record<Language, LanguageTexts> = {
@@ -901,6 +927,30 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 thumbnail: '缩略图',
                 objectId: '对象'
             }
+        },
+        taskManager: {
+            title: '任务管理器',
+            tooltip: '任务管理器 ({count})',
+            emptyState: '当前没有后台任务',
+            priorityP0: 'P0 · 数据安全',
+            priorityP1: 'P1 · 重型任务',
+            priorityP2: 'P2 · 轻量任务',
+            statusRunning: '进行中',
+            statusCompleted: '已完成',
+            statusError: '失败',
+            statusCancelled: '已取消',
+            cancel: '取消',
+            types: {
+                autoSave: '自动保存',
+                frameExtraction: '视频拆帧',
+                batchDetect: '批量检测',
+                batchSegment: '批量分割',
+                tracking: '目标跟踪',
+                export: '导出标注',
+                queueLoad: '加载队列项'
+            },
+            subtitleFrames: '{done}/{total} 帧',
+            showCompleted: '显示已完成'
         }
     },
     [Language.ENGLISH]: {
@@ -1350,6 +1400,30 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 thumbnail: 'Thumbnail',
                 objectId: 'Object'
             }
+        },
+        taskManager: {
+            title: 'Task Manager',
+            tooltip: 'Task Manager ({count})',
+            emptyState: 'No background tasks',
+            priorityP0: 'P0 · Data integrity',
+            priorityP1: 'P1 · Heavy work',
+            priorityP2: 'P2 · Light tasks',
+            statusRunning: 'Running',
+            statusCompleted: 'Done',
+            statusError: 'Error',
+            statusCancelled: 'Cancelled',
+            cancel: 'Cancel',
+            types: {
+                autoSave: 'Auto save',
+                frameExtraction: 'Video frame extraction',
+                batchDetect: 'Batch detection',
+                batchSegment: 'Batch segmentation',
+                tracking: 'Object tracking',
+                export: 'Export annotations',
+                queueLoad: 'Load queue item'
+            },
+            subtitleFrames: 'frame {done}/{total}',
+            showCompleted: 'Show completed'
         }
     }
 };

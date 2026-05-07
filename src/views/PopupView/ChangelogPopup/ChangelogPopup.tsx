@@ -16,6 +16,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.5.2',
+        date: '2026-05-07',
+        changes: [
+            { zh: '【新功能】任务管理器（右下角）：在右侧 sidebar 底部新增任务图标，对称于左下保存图标。点击弹出浮动面板，按 P0（自动保存）/ P1（视频拆帧、批量检测、分割、跟踪）/ P2（YOLO 导出）三档分组展示后台任务，带帧进度与可中断按钮。点击外部 / Esc 关闭', en: '[Feature] Task Manager (bottom-right): new task icon in the right sidebar bottom, mirroring the bottom-left save button. Click to open a floating panel grouping background tasks by P0 (autosave) / P1 (frame extraction, batch detect, segment, track) / P2 (YOLO export), with per-frame progress and a cancel button on cancellable tasks. Closes on click-outside or Esc' },
+            { zh: '【UX】任务面板贴角定位：弹框右下角对齐图标左上角，window resize 时自动跟随，不再固定坐标偏移', en: '[UX] Task panel anchors its bottom-right corner to the icon\'s top-left corner; recomputes on window resize instead of using a fixed offset' },
+        ]
+    },
+    {
         version: '2.5.1',
         date: '2026-05-07',
         changes: [

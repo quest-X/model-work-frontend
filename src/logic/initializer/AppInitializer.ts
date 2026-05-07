@@ -1,4 +1,5 @@
 import {updateWindowSize} from '../../store/general/actionCreators';
+import {tasksClearAll} from '../../store/tasks/actionCreators';
 import {ContextManager} from '../hotkey/ContextManager';
 import {store} from '../../index';
 import {PlatformUtil} from '../../utils/PlatformUtil';
@@ -9,6 +10,8 @@ import {EnvironmentUtil} from '../../utils/EnvironmentUtil';
 
 export class AppInitializer {
     public static inti():void {
+        // 启动时清空 tasks：HMR/重水合后残留的 "running" 行跨 session 没有意义。
+        store.dispatch(tasksClearAll());
         AppInitializer.handleResize();
         AppInitializer.detectDeviceParams();
         AppInitializer.handleAccidentalPageExit();

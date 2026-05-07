@@ -49,6 +49,47 @@
     }
   }
 
+  // 镜像 SaveButtonBottom，用于右侧 sidebar 底部的 Task Manager 入口按钮。
+  .TaskManagerButtonBottom {
+    position: absolute;
+    bottom: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    border-radius: 3px;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    &.active {
+      background-color: rgba(0, 158, 253, 0.2);
+    }
+
+    .Badge {
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      min-width: 14px;
+      height: 14px;
+      padding: 0 3px;
+      border-radius: 7px;
+      background-color: #009efd;
+      color: #fff;
+      font-size: 9px;
+      font-weight: 600;
+      line-height: 14px;
+      text-align: center;
+      pointer-events: none;
+      box-shadow: 0 0 0 1px #282828;
+    }
+  }
+
   .EditorWrapper {
     align-self: stretch;
     flex: 1;

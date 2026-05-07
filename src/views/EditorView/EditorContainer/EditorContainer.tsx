@@ -34,6 +34,8 @@ import InferenceResultsButton from '../InferenceResultsButton/InferenceResultsBu
 import InferenceResultsView from '../InferenceResultsView/InferenceResultsView';
 import BatchStatisticsView from '../BatchStatisticsView/BatchStatisticsView';
 import {AutoSaveService} from '../../../services/AutoSaveService';
+import {TaskManagerButton} from '../TaskManager/TaskManagerButton';
+import {TaskManagerPanel} from '../TaskManager/TaskManagerPanel';
 import {EditorContext} from '../../../logic/hotkey/EditorContext';
 import {v4 as uuidv4} from 'uuid';
 import {ImageRepository} from '../../../logic/imageRepository/ImageRepository';
@@ -96,6 +98,10 @@ const EditorContainer: React.FC<IProps> = (
     const [showQueueList, setShowQueueList] = useState<boolean>(false);
     const [isWindowDragActive, setIsWindowDragActive] = useState(false);
     const [videoProcessing, setVideoProcessing] = useState<{phase: string; progress: number; fileName: string} | null>(null);
+
+    // Task Manager 浮动面板开关 + 按钮 ref（click-outside 排除按钮自身）
+    const [taskPanelOpen, setTaskPanelOpen] = useState(false);
+    const taskButtonRef = useRef<HTMLDivElement>(null);
 
     // 手动保存
     const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
@@ -567,7 +573,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '167px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.5.1</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.5.2</div>
             <div
                 className='SaveButtonBottom'
                 onClick={handleSave}
@@ -640,6 +646,11 @@ const EditorContainer: React.FC<IProps> = (
                 onClick={batchStatisticsButtonOnClick}
                 isActive={rightTabStatus && activeRightPanel === 'statistics'}
                 style={{top: '253px'}}
+            />
+            <TaskManagerButton
+                buttonRef={taskButtonRef}
+                isActive={taskPanelOpen}
+                onClick={() => setTaskPanelOpen(o => !o)}
             />
         </>
     };
@@ -741,6 +752,13 @@ const EditorContainer: React.FC<IProps> = (
                 renderContent={rightSideBarRender}
                 key='right-side-navigation-bar'
             />
+            {taskPanelOpen && (
+                <TaskManagerPanel
+                    onClose={() => setTaskPanelOpen(false)}
+                    excludeRef={taskButtonRef}
+                    anchorRef={taskButtonRef}
+                />
+            )}
         </div>
     );
 };

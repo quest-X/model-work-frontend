@@ -16,6 +16,7 @@ import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { LabelMeExporter } from '../../../logic/export/labelme/LabelMeExporter';
 import { YOLOPackExporter } from '../../../logic/export/yolo/YOLOPackExporter';
 import { ImageData } from '../../../store/labels/types';
+import { TaskTracker } from '../../../services/TaskTracker';
 
 export type ExportMode = 'simple' | 'complete';
 type ExportTarget = 'labelme' | 'yolo';
@@ -53,22 +54,25 @@ const ExportLabelPopup: React.FC<IProps> = ({ activeLabelType, language, imagesD
     const zh = language === Language.CHINESE;
 
     const onAccept = (type: LabelType) => {
+        // P2 Task Manager 行：每次导出登记一次。wrapExport 自动 start/complete/fail。
+        const t = LanguageConfig[language].taskManager;
+        const exportTitle = (subType: string) => `${t.types.export} · ${subType}`;
         if (type === LabelType.RECT || type === LabelType.POLYGON) {
             if (exportTarget === 'labelme') {
-                LabelMeExporter.export(exportMode);
+                void TaskTracker.wrapExport(exportTitle('LabelMe'), () => LabelMeExporter.export(exportMode));
             } else {
-                YOLOPackExporter.export(exportMode);
+                void TaskTracker.wrapExport(exportTitle('YOLO'), () => YOLOPackExporter.export(exportMode));
             }
         } else {
             switch (type) {
                 case LabelType.POINT:
-                    PointLabelsExporter.export(exportFormatType);
+                    void TaskTracker.wrapExport(exportTitle('Point'), () => PointLabelsExporter.export(exportFormatType));
                     break;
                 case LabelType.LINE:
-                    LineLabelsExporter.export(exportFormatType);
+                    void TaskTracker.wrapExport(exportTitle('Line'), () => LineLabelsExporter.export(exportFormatType));
                     break;
                 case LabelType.IMAGE_RECOGNITION:
-                    TagLabelsExporter.export(exportFormatType);
+                    void TaskTracker.wrapExport(exportTitle('Tag'), () => TagLabelsExporter.export(exportFormatType));
                     break;
             }
         }

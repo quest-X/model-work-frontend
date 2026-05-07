@@ -28,6 +28,9 @@ import { EditorActions } from './EditorActions';
 import { FrameExtractorService } from '../../services/FrameExtractorService';
 import { updateVideoSessionId } from '../../store/video/actionCreators';
 import { LabelUtil } from '../../utils/LabelUtil';
+import { TaskTracker, TaskHandle } from '../../services/TaskTracker';
+import { TaskType } from '../../store/tasks/types';
+import { LanguageConfig } from '../../data/LanguageConfig';
 
 type StartParams = {
     sessionId: string;
@@ -113,6 +116,8 @@ function ensureLabelId(className: string): string | null {
 
 export class ObjectTrackingActions {
     private static currentController: AbortController | null = null;
+    // 当前 Task Manager 句柄。所有终态路径（cancel/finalize/handleError）都要清理它。
+    private static currentTask: TaskHandle | null = null;
 
     public static isRunning(): boolean {
         return !!this.currentController;
@@ -126,6 +131,10 @@ export class ObjectTrackingActions {
             // received from backend before abort still land on screen.
             forceFlushTrackingUpdates();
             store.dispatch(updateTrackingInProgressStatus(false));
+        }
+        if (this.currentTask) {
+            this.currentTask.cancel();
+            this.currentTask = null;
         }
     }
 
@@ -142,6 +151,18 @@ export class ObjectTrackingActions {
         const progressNotification = NotificationUtil.createInferenceProgressNotification();
         store.dispatch(submitNewNotification(progressNotification));
 
+        // P1 Task Manager 行：可取消，onCancel 走现有 cancelTracking 路径。
+        const lang = store.getState().general.language;
+        const tmTexts = LanguageConfig[lang].taskManager;
+        const task = TaskTracker.startTask({
+            type: TaskType.TRACKING,
+            priority: 'P1',
+            title: tmTexts.types.tracking,
+            cancellable: true,
+            onCancel: () => ObjectTrackingActions.cancelTracking(),
+        });
+        this.currentTask = task;
+
         const updateProgress = (step: number, description: string) => {
             store.dispatch(updateNotificationById(progressNotification.id, {
                 ...progressNotification,
@@ -149,6 +170,9 @@ export class ObjectTrackingActions {
                 stepDescription: description,
                 description,
             }));
+            // 同步喂给 Task Manager；progress 由 doneCount/totalExpected 算
+            const pct = Math.round((doneCount / totalExpected) * 100);
+            task.update(pct, description);
         };
         updateProgress(1, `目标跟踪启动中 (0/${totalExpected})`);
 
@@ -163,6 +187,9 @@ export class ObjectTrackingActions {
             store.dispatch(updateTrackingInProgressStatus(false));
             store.dispatch(deleteNotificationById(progressNotification.id));
             this.currentController = null;
+            // currentTask 在 onDone/handleError 已经 complete/fail；
+            // 如果还残留（比如 finalize 走到这里但前面没标记），保险起见清掉。
+            this.currentTask = null;
             EditorActions.fullRender();
         };
 
@@ -204,6 +231,10 @@ export class ObjectTrackingActions {
             });
             store.dispatch(submitNewNotification(fail));
             setTimeout(() => store.dispatch(deleteNotificationById(fail.id)), 5000);
+            if (this.currentTask) {
+                this.currentTask.fail(err);
+                this.currentTask = null;
+            }
             finalize();
         };
 
@@ -289,6 +320,10 @@ export class ObjectTrackingActions {
                     });
                     store.dispatch(submitNewNotification(done));
                     setTimeout(() => store.dispatch(deleteNotificationById(done.id)), 3500);
+                    if (this.currentTask) {
+                        this.currentTask.complete();
+                        this.currentTask = null;
+                    }
                     finalize();
                 },
                 onError: (err) => { void handleError(err); },

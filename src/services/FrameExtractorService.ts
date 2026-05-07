@@ -16,6 +16,10 @@
 import axios from 'axios';
 import JSZip from 'jszip';
 import {getDefaultBackendBase} from '../utils/DefaultBackendUrl';
+import {TaskTracker} from './TaskTracker';
+import {TaskType} from '../store/tasks/types';
+import {store} from '../index';
+import {LanguageConfig} from '../data/LanguageConfig';
 
 // ── ZIP-parse worker ──────────────────────────────────────────────────────
 // Vite picks up `new Worker(new URL(...), { type: 'module' })` and emits a
@@ -120,22 +124,45 @@ export class FrameExtractorService {
         onProgress?: ProgressCallback,
     ): Promise<FrameExtractionResult> {
 
-        onProgress?.('上传视频', 0, 100);
+        // P1 Task Manager 行：后端 session 不可由前端取消。
+        const tmTexts = LanguageConfig[store.getState().general.language].taskManager;
+        const task = TaskTracker.startTask({
+            type: TaskType.FRAME_EXTRACTION,
+            priority: 'P1',
+            title: tmTexts.types.frameExtraction,
+            subtitle: videoFile.name,
+            cancellable: false,
+        });
+
+        // 在原 onProgress 回调外再喂一份给 task：phase 作为 subtitle，进度算成 0..100。
+        const wrappedProgress: ProgressCallback = (phase, current, total) => {
+            const pct = total > 0 ? Math.round((current / total) * 100) : undefined;
+            task.update(pct, phase);
+            onProgress?.(phase, current, total);
+        };
+
+        wrappedProgress('上传视频', 0, 100);
         console.log(`[FrameExtractor] 上传视频: ${videoFile.name} (${(videoFile.size / 1024 / 1024).toFixed(1)}MB)`);
 
-        const uploadResult = await this.uploadVideo(videoFile, targetFps, onProgress);
-        const { sessionId, metadata } = uploadResult;
+        try {
+            const uploadResult = await this.uploadVideo(videoFile, targetFps, wrappedProgress);
+            const { sessionId, metadata } = uploadResult;
 
-        console.log(`[FrameExtractor] fast_ffmpeg_mode (on-demand): sessionId=${sessionId}, 总帧数=${metadata.totalFrames}`);
+            console.log(`[FrameExtractor] fast_ffmpeg_mode (on-demand): sessionId=${sessionId}, 总帧数=${metadata.totalFrames}`);
 
-        return {
-            fps: metadata.fps,
-            duration: metadata.duration,
-            totalFrames: metadata.totalFrames,
-            width: metadata.width,
-            height: metadata.height,
-            sessionId,
-        };
+            task.complete();
+            return {
+                fps: metadata.fps,
+                duration: metadata.duration,
+                totalFrames: metadata.totalFrames,
+                width: metadata.width,
+                height: metadata.height,
+                sessionId,
+            };
+        } catch (err) {
+            task.fail(err);
+            throw err;
+        }
     }
 
     // ── 上传视频 ────────────────────────────────────────────────────────────
