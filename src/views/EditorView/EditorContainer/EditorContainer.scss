@@ -73,17 +73,17 @@
 
     .Badge {
       position: absolute;
-      top: -2px;
-      right: -2px;
-      min-width: 14px;
-      height: 14px;
-      padding: 0 3px;
-      border-radius: 7px;
+      top: -1px;
+      right: -4px;
+      min-width: 10px;
+      height: 10px;
+      padding: 0 2px;
+      border-radius: 5px;
       background-color: #009efd;
       color: #fff;
-      font-size: 9px;
+      font-size: 7px;
       font-weight: 600;
-      line-height: 14px;
+      line-height: 10px;
       text-align: center;
       pointer-events: none;
       box-shadow: 0 0 0 1px #282828;
