@@ -4,16 +4,18 @@ import {AppState} from '../../../store';
 import {LanguageConfig, Language} from '../../../data/LanguageConfig';
 
 interface IProps {
-    activeCount: number;
+    activeCount: number;   // running 中的数量
+    totalCount: number;    // 全部任务数量（含已完成）
     isActive: boolean;
     language: Language;
     onClick: (e: React.MouseEvent) => void;
     buttonRef?: React.RefObject<HTMLDivElement>;
 }
 
-const TaskManagerButtonComponent: React.FC<IProps> = ({activeCount, isActive, language, onClick, buttonRef}) => {
+const TaskManagerButtonComponent: React.FC<IProps> = ({activeCount, totalCount, isActive, language, onClick, buttonRef}) => {
     const t = LanguageConfig[language].taskManager;
     const tooltip = t.tooltip.replace('{count}', String(activeCount));
+    const badgeCount = totalCount;
     return (
         <div
             ref={buttonRef}
@@ -32,13 +34,14 @@ const TaskManagerButtonComponent: React.FC<IProps> = ({activeCount, isActive, la
                     transition: 'opacity 0.2s ease',
                 }}
             />
-            {activeCount > 0 && <span className='Badge'>{activeCount > 99 ? '99+' : activeCount}</span>}
+            {badgeCount > 0 && <span className='Badge'>{badgeCount > 99 ? '99+' : badgeCount}</span>}
         </div>
     );
 };
 
 const mapStateToProps = (state: AppState) => ({
     activeCount: state.tasks.tasks.filter(t => t.status === 'running').length,
+    totalCount: state.tasks.tasks.length,
     language: state.general.language,
 });
 
