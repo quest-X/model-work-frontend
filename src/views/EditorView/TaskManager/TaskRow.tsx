@@ -15,6 +15,15 @@ const STATUS_COLOR: Record<TaskStatus, string> = {
     cancelled: '#888',
 };
 
+/** 格式化时间戳为 HH:MM:SS */
+function formatTime(ts: number): string {
+    const d = new Date(ts);
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return `${h}:${m}:${s}`;
+}
+
 export const TaskRow: React.FC<IProps> = ({task, texts}) => {
     const statusLabel = (() => {
         switch (task.status) {
@@ -27,11 +36,17 @@ export const TaskRow: React.FC<IProps> = ({task, texts}) => {
 
     const showCancel = task.status === 'running' && task.cancellable;
 
+    // 时间戳：运行中显示开始时间，已完成/失败/取消显示结束时间
+    const timestamp = task.finishedAt
+        ? formatTime(task.finishedAt)
+        : formatTime(task.startedAt);
+
     return (
         <div className='TaskRow'>
             <div className='TaskRow__head'>
                 <div className='TaskRow__title'>{task.title}</div>
                 <div className='TaskRow__right'>
+                    <span className='TaskRow__time'>{timestamp}</span>
                     <span
                         className='TaskRow__status'
                         style={{backgroundColor: STATUS_COLOR[task.status]}}

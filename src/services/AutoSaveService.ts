@@ -142,7 +142,7 @@ export class AutoSaveService {
         }
 
         // 走到这里就是真正要写盘了，登记 P0 task。stableId='autosave' 确保
-        // 重复触发时是 upsert 替换，不刷屏；autoRemove 1500ms 让一次绿闪后立即消失。
+        // 每次保存独立记录，不再 upsert 覆盖，保留完整保存历史。
         const lang = store.getState().general.language;
         const t = LanguageConfig[lang].taskManager;
         const task = TaskTracker.startTask({
@@ -150,7 +150,6 @@ export class AutoSaveService {
             priority: 'P0',
             title: t.types.autoSave,
             cancellable: false,
-            stableId: 'autosave',
             autoRemoveAfterMs: 0,
         });
 

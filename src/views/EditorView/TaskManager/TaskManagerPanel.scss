@@ -160,6 +160,12 @@
       flex-shrink: 0;
     }
 
+    &__time {
+      font-size: 10px;
+      color: #666;
+      font-variant-numeric: tabular-nums;
+    }
+
     &__status {
       font-size: 10px;
       color: #fff;
