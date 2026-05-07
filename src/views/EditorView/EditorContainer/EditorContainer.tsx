@@ -200,33 +200,30 @@ const EditorContainer: React.FC<IProps> = (
         return () => window.removeEventListener('batchInferenceComplete', handleBatchComplete);
     }, []);
 
-    // 监听数据变化并触发自动保存
-    // 使用 ref 来避免频繁触发
+    // 监听标注数据变化并触发自动保存
+    // 5 秒防抖：只有 imagesData 引用变化（标注增删改）才触发，
+    // 切帧(activeImageIndex)和切语言不触发保存。
     const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-    
+
     useEffect(() => {
-        // 当图像数据或标注数据变化时触发保存
         if (imagesData.length > 0) {
-            // 清除之前的定时器
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
             }
-            
-            // 设置新的定时器
+
             saveTimeoutRef.current = setTimeout(() => {
                 AutoSaveService.saveCurrentState();
                 saveTimeoutRef.current = null;
-            }, 1000); // 1秒延迟，避免频繁保存
+            }, 5000); // 5秒防抖，避免频繁保存
         }
-        
-        // cleanup 函数
+
         return () => {
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
                 saveTimeoutRef.current = null;
             }
         };
-    }, [imagesData, activeImageIndex, language]);
+    }, [imagesData]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // 生成缩略图辅助函数
     const generateThumbnail = async (file: File): Promise<string | undefined> => {
