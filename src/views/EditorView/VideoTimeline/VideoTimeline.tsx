@@ -98,10 +98,10 @@ const VideoTimeline: React.FC<IProps> = ({
         if (selectionRange) {
             const x1 = frames > 1 ? (selectionRange.startFrame / (frames - 1)) * width : 0;
             const x2 = frames > 1 ? (selectionRange.endFrame / (frames - 1)) * width : width;
-            ctx.fillStyle = 'rgba(33, 150, 243, 0.18)';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
             ctx.fillRect(x1, 0, x2 - x1, height - 30);
             // 选区边界线
-            ctx.strokeStyle = 'rgba(33, 150, 243, 0.7)';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
             ctx.lineWidth = 1;
             ctx.setLineDash([]);
             ctx.beginPath();
@@ -184,11 +184,11 @@ const VideoTimeline: React.FC<IProps> = ({
         const displayTime = currentTime;
         const progress = frames > 0 ? displayFrame / (frames - 1) : 0;
         const currentX = Math.min(progress * width, width);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.fillStyle = 'rgba(33, 150, 243, 0.3)';
         ctx.fillRect(0, 0, currentX, height - 30);
 
         // 绘制当前时间指针
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.strokeStyle = '#2196f3';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(currentX, 0);
@@ -196,7 +196,7 @@ const VideoTimeline: React.FC<IProps> = ({
         ctx.stroke();
 
         // 绘制指针底部的三角形（朝上）
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillStyle = '#2196f3';
         ctx.beginPath();
         ctx.moveTo(currentX, height);
         ctx.lineTo(currentX - 6, height - 10);
