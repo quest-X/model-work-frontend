@@ -73,8 +73,9 @@
 
     .Badge {
       position: absolute;
-      top: -1px;
-      right: -4px;
+      top: -4px;
+      left: 50%;
+      transform: translateX(-50%);
       min-width: 10px;
       height: 10px;
       padding: 0 2px;
