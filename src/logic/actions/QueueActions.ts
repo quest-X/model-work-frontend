@@ -25,7 +25,7 @@ export class QueueActions {
             title: tmTexts.types.queueLoad,
             subtitle: targetItem.name,
             cancellable: false,
-            autoRemoveAfterMs: 1500,
+            autoRemoveAfterMs: 0,
         });
 
         // 1. 保存当前文件的标注缓存

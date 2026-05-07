@@ -151,7 +151,7 @@ export class AutoSaveService {
             title: t.types.autoSave,
             cancellable: false,
             stableId: 'autosave',
-            autoRemoveAfterMs: 1500,
+            autoRemoveAfterMs: 0,
         });
 
         try {
