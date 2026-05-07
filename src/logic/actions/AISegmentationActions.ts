@@ -17,6 +17,18 @@ import {EditorModel} from "../../staticModels/EditorModel";
 import {TaskTracker} from "../../services/TaskTracker";
 import {TaskType} from "../../store/tasks/types";
 
+/**
+ * 按视频分辨率压缩前端 in-flight 并发数。后端 SAM 是单 GPU 串行(torch.inference_mode),
+ * 提高并发并不会让推理更快,只会让前端同时持有更多 blob/Image,放大内存峰值。
+ * 1440p/4K 视频上,并发 4 会让前端额外吃 4 张 ~14MB+ 的 RGBA bitmap → 易触发 OOM 崩溃。
+ */
+function computeBatchConcurrency(width: number, height: number): number {
+    const pixels = (width || 0) * (height || 0);
+    if (pixels >= 2560 * 1440) return 1; // 1440p 及以上
+    if (pixels >= 1920 * 1080) return 2; // 1080p
+    return 4;                            // 720p 及以下保持原行为
+}
+
 export class AISegmentationActions {
 
     private static yieldToUI(): Promise<void> {
@@ -204,7 +216,10 @@ export class AISegmentationActions {
                 };
             });
 
-            await this.withConcurrency(tasks, 4, (done, ttl) => {
+            const videoSize = store.getState().video?.activeVideo?.videoSize;
+            const concurrency = computeBatchConcurrency(videoSize?.width || 0, videoSize?.height || 0);
+            console.log(`[Segment] concurrency=${concurrency} (videoSize=${videoSize?.width}x${videoSize?.height})`);
+            await this.withConcurrency(tasks, concurrency, (done, ttl) => {
                 const pct = preFrames ? Math.round((done / ttl) * 90) : 33 + Math.round((done / ttl) * 55);
                 notify(2, `${t().aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${t().video.frame} ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
             });

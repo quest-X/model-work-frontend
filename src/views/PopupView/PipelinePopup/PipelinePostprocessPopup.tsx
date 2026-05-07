@@ -58,6 +58,8 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
     const [minAreaEnabled, setMinAreaEnabled] = useState<boolean>(segSectionActive && initialSeg.min_mask_area_enabled !== false && initialSeg.min_mask_area > 0);
     const [maskDilateEnabled, setMaskDilateEnabled] = useState<boolean>(segSectionActive && initialSeg.mask_dilate_enabled !== false && initialSeg.mask_dilate > 0);
     const [maxPolygonPointsEnabled, setMaxPolygonPointsEnabled] = useState<boolean>(segSectionActive && initialSeg.max_polygon_points_enabled !== false && initialSeg.max_polygon_points > 0);
+    const [maskIouThreshold, setMaskIouThreshold] = useState<number>(initialSeg.mask_iou_threshold);
+    const [maskIouThresholdEnabled, setMaskIouThresholdEnabled] = useState<boolean>(segSectionActive && initialSeg.mask_iou_threshold_enabled !== false);
 
     const onAccept = () => {
         DetectionAPIDetector.setPostprocessParams({
@@ -72,11 +74,13 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
             largest_cc_only: largestOnly,
             mask_dilate: maskDilate,
             max_polygon_points: maxPolygonPoints,
+            mask_iou_threshold: maskIouThreshold,
             polygon_epsilon_enabled: epsilonEnabled,
             min_mask_area_enabled: minAreaEnabled,
             largest_cc_only_enabled: largestOnly,
             mask_dilate_enabled: maskDilateEnabled,
             max_polygon_points_enabled: maxPolygonPointsEnabled,
+            mask_iou_threshold_enabled: maskIouThresholdEnabled,
         });
         backToCallModel();
     };
@@ -91,10 +95,12 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
         setLargestOnly(DEF.largest_cc_only);
         setMaskDilate(DEF.mask_dilate);
         setMaxPolygonPoints(DEF.max_polygon_points);
+        setMaskIouThreshold(DEF.mask_iou_threshold);
         setEpsilonEnabled(true);
         setMinAreaEnabled(true);
         setMaskDilateEnabled(true);
         setMaxPolygonPointsEnabled(true);
+        setMaskIouThresholdEnabled(true);
     };
 
     const epsilonLabel = (v: number) => v === 0 ? (zh ? '关闭' : 'off') : `${v.toFixed(1)} px`;
@@ -311,6 +317,37 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                         {zh
                             ? '对 mask 进行椭圆核形态学膨胀，向外扩张边界（半径像素）。0 = 不膨胀。可用于扩大标注区域或填补边缘空洞。'
                             : 'Morphological dilation with an elliptical kernel (radius in pixels). 0 = off. Useful for expanding mask boundaries or filling edge gaps.'}
+                    </div>
+                </div>
+
+                {/* mask_iou_threshold */}
+                <div className={`ParamRow${!maskIouThresholdEnabled ? ' param-disabled' : ''}`}>
+                    <div className='ParamHeader'>
+                        <label className='ParamLabelRow'>
+                            <input type='checkbox' checked={maskIouThresholdEnabled}
+                                onChange={(e) => setMaskIouThresholdEnabled(e.target.checked)} />
+                            <span className='ParamLabel'>
+                                {zh ? '去重 IoU 阈值 (mask_iou_threshold)' : 'Dedup IoU threshold (mask_iou_threshold)'}
+                            </span>
+                        </label>
+                        <div className='ParamValueGroup'>
+                            <span className='ParamValue'>
+                                {maskIouThreshold.toFixed(2)}
+                            </span>
+                            {maskIouThreshold !== DEF.mask_iou_threshold && maskIouThresholdEnabled && (
+                                <button className='ParamResetBtn' onClick={() => setMaskIouThreshold(DEF.mask_iou_threshold)}>
+                                    ↺ {DEF.mask_iou_threshold.toFixed(2)}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <input type='range' min={0.05} max={1} step={0.05} value={maskIouThreshold}
+                        disabled={!maskIouThresholdEnabled}
+                        onChange={(e) => setMaskIouThreshold(Number(e.target.value))} />
+                    <div className='ParamDesc'>
+                        {zh
+                            ? '对同一目标的多个重叠 mask 做 NMS 去重：IoU 超过此阈值的低置信度 mask 将被丢弃。0.5 = 适中；越小去得越激进。关闭 = 不去重。'
+                            : 'NMS-style deduplication for overlapping masks: lower-confidence masks with IoU above this threshold are dropped. 0.5 = moderate; lower = more aggressive. Off = no dedup.'}
                     </div>
                 </div>
 

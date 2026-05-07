@@ -30,7 +30,7 @@ export class EditorModel {
     public static videoFrameImage: HTMLImageElement; // Persistent video-resolution image for coordinate mapping (both modes)
     public static playbackImageData: any; // During playback: direct ref to current frame ImageData, bypasses Redux selector
     public static latestImagesData: any[] | null = null; // Cache after batchApplyResults dispatch, avoids ref staleness
-    public static videoFrameFiles: File[] = []; // fast_ffmpeg_mode (full-load): global frame file pool
+    public static videoFrameFiles: (File | undefined)[] = []; // fast_ffmpeg_mode (full-load): global frame file pool. Slot may be undefined after eviction (sparse array).
     public static videoSessionId: string = ''; // fast_ffmpeg_mode (on-demand): backend session ID
     public static preloadedImageCache: Map<number, HTMLImageElement> = new Map(); // Pre-decoded Image cache from parsing phase
     public static isLoading: boolean = false;

@@ -1,13 +1,11 @@
 /**
- * ObjectTrackingActions — drives the SAM 2 / SAM 3 video tracking flow.
+ * ObjectTrackingActions — drives the SAM 2 / SAM 3 video tracking / retrieval flow.
  *
- * Flow:
- *   1. User draws a bbox in trackingMode → RectRenderEngine stores it and opens the popup.
- *   2. User confirms frame range in ObjectTrackingPopup → calls startTracking().
- *   3. startTracking streams /track NDJSON; for each frame builds a SegmentationResult
- *      and reuses AISegmentationActions.applySingleResult(source='tracking') so
- *      the polygon gets added without polluting the inference-history panel.
- *   4. cancelTracking() or user abort closes the stream.
+ * Two entry points:
+ *   - startTracking(bbox): legacy bbox-based tracking (画框 → 跟踪)
+ *   - startRetrieval(maskPolygons): 检索模式 — 用当前帧的 SAM polygon 作为 seed mask
+ *
+ * Both share the same streaming pipeline: /track NDJSON → per-frame polygon → Redux coalescer.
  */
 import { v4 as uuidv4 } from 'uuid';
 import { store } from '../../index';
@@ -39,6 +37,17 @@ type StartParams = {
     bboxImageSpace: [number, number, number, number];
     modelName: string;
     className?: string; // 可选；未给时用 "tracked"
+};
+
+/** 检索模式参数：用当前帧的 SAM polygon 作为 seed mask */
+type RetrievalParams = {
+    sessionId: string;
+    startFrameIdx: number;
+    endFrameIdx: number;
+    /** 当前帧上的 polygon vertices（image-space），每个 polygon 是 [x,y][] */
+    maskPolygons: [number, number][][];
+    modelName: string;
+    className?: string;
 };
 
 // ── Tracking dispatch coalescer ───────────────────────────────────────────────
@@ -317,6 +326,192 @@ export class ObjectTrackingActions {
                     const done = NotificationUtil.createSuccessNotification({
                         header: '目标跟踪完成',
                         description: `已生成 ${total} 帧的分割`,
+                    });
+                    store.dispatch(submitNewNotification(done));
+                    setTimeout(() => store.dispatch(deleteNotificationById(done.id)), 3500);
+                    if (this.currentTask) {
+                        this.currentTask.complete();
+                        this.currentTask = null;
+                    }
+                    finalize();
+                },
+                onError: (err) => { void handleError(err); },
+            },
+        );
+    }
+
+    /**
+     * 检索模式入口：用当前帧的 SAM polygon 作为 seed mask，跨帧跟踪/检索。
+     * 与 startTracking 共享整个 stream pipeline，唯一区别是 prompt 类型。
+     */
+    public static startRetrieval(params: RetrievalParams, _retried = false): void {
+        if (this.currentController) {
+            this.cancelTracking();
+        }
+
+        const trackingGroupId = uuidv4();
+        const className = params.className || 'retrieved';
+        const totalExpected = Math.max(1, params.endFrameIdx - params.startFrameIdx + 1);
+        let doneCount = 0;
+
+        const progressNotification = NotificationUtil.createInferenceProgressNotification();
+        store.dispatch(submitNewNotification(progressNotification));
+
+        const lang = store.getState().general.language;
+        const tmTexts = LanguageConfig[lang].taskManager;
+        const task = TaskTracker.startTask({
+            type: TaskType.TRACKING,
+            priority: 'P1',
+            title: lang === 'zh' ? '检索跟踪' : 'Retrieval',
+            cancellable: true,
+            onCancel: () => ObjectTrackingActions.cancelTracking(),
+        });
+        this.currentTask = task;
+
+        const updateProgress = (step: number, description: string) => {
+            store.dispatch(updateNotificationById(progressNotification.id, {
+                ...progressNotification,
+                currentStep: step,
+                stepDescription: description,
+                description,
+            }));
+            const pct = Math.round((doneCount / totalExpected) * 100);
+            task.update(pct, description);
+        };
+        updateProgress(1, lang === 'zh'
+            ? `检索启动中 (0/${totalExpected})`
+            : `Retrieval starting (0/${totalExpected})`);
+
+        store.dispatch(updateTrackingInProgressStatus(true));
+
+        const finalize = () => {
+            forceFlushTrackingUpdates();
+            store.dispatch(updateTrackingInProgressStatus(false));
+            store.dispatch(deleteNotificationById(progressNotification.id));
+            this.currentController = null;
+            this.currentTask = null;
+            EditorActions.fullRender();
+        };
+
+        const handleError = async (err: Error) => {
+            console.error('[Retrieval] stream failed', err);
+            const msg = err.message || '';
+            const isSessionGone = /404/.test(msg) && /session.*not found/i.test(msg);
+
+            if (isSessionGone && !_retried) {
+                const activeVideo = store.getState().video?.activeVideo;
+                if (activeVideo?.fileData) {
+                    updateProgress(1, lang === 'zh' ? '视频会话已过期，正在重新上传…' : 'Session expired, re-uploading…');
+                    try {
+                        const result = await FrameExtractorService.openSession(
+                            activeVideo.fileData,
+                            activeVideo.fps || 0,
+                        );
+                        if (result.sessionId) {
+                            store.dispatch(updateVideoSessionId(activeVideo.id, result.sessionId));
+                            finalize();
+                            ObjectTrackingActions.startRetrieval(
+                                { ...params, sessionId: result.sessionId },
+                                true,
+                            );
+                            return;
+                        }
+                    } catch (uploadErr) {
+                        console.error('[Retrieval] re-upload failed', uploadErr);
+                    }
+                }
+            }
+
+            const description = isSessionGone
+                ? (lang === 'zh' ? '视频会话已过期（后端重启后会话丢失），请重新上传视频后再追踪' : 'Video session expired')
+                : msg || 'Unknown error';
+            const fail = NotificationUtil.createErrorNotification({
+                header: lang === 'zh' ? '检索跟踪失败' : 'Retrieval failed',
+                description,
+            });
+            store.dispatch(submitNewNotification(fail));
+            setTimeout(() => store.dispatch(deleteNotificationById(fail.id)), 5000);
+            if (this.currentTask) {
+                this.currentTask.fail(err);
+                this.currentTask = null;
+            }
+            finalize();
+        };
+
+        const postprocess = PipelineStore.isActivated('postprocess')
+            ? (() => {
+                const pp = SegmentationAPIDetector.getPostprocessParams();
+                const out: { polygon_epsilon?: number; min_mask_area?: number; mask_dilate?: number; max_polygon_points?: number } = {};
+                if (pp.polygon_epsilon_enabled !== false) out.polygon_epsilon = pp.polygon_epsilon;
+                if (pp.min_mask_area_enabled !== false) out.min_mask_area = pp.min_mask_area;
+                if (pp.mask_dilate_enabled !== false && pp.mask_dilate > 0) out.mask_dilate = pp.mask_dilate;
+                if (pp.max_polygon_points_enabled !== false && pp.max_polygon_points > 0) out.max_polygon_points = pp.max_polygon_points;
+                return Object.keys(out).length > 0 ? out : undefined;
+            })()
+            : undefined;
+
+        this.currentController = TrackingAPIService.streamTrack(
+            {
+                sessionId: params.sessionId,
+                startFrame: params.startFrameIdx,
+                endFrame: params.endFrameIdx,
+                maskPolygons: params.maskPolygons,
+                modelName: params.modelName,
+                postprocess,
+            },
+            {
+                onFrame: (f) => {
+                    doneCount++;
+                    updateProgress(2, lang === 'zh'
+                        ? `检索中 (${doneCount}/${totalExpected}) — 帧 ${f.frame_idx}`
+                        : `Retrieving (${doneCount}/${totalExpected}) — frame ${f.frame_idx}`);
+
+                    const mask = Array.isArray(f.mask) ? f.mask : [];
+                    if (mask.length < 3) return;
+
+                    const baseImg = pendingTrackingUpdates.get(
+                        store.getState().labels.imagesData[f.frame_idx]?.id || ''
+                    ) || store.getState().labels.imagesData[f.frame_idx];
+                    if (!baseImg) return;
+
+                    const labelId = ensureLabelId(className);
+
+                    const polygon: LabelPolygon = {
+                        id: uuidv4(),
+                        labelId,
+                        vertices: mask
+                            .filter(([x, y]) => isFinite(x) && isFinite(y))
+                            .map(([x, y]) => ({ x, y })),
+                        isCreatedByAI: true,
+                        isVisible: true,
+                        status: LabelStatus.ACCEPTED,
+                        suggestedLabel: labelId ? null : className,
+                        confidence: f.confidence || 0,
+                        trackingGroupId,
+                    } as LabelPolygon;
+
+                    const updated: ImageData = {
+                        ...baseImg,
+                        labelPolygons: [...baseImg.labelPolygons, polygon],
+                    };
+                    pendingTrackingUpdates.set(baseImg.id, updated);
+                    scheduleTrackingFlush();
+                },
+                onStatus: (s) => {
+                    if (s.status === 'clipping') {
+                        updateProgress(1, lang === 'zh'
+                            ? `FFmpeg 切片 ${s.n_frames} 帧中...`
+                            : `FFmpeg clipping ${s.n_frames} frames...`);
+                    } else if (s.status === 'preparing') {
+                        updateProgress(1, lang === 'zh'
+                            ? `预处理中：SAM 2 视频编码 ${s.frames_to_encode} 帧`
+                            : `Preparing: SAM 2 encoding ${s.frames_to_encode} frames`);
+                    }
+                },
+                onDone: (total) => {
+                    const done = NotificationUtil.createSuccessNotification({
+                        header: lang === 'zh' ? '检索跟踪完成' : 'Retrieval complete',
+                        description: lang === 'zh' ? `已生成 ${total} 帧的分割` : `Generated masks for ${total} frames`,
                     });
                     store.dispatch(submitNewNotification(done));
                     setTimeout(() => store.dispatch(deleteNotificationById(done.id)), 3500);

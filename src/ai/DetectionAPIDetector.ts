@@ -293,9 +293,9 @@ export class DetectionAPIDetector {
                     canvas.toBlob((b) => {
                         if (b) resolve(b);
                         else reject(new Error('Failed to capture video frame'));
-                    }, 'image/png');
+                    }, 'image/jpeg', 0.9);
                 });
-                formData.append('file', blob, 'video_frame.png');
+                formData.append('file', blob, 'video_frame.jpg');
             } else if (EditorModel.videoFrameImage) {
                 // fast_ffmpeg_mode with pre-extracted frames: capture pixels from the decoded frame Image
                 const img = EditorModel.videoFrameImage;
@@ -311,9 +311,9 @@ export class DetectionAPIDetector {
                     canvas.toBlob((b) => {
                         if (b) resolve(b);
                         else reject(new Error('Failed to capture frame image'));
-                    }, 'image/png');
+                    }, 'image/jpeg', 0.9);
                 });
-                formData.append('file', blob, 'frame.png');
+                formData.append('file', blob, 'frame.jpg');
             } else if (imageData.fileData && imageData.fileData.size > 0) {
                 // 图像模式：直接发送原始文件
                 formData.append('file', imageData.fileData, imageData.fileData.name || 'image.jpg');

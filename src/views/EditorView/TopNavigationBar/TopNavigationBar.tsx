@@ -159,16 +159,16 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                         {showModelsDropdown && (
                             <div className='DropDownMenuContent ModelsDropdown'>
                                 <div className='DropDownMenuContentOption active'
-                                    onClick={openLocalModelManager}>
-                                    <div className='Marker'/>
-                                    <img src='ico/ai.png' alt='local-models'/>
-                                    {currentTexts.modelManagement.callModels}
-                                </div>
-                                <div className='DropDownMenuContentOption active'
                                     onClick={openRemoteModelManager}>
                                     <div className='Marker'/>
                                     <img src='ico/api.png' alt='remote-models'/>
                                     {currentTexts.modelManagement.modelEngines}
+                                </div>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openLocalModelManager}>
+                                    <div className='Marker'/>
+                                    <img src='ico/ai.png' alt='local-models'/>
+                                    {currentTexts.modelManagement.callModels}
                                 </div>
                             </div>
                         )}

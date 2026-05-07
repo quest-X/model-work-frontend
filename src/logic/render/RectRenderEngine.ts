@@ -14,8 +14,7 @@ import {PointUtil} from '../../utils/PointUtil';
 import {RectAnchor} from '../../data/RectAnchor';
 import {RenderEngineSettings} from '../../settings/RenderEngineSettings';
 import {Direction} from '../../data/enums/Direction';
-import {updateCustomCursorStyle, updateActivePopupType} from '../../store/general/actionCreators';
-import {PopupWindowType} from '../../data/enums/PopupWindowType';
+import {updateCustomCursorStyle} from '../../store/general/actionCreators';
 import {CustomCursorStyle} from '../../data/enums/CustomCursorStyle';
 import {LabelsSelector} from '../../store/selectors/LabelsSelector';
 import {EditorData} from '../../data/EditorData';
@@ -109,13 +108,6 @@ export class RectRenderEngine extends BaseRenderEngine {
                     }
                     return;
                 }
-                // 目标跟踪模式：同样跳过命中测试，drag 出 bbox 交给 mouseUpHandler 的 tracking 分支
-                if (GeneralSelector.getTrackingMode()) {
-                    if (isMouseOverImage) {
-                        this.startRectCreation(data.mousePositionOnViewPortContent);
-                    }
-                    return;
-                }
                 // 编辑模式：先检查锚点，然后只在边缘可以拖拽，内部可以创建新矩形
                 const rectUnderMouseEdge: LabelRect = this.getRectUnderMouse(data);
                 if (!!rectUnderMouseEdge) {
@@ -143,30 +135,6 @@ export class RectRenderEngine extends BaseRenderEngine {
         if (!!data.viewPortContentImageRect) {
             const mousePositionSnapped: IPoint = RectUtil.snapPointToRect(data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
             const activeLabelRect: LabelRect = LabelsSelector.getActiveRectLabel();
-
-            // ── 目标跟踪劫持：drag → 暂存 bbox 并打开 ObjectTrackingPopup ──
-            if (GeneralSelector.getTrackingMode() && !!this.startCreateRectPoint) {
-                const startInImage: IPoint = RenderEngineUtil.transferPointFromViewPortContentToImage(this.startCreateRectPoint, data);
-                const endInImage: IPoint = RenderEngineUtil.transferPointFromViewPortContentToImage(mousePositionSnapped, data);
-                const dxView = this.startCreateRectPoint.x - mousePositionSnapped.x;
-                const dyView = this.startCreateRectPoint.y - mousePositionSnapped.y;
-                const isClick = (dxView * dxView + dyView * dyView) < 25;
-                if (!isClick) {
-                    const x1 = Math.min(startInImage.x, endInImage.x);
-                    const y1 = Math.min(startInImage.y, endInImage.y);
-                    const x2 = Math.max(startInImage.x, endInImage.x);
-                    const y2 = Math.max(startInImage.y, endInImage.y);
-                    const activeVideo = store.getState().video?.activeVideo;
-                    const startFrame = activeVideo?.currentFrame ?? 0;
-                    // 延迟 import 避免模块循环依赖
-                    import('../../views/PopupView/ObjectTrackingPopup/ObjectTrackingPopup').then(mod => {
-                        mod.stashTrackingPrompt([x1, y1, x2, y2], startFrame);
-                        store.dispatch(updateActivePopupType(PopupWindowType.OBJECT_TRACKING));
-                    });
-                }
-                this.endRectTransformation();
-                return;
-            }
 
             // ── 智能标注劫持：click → SAM 单点 prompt；drag → SAM bbox prompt ──
             if (GeneralSelector.getSmartAnnotationActiveStatus() && !!this.startCreateRectPoint) {

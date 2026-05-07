@@ -47,16 +47,18 @@ export interface SegmentationPostprocessParams {
     largest_cc_only: boolean;           // 仅保留最大连通域
     mask_dilate: number;                // 形态学膨胀半径（像素）；0 = 关闭
     max_polygon_points: number;         // 最大顶点数限制；0 = 关闭
+    mask_iou_threshold: number;         // 去重 IoU 阈值；0 = 关闭
     polygon_epsilon_enabled: boolean;
     min_mask_area_enabled: boolean;
     largest_cc_only_enabled: boolean;
     mask_dilate_enabled: boolean;
     max_polygon_points_enabled: boolean;
+    mask_iou_threshold_enabled: boolean;
 }
 
 const INFERENCE_PARAMS_STORAGE_KEY = 'segmentationAPI.inferenceParams';
 const POSTPROCESS_PARAMS_STORAGE_KEY = 'segmentationAPI.postprocessParams';
-const POSTPROCESS_PARAMS_VERSION = 3; // 升版本使旧缓存失效，强制用新默认值
+const POSTPROCESS_PARAMS_VERSION = 4; // 升版本使旧缓存失效，强制用新默认值
 
 export const DEFAULT_SEGMENTATION_INFERENCE_PARAMS: SegmentationInferenceParams = {
     conf: 0.25,
@@ -83,11 +85,13 @@ export const DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS: SegmentationPostprocessPar
     largest_cc_only: false,
     mask_dilate: 1,
     max_polygon_points: 30,
+    mask_iou_threshold: 0.5,
     polygon_epsilon_enabled: true,
     min_mask_area_enabled: true,
     largest_cc_only_enabled: false,
     mask_dilate_enabled: false,
     max_polygon_points_enabled: true,
+    mask_iou_threshold_enabled: true,
 };
 
 function loadSegInferenceParams(): SegmentationInferenceParams {
@@ -130,11 +134,13 @@ function loadSegPostprocessParams(): SegmentationPostprocessParams {
             largest_cc_only: typeof p.largest_cc_only === 'boolean' ? p.largest_cc_only : DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS.largest_cc_only,
             mask_dilate: typeof p.mask_dilate === 'number' ? p.mask_dilate : DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS.mask_dilate,
             max_polygon_points: typeof p.max_polygon_points === 'number' ? p.max_polygon_points : DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS.max_polygon_points,
+            mask_iou_threshold: typeof p.mask_iou_threshold === 'number' ? p.mask_iou_threshold : DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS.mask_iou_threshold,
             polygon_epsilon_enabled: p.polygon_epsilon_enabled !== false,
             min_mask_area_enabled: p.min_mask_area_enabled !== false,
             largest_cc_only_enabled: p.largest_cc_only_enabled !== false,
             mask_dilate_enabled: p.mask_dilate_enabled !== false,
             max_polygon_points_enabled: p.max_polygon_points_enabled !== false,
+            mask_iou_threshold_enabled: p.mask_iou_threshold_enabled !== false,
         };
     } catch {
         return { ...DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS };
@@ -214,6 +220,8 @@ export class SegmentationAPIDetector {
                 formData.append('mask_dilate', String(pp.mask_dilate));
             if (pp.max_polygon_points_enabled !== false && pp.max_polygon_points > 0)
                 formData.append('max_polygon_points', String(pp.max_polygon_points));
+            if (pp.mask_iou_threshold_enabled === true && pp.mask_iou_threshold > 0)
+                formData.append('mask_iou_threshold', String(pp.mask_iou_threshold));
         }
     }
 

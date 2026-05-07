@@ -47,8 +47,23 @@ const BATCH_SIZE = 100;
 
 // === available_frames 滑动窗口（基于秒数 × fps 动态计算） ===
 const MIN_AHEAD_SECONDS = 20;   // 前方保持 20 秒可播放（25fps=500, 30fps=600）
-const MAX_AVAILABLE_SECONDS = 60; // 缓存上限 60 秒
+const MAX_AVAILABLE_SECONDS = 60; // 缓存上限 60 秒（仅用于低分辨率：高分辨率被内存预算覆盖）
 const KEEP_BEHIND_SECONDS = 3;  // 后方保留 3 秒（支持短回退）
+
+// === 三层缓存独立预算 ===
+//
+// 解码后 RGBA 帧 (重) — 14MB/帧 (1440p),严格限制以防崩溃
+const DECODED_FRAME_BUDGET_BYTES = 1_200_000_000;   // 1.2 GB
+const MIN_CACHE_FLOOR = 30;
+const MIN_AHEAD_FLOOR = 8;
+//
+// JPEG 字节层 (中) — 300KB/帧典型,允许大窗口,scrub 时不必回后端
+// 600MB → ~2000 帧 (1440p ~80秒);  注意力区拖动几乎都在窗内
+const JPEG_BUDGET_BYTES = 600_000_000;
+const ASSUMED_JPEG_BYTES_PER_FRAME = 300_000;       // 经验值,用于估算窗口大小
+//
+// 缩略图: 由 thumbnailDoneRef 累积,150x150 JPEG ~10KB/张,15094 张 ~150MB
+// 不主动驱逐,自然累积
 
 const FramePlayer: React.FC<IProps> = ({
     language,
@@ -70,9 +85,23 @@ const FramePlayer: React.FC<IProps> = ({
     const texts = LanguageConfig[language];
 
     // 基于实际 fps 动态计算滑动窗口参数
-    const MIN_AHEAD = Math.ceil(MIN_AHEAD_SECONDS * (fps || 30));
-    const MAX_AVAILABLE = Math.ceil(MAX_AVAILABLE_SECONDS * (fps || 30));
-    const KEEP_BEHIND = Math.ceil(KEEP_BEHIND_SECONDS * (fps || 30));
+    const fpsClamped = fps || 30;
+    const secondsBasedMaxAvailable = Math.ceil(MAX_AVAILABLE_SECONDS * fpsClamped);
+    const secondsBasedMinAhead = Math.ceil(MIN_AHEAD_SECONDS * fpsClamped);
+    const KEEP_BEHIND = Math.ceil(KEEP_BEHIND_SECONDS * fpsClamped);
+
+    // 按分辨率内存预算压缩缓存上限,避免 1440p+ 视频吃光浏览器进程内存导致崩溃
+    const perFrameBytes = Math.max(1, (videoSize.width || 0) * (videoSize.height || 0) * 4);
+    const memoryBasedMaxAvailable = Math.floor(DECODED_FRAME_BUDGET_BYTES / perFrameBytes);
+    const MAX_AVAILABLE = Math.max(
+        MIN_CACHE_FLOOR,
+        Math.min(secondsBasedMaxAvailable, memoryBasedMaxAvailable),
+    );
+    // MIN_AHEAD 也要相应压缩,且必须留出 KEEP_BEHIND 和一定 margin,否则刚加载就被淘汰
+    const MIN_AHEAD = Math.max(
+        MIN_AHEAD_FLOOR,
+        Math.min(secondsBasedMinAhead, MAX_AVAILABLE - KEEP_BEHIND - 5),
+    );
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -300,8 +329,9 @@ const FramePlayer: React.FC<IProps> = ({
         }
     }, [loadFrameImage, videoSize]);
 
-    // === available_frames 滑动窗口维护 ===
-    // 淘汰远离当前位置的旧帧
+    // === RGBA 解码缓存淘汰 ===
+    // 仅清解码后的 Image,不动 JPEG 字节池(JPEG 层有自己的 evictJpegByBudget)。
+    // 这样 scrub 命中 JPEG 缓存时只需重新解码(~30ms),不必回后端拉(100-300ms)。
     const evictOldFrames = useCallback((currentPos: number) => {
         const cache = frameCacheRef.current;
         if (cache.size <= MAX_AVAILABLE) return;
@@ -317,9 +347,33 @@ const FramePlayer: React.FC<IProps> = ({
             if (url) { URL.revokeObjectURL(url); blobUrlCacheRef.current.delete(key); }
         }
         if (toEvict.length > 0) {
-            console.log(`[FramePlayer] 淘汰 ${toEvict.length} 旧帧, 缓存=${cache.size}`);
+            console.log(`[FramePlayer] RGBA 淘汰 ${toEvict.length} 帧, 缓存=${cache.size}`);
         }
     }, [MAX_AVAILABLE, KEEP_BEHIND]);
+
+    // === JPEG 字节池独立淘汰(只在 on-demand 模式) ===
+    // 当 JPEG 池超过预算时,从距当前帧最远处开始 evict,保留注意力区。
+    // 全片不一定都在内存里,但当前 ±N 千帧基本都有。
+    const evictJpegByBudget = useCallback((currentPos: number) => {
+        if (!sessionId) return; // full-load 模式由父组件管理,这里不能动
+        const pool = EditorModel.videoFrameFiles;
+        const maxFrames = Math.floor(JPEG_BUDGET_BYTES / ASSUMED_JPEG_BYTES_PER_FRAME);
+
+        // O(N) 扫一次,15094 帧约 0.1ms,可接受
+        const heldIndices: number[] = [];
+        for (let i = 0; i < pool.length; i++) {
+            if (pool[i]) heldIndices.push(i);
+        }
+        if (heldIndices.length <= maxFrames) return;
+
+        // 按"距 currentPos 远近"排序,最远的优先 evict
+        heldIndices.sort((a, b) => Math.abs(b - currentPos) - Math.abs(a - currentPos));
+        const toRemove = heldIndices.length - maxFrames;
+        for (let i = 0; i < toRemove; i++) {
+            pool[heldIndices[i]] = undefined;
+        }
+        console.log(`[FramePlayer] JPEG 淘汰 ${toRemove} 帧, 池容量=${heldIndices.length - toRemove}/${maxFrames}`);
+    }, [sessionId]);
 
     // 持续维护 available_frames：保证当前位置前方始终有 MIN_AHEAD 帧可播放
     const maintainAvailableFrames = useCallback(async () => {
@@ -376,10 +430,11 @@ const FramePlayer: React.FC<IProps> = ({
                 continue;
             }
 
-            // 淘汰旧帧
+            // 淘汰旧帧:RGBA 严格限,JPEG 大窗口独立 LRU
             evictOldFrames(pos);
+            evictJpegByBudget(pos);
         }
-    }, [totalFrames, loadFrameImage, evictOldFrames, updateBgLoad, MIN_AHEAD, MAX_AVAILABLE]);
+    }, [totalFrames, loadFrameImage, evictOldFrames, evictJpegByBudget, updateBgLoad, MIN_AHEAD, MAX_AVAILABLE]);
 
     // 更新稳定 ref
     loadFrameFullRef.current = loadFrameFull;

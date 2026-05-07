@@ -32,6 +32,7 @@ import { AIStateStorageManager } from '../../../utils/AIStateStorageManager';
 import { AIModelsSelector } from '../../../store/selectors/AIModelsSelector';
 import { YOLO_MODEL_FAMILIES, SEG_MODEL_FAMILIES } from '../../PopupView/CallModelPopup/CallModelPopup';
 import { EditorActions } from '../../../logic/actions/EditorActions';
+import { ObjectTrackingActions } from '../../../logic/actions/ObjectTrackingActions';
 import { submitNewNotification, deleteNotificationById } from '../../../store/notifications/actionCreators';
 import { getTimelineRange, FrameRange } from '../VideoTimeline/VideoTimeline';
 import { NotificationUtil } from '../../../utils/NotificationUtil';
@@ -323,27 +324,15 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         }
     }, [isSAMLoaded, smartAnnotationActive, trackingMode, imageDragMode, activeLabelViewType, updateSmartAnnotationActiveStatusAction, updateTrackingModeStatusAction, updateImageDragModeStatusAction, updateActiveLabelType, updateActivePopupTypeAction]);
 
-    // 目标跟踪按钮：仅 SAM 2 / SAM 3 已加载时可用
-    // 激活后：进入跟踪模式 → 用户在画面上框 bbox → RectRenderEngine 打开 ObjectTrackingPopup
+    // 检索按钮：切换检索模式（纯开关），不改变标注工具或智能标注状态。
+    // 检索模式 ON 时，推理按钮行为变为"用当前帧 polygon 作为 seed mask 跨帧跟踪"。
     const trackingOnClick = useCallback(() => {
         if (!isTrackingModelLoaded) {
             updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
             return;
         }
-        const willActivate = !trackingMode;
-        updateTrackingModeStatusAction(willActivate);
-        if (willActivate) {
-            // 和智能标注一样切到 ALL 视图，让 AllLabelsRenderEngine 把事件路由给 RectRenderEngine
-            updateActiveLabelType(LabelType.ALL);
-            if (smartAnnotationActive) updateSmartAnnotationActiveStatusAction(false);
-            if (imageDragMode) updateImageDragModeStatusAction(false);
-        } else {
-            // 关闭时同步回侧栏视图
-            updateActiveLabelType(activeLabelViewType);
-        }
-    }, [isTrackingModelLoaded, trackingMode, smartAnnotationActive, imageDragMode, activeLabelViewType,
-        updateTrackingModeStatusAction, updateSmartAnnotationActiveStatusAction,
-        updateImageDragModeStatusAction, updateActiveLabelType, updateActivePopupTypeAction]);
+        updateTrackingModeStatusAction(!trackingMode);
+    }, [isTrackingModelLoaded, trackingMode, updateTrackingModeStatusAction, updateActivePopupTypeAction]);
 
     // 智能标注激活时自动切换到 SAM 模型
     useEffect(() => {
@@ -512,6 +501,53 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         const activeImageData = LabelsSelector.getActiveImageData();
         if (!activeImageData) return;
 
+        // ── 检索模式：用当前帧的 polygon 作为 seed mask 跨帧跟踪 ──
+        if (trackingMode) {
+            const polygons = activeImageData.labelPolygons || [];
+            if (polygons.length === 0) {
+                const errNote = NotificationUtil.createErrorNotification({
+                    header: language === 'zh' ? '检索失败' : 'Retrieval failed',
+                    description: language === 'zh'
+                        ? '当前帧没有标注，请先用智能标注创建 seed mask'
+                        : 'No annotations on current frame. Use smart annotation to create a seed mask first.',
+                });
+                store.dispatch(submitNewNotification(errNote));
+                setTimeout(() => store.dispatch(deleteNotificationById(errNote.id)), 5000);
+                return;
+            }
+
+            const range = getTimelineRange();
+            const activeVideo = store.getState().video?.activeVideo;
+            const currentFrame = activeVideo?.currentFrame ?? LabelsSelector.getActiveImageIndex();
+
+            // 提取 polygon vertices → [x,y][][]
+            const maskPolygons: [number, number][][] = polygons.map(p =>
+                p.vertices.map((v: any) => [v.x, v.y] as [number, number])
+            );
+
+            const startFrame = range ? range.startFrame : currentFrame;
+            const endFrame = range ? range.endFrame : imagesData.length - 1;
+            const sessionId = activeVideo?.sessionId || '';
+            const modelName = activeModelName;
+
+            // 尝试从第一个 polygon 的 labelId 获取 className
+            const labels = store.getState().labels.labels;
+            const firstLabelId = polygons[0]?.labelId;
+            const labelName = labels.find((l: any) => l.id === firstLabelId);
+            const className = labelName?.name || 'retrieved';
+
+            ObjectTrackingActions.startRetrieval({
+                sessionId,
+                startFrameIdx: startFrame,
+                endFrameIdx: endFrame,
+                maskPolygons,
+                modelName,
+                className,
+            });
+            return;
+        }
+
+        // ── 正常推理模式 ──
         // 时间轴选区优先：有选区时，从 imagesData 中切出对应帧范围
         const range = getTimelineRange();
         if (range) {
@@ -543,7 +579,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 AIDetectionActions.detectObjects(activeImageData);
             }
         }
-    }, [imagesData, isFullImageInferenceInProgress, updateFullImageInferenceStatus, isSegModel]);
+    }, [imagesData, isFullImageInferenceInProgress, updateFullImageInferenceStatus, isSegModel, trackingMode, language, activeModelName]);
 
     const withAI = (
         ((activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isAISSDObjectDetectorModelLoaded()) ||
@@ -698,8 +734,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                     {isTrackingModelLoaded && getButtonWithTooltip(
                         'object-tracking',
                         trackingMode
-                            ? (language === 'zh' ? '退出目标跟踪' : 'Exit Object Tracking')
-                            : (language === 'zh' ? '目标跟踪' : 'Object Tracking'),
+                            ? (language === 'zh' ? '退出检索模式' : 'Exit Retrieval')
+                            : (language === 'zh' ? '检索' : 'Retrieval'),
                         'ico/tracking.png',
                         'object-tracking',
                         trackingMode && !eraserMode,
@@ -802,7 +838,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                     {isFullImageInferenceInProgress
                         ? (language === 'zh' ? '停止' : 'Stop')
                         : (() => {
-                            const label = language === 'zh' ? '推理' : 'Infer';
+                            const label = trackingMode
+                                ? (language === 'zh' ? '检索' : 'Retrieve')
+                                : (language === 'zh' ? '推理' : 'Infer');
                             // 时间轴选区优先显示帧数
                             if (timelineRange) {
                                 const rangeCount = timelineRange.endFrame - timelineRange.startFrame + 1;

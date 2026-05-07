@@ -831,7 +831,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
 
         // AI Model Management
         modelManagement: {
-            callModels: '模型设置',
+            callModels: '推理中心',
             modelEngines: '模型引擎',
             manage: '管理',
             noModels: '暂无AI模型',
@@ -953,7 +953,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 frameExtraction: '视频拆帧',
                 batchDetect: '批量检测',
                 batchSegment: '批量分割',
-                tracking: '目标跟踪',
+                tracking: '检索跟踪',
                 export: '导出标注',
                 queueLoad: '加载队列项'
             },
@@ -1308,7 +1308,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
 
         // AI Model Management
         modelManagement: {
-            callModels: 'Call Models',
+            callModels: 'Inference Center',
             modelEngines: 'Model Engines',
             manage: 'Manage',
             noModels: 'No AI Models',
@@ -1430,7 +1430,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 frameExtraction: 'Video frame extraction',
                 batchDetect: 'Batch detection',
                 batchSegment: 'Batch segmentation',
-                tracking: 'Object tracking',
+                tracking: 'Retrieval',
                 export: 'Export annotations',
                 queueLoad: 'Load queue item'
             },

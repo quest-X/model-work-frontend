@@ -18,7 +18,12 @@ export type StreamTrackParams = {
     sessionId: string;
     startFrame: number;
     endFrame: number;
-    bbox: [number, number, number, number]; // x1,y1,x2,y2 in image-space
+    /** Exactly one of bbox or maskPolygons must be provided. */
+    bbox?: [number, number, number, number]; // x1,y1,x2,y2 in image-space
+    /** Polygon vertices from SAM annotations on seed frame.
+     *  Each polygon is an array of [x,y] pairs in image-space pixels.
+     *  Backend rasterizes them into a binary mask for SAM 2/3 tracking. */
+    maskPolygons?: [number, number][][];
     modelName: string;
     /** Mirrors /segment postprocess. Only present keys are applied; absent =
      *  use backend defaults (polygon_epsilon=2px memory baseline, others off).
@@ -63,7 +68,9 @@ export class TrackingAPIService {
                         session_id: params.sessionId,
                         start_frame: params.startFrame,
                         end_frame: params.endFrame,
-                        prompt: { bbox: params.bbox },
+                        prompt: params.maskPolygons
+                            ? { mask: params.maskPolygons }
+                            : { bbox: params.bbox },
                         model: params.modelName,
                         ...(params.postprocess ? { postprocess: params.postprocess } : {}),
                     }),

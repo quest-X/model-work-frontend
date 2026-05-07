@@ -16,6 +16,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.5.4',
+        date: '2026-05-07',
+        changes: [
+            { zh: '【关键修复】1440p+ 长视频推理浏览器崩溃：缓存窗口按视频分辨率自适应（1440p 时从 1500 帧降到 ~80 帧 RGBA），推理并发按分辨率自适应（1440p→1，1080p→2，≤720p→4），从根上消除 OOM 崩溃。9.3GB / 1440p / 25fps / 10min 视频实测稳定', en: '[Critical Fix] 1440p+ long-video inference no longer crashes the browser: frame cache window now adapts to resolution (1440p drops from 1500 to ~80 RGBA frames), inference concurrency adapts to resolution (1440p→1, 1080p→2, ≤720p→4). Eliminates OOM crash on a 9.3 GB / 1440p / 25 fps / 10 min test video' },
+            { zh: '【优化】三层缓存独立预算：RGBA 解码层 1.2GB（重，严限）/ JPEG 字节层 600MB（中，~2000 帧大窗口）/ 缩略图自然累积。scrub 在当前帧 ±80 秒内基本无感（命中 JPEG 缓存 ~30ms 解码），远端约 200ms 后端拉取', en: '[Optimize] Three-tier cache with independent budgets: decoded RGBA layer 1.2 GB (heavy, strict) / JPEG byte layer 600 MB (~2000 frames) / thumbnails accumulate naturally. Scrubbing within ±80 s of current frame is near-instant (JPEG hit + ~30 ms decode); farther seeks ~200 ms backend fetch' },
+            { zh: '【优化】检测推理路径切到 JPEG q=0.9：单帧检测/批量检测从前端 PNG 编码（80-200ms 主线程阻塞 + ~3MB/帧）切到 JPEG（10-30ms + ~500KB/帧）。分割路径保留 PNG（mask 边界对压缩敏感）', en: '[Optimize] Detection inference now uses JPEG q=0.9: single-frame and batch detection switched from PNG (80-200 ms main-thread block + ~3 MB/frame) to JPEG (10-30 ms + ~500 KB/frame). Segmentation path retains PNG (mask edges are compression-sensitive)' },
+            { zh: '【UX】推理流程默认全激活：模型设置弹窗的"前处理 / 推理过程 / 后处理"三阶段默认全部激活，不需手动拖入下方区域', en: '[UX] Pipeline stages activated by default: pre-process / inference / post-process all start active in the model settings popup; no manual drag-to-activate needed' },
+        ]
+    },
+    {
         version: '2.5.3',
         date: '2026-05-07',
         changes: [

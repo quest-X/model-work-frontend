@@ -243,11 +243,15 @@ const VideoTimeline: React.FC<IProps> = ({
 
     const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
         if (e.shiftKey) {
-            // Shift+mousedown：开始范围选区
-            const frame = xToFrame(e.clientX);
-            rangeAnchorRef.current = frame;
+            // Shift+mousedown：以当前播放帧为 startFrame（seed frame），
+            // 鼠标点击位置为 endFrame，开始拖拽调整 endFrame。
+            const clickedFrame = xToFrame(e.clientX);
+            rangeAnchorRef.current = currentFrame; // 锁定 start = 当前帧
             setIsRangeSelecting(true);
-            setSelectionRange({ startFrame: frame, endFrame: frame });
+            setSelectionRange({
+                startFrame: Math.min(currentFrame, clickedFrame),
+                endFrame: Math.max(currentFrame, clickedFrame),
+            });
             return; // 不触发 seek
         }
         setIsDragging(true);
@@ -265,7 +269,7 @@ const VideoTimeline: React.FC<IProps> = ({
 
         if (isRangeSelecting && rangeAnchorRef.current !== null) {
             const frame = xToFrame(e.clientX);
-            const anchor = rangeAnchorRef.current;
+            const anchor = rangeAnchorRef.current; // = currentFrame (seed frame)
             setSelectionRange({
                 startFrame: Math.min(anchor, frame),
                 endFrame: Math.max(anchor, frame),
