@@ -1,12 +1,18 @@
 import { IRect } from '../../interfaces/IRect';
 import { LabelUtil } from '../LabelUtil';
-import {LabelPoint, LabelPolygon, LabelRect} from '../../store/labels/types';
+import {LabelName, LabelPoint, LabelPolygon, LabelRect} from '../../store/labels/types';
 import {LabelStatus} from '../../data/enums/LabelStatus';
 import {IPoint} from '../../interfaces/IPoint';
 
 const mockUUID: string = '123e4567-e89b-12d3-a456-426614174000'
 
-jest.mock('uuid', () => ({ v4: () => mockUUID }));
+// `mock`-prefixed so jest.mock factory hoisting accepts the reference.
+const mockUuidState: { impl: () => string } = { impl: () => mockUUID };
+jest.mock('uuid', () => ({ v4: () => mockUuidState.impl() }));
+
+beforeEach(() => {
+    mockUuidState.impl = () => mockUUID;
+});
 
 describe('LabelUtil createLabelRect method', () => {
     it('return correct LabelRect object', () => {

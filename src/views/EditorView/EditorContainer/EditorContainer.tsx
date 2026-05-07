@@ -42,6 +42,7 @@ import {EditorModel} from '../../../staticModels/EditorModel';
 import {store} from '../../../index';
 import {submitNewNotification, updateNotificationById, deleteNotificationById} from '../../../store/notifications/actionCreators';
 import {NotificationUtil} from '../../../utils/NotificationUtil';
+import {PendingImportFiles} from '../../../utils/PendingImportFiles';
 // import {inferenceEventEmitter, InferenceResultsEvent} from '../../../logic/actions/AISegmentationActions';
 
 interface IProps {
@@ -313,12 +314,30 @@ const EditorContainer: React.FC<IProps> = (
         noKeyboard: true, // 禁用键盘触发上传，避免Space键冲突
         accept: {
             'image/*': ['.jpeg', '.png', '.jpg'],
-            'video/*': ['.mp4', '.mov', '.avi', '.webm']
+            'video/*': ['.mp4', '.mov', '.avi', '.webm'],
+            'application/json': ['.json'],
+            'text/plain': ['.txt'],
+            'application/xml': ['.xml'],
+            'text/xml': ['.xml'],
+            'application/zip': ['.zip'],
+            'application/x-zip-compressed': ['.zip'],
+            'application/octet-stream': ['.zip'],
         },
         onDrop: async (files) => {
             if (files.length > 0) {
                 const sortedFiles = sortBy(files, (item: File) => item.name);
-                
+
+                // 标注文件优先：拦截并转交导入弹窗
+                const ANNOTATION_EXTS = ['.json', '.txt', '.xml', '.zip'];
+                const annotationFiles = sortedFiles.filter(f =>
+                    ANNOTATION_EXTS.some(ext => f.name.toLowerCase().endsWith(ext))
+                );
+                if (annotationFiles.length > 0) {
+                    PendingImportFiles.set(annotationFiles);
+                    updateActivePopupTypeAction(PopupWindowType.IMPORT_ANNOTATIONS);
+                    return;
+                }
+
                 // 检查是否包含视频文件
                 const videoFiles = sortedFiles.filter(file => file.type.startsWith('video/'));
                 const imageFiles = sortedFiles.filter(file => file.type.startsWith('image/'));
@@ -548,7 +567,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '167px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.5.0</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.5.1</div>
             <div
                 className='SaveButtonBottom'
                 onClick={handleSave}

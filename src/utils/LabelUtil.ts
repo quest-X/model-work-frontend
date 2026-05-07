@@ -80,4 +80,38 @@ export class LabelUtil {
             return missingIds
         }, [])
     }
+
+    /**
+     * Merge incoming LabelNames into existing ones by case-sensitive `name`.
+     *
+     * - For each incoming label, if `existing` already has a label with the same `name`,
+     *   reuse that existing label (id + color preserved) and record a remap from the
+     *   incoming label's id to the existing label's id.
+     * - If `name` is not in `existing`, create a new LabelName via {@link createLabelName}
+     *   (fresh UUID + palette color), append it to the merged list, and remap incoming id
+     *   to the new label's id.
+     * - `existing` element references are kept stable; nothing in either input is mutated.
+     * - The returned `idRemap` always contains an entry for every incoming label so callers
+     *   can uniformly translate incoming label ids into final ids.
+     */
+    public static mergeLabelsByName(
+        existing: LabelName[],
+        incoming: LabelName[]
+    ): { merged: LabelName[]; idRemap: Map<string, string> } {
+        const merged: LabelName[] = [...existing];
+        const idRemap: Map<string, string> = new Map<string, string>();
+
+        for (const incomingLabel of incoming) {
+            const match = merged.find((l: LabelName) => l.name === incomingLabel.name);
+            if (match) {
+                idRemap.set(incomingLabel.id, match.id);
+            } else {
+                const newLabel: LabelName = LabelUtil.createLabelName(incomingLabel.name);
+                merged.push(newLabel);
+                idRemap.set(incomingLabel.id, newLabel.id);
+            }
+        }
+
+        return { merged, idRemap };
+    }
 }

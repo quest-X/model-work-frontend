@@ -30,6 +30,7 @@ interface StoredDataInfo {
     hasSettings: boolean;
     hasProject: boolean;
     lastSaved: number;
+    projectName?: string;
     imageCount?: number;
     validImageCount?: number;
     labelCount?: number;
@@ -121,6 +122,12 @@ const App: React.FC<IProps> = (
                 <div className="restore-dialog">
                     <h2>是否恢复之前的工作?</h2>
                     <div className="restore-info">
+                        {storedDataInfo.projectName && (
+                            <div className="info-row">
+                                <span className="info-label">项目名称</span>
+                                <span className="info-value">{storedDataInfo.projectName}</span>
+                            </div>
+                        )}
                         <div className="info-row">
                             <span className="info-label">上次保存</span>
                             <span className="info-value">{ProjectRestoreService.formatLastSavedTime(storedDataInfo.lastSaved)}</span>

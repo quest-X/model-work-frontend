@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './ImportLabelPopup.scss';
 import { LabelType } from '../../../data/enums/LabelType';
 import { EditorModel } from '../../../staticModels/EditorModel';
@@ -27,6 +27,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ArrayUtil } from '../../../utils/ArrayUtil';
 import { Settings } from '../../../settings/Settings';
 import { LabelUtil } from '../../../utils/LabelUtil';
+import { PendingImportFiles } from '../../../utils/PendingImportFiles';
 
 interface IProps {
     activeLabelType: LabelType;
@@ -54,6 +55,7 @@ const ImportLabelPopup: React.FC<IProps> = ({
     const [loadedImageData, setLoadedImageData] = useState<ImageData[]>([]);
     const [annotationsLoadedError, setAnnotationsLoadedError] = useState<Error | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [sourceInfo, setSourceInfo] = useState<{zipCount: number; looseCount: number}>({zipCount: 0, looseCount: 0});
 
     const resolveNotification = (error: Error): Notification => {
         if (error instanceof DocumentParsingError) return Notification.ANNOTATION_FILE_PARSE_ERROR;
@@ -132,19 +134,18 @@ const ImportLabelPopup: React.FC<IProps> = ({
         });
     };
 
-    const doFullYOLOImport = (imageFiles: File[], annotationFiles: File[]) => {
+    type ImportResult = { imageData: ImageData[]; labelNames: LabelName[] };
+
+    const importYOLOAsync = (imageFiles: File[], annotationFiles: File[]): Promise<ImportResult> => {
         const labelsFile = annotationFiles.find(f => f.name.toLowerCase() === 'labels.txt');
-        if (!labelsFile) {
-            onAnnotationsLoadFailure(new Error('labels.txt not found in zip'));
-            return;
-        }
+        if (!labelsFile) return Promise.reject(new Error('labels.txt not found in zip'));
 
         const labelsPromise = FileUtil.readFile(labelsFile).then(content => YOLOUtils.parseLabelsNamesFromString(content));
         const imagesPromise = Promise.all(imageFiles.map(f => loadImageDimensions(f)));
         const txtFiles = annotationFiles.filter(f => f.name.toLowerCase() !== 'labels.txt' && f.name.endsWith('.txt'));
         const txtContentsPromise = Promise.all(txtFiles.map(f => FileUtil.readFile(f)));
 
-        Promise.all([labelsPromise, imagesPromise, txtContentsPromise])
+        return Promise.all([labelsPromise, imagesPromise, txtContentsPromise])
             .then(([labelNames, loadedImages, txtContents]) => {
                 const annotationMap: Record<string, string> = {};
                 txtFiles.forEach((f, i) => {
@@ -163,7 +164,6 @@ const ImportLabelPopup: React.FC<IProps> = ({
                             const labelId = labelNames[classIdx]?.id;
                             if (!labelId) return;
                             if (parts.length === 5) {
-                                // Detection format: class cx cy w h
                                 imageData.labelRects.push(LabelUtil.createLabelRect(labelId, {
                                     x: (parseFloat(parts[1]) - parseFloat(parts[3]) / 2) * width,
                                     y: (parseFloat(parts[2]) - parseFloat(parts[4]) / 2) * height,
@@ -171,7 +171,6 @@ const ImportLabelPopup: React.FC<IProps> = ({
                                     height: parseFloat(parts[4]) * height,
                                 }));
                             } else if (parts.length > 5 && (parts.length - 1) % 2 === 0) {
-                                // Segmentation format: class x1 y1 x2 y2 ...
                                 const vertices = [];
                                 for (let i = 1; i < parts.length; i += 2) {
                                     vertices.push({ x: parseFloat(parts[i]) * width, y: parseFloat(parts[i + 1]) * height });
@@ -182,19 +181,15 @@ const ImportLabelPopup: React.FC<IProps> = ({
                     }
                     return imageData;
                 });
-                resultImageData.sort((a, b) => a.fileData.name.localeCompare(b.fileData.name, undefined, { numeric: true }));
-                onAnnotationLoadSuccess(resultImageData, labelNames);
-            })
-            .catch(err => onAnnotationsLoadFailure(err instanceof Error ? err : new Error(String(err))));
+                return { imageData: resultImageData, labelNames };
+            });
     };
 
-    const doFullLabelMeImport = (imageFiles: File[], annotationFiles: File[]) => {
+    const importLabelMeAsync = (imageFiles: File[], annotationFiles: File[]): Promise<ImportResult> => {
         const jsonFiles = annotationFiles.filter(f => f.name.toLowerCase().endsWith('.json'));
-        const annotationsPromise = Promise.all(jsonFiles.map(f =>
+        return Promise.all(jsonFiles.map(f =>
             FileUtil.readFile(f).then(text => JSON.parse(text))
-        ));
-
-        annotationsPromise.then(annotations => {
+        )).then(annotations => {
             const allLabels = new Set<string>();
             annotations.forEach((ann: any) => (ann.shapes || []).forEach((s: any) => allLabels.add(s.label)));
 
@@ -227,11 +222,9 @@ const ImportLabelPopup: React.FC<IProps> = ({
                 const baseName = ann.imagePath?.split('/').pop() || ann.imagePath;
                 const imgData = imageDataByName[baseName];
                 if (!imgData) continue;
-
                 for (const shape of (ann.shapes || [])) {
                     const labelId = labelNameMap[shape.label]?.id;
                     if (!labelId) continue;
-
                     if (shape.shape_type === 'rectangle') {
                         pushRect(imgData, labelId, shape.points);
                     } else if (shape.shape_type === 'polygon') {
@@ -243,108 +236,115 @@ const ImportLabelPopup: React.FC<IProps> = ({
                     }
                 }
             }
+            return { imageData: resultImageData, labelNames: Object.values(labelNameMap) };
+        });
+    };
 
-            resultImageData.sort((a, b) => a.fileData.name.localeCompare(b.fileData.name, undefined, { numeric: true }));
-            onAnnotationLoadSuccess(resultImageData, Object.values(labelNameMap));
-        }).catch(err => onAnnotationsLoadFailure(err instanceof Error ? err : new Error(String(err))));
+    const importGenericAsync = (files: File[], format: AnnotationFormatType): Promise<ImportResult> => {
+        if (!ImporterSpecData[format]) return Promise.reject(new Error('Unsupported file format'));
+        return new Promise((resolve, reject) => {
+            const importer = new (ImporterSpecData[format])([labelType]);
+            importer.import(files,
+                (imageData: ImageData[], labelNames: LabelName[]) => resolve({ imageData, labelNames }),
+                (error?: Error) => reject(error || new Error('Import failed'))
+            );
+        });
     };
 
     const doImport = (files: File[], format: AnnotationFormatType) => {
-        if (!ImporterSpecData[format]) {
-            onAnnotationsLoadFailure(new Error('Unsupported file format'));
-            return;
-        }
-        const importer = new (ImporterSpecData[format])([labelType]);
-        importer.import(files, onAnnotationLoadSuccess, onAnnotationsLoadFailure);
+        importGenericAsync(files, format)
+            .then(r => onAnnotationLoadSuccess(r.imageData, r.labelNames))
+            .catch(err => onAnnotationsLoadFailure(err instanceof Error ? err : new Error(String(err))));
     };
 
-    const { acceptedFiles, getRootProps, getInputProps } = useDropzone({
-        accept: {
-            'application/json': ['.json'],
-            'text/plain': ['.txt'],
-            'application/xml': ['.xml'],
-            'text/xml': ['.xml'],
-            'application/zip': ['.zip'],
-            'application/x-zip-compressed': ['.zip'],
-            'application/octet-stream': ['.zip'],
-        },
-        multiple: true,
-        onDrop: (accepted) => {
-            if (accepted.length === 0) return;
-            setIsProcessing(true);
-            setAnnotationsLoadedError(null);
+    const handleFiles = useCallback((accepted: File[]) => {
+        if (accepted.length === 0) return;
+        setIsProcessing(true);
+        setAnnotationsLoadedError(null);
+        const zips = accepted.filter(f => f.name.toLowerCase().endsWith('.zip'));
+        const loose = accepted.filter(f => !f.name.toLowerCase().endsWith('.zip'));
+        setSourceInfo({zipCount: zips.length, looseCount: loose.length});
 
-            const zipFile = accepted.find(f => f.name.toLowerCase().endsWith('.zip'));
-            if (zipFile) {
-                const { format: zipFormat, isFull } = detectFromZipName(zipFile.name);
-                JSZip.loadAsync(zipFile)
-                    .then((zip) => {
-                        const annotationExts = ['.json', '.txt', '.xml'];
-                        const imageExts = ['.jpg', '.jpeg', '.png', '.bmp', '.webp'];
-                        const mimeMap: Record<string, string> = {
-                            '.json': 'application/json',
-                            '.txt': 'text/plain',
-                            '.xml': 'application/xml',
-                        };
-                        const imageMimeMap: Record<string, string> = {
-                            '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-                            '.png': 'image/png', '.bmp': 'image/bmp', '.webp': 'image/webp',
-                        };
+            if (zips.length > 0) {
+                const annotationExts = ['.json', '.txt', '.xml'];
+                const imageExts = ['.jpg', '.jpeg', '.png', '.bmp', '.webp'];
+                const mimeMap: Record<string, string> = {
+                    '.json': 'application/json', '.txt': 'text/plain', '.xml': 'application/xml',
+                };
+                const imageMimeMap: Record<string, string> = {
+                    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                    '.png': 'image/png', '.bmp': 'image/bmp', '.webp': 'image/webp',
+                };
 
-                        const annotationPromises: Promise<File>[] = [];
-                        const imagePromises: Promise<File>[] = [];
-
+                const processOneZip = (zipFile: File): Promise<ImportResult> => {
+                    const { format: zipFormat, isFull } = detectFromZipName(zipFile.name);
+                    return JSZip.loadAsync(zipFile).then(zip => {
+                        const annPromises: Promise<File>[] = [];
+                        const imgPromises: Promise<File>[] = [];
                         zip.forEach((path, entry) => {
                             if (entry.dir) return;
                             const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
                             const fileName = path.split('/').pop();
-
                             if (annotationExts.includes(ext)) {
-                                annotationPromises.push(
-                                    entry.async('arraybuffer').then(buf =>
-                                        new File([buf], fileName, { type: mimeMap[ext] || 'text/plain' })
-                                    )
-                                );
+                                annPromises.push(entry.async('arraybuffer').then(buf =>
+                                    new File([buf], fileName!, { type: mimeMap[ext] || 'text/plain' })));
                             } else if (isFull && imageExts.includes(ext)) {
-                                imagePromises.push(
-                                    entry.async('arraybuffer').then(buf =>
-                                        new File([buf], fileName, { type: imageMimeMap[ext] || 'image/jpeg' })
-                                    )
-                                );
+                                imgPromises.push(entry.async('arraybuffer').then(buf =>
+                                    new File([buf], fileName!, { type: imageMimeMap[ext] || 'image/jpeg' })));
+                            }
+                        });
+                        return Promise.all([Promise.all(annPromises), Promise.all(imgPromises)]);
+                    }).then(([annFiles, imgFiles]) => {
+                        if (isFull && imgFiles.length > 0 && zipFormat === AnnotationFormatType.YOLO) {
+                            return importYOLOAsync(imgFiles, annFiles);
+                        } else if (isFull && imgFiles.length > 0 && zipFormat === AnnotationFormatType.LABELME) {
+                            return importLabelMeAsync(imgFiles, annFiles);
+                        } else if (isFull && imgFiles.length > 0) {
+                            const newImageData = imgFiles.map(f => ImageDataUtil.createImageDataFromFileData(f));
+                            const format = zipFormat || detectFormatFromFiles(annFiles);
+                            if (!format) return Promise.reject(new Error('Cannot detect annotation format'));
+                            return importGenericAsync(annFiles, format).then(r => ({
+                                imageData: [...newImageData, ...r.imageData],
+                                labelNames: r.labelNames,
+                            }));
+                        } else {
+                            const format = zipFormat || detectFormatFromFiles(annFiles);
+                            if (!format) return Promise.reject(new Error('Cannot detect annotation format'));
+                            return importGenericAsync(annFiles, format);
+                        }
+                    });
+                };
+
+                Promise.all(zips.map(processOneZip))
+                    .then(results => {
+                        const labelNameMap = new Map<string, LabelName>();
+                        const idRemap = new Map<string, string>();
+                        results.forEach(r => r.labelNames.forEach(ln => {
+                            if (!labelNameMap.has(ln.name)) labelNameMap.set(ln.name, ln);
+                            idRemap.set(ln.id, labelNameMap.get(ln.name)!.id);
+                        }));
+
+                        const allImageData: ImageData[] = [];
+                        const remap = (id: string | null) => (id && idRemap.has(id)) ? idRemap.get(id)! : id;
+
+                        results.forEach((r, zipIdx) => {
+                            const prefix = zips.length > 1
+                                ? zips[zipIdx].name.replace(/\.[^/.]+$/, '') + '_'
+                                : '';
+                            for (const img of r.imageData) {
+                                for (const rect of img.labelRects) rect.labelId = remap(rect.labelId);
+                                for (const poly of img.labelPolygons) poly.labelId = remap(poly.labelId);
+                                for (const pt of img.labelPoints) pt.labelId = remap(pt.labelId);
+                                for (const ln of img.labelLines) ln.labelId = remap(ln.labelId);
+                                if (prefix) {
+                                    img.fileData = new File([img.fileData], prefix + img.fileData.name, { type: img.fileData.type });
+                                }
+                                allImageData.push(img);
                             }
                         });
 
-                        return Promise.all([
-                            Promise.all(annotationPromises),
-                            Promise.all(imagePromises)
-                        ]).then(([annotationFiles, imageFiles]) => {
-                            if (isFull && imageFiles.length > 0 && zipFormat === AnnotationFormatType.YOLO) {
-                                // Full YOLO import: load images, parse annotations, build ImageData with labels in one pass
-                                doFullYOLOImport(imageFiles, annotationFiles);
-                            } else if (isFull && imageFiles.length > 0 && zipFormat === AnnotationFormatType.LABELME) {
-                                doFullLabelMeImport(imageFiles, annotationFiles);
-                            } else if (isFull && imageFiles.length > 0) {
-                                // Full non-YOLO (non-LabelMe): add images first, then import labels
-                                const newImageData = imageFiles.map(f => ImageDataUtil.createImageDataFromFileData(f));
-                                addImageDataAction(newImageData);
-                                const format = zipFormat || detectFormatFromFiles(annotationFiles);
-                                if (!format) {
-                                    onAnnotationsLoadFailure(new Error('Cannot detect annotation format'));
-                                    return;
-                                }
-                                // Wait for Redux to flush the addImageData dispatch before importing labels.
-                                // 800ms is a conservative budget for slow devices; a proper fix would use a
-                                // Redux subscription or Promise-based dispatch, but that requires a larger refactor.
-                                setTimeout(() => doImport(annotationFiles, format), 800);
-                            } else {
-                                const format = zipFormat || detectFormatFromFiles(annotationFiles);
-                                if (!format) {
-                                    onAnnotationsLoadFailure(new Error('Cannot detect annotation format'));
-                                    return;
-                                }
-                                doImport(annotationFiles, format);
-                            }
-                        });
+                        allImageData.sort((a, b) => a.fileData.name.localeCompare(b.fileData.name, undefined, { numeric: true }));
+                        onAnnotationLoadSuccess(allImageData, Array.from(labelNameMap.values()));
                     })
                     .catch(err => {
                         onAnnotationsLoadFailure(err instanceof Error ? err : new Error(String(err)));
@@ -364,7 +364,27 @@ const ImportLabelPopup: React.FC<IProps> = ({
                     doImport(accepted, format);
                 }
             }
-        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [labelType]);
+
+    useEffect(() => {
+        const files = PendingImportFiles.take();
+        if (files && files.length > 0) handleFiles(files);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const { acceptedFiles, getRootProps, getInputProps } = useDropzone({
+        accept: {
+            'application/json': ['.json'],
+            'text/plain': ['.txt'],
+            'application/xml': ['.xml'],
+            'text/xml': ['.xml'],
+            'application/zip': ['.zip'],
+            'application/x-zip-compressed': ['.zip'],
+            'application/octet-stream': ['.zip'],
+        },
+        multiple: true,
+        onDrop: handleFiles,
     });
 
     const onAccept = () => {
@@ -417,11 +437,47 @@ const ImportLabelPopup: React.FC<IProps> = ({
                 <p className='extraBold'>{currentTexts.popups.importAnnotations.tryAgain}</p>
             </>;
         } else if (loadedImageData.length !== 0 && loadedLabelNames.length !== 0) {
-            return <>
-                <img draggable={false} alt={'success'} src={'ico/box-closed.png'} />
-                <p className='extraBold'>{currentTexts.popups.importAnnotations.importReady}</p>
-                <p>{currentTexts.popups.importAnnotations.importWarning}</p>
-            </>;
+            const totalRects = loadedImageData.reduce((s, d) => s + d.labelRects.length, 0);
+            const totalPolygons = loadedImageData.reduce((s, d) => s + d.labelPolygons.length, 0);
+            const newImages = loadedImageData.filter(d => d.fileData).length;
+            const zh = language === Language.CHINESE;
+            const sourceRows: [string, string][] = [];
+            if (sourceInfo.zipCount > 0)
+                sourceRows.push([zh ? '压缩包' : 'Archives', `${sourceInfo.zipCount}`]);
+            if (sourceInfo.looseCount > 0)
+                sourceRows.push([zh ? '散列文件' : 'Files', `${sourceInfo.looseCount}`]);
+
+            const contentRows: [string, string][] = [];
+            if (newImages > 0)
+                contentRows.push([zh ? '图像' : 'Images', `${newImages} ${zh ? '张' : ''}`]);
+            contentRows.push([zh ? '标注图像' : 'Annotated', `${loadedImageData.length} ${zh ? '张' : ''}`]);
+            contentRows.push([zh ? '标签类别' : 'Classes', `${loadedLabelNames.length} ${zh ? '个' : ''}`]);
+            if (totalRects > 0)
+                contentRows.push([zh ? '检测框' : 'Boxes', `${totalRects} ${zh ? '个' : ''}`]);
+            if (totalPolygons > 0)
+                contentRows.push([zh ? '多边形' : 'Polygons', `${totalPolygons} ${zh ? '个' : ''}`]);
+
+            return <div className='import-summary'>
+                {sourceRows.length > 0 && (
+                    <div className='summary-section'>
+                        {sourceRows.map(([label, value]) => (
+                            <div className='summary-row' key={label}>
+                                <span className='summary-label'>{label}</span>
+                                <span className='summary-value'>{value}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <div className='summary-section'>
+                    {contentRows.map(([label, value]) => (
+                        <div className='summary-row' key={label}>
+                            <span className='summary-label'>{label}</span>
+                            <span className='summary-value'>{value}</span>
+                        </div>
+                    ))}
+                </div>
+                <div className='summary-footer'>{currentTexts.popups.importAnnotations.importWarning}</div>
+            </div>;
         } else {
             return <>
                 <input {...getInputProps()} />
@@ -443,7 +499,9 @@ const ImportLabelPopup: React.FC<IProps> = ({
 
     return (
         <GenericYesNoPopup
-            title={currentTexts.popups.importAnnotations.title}
+            title={loadedImageData.length > 0 && loadedLabelNames.length > 0
+                ? currentTexts.popups.importAnnotations.importReady
+                : currentTexts.popups.importAnnotations.title}
             renderContent={renderContent}
             acceptLabel={currentTexts.popups.importAnnotations.acceptButton}
             disableAcceptButton={loadedImageData.length === 0 || loadedLabelNames.length === 0 || !!annotationsLoadedError || isProcessing}

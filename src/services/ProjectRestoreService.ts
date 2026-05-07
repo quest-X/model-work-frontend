@@ -17,6 +17,7 @@ export class ProjectRestoreService {
         hasSettings: boolean;
         hasProject: boolean;
         lastSaved: number;
+        projectName?: string;
         imageCount?: number;
         validImageCount?: number;
         labelCount?: number;
@@ -24,6 +25,7 @@ export class ProjectRestoreService {
     }> {
         const hasSettings = LocalStorageManager.hasStoredSettings();
         const lastSaved = LocalStorageManager.getLastSavedTime();
+        const projectName = hasSettings ? LocalStorageManager.getSettings().projectName : undefined;
         const meta = await IndexedDBManager.getProjectMeta();
         const hasProject = meta !== null && meta.validImageCount > 0;
 
@@ -31,6 +33,7 @@ export class ProjectRestoreService {
             hasSettings,
             hasProject,
             lastSaved,
+            projectName,
             imageCount: meta?.imageCount,
             validImageCount: meta?.validImageCount,
             labelCount: meta?.labelCount,

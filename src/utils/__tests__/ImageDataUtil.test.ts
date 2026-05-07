@@ -5,10 +5,10 @@ import { ImageDataUtil } from '../ImageDataUtil';
 import { AcceptedFileType } from '../../data/enums/AcceptedFileType';
 
 
-const getDummyImageData = (id: string): ImageData => {
+const getDummyImageData = (id: string, fileName: string = 'filename.txt'): ImageData => {
     return {
         id,
-        fileData: new File([''], 'filename.txt', { type: AcceptedFileType.TEXT }),
+        fileData: new File([''], fileName, { type: AcceptedFileType.TEXT }),
         loadStatus: true,
         labelRects: [],
         labelPoints: [],

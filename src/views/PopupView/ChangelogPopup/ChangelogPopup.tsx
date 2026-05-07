@@ -16,6 +16,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.5.1',
+        date: '2026-05-07',
+        changes: [
+            { zh: '【UX】恢复对话框新增项目名称显示：刷新/重开时的恢复弹窗现在第一行就是项目名，方便确认是不是自己要恢复的那个', en: '[UX] Restore dialog now shows the project name as the first row, making it easier to confirm which session you\'re restoring' },
+            { zh: '【功能】空白编辑区拖拽导入标注：直接把 .json / .txt / .xml / .zip 拖进空白区域即可触发导入弹窗，不用再从菜单里找', en: '[Feature] Drag-and-drop annotation import on the empty editor: drop .json / .txt / .xml / .zip files directly onto the canvas to open the import dialog' },
+            { zh: '【UX】导入弹窗显示加载摘要：压缩包数量、图像数、标签类别、标注数一目了然，导入前就知道内容对不对', en: '[UX] Import popup shows a loading summary: zip count, image count, label classes, and annotation count at a glance before committing the import' },
+            { zh: '【修复】多 zip 批量导入：之前只处理第一个 zip；现在每个 zip 独立解析 + label ID 跨包重映射 + 文件名前缀去重，不再丢图或串标注', en: '[Fix] Multi-zip batch import: previously only the first zip was processed. Each zip is now parsed independently with cross-zip label-ID remapping and filename prefixing to prevent image loss and annotation mismatch' },
+        ]
+    },
+    {
         version: '2.5.0',
         date: '2026-05-07',
         changes: [
