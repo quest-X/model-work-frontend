@@ -131,7 +131,7 @@ const NotificationsView: React.FC<IProps> = (props) => {
                 className={getNotificationWrapperClassName()}
                 key={notification.id}
                 onAnimationEnd={onAnimationEnd}
-                onClick={!notification.isInferenceProgress ? onClose : undefined}
+                onClick={onClose}
             >
                 <div className={getNotificationClassName()}>
                     <div className='header'>
