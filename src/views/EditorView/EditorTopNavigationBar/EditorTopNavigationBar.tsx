@@ -555,10 +555,24 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 
     const runInference = useCallback((_mode?: string) => {
         setShowInferenceMenu(false);
-        if (isFullImageInferenceInProgress) return;
+        if (isFullImageInferenceInProgress) {
+            console.log('[Infer] skip: inference already in progress');
+            return;
+        }
 
         const activeImageData = LabelsSelector.getActiveImageData();
-        if (!activeImageData) return;
+        if (!activeImageData) {
+            console.log('[Infer] skip: no active image data');
+            return;
+        }
+        console.log('[Infer] entry', {
+            isSegModel,
+            smartAnnotationActive,
+            trackingMode,
+            activeModelName,
+            hasImage: !!activeImageData,
+            imageId: activeImageData.id,
+        });
 
         // ── 智能标注模式：收集 prompt LabelRects，统一发 SAM 推理 ──
         if (smartAnnotationActive) {
