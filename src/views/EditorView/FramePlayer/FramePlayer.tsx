@@ -831,6 +831,16 @@ const FramePlayer: React.FC<IProps> = ({
                     <span>缓冲 {bgLoad.ahead}/{bgLoad.min}</span>
                 </div>
             )}
+            {isLoaded && webcodecsActive && (
+                <div className="BgLoadingBadge" style={{ background: 'rgba(0,128,0,0.6)' }}>
+                    <span>WebCodecs · GPU 解码</span>
+                </div>
+            )}
+            {isLoaded && webcodecsFailed && webcodecsUrl && (
+                <div className="BgLoadingBadge" style={{ background: 'rgba(180,120,0,0.6)' }}>
+                    <span>WebCodecs 不可用 · 已回退兼容路径</span>
+                </div>
+            )}
             {sessionExpired && (
                 <div className="LoadingOverlay">
                     <p style={{ fontSize: 16, marginBottom: 8 }}>视频会话已失效</p>

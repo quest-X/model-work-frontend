@@ -28,9 +28,15 @@ export class WebCodecsFramePlayer {
     private cache: Map<number, CacheEntry> = new Map();
     private maxCacheFrames: number;
     private pendingDecodes: Map<number, Promise<VideoFrame>> = new Map();
-    // 解码器输出顺序问题: VideoDecoder.decode 是流水线,output 回调按 DTS 顺序到来,
-    // 但我们要按 frame index 配对。用一个单调递增的 expectedFrameIdx 队列。
-    private decodeQueue: { frameIdx: number; resolve: (f: VideoFrame) => void; reject: (e: Error) => void }[] = [];
+    // 串行化解码: 每次 doDecode 等前一次完成,避免 _currentBatch* 状态被并发覆盖。
+    // 看起来串行会变慢,但实际上 GPU decoder 内部本身就是流水线,串行 await 在 100ms
+    // 量级下根本看不出来,反而避免了并发竞态导致的 waiter 永不 resolve 的 bug。
+    private decodeChain: Promise<unknown> = Promise.resolve();
+    // 当前正在解码的批次状态(由 doDecode 设置, handleDecodedFrame 读取)
+    private currentExpected: Set<number> = new Set();
+    private currentTarget: number = -1;
+    private currentResolve: ((f: VideoFrame) => void) | null = null;
+    private currentReject: ((e: Error) => void) | null = null;
 
     private constructor(demuxer: VideoDemuxer, maxCacheFrames: number) {
         this.demuxer = demuxer;
@@ -108,9 +114,11 @@ export class WebCodecsFramePlayer {
             output: (frame) => this.handleDecodedFrame(frame),
             error: (err) => {
                 console.error('[WebCodecs] VideoDecoder error:', err);
-                // 把队列里所有等待者都 reject
-                for (const w of this.decodeQueue) w.reject(err);
-                this.decodeQueue = [];
+                if (this.currentReject) {
+                    this.currentReject(err);
+                    this.currentReject = null;
+                    this.currentResolve = null;
+                }
             },
         });
         this.decoder.configure({
@@ -122,58 +130,70 @@ export class WebCodecsFramePlayer {
     }
 
     /**
-     * 实际解码: 取 [keyframe..frameIdx] 的 chunks 喂给 decoder,等到目标帧 output。
-     * keyframe 之前的中间帧也会输出,我们把它们一并放进 LRU 缓存(顺手赚到的)。
+     * 解码 frameIdx 所需的 chunks 并返回目标 VideoFrame。
+     * 串行化: 每次 decode 等前一次 chain 完成,避免 currentExpected/Target 被并发覆盖。
+     * 中间帧顺手进 LRU(下次 scrub 到附近帧零延迟)。
      */
     private async decodeFrame(frameIdx: number): Promise<VideoFrame> {
+        const myTurn = this.decodeChain.then(() => this.doDecode(frameIdx));
+        // chain 继续,即使本次失败也不阻断后续(catch 吞错只是给链用,真错由 myTurn 抛)
+        this.decodeChain = myTurn.catch(() => undefined);
+        return myTurn;
+    }
+
+    private async doDecode(frameIdx: number): Promise<VideoFrame> {
+        // 二次检查 cache(链上前一帧可能正好把这帧解出来了)
+        const cached = this.cache.get(frameIdx);
+        if (cached) {
+            this.cache.delete(frameIdx);
+            this.cache.set(frameIdx, cached);
+            return cached.frame;
+        }
+
         const chunks = await this.demuxer.getChunksForFrame(frameIdx);
         const targetTimestamp = chunks[chunks.length - 1].timestamp;
-        const expectedTimestamps = chunks.map(c => c.timestamp);
 
         return new Promise<VideoFrame>((resolve, reject) => {
-            // 注册等待者: 当 output 的 timestamp 命中 targetTimestamp,resolve
-            this.decodeQueue.push({
-                frameIdx,
-                resolve,
-                reject,
-            });
-            // 顺手把中间帧也"等"上,output 时塞进 cache
-            (this as any)._currentBatchTimestamps = new Set(expectedTimestamps);
-            (this as any)._currentBatchTarget = targetTimestamp;
+            this.currentExpected = new Set(chunks.map(c => c.timestamp));
+            this.currentTarget = targetTimestamp;
+            this.currentResolve = resolve;
+            this.currentReject = reject;
 
-            for (const chunk of chunks) {
-                this.decoder.decode(chunk);
-            }
-            // flush 让 decoder 输出最后一帧 (尤其当 chunks 末尾是 P/B 帧时)
-            this.decoder.flush().catch(reject);
+            for (const chunk of chunks) this.decoder.decode(chunk);
+            this.decoder.flush().catch((err) => {
+                if (this.currentReject) {
+                    this.currentReject(err);
+                    this.currentReject = null;
+                    this.currentResolve = null;
+                }
+            });
         });
     }
 
     private handleDecodedFrame(frame: VideoFrame): void {
         const ts = frame.timestamp;
-        const targetTs = (this as any)._currentBatchTarget;
-        const batchSet = (this as any)._currentBatchTimestamps as Set<number> | undefined;
+        const isTarget = ts === this.currentTarget;
+        const isExpected = this.currentExpected.has(ts);
 
-        // batch 内的所有中间帧都进 LRU
-        if (batchSet?.has(ts)) {
-            const frameIdx = this.demuxer.timestampToFrame(ts);
-            // 如果同 frame 已经在 cache (理论上不应该,因为 getFrame 已经查过了),先 close 旧的
-            const existing = this.cache.get(frameIdx);
-            if (existing) existing.frame.close();
-            this.cache.set(frameIdx, { frame, insertedAt: Date.now() });
-            this.evictIfNeeded(frameIdx);
-        } else {
-            // 不在 batch 内,直接丢弃
+        if (!isExpected) {
+            // 流水线漏出来的旧帧, 不属于本批次
             frame.close();
             return;
         }
 
-        // 命中目标帧 → resolve 等待者
-        if (ts === targetTs) {
-            const waiter = this.decodeQueue.shift();
-            if (waiter) {
-                waiter.resolve(frame);
-            }
+        // 进 LRU 缓存。target 的 frame 不进缓存(交给 caller, caller clone 后是否进缓存
+        // 看策略;这里把 target 也放进去,resolve 时返回同一引用,close 由 LRU 管)
+        const idx = this.demuxer.timestampToFrame(ts);
+        const existing = this.cache.get(idx);
+        if (existing) existing.frame.close();
+        this.cache.set(idx, { frame, insertedAt: Date.now() });
+        this.evictIfNeeded(idx);
+
+        if (isTarget && this.currentResolve) {
+            const resolve = this.currentResolve;
+            this.currentResolve = null;
+            this.currentReject = null;
+            resolve(frame);
         }
     }
 
