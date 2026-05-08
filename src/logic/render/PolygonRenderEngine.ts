@@ -194,6 +194,9 @@ export class PolygonRenderEngine extends BaseRenderEngine {
     }
 
     private drawActivelyCreatedLabel(data: EditorData) {
+        // 没有 in-progress 多边形(用户没点过)就别 render,否则 path = [mousePos] = 1 个点,
+        // DrawUtil 会反复打 "无效 anchors" 警告刷屏
+        if (!this.activePath || this.activePath.length === 0) return;
         const standardizedPoints: IPoint[] = this.activePath.map((point: IPoint) => RenderEngineUtil.setPointBetweenPixels(point));
         const path = standardizedPoints.concat(data.mousePositionOnViewPortContent);
         const lines: ILine[] = PolygonUtil.getEdges(path, false);

@@ -17,6 +17,7 @@ import {EditorData} from '../../../data/EditorData';
 import {EditorModel} from '../../../staticModels/EditorModel';
 import {EditorActions} from '../../../logic/actions/EditorActions';
 import {EditorUtil} from '../../../utils/EditorUtil';
+import {isVideoFrame} from '../../../utils/FrameSourceUtil';
 import {ContextManager} from '../../../logic/hotkey/ContextManager';
 import {ContextType} from '../../../data/enums/ContextType';
 import Scrollbars from 'react-custom-scrollbars-2';
@@ -153,6 +154,18 @@ class Editor extends React.Component<IProps, IState> {
     // =================================================================================================================
 
     private loadImage = async (imageData: ImageData): Promise<any> => {
+        // v2.6.0 WebCodecs: videoFrameImage 由 FramePlayer 用 GPU-decoded VideoFrame 提供,
+        // imageData.fileData 是 0 字节占位帧,不要 FileUtil.loadImage 它(会失败刷屏)
+        if (VideoSelector.isVideoMode() && isVideoFrame(EditorModel.videoFrameImage)) {
+            EditorActions.setActiveImage(EditorModel.videoFrameImage);
+            this.updateModelAndRender();
+            return;
+        }
+        // 视频模式 + 0 字节占位帧 = WebCodecs 还在 init,静默等待。
+        // FramePlayer drawFrame(0) 完成后会通过 EditorModel.image 触发 fullRender。
+        if (VideoSelector.isVideoMode() && imageData.fileData?.size === 0) {
+            return;
+        }
         if (imageData.loadStatus) {
             // 视频模式：复用缓存的 videoFrameImage（尺寸与视频一致），同步设置，零延迟
             if (VideoSelector.isVideoMode() && EditorModel.videoFrameImage) {

@@ -209,10 +209,13 @@ const FramePlayer: React.FC<IProps> = ({
                 player.close();
                 webcodecsPlayerRef.current = null;
             }
-            // 释放可能挂在 EditorModel 上的 VideoFrame
-            if (EditorModel.videoFrameImage) {
-                closeFrame(EditorModel.videoFrameImage);
+            // 释放挂在 EditorModel 上的 VideoFrame; EditorModel.image 也指向同一引用,
+            // 必须一起置空,否则 Editor 在 FramePlayer 卸载后 render 会 drawImage(closed)
+            const stale = EditorModel.videoFrameImage;
+            if (stale) {
                 EditorModel.videoFrameImage = null;
+                if (EditorModel.image === stale) (EditorModel as any).image = null;
+                closeFrame(stale);
             }
         };
     }, [webcodecsUrl]);
@@ -312,16 +315,26 @@ const FramePlayer: React.FC<IProps> = ({
             // v2.6.0: WebCodecs 硬解路径
             const wcPlayer = webcodecsPlayerRef.current;
             if (wcPlayer) {
-                const frame = await wcPlayer.getFrame(frameIdx);
+                // 后端预拆 JPEG 的 fps (props.fps) 可能与 mp4 native fps 不一样,
+                // 用 timestamp 取最近的 native 帧,避免索引错位
+                const targetTimestampUs = Math.round((frameIdx / fpsClamped) * 1_000_000);
+                const frame = await wcPlayer.getFrameAtTimestamp(targetTimestampUs);
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(frame as any, 0, 0, canvas.width, canvas.height);
-                // 把上一个 videoFrameImage(可能是 VideoFrame clone)关掉,然后克隆新的
-                closeFrame(EditorModel.videoFrameImage);
-                EditorModel.videoFrameImage = frame.clone();
+                // 关键: VideoFrame 生命周期管理
+                //   - newClone 给 EditorModel.{videoFrameImage,image} 持有
+                //   - oldClone (如果存在,可能是上一帧的 clone) 必须在新 clone 完全替换后才能 close
+                //     否则 React componentDidUpdate 走 fullRender 时 EditorModel.image 还是 closed frame
+                //   - 无论 isPlaying 都要 setActiveImage,因为 EditorModel.image 此前可能也是同一引用
+                const newClone = frame.clone();
+                const oldClone = EditorModel.videoFrameImage;
+                EditorModel.videoFrameImage = newClone;
+                EditorActions.setActiveImage(newClone);
                 if (!isPlayingRef.current && EditorModel.canvas) {
-                    EditorActions.setActiveImage(EditorModel.videoFrameImage);
                     EditorActions.fullRender();
                 }
+                // 全部替换完毕,旧引用不再被任何渲染路径访问,可以安全关闭
+                closeFrame(oldClone);
                 return;
             }
             // 老路径(JPEG decode)
@@ -337,7 +350,15 @@ const FramePlayer: React.FC<IProps> = ({
                 EditorActions.fullRender();
             }
         } catch (err) {
-            console.error(`[FramePlayer] drawFrame(${frameIdx}) failed:`, err);
+            // session 过期 / 解码失败 / fetch 网络错误: 不要刷屏 (后台预读 loop 会退避)
+            const msg = (err as Error)?.message ?? '';
+            const isNoise = msg.includes('failed: 404')
+                || msg.includes('Player closed')
+                || msg.includes('Failed to fetch')
+                || msg.includes('network error');
+            if (!isNoise) {
+                console.error(`[FramePlayer] drawFrame(${frameIdx}) failed:`, err);
+            }
         }
     }, [loadFrameImage, videoSize]);
 
@@ -346,6 +367,25 @@ const FramePlayer: React.FC<IProps> = ({
         if (!canvas) return false;
         const ctx = canvas.getContext('2d');
         if (!ctx) return false;
+
+        // v2.6.0 WebCodecs: 优先查 VideoFrame cache。rAF 播放循环用此路径,
+        // 不能 await,所以只查不解码;cache miss → 让 useEffect 走异步路径补
+        const wcPlayer = webcodecsPlayerRef.current;
+        if (wcPlayer) {
+            const targetTimestampUs = Math.round((frameIdx / fpsClamped) * 1_000_000);
+            const vf = wcPlayer.getCachedFrameAtTimestamp(targetTimestampUs);
+            if (!vf) return false;
+            ensureCanvasSize(canvas);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            try { ctx.drawImage(vf as any, 0, 0, canvas.width, canvas.height); }
+            catch { return false; }
+            // 维护 videoFrameImage 引用,但要正确管理 close
+            const oldClone = EditorModel.videoFrameImage;
+            EditorModel.videoFrameImage = vf.clone();
+            EditorActions.setActiveImage(EditorModel.videoFrameImage);
+            closeFrame(oldClone);
+            return true;
+        }
 
         let cached = frameCacheRef.current.get(frameIdx);
         if (!cached) {
@@ -363,7 +403,7 @@ const FramePlayer: React.FC<IProps> = ({
         ctx.drawImage(cached, 0, 0, canvas.width, canvas.height);
         EditorModel.videoFrameImage = cached;
         return true;
-    }, [videoSize]);
+    }, [videoSize, fpsClamped]);
 
     // === 完整加载一帧：Image 解码 + 缩略图 ===
     const loadFrameFull = useCallback(async (frameIdx: number): Promise<void> => {
@@ -450,9 +490,44 @@ const FramePlayer: React.FC<IProps> = ({
         console.log(`[FramePlayer] JPEG 淘汰 ${toRemove} 帧, 池容量=${heldIndices.length - toRemove}/${maxFrames}`);
     }, [sessionId]);
 
+    // === v2.6.0 WebCodecs 后台主动预读循环 ===
+    // 类似 v2.5.4 的 maintainAvailableFrames,但走 WebCodecs 路径。播放/暂停时持续在
+    // 当前位置前方维持 30 帧 lookahead,让 rAF 永远命中 cache,避免画面滞缓。
+    useEffect(() => {
+        if (!webcodecsActive || !isLoaded) return undefined;
+        let cancelled = false;
+        const PREFETCH_AHEAD = 60;  // 提到 60 帧 (≈ 2.4s @ 25fps),抗瞬时抖动
+        const TICK_MS = 50;          // 压到 50ms,更快响应
+
+        const loop = async () => {
+            let consecutiveErrors = 0;
+            while (!cancelled) {
+                const player = webcodecsPlayerRef.current;
+                if (!player) break;
+                const pos = isPlayingRef.current ? playFrameRef.current : currentFrameRef.current;
+                const target = Math.min(pos + PREFETCH_AHEAD, totalFrames - 1);
+                const targetTimestampUs = Math.round((target / fpsClamped) * 1_000_000);
+                try {
+                    await player.getFrameAtTimestamp(targetTimestampUs);
+                    consecutiveErrors = 0;
+                } catch {
+                    // session 过期 / 解码失败: 退避避免 busy loop。连续错误 > 5 次直接停
+                    consecutiveErrors++;
+                    if (consecutiveErrors > 5) break;
+                    await new Promise(r => setTimeout(r, 500));
+                    continue;
+                }
+                if (cancelled) break;
+                await new Promise(r => setTimeout(r, TICK_MS));
+            }
+        };
+        loop();
+        return () => { cancelled = true; };
+    }, [webcodecsActive, isLoaded, totalFrames, fpsClamped]);
+
     // 持续维护 available_frames：保证当前位置前方始终有 MIN_AHEAD 帧可播放
     const maintainAvailableFrames = useCallback(async () => {
-        // v2.6.0: WebCodecs 路径不需要 JPEG 滑动窗口(GPU 硬解,用过即弃)
+        // v2.6.0: WebCodecs 路径走独立的预读 useEffect,跳过 JPEG 滑动窗
         if (webcodecsPlayerRef.current) return;
         const gen = ++loadGenRef.current;
 
@@ -697,8 +772,12 @@ const FramePlayer: React.FC<IProps> = ({
                 playFrameRef.current = targetFrame;
                 onTimeUpdateRef.current?.(targetFrame / fps, targetFrame);
 
-                // 尝试同步绘制（缓存命中则画，否则保持上一帧画面）
-                drawFrameSync(targetFrame);
+                // 尝试同步绘制(缓存命中则画)。WebCodecs 模式下 sync miss 时
+                // fire-and-forget 异步 drawFrame: 它会触发 lookahead batch 解码,
+                // 后续 sequential 帧会因 cache 命中由 sync 路径瞬间画上。
+                if (!drawFrameSync(targetFrame) && webcodecsPlayerRef.current) {
+                    drawFrame(targetFrame);
+                }
 
                 // 到达最后一帧 → 确保画完再暂停
                 if (targetFrame >= totalFrames - 1) {

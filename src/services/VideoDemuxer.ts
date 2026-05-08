@@ -60,22 +60,22 @@ export class VideoDemuxer {
 
     /** 取出解码 frameIdx 所需的 chunks (含前一个 keyframe 到 frameIdx)。 */
     async getChunksForFrame(frameIdx: number): Promise<EncodedVideoChunk[]> {
-        if (frameIdx < 0 || frameIdx >= this.samples.length) {
-            throw new Error(`Frame ${frameIdx} out of range [0, ${this.samples.length})`);
+        const kfIdx = this.findKeyframeBefore(frameIdx);
+        return this.getChunksInRange(kfIdx, frameIdx);
+    }
+
+    /** 取连续 sample 范围 [startIdx..endIdx] 的 chunks。
+     *  调用方负责保证 startIdx 处是 keyframe 或 decoder 已经位于 startIdx-1。 */
+    async getChunksInRange(startIdx: number, endIdx: number): Promise<EncodedVideoChunk[]> {
+        if (startIdx < 0 || endIdx >= this.samples.length || startIdx > endIdx) {
+            throw new Error(`Range [${startIdx}, ${endIdx}] invalid (samples=${this.samples.length})`);
         }
-        // 1. 向前找 keyframe
-        let kfIdx = frameIdx;
-        while (kfIdx > 0 && !this.samples[kfIdx].isKeyframe) {
-            kfIdx--;
-        }
-        // 2. Range 抓 [kfIdx..frameIdx] 的字节
-        const startByte = this.samples[kfIdx].offset;
-        const endSample = this.samples[frameIdx];
+        const startByte = this.samples[startIdx].offset;
+        const endSample = this.samples[endIdx];
         const endByte = endSample.offset + endSample.size - 1;
         const bytes = await this.fetchRange(startByte, endByte);
-        // 3. 切成 per-sample chunks
         const chunks: EncodedVideoChunk[] = [];
-        for (let i = kfIdx; i <= frameIdx; i++) {
+        for (let i = startIdx; i <= endIdx; i++) {
             const s = this.samples[i];
             const sliceStart = s.offset - startByte;
             const sliceEnd = sliceStart + s.size;
@@ -88,6 +88,16 @@ export class VideoDemuxer {
             }));
         }
         return chunks;
+    }
+
+    /** 找到 idx 之前(含)最近的 keyframe。 */
+    findKeyframeBefore(idx: number): number {
+        if (idx < 0 || idx >= this.samples.length) {
+            throw new Error(`Frame ${idx} out of range [0, ${this.samples.length})`);
+        }
+        let k = idx;
+        while (k > 0 && !this.samples[k].isKeyframe) k--;
+        return k;
     }
 
     /** 帧号 → μs */
@@ -109,17 +119,16 @@ export class VideoDemuxer {
     // ===== 内部 =====
 
     private async parseHeader(): Promise<void> {
-        // 先 HEAD 拿文件大小 (Content-Length 即总字节)
-        const headRes = await fetch(this.url, { method: 'HEAD' });
-        if (!headRes.ok) throw new Error(`HEAD ${this.url} failed: ${headRes.status}`);
-        const lenHeader = headRes.headers.get('content-length');
-        if (!lenHeader) throw new Error('Missing Content-Length on mp4 stream');
-        this.fileSize = parseInt(lenHeader, 10);
+        // 拿文件大小: 优先 HEAD,失败 fallback 到 Range bytes=0-0 读 Content-Range
+        this.fileSize = await this.getFileSize();
 
-        // 抓前 N MB 找 moov。多数 mp4 把 moov 放头部,faststart-mp4 一定如此。
+        // 抓前 N MB 找 moov。多数 mp4 把 moov 放头部 (faststart),少数放尾部。
+        // 关键: mp4box.js 解析完 moov 后会自动 buildSampleLists,把所有 sample 的
+        // (offset, size, cts, duration, is_sync) 写到 trak.samples。我们直接读这个,
+        // 不走 setExtractionOptions/onSamples — 后者要求实际 mdat 字节都喂进去才会
+        // deliver,对几百 MB 的视频不实用。
         const file = MP4Box.createFile() as ISOFile;
         let info: MP4Info | null = null;
-        let samples: MP4Sample[] = [];
 
         return new Promise<void>(async (resolve, reject) => {
             file.onError = (err: string) => reject(new Error(`mp4box parse error: ${err}`));
@@ -131,14 +140,9 @@ export class VideoDemuxer {
                     return;
                 }
                 this.trackId = videoTrack.id;
-                file.setExtractionOptions(videoTrack.id, null, { nbSamples: 1_000_000 });
-                file.start();
-            };
-            file.onSamples = (_id: number, _user: unknown, parsedSamples: MP4Sample[]) => {
-                samples.push(...parsedSamples);
+                // 不需要 setExtractionOptions / start;sample 表已经在 trak 上
             };
 
-            // 拉头部 chunk
             try {
                 let cursor = 0;
                 const tryRange = async (size: number): Promise<boolean> => {
@@ -148,10 +152,9 @@ export class VideoDemuxer {
                     buf.fileStart = cursor;
                     file.appendBuffer(buf);
                     cursor = end + 1;
-                    return info !== null && samples.length > 0;
+                    return info !== null;
                 };
 
-                // 尝试 4MB,8MB,32MB; 大多数视频前 4MB 已含 moov
                 if (!(await tryRange(HEADER_FETCH_BYTES))) {
                     if (!(await tryRange(HEADER_FETCH_BYTES * 2))) {
                         // moov 可能在尾部,抓最后 16MB
@@ -168,23 +171,26 @@ export class VideoDemuxer {
                     reject(new Error('mp4 解析失败:未找到 moov box'));
                     return;
                 }
-                if (samples.length === 0) {
-                    reject(new Error('mp4 解析失败:未拿到 sample 数据'));
+
+                // 直接读已构建好的 sample 表
+                const rawSamples = (file as any).getTrackSamplesInfo(this.trackId);
+                if (!rawSamples || rawSamples.length === 0) {
+                    reject(new Error('mp4 解析失败:trak.samples 为空'));
                     return;
                 }
 
-                // 提取 codec config (avcC/hvcC box → description)
+                // codec config (avcC/hvcC box → description)
                 const videoTrack = info.videoTracks[0];
                 const description = this.extractDescription(file, videoTrack.id);
 
-                // 把 mp4box 时间戳 (cts/ticks) 换成 μs,构造 SampleEntry 表
+                // mp4box ticks → μs (WebCodecs 单位)
                 const timescale = videoTrack.timescale;
-                this.samples = samples.map(s => ({
+                this.samples = rawSamples.map((s: any) => ({
                     offset: s.offset,
                     size: s.size,
                     timestamp: Math.round((s.cts / timescale) * 1_000_000),
                     duration: Math.round((s.duration / timescale) * 1_000_000),
-                    isKeyframe: s.is_sync,
+                    isKeyframe: !!s.is_sync,
                 }));
 
                 this.info = {
@@ -222,6 +228,30 @@ export class VideoDemuxer {
         // box 写出来包含 8 字节的 box header (size + type),要去掉
         const buf = new Uint8Array(stream.buffer);
         return buf.slice(8);
+    }
+
+    private async getFileSize(): Promise<number> {
+        // 优先 HEAD (轻)
+        try {
+            const head = await fetch(this.url, { method: 'HEAD' });
+            if (head.ok) {
+                const lenHeader = head.headers.get('content-length');
+                if (lenHeader) return parseInt(lenHeader, 10);
+            }
+        } catch { /* HEAD 失败,落到 Range 兜底 */ }
+        // Range bytes=0-0: 服务端返回 206 带 Content-Range: "bytes 0-0/<total>"
+        const probe = await fetch(this.url, { headers: { Range: 'bytes=0-0' } });
+        if (!probe.ok && probe.status !== 206) {
+            throw new Error(`无法获取 ${this.url} 大小: ${probe.status}`);
+        }
+        const cr = probe.headers.get('content-range');
+        if (cr) {
+            const m = cr.match(/\/(\d+)$/);
+            if (m) return parseInt(m[1], 10);
+        }
+        const lenHeader = probe.headers.get('content-length');
+        if (lenHeader && probe.status === 200) return parseInt(lenHeader, 10);
+        throw new Error('无法从响应头获取 mp4 总大小');
     }
 
     private async fetchRange(startByte: number, endByte: number): Promise<Uint8Array> {
