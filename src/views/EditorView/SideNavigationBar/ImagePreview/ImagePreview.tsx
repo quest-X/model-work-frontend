@@ -156,14 +156,12 @@ class ImagePreview extends React.Component<IProps, IState> {
                 URL.revokeObjectURL(fullUrl); // Release full-size blob
 
                 // Async toBlob instead of sync toDataURL to avoid blocking main thread
-                thumbCanvas.toBlob((blob) => {
-                    if (!blob) { this.handleLoadImageError(); return; }
-                    const blobUrl = URL.createObjectURL(blob);
+                thumbCanvas.toBlob((thumbBlob) => {
+                    if (!thumbBlob) { this.handleLoadImageError(); return; }
+                    const blobUrl = URL.createObjectURL(thumbBlob);
                     const thumbImg = new Image();
-                    thumbImg.onload = () => {
-                        URL.revokeObjectURL(blobUrl);
-                        this.saveLoadedImage(thumbImg, imageData);
-                    };
+                    // 不撤销 blobUrl：<img src={image.src}> 渲染仍指向它，撤销会变破图
+                    thumbImg.onload = () => this.saveLoadedImage(thumbImg, imageData);
                     thumbImg.onerror = () => {
                         URL.revokeObjectURL(blobUrl);
                         this.handleLoadImageError();

@@ -312,8 +312,8 @@ const VideoEditor: React.FC<IProps> = ({
                     }
                     const thumbUrl = URL.createObjectURL(blob);
                     const thumbnailImage = new Image();
+                    // 不撤销 thumbUrl：ImagePreview <img src={image.src}> 渲染仍指向它
                     thumbnailImage.onload = () => {
-                        URL.revokeObjectURL(thumbUrl);
                         // 缩略图存入 ImageRepository（给 ImagePreview 用）
                         ImageRepository.storeImage(firstFrameImageData.id, thumbnailImage);
                         const updatedImageData = { ...firstFrameImageData, loadStatus: true };

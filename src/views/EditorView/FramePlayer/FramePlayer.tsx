@@ -337,8 +337,8 @@ const FramePlayer: React.FC<IProps> = ({
             const thumbUrl = URL.createObjectURL(blob);
             await new Promise<void>(resolve => {
                 const thumb = new Image();
+                // 不撤销 thumbUrl：ImagePreview <img src={image.src}> 渲染仍指向它
                 thumb.onload = () => {
-                    URL.revokeObjectURL(thumbUrl);
                     cb(frameIdx, thumb);
                     thumbnailDoneRef.current.add(frameIdx);
                     resolve();
