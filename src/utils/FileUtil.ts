@@ -17,6 +17,13 @@ export class FileUtil {
 
     public static loadImage(fileData: File): Promise<HTMLImageElement> {
         return new Promise((resolve, reject) => {
+            // 0 字节占位文件（视频 on-demand 模式的 placeholder）→ createObjectURL 后
+            // img.src 会触发 net::ERR_FILE_NOT_FOUND。所有调用方应先确认 size > 0，
+            // 但作为公共入口加一道兜底，让错误本地化为 reject 而不是浏览器层的失败资源。
+            if (!fileData || fileData.size === 0) {
+                reject(new Error(`FileUtil.loadImage: file is missing or 0-byte placeholder`));
+                return;
+            }
             const url = URL.createObjectURL(fileData);
             const image = new Image();
             // We deliberately do NOT revoke the object URL on success — `<img>`
