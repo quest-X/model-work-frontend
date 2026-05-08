@@ -510,40 +510,52 @@ export class AIDetectionActions {
             });
 
         } else {
-            // ======== 普通图像模式：4路并发流式推理 ========
+            // ======== 普通图像模式：分块批量调 /batch_detect ========
+            // v2.6.3 起从"4 路并发 × N 次 /detect"改为"分块 × /batch_detect"。后端
+            // batch_detect 走真正的 batched forward pass，5 图实测 22% 提速 + 单次
+            // HTTP 往返。BATCH_SIZE 取 8 平衡推理速率和单次 timeout 风险。
             const imageQueue = imagesToDetect.filter(
                 img => !img.labelRects.some((r: LabelRect) => r.isCreatedByAI)
             );
             successCount = total - imageQueue.length;
 
-            // 批量推理前统一设置标签视图（避免对每帧 dispatch 一次）
             store.dispatch(updateActiveLabelViewType(LabelType.RECT));
             if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
                 store.dispatch(updateActiveLabelType(LabelType.RECT));
             }
 
-            const imageTasks = imageQueue.map((imageData) => async (): Promise<DetectionResult[] | null> => {
+            const BATCH_SIZE = 8;
+            let processed = 0;
+            for (let chunkStart = 0; chunkStart < imageQueue.length; chunkStart += BATCH_SIZE) {
+                if (this.isCancelled()) break;
+                const chunk = imageQueue.slice(chunkStart, chunkStart + BATCH_SIZE);
+                const blobs = chunk.map(img => img.fileData as Blob);
+                const filenames = chunk.map(img => img.fileData?.name || 'image.jpg');
                 try {
-                    const results = await new Promise<DetectionResult[]>((resolve, reject) => {
-                        DetectionAPIDetector.predict(imageData, resolve, reject);
-                    });
-                    // 立即写入 Redux
-                    this.applySingleResult(imageData, results);
-                    totalObjects += results.length;
-                    successCount++;
-                    return results;
+                    const batchResults = await DetectionAPIDetector.predictBatchFromBlobs(blobs, filenames);
+                    // 逐张落地结果，保持和原路径相同的 Redux 写入语义
+                    for (let i = 0; i < chunk.length; i++) {
+                        const imageData = chunk[i];
+                        const results = batchResults[i] || [];
+                        this.applySingleResult(imageData, results);
+                        totalObjects += results.length;
+                        successCount++;
+                    }
                 } catch (err) {
-                    console.error(`[Inference] Image ${imageData.fileData?.name} FAILED:`, (err as Error).message);
-                    failCount++;
-                    store.dispatch(addInferenceHistory(imageData.id, 0, false, 'detection'));
-                    return null;
+                    console.error(`[Inference] batch_detect chunk [${chunkStart},${chunkStart + chunk.length}) FAILED:`,
+                        (err as Error).message);
+                    // batch 失败 → 整 chunk 标失败（语义保守，不 fallback 逐张防止重复请求）
+                    chunk.forEach(img => {
+                        failCount++;
+                        store.dispatch(addInferenceHistory(img.id, 0, false, 'detection'));
+                    });
                 }
-            });
-
-            await this.withConcurrency(imageTasks, 4, (done, ttl) => {
-                const pct = Math.round((done / ttl) * 100);
-                notify(2, `${t().aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${imageQueue[done - 1]?.fileData?.name || `Image ${done}`}`);
-            });
+                processed += chunk.length;
+                const pct = Math.round((processed / imageQueue.length) * 100);
+                notify(2, `${t().aiInference.steps.inferring} (${processed}/${imageQueue.length})`,
+                    `${pct}% — ${chunk[chunk.length - 1]?.fileData?.name || `Image ${processed}`}`);
+                if (chunkStart + BATCH_SIZE < imageQueue.length) await this.yieldToUI();
+            }
         }
 
         // ── 完成 / 取消 ──
