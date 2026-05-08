@@ -16,6 +16,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.3',
+        date: '2026-05-09',
+        changes: [
+            { zh: '【性能】图像批量检测切到 /batch_detect：之前是 4 路并发 × N 次 /detect，现在分块（BATCH_SIZE=8）× /batch_detect。后端走真正 batched forward pass，5 张 1440p 实测 22% 提速 + 单次 HTTP 往返代替 N 次。视频路径未改（瓶颈在 sessionId 拉帧）', en: '[Perf] Image batch detection switched to /batch_detect: previously 4-path concurrent × N /detect calls, now chunk-of-8 × /batch_detect. Backend does true batched forward pass, 5×1440p measured 22% faster + single HTTP round trip replaces N. Video path unchanged (bottleneck is sessionId frame pull)' },
+            { zh: '【新 API】DetectionAPIDetector.predictBatchFromBlobs：blobs[] + filenames[] → DetectionResult[][]，整批失败抛错让调用方决定 fallback', en: '[New API] DetectionAPIDetector.predictBatchFromBlobs: blobs[] + filenames[] → DetectionResult[][]; throws on whole-batch failure so caller chooses fallback strategy' },
+            { zh: '【清理】删 InferenceToggle 注释残留：EditorTopNavigationBar:968-969 引用一个 src 里根本不存在的组件，纯历史污染，删掉', en: '[Cleanup] Removed dead InferenceToggle comments: EditorTopNavigationBar.tsx:968-969 referenced a component that does not exist anywhere in src/ — pure historical noise, deleted' },
+            { zh: '【提示】yolov8n 在钢厂监控视频上误检 banana：模型问题不是 v1 代码 bug。生产场景请切换到 luqian_FeiGangDou_GangBao_OCR_0202 / SEG_260123_Gangye_YV8x_Seg_Ep112 等业务模型', en: '[Note] yolov8n misdetects "banana" on steel-plant footage: model issue, not a v1 bug. For production switch to business models like luqian_FeiGangDou_GangBao_OCR_0202 / SEG_260123_Gangye_YV8x_Seg_Ep112' },
+        ]
+    },
+    {
         version: '2.6.2',
         date: '2026-05-09',
         changes: [
