@@ -965,8 +965,6 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         )
                     }
                 </div>}
-            {/* InferenceToggle hidden - segmentation not available */}
-            {/* <InferenceToggle /> */}
         </div>
     );
 });
