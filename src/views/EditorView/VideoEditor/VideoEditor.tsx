@@ -261,13 +261,19 @@ const VideoEditor: React.FC<IProps> = ({
                 fullCanvas.height = targetH;
                 const fullCtx = fullCanvas.getContext('2d');
                 fullCtx.drawImage(canvas, 0, 0, fullCanvas.width, fullCanvas.height);
-                const fullDataUrl = fullCanvas.toDataURL('image/jpeg', 0.9);
-                const fullImage = new Image();
-                fullImage.onload = () => {
-                    EditorModel.videoFrameImage = fullImage;
-                    EditorActions.setActiveImage(fullImage);
-                };
-                fullImage.src = fullDataUrl;
+                // Async toBlob avoids blocking main thread (sync toDataURL cost ~50ms+)
+                fullCanvas.toBlob((blob) => {
+                    if (!blob) return;
+                    const url = URL.createObjectURL(blob);
+                    const fullImage = new Image();
+                    fullImage.onload = () => {
+                        URL.revokeObjectURL(url);
+                        EditorModel.videoFrameImage = fullImage;
+                        EditorActions.setActiveImage(fullImage);
+                    };
+                    fullImage.onerror = () => URL.revokeObjectURL(url);
+                    fullImage.src = url;
+                }, 'image/jpeg', 0.9);
             };
 
             if (firstFrameImageData.loadStatus) {
@@ -297,21 +303,31 @@ const VideoEditor: React.FC<IProps> = ({
                 thumbnailCtx.fillRect(0, 0, thumbnailSize, thumbnailSize);
                 thumbnailCtx.drawImage(canvas, offsetX, offsetY, scaledWidth, scaledHeight);
 
-                const thumbnailDataUrl = thumbnailCanvas.toDataURL('image/jpeg', 0.5);
-                const thumbnailImage = new Image();
-                thumbnailImage.onload = () => {
-                    // 缩略图存入 ImageRepository（给 ImagePreview 用）
-                    ImageRepository.storeImage(firstFrameImageData.id, thumbnailImage);
-                    const updatedImageData = { ...firstFrameImageData, loadStatus: true };
-                    updateImageDataById(updatedImageData.id, updatedImageData);
-                    // 全分辨率图像给 Editor 渲染引擎
-                    setFullResImage();
-                };
-                thumbnailImage.onerror = () => {
-                    const updatedImageData = { ...firstFrameImageData, loadStatus: true };
-                    updateImageDataById(updatedImageData.id, updatedImageData);
-                };
-                thumbnailImage.src = thumbnailDataUrl;
+                // Async toBlob to avoid blocking main thread
+                thumbnailCanvas.toBlob((blob) => {
+                    if (!blob) {
+                        const updatedImageData = { ...firstFrameImageData, loadStatus: true };
+                        updateImageDataById(updatedImageData.id, updatedImageData);
+                        return;
+                    }
+                    const thumbUrl = URL.createObjectURL(blob);
+                    const thumbnailImage = new Image();
+                    thumbnailImage.onload = () => {
+                        URL.revokeObjectURL(thumbUrl);
+                        // 缩略图存入 ImageRepository（给 ImagePreview 用）
+                        ImageRepository.storeImage(firstFrameImageData.id, thumbnailImage);
+                        const updatedImageData = { ...firstFrameImageData, loadStatus: true };
+                        updateImageDataById(updatedImageData.id, updatedImageData);
+                        // 全分辨率图像给 Editor 渲染引擎
+                        setFullResImage();
+                    };
+                    thumbnailImage.onerror = () => {
+                        URL.revokeObjectURL(thumbUrl);
+                        const updatedImageData = { ...firstFrameImageData, loadStatus: true };
+                        updateImageDataById(updatedImageData.id, updatedImageData);
+                    };
+                    thumbnailImage.src = thumbUrl;
+                }, 'image/jpeg', 0.5);
             } else {
                 const updatedImageData = { ...firstFrameImageData, loadStatus: true };
                 updateImageDataById(updatedImageData.id, updatedImageData);

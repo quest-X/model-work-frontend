@@ -56,8 +56,10 @@ export class AppInitializer {
     private static detectDeviceParams = () => {
         const userAgent: string = window.navigator.userAgent;
         PlatformModel.mobileDeviceData = PlatformUtil.getMobileDeviceData(userAgent);
-        PlatformModel.isMac = PlatformUtil.isMac(userAgent);
-        PlatformModel.isSafari = PlatformUtil.isSafari(userAgent);
-        PlatformModel.isFirefox = PlatformUtil.isFirefox(userAgent);
+        // Single-pass detection avoids 4× toLowerCase() on the UA string.
+        const flags = PlatformUtil.detectAll(userAgent);
+        PlatformModel.isMac = flags.isMac;
+        PlatformModel.isSafari = flags.isSafari;
+        PlatformModel.isFirefox = flags.isFirefox;
     };
 }

@@ -51,7 +51,7 @@ class ImagePreview extends React.Component<IProps, IState> {
         ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, this.props.isScrolling));
     }
 
-    public componentWillUpdate(nextProps: Readonly<IProps>, nextState: Readonly<IState>, nextContext: any): void {
+    public UNSAFE_componentWillUpdate(nextProps: Readonly<IProps>, nextState: Readonly<IState>, nextContext: any): void {
         if (this.props.imageData.id !== nextProps.imageData.id) {
             this.setState({ image: null });
             ImageLoadManager.addAndRun(this.loadImage(nextProps.imageData, nextProps.isScrolling));
@@ -77,9 +77,6 @@ class ImagePreview extends React.Component<IProps, IState> {
             this.props.imageData.id !== nextProps.imageData.id ||
             this.props.imageData.loadStatus !== nextProps.imageData.loadStatus ||
             this.props.imageData.isSelected !== nextProps.imageData.isSelected ||
-            this.props.imageData.isVisitedByYOLOObjectDetector !== nextProps.imageData.isVisitedByYOLOObjectDetector ||
-            this.props.imageData.isVisitedBySSDObjectDetector !== nextProps.imageData.isVisitedBySSDObjectDetector ||
-            this.props.imageData.isVisitedByPoseDetector !== nextProps.imageData.isVisitedByPoseDetector ||
             this.props.imageData.isVisitedByRoboflowAPI !== nextProps.imageData.isVisitedByRoboflowAPI ||
             this.props.imageData.labelRects?.length !== nextProps.imageData.labelRects?.length ||
             this.props.imageData.labelPolygons?.length !== nextProps.imageData.labelPolygons?.length ||
@@ -139,17 +136,46 @@ class ImagePreview extends React.Component<IProps, IState> {
             const frames = await FrameExtractorService.fetchFrameRange(sessionId, frameIdx, 1);
             if (!frames || frames.length === 0) { this.isLoading = false; return; }
             const blob = frames[0] as Blob;
-            const objectUrl = URL.createObjectURL(blob);
-            const img = new Image();
-            img.onload = () => {
-                // 不撤销 objectUrl：img.src 仍指向它，撤销后渲染会显示破图"?"
-                this.saveLoadedImage(img, imageData);
+            const fullUrl = URL.createObjectURL(blob);
+            const fullImg = new Image();
+            fullImg.onload = () => {
+                // Downscale to thumbnail size (~200px) to save memory.
+                // Full-size frames (e.g. 2560×1440 ≈ 15MB decoded) are wasteful
+                // for sidebar thumbnails displayed at ~150×84px.
+                const THUMB_MAX = 200;
+                const scale = Math.min(THUMB_MAX / fullImg.naturalWidth, THUMB_MAX / fullImg.naturalHeight, 1);
+                const tw = Math.round(fullImg.naturalWidth * scale);
+                const th = Math.round(fullImg.naturalHeight * scale);
+                const thumbCanvas = document.createElement('canvas');
+                thumbCanvas.width = tw;
+                thumbCanvas.height = th;
+                const ctx = thumbCanvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(fullImg, 0, 0, tw, th);
+                }
+                URL.revokeObjectURL(fullUrl); // Release full-size blob
+
+                // Async toBlob instead of sync toDataURL to avoid blocking main thread
+                thumbCanvas.toBlob((blob) => {
+                    if (!blob) { this.handleLoadImageError(); return; }
+                    const blobUrl = URL.createObjectURL(blob);
+                    const thumbImg = new Image();
+                    thumbImg.onload = () => {
+                        URL.revokeObjectURL(blobUrl);
+                        this.saveLoadedImage(thumbImg, imageData);
+                    };
+                    thumbImg.onerror = () => {
+                        URL.revokeObjectURL(blobUrl);
+                        this.handleLoadImageError();
+                    };
+                    thumbImg.src = blobUrl;
+                }, 'image/jpeg', 0.6);
             };
-            img.onerror = () => {
-                URL.revokeObjectURL(objectUrl);
+            fullImg.onerror = () => {
+                URL.revokeObjectURL(fullUrl);
                 this.handleLoadImageError();
             };
-            img.src = objectUrl;
+            fullImg.src = fullUrl;
         } catch {
             this.isLoading = false;
         }
@@ -226,10 +252,7 @@ class ImagePreview extends React.Component<IProps, IState> {
 
     private isAIProcessedImage = (): boolean => {
         const { imageData } = this.props;
-        return imageData.isVisitedByYOLOObjectDetector ||
-               imageData.isVisitedBySSDObjectDetector ||
-               imageData.isVisitedByPoseDetector ||
-               imageData.isVisitedByRoboflowAPI;
+        return imageData.isVisitedByRoboflowAPI;
     };
 
     private getClassName = () => {

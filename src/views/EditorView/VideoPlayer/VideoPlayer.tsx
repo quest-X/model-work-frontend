@@ -171,10 +171,18 @@ const VideoPlayer: React.FC<IProps> = ({
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // 设置画布大小以匹配视频尺寸
-        if (canvas.width !== videoSize.width || canvas.height !== videoSize.height) {
-            canvas.width = videoSize.width;
-            canvas.height = videoSize.height;
+        // Use display size × DPR instead of full video resolution to reduce GPU cost
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const targetW = rect.width > 0
+            ? Math.min(Math.round(rect.width * dpr), videoSize.width)
+            : videoSize.width;
+        const targetH = rect.height > 0
+            ? Math.min(Math.round(rect.height * dpr), videoSize.height)
+            : videoSize.height;
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+            canvas.width = targetW;
+            canvas.height = targetH;
         }
 
         // 清空画布

@@ -165,6 +165,9 @@ class Editor extends React.Component<IProps, IState> {
             }
         }
         else {
+            // 0-byte placeholder = on-demand video frame; skip FileUtil.loadImage
+            // (it will be drawn by FramePlayer via backend fetch instead)
+            if (imageData.fileData && imageData.fileData.size === 0) return;
             if (!EditorModel.isLoading) {
                 EditorActions.setLoadingStatus(true);
                 const saveLoadedImagePartial = (image: HTMLImageElement) => this.saveLoadedImage(image, imageData);

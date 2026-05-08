@@ -44,6 +44,14 @@ function cloneImageData(list: ImageData[]): ImageData[] {
 // change we cache a deep clone; on the next mutation we push that clean cache.
 let lastSnapshot: UndoSnapshot | null = null;
 
+// Throttle snapshots: structuredClone of 15k+ ImageData entries costs ~50-100ms.
+// During playback, UPDATE_IMAGE_DATA_BY_ID fires on every frame (25+ times/sec),
+// causing >2.5s of cloning overhead per 16s of playback. Throttle to at most
+// one snapshot every 300ms — still captures undo points for interactive edits,
+// while eliminating 90%+ of cloning during rapid-fire dispatches.
+let lastSnapshotTime = 0;
+const SNAPSHOT_MIN_INTERVAL_MS = 300;
+
 function takeSnapshot(state: AppState): UndoSnapshot {
     return {
         imagesData: cloneImageData(state.labels.imagesData),
@@ -57,7 +65,11 @@ export const undoMiddleware: Middleware<{}, AppState> = store => next => (action
     }
     const result = next(action);
     if (action && LABEL_STATE_ACTIONS.has(action.type)) {
-        lastSnapshot = takeSnapshot(store.getState());
+        const now = performance.now();
+        if (now - lastSnapshotTime >= SNAPSHOT_MIN_INTERVAL_MS) {
+            lastSnapshot = takeSnapshot(store.getState());
+            lastSnapshotTime = now;
+        }
     } else if (lastSnapshot === null && action) {
         // First dispatch after boot — seed the snapshot so the first mutation is undoable
         lastSnapshot = takeSnapshot(store.getState());

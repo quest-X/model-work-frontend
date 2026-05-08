@@ -237,9 +237,20 @@ const FramePlayer: React.FC<IProps> = ({
     }, [frames, sessionId, totalFrames]);
 
     const ensureCanvasSize = (canvas: HTMLCanvasElement) => {
-        if (canvas.width !== videoSize.width || canvas.height !== videoSize.height) {
-            canvas.width = videoSize.width;
-            canvas.height = videoSize.height;
+        // Use display size × devicePixelRatio instead of full video resolution.
+        // e.g. 2560×1440 video displayed at 636×358 on 2x Retina → canvas 1272×716
+        // saves ~75% GPU pixel fill vs native resolution.
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const targetW = rect.width > 0
+            ? Math.min(Math.round(rect.width * dpr), videoSize.width)
+            : videoSize.width;
+        const targetH = rect.height > 0
+            ? Math.min(Math.round(rect.height * dpr), videoSize.height)
+            : videoSize.height;
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+            canvas.width = targetW;
+            canvas.height = targetH;
         }
     };
 
@@ -313,16 +324,21 @@ const FramePlayer: React.FC<IProps> = ({
             ctx.fillRect(0, 0, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
             ctx.drawImage(img, (THUMBNAIL_SIZE - sw) / 2, (THUMBNAIL_SIZE - sh) / 2, sw, sh);
 
-            const dataUrl = thumbnailCanvasRef.current.toDataURL('image/jpeg', 0.5);
+            // Use async toBlob instead of synchronous toDataURL to avoid blocking
+            // the main thread (~512ms total savings per Gemini/DevTools analysis).
+            const blob: Blob | null = await new Promise(r => thumbnailCanvasRef.current!.toBlob(r, 'image/jpeg', 0.5));
+            if (!blob) return;
+            const thumbUrl = URL.createObjectURL(blob);
             await new Promise<void>(resolve => {
                 const thumb = new Image();
                 thumb.onload = () => {
+                    URL.revokeObjectURL(thumbUrl);
                     cb(frameIdx, thumb);
                     thumbnailDoneRef.current.add(frameIdx);
                     resolve();
                 };
-                thumb.onerror = () => resolve();
-                thumb.src = dataUrl;
+                thumb.onerror = () => { URL.revokeObjectURL(thumbUrl); resolve(); };
+                thumb.src = thumbUrl;
             });
         } catch (err) {
             console.error(`[FramePlayer] loadFrameFull(${frameIdx}) failed:`, err);

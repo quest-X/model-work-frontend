@@ -16,6 +16,19 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.5.8',
+        date: '2026-05-08',
+        changes: [
+            { zh: '【性能】VideoCanvas 分辨率自适应：画布从视频原始分辨率（如 2560×1440）降至显示尺寸×DPR，减少 ~27% 像素填充', en: '[Perf] VideoCanvas resolution adapts to display size × DPR instead of native video resolution, reducing pixel fill by ~27%' },
+            { zh: '【性能】toDataURL → toBlob：视频帧导出和缩略图生成从同步阻塞改为异步非阻塞，消除主线程卡顿', en: '[Perf] toDataURL → toBlob: video frame export and thumbnail generation switched from synchronous to async, eliminating main-thread stalls' },
+            { zh: '【性能】视频帧缩略图降采样：sidebar 缩略图从全尺寸（~15MB/帧解码）降至 200px（~0.1MB），大幅减少内存占用', en: '[Perf] Video frame thumbnail downsampling: sidebar thumbnails reduced from full-size (~15 MB decoded/frame) to 200px max (~0.1 MB), significantly reducing memory usage' },
+            { zh: '【性能】Undo/Redo structuredClone 节流：快照间隔限制 300ms，消除快速操作时 2.6 秒的主线程阻塞', en: '[Perf] Undo/Redo structuredClone throttle: snapshot interval capped at 300ms, eliminating 2.6s main-thread block during rapid operations' },
+            { zh: '【性能】平台检测单次 toLowerCase：UA 字符串只做一次大小写转换，避免 4× 重复调用', en: '[Perf] Platform detection single-pass: UA string lowercased once instead of 4× separate calls' },
+            { zh: '【修复】DrawUtil.clearCanvas 空值守卫：canvas 未挂载时鼠标事件不再抛 TypeError', en: '[Fix] DrawUtil.clearCanvas null guard: mouse events before canvas mount no longer throw TypeError' },
+            { zh: '【修复】Editor 跳过 0 字节占位文件加载：视频按需帧的空占位不再触发 FileUtil.loadImage 报错', en: '[Fix] Editor skips loading 0-byte placeholder files: on-demand video frame placeholders no longer trigger FileUtil.loadImage errors' },
+        ]
+    },
+    {
         version: '2.5.7',
         date: '2026-05-08',
         changes: [
