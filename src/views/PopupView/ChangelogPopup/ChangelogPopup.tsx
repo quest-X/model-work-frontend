@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.1',
+        date: '2026-05-09',
+        changes: [
+            { zh: '【修复】视频 on-demand 模式 ERR_FILE_NOT_FOUND 刷屏：FramePlayer.loadFrameImage 入口加 0 字节占位帧守卫，避免给 placeholder File 调 createObjectURL → img.src 触发浏览器加载失败', en: '[Fix] Video on-demand ERR_FILE_NOT_FOUND spam: FramePlayer.loadFrameImage now guards against 0-byte placeholder Files at entry, no longer feeds them through createObjectURL → img.src which triggered ~17× browser load failures during init' },
+            { zh: '【修复】AutoSave 占位帧 warn 节流：视频 on-demand 模式下"全占位帧 → 跳过 IDB 写入"路径每 3 分钟触发一次，长时间会话累积上百次刷屏。改为首次和每 20 次 warn，其余静默', en: '[Fix] AutoSave placeholder-filter warn throttle: in video on-demand mode the periodic 3-min autosave kept hitting "all placeholders → skip IDB" and warning every time (100+ during long sessions). Now warns on first occurrence and every 20th, silent otherwise' },
+            { zh: '【诊断】runInference 入口加状态日志：视频模式 SAM2 推理偶现 silent return，加 [Infer] entry 日志输出 isSegModel/smartAnnotationActive/trackingMode/activeModelName 几个关键状态，方便下次复现定位', en: '[Diag] runInference entry diagnostic log: video-mode SAM2 inference sometimes silently returns; added [Infer] entry log dumping isSegModel/smartAnnotationActive/trackingMode/activeModelName so the next reproduction immediately shows which branch ate the call' },
+        ]
+    },
+    {
         version: '2.6.0',
         date: '2026-05-09',
         changes: [
