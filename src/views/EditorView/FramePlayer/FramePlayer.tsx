@@ -215,6 +215,12 @@ const FramePlayer: React.FC<IProps> = ({
 
             if (!frameFile) throw new Error(`Frame ${frameIdx} unavailable`);
 
+            // 0 字节占位文件 = on-demand 视频帧未拉到，URL.createObjectURL 后浏览器加载会
+            // 触发 net::ERR_FILE_NOT_FOUND 刷屏。直接抛错，让调用方等真实数据到达后再试。
+            if (frameFile.size === 0) {
+                throw new Error(`Frame ${frameIdx} is a 0-byte placeholder; pending backend fetch`);
+            }
+
             // 驱逐由 evictOldFrames 统一处理，此处不做
 
             return new Promise<HTMLImageElement>((resolve, reject) => {
