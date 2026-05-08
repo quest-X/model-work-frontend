@@ -51,24 +51,24 @@ class ImagePreview extends React.Component<IProps, IState> {
         ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, this.props.isScrolling));
     }
 
-    public UNSAFE_componentWillUpdate(nextProps: Readonly<IProps>, nextState: Readonly<IState>, nextContext: any): void {
-        if (this.props.imageData.id !== nextProps.imageData.id) {
+    public componentDidUpdate(prevProps: Readonly<IProps>): void {
+        if (prevProps.imageData.id !== this.props.imageData.id) {
             this.setState({ image: null });
-            ImageLoadManager.addAndRun(this.loadImage(nextProps.imageData, nextProps.isScrolling));
+            ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, this.props.isScrolling));
         }
-        else if (!this.props.imageData.loadStatus && nextProps.imageData.loadStatus) {
-            ImageLoadManager.addAndRun(this.loadImage(nextProps.imageData, nextProps.isScrolling));
+        else if (!prevProps.imageData.loadStatus && this.props.imageData.loadStatus) {
+            ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, this.props.isScrolling));
         }
         // Evicted-detection: when LRU drops this image (src cleared) we still
         // hold the stale HTMLImageElement reference; on the NEXT re-render the
         // <img src=""> would render as broken. Drop our reference + reload.
         else if (this.state.image && !this.state.image.src && !this.isLoading) {
             this.setState({ image: null });
-            ImageLoadManager.addAndRun(this.loadImage(nextProps.imageData, nextProps.isScrolling));
+            ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, this.props.isScrolling));
         }
 
-        if (this.props.isScrolling && !nextProps.isScrolling) {
-            ImageLoadManager.addAndRun(this.loadImage(nextProps.imageData, false));
+        if (prevProps.isScrolling && !this.props.isScrolling) {
+            ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, false));
         }
     }
 

@@ -16,6 +16,18 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.0',
+        date: '2026-05-09',
+        changes: [
+            { zh: '【性能】模型轮询从 5s → 30s：health + available-models 共用的轮询定时器间隔放宽 6×，推理时不再每 5 秒打一次后端，trace/排查时网络面板大幅干净', en: '[Perf] Model polling 5s → 30s: the shared health + available-models poll timer is now 6× slower; backend no longer hit every 5s during inference, network panel much cleaner during trace/debug' },
+            { zh: '【性能】切模型时强制刷状态：switchModel 调用 /switch-model 后立即触发一次 fetchModels，弥补轮询变慢后的状态延迟', en: '[Perf] Force refresh on model switch: switchModel now triggers an immediate fetchModels after /switch-model, compensating for the slower poll' },
+            { zh: '【UX】SAM2 自动模式提示：每会话首次运行批量分割时，弹一次 message 通知告知"无 prompt 时每张约 20 秒（grid sampling），需要更快可先画 bbox/点"，避免用户误以为卡死', en: '[UX] SAM2 automatic-mode hint: a one-shot session-scoped notification explains "~20s per image without prompt (grid sampling); draw a bbox/points first for instant results", so users don\'t mistake the wait for a hang' },
+            { zh: '【修复】DrawUtil 14 次/推理的 anchors 警告：anchors < 3 的 polygon 在 AISegmentationActions 直接 filter 掉（isFinite 后剩余顶点不足时），DrawUtil 内部从 console.warn 改为 silent return，控制台不再刷屏', en: '[Fix] DrawUtil "无效的anchors数据" warn spam (14×/inference): polygons with < 3 finite vertices are now filtered in AISegmentationActions before reaching the renderer, and DrawUtil itself silently skips invalid anchors instead of warning' },
+            { zh: '【修复】React UNSAFE 生命周期警告：VirtualList 显式加 UNSAFE_ 前缀；ImagePreview 重构 UNSAFE_componentWillUpdate → componentDidUpdate（用 prevProps 对比），消除 strict mode 警告', en: '[Fix] React UNSAFE lifecycle warnings: VirtualList explicitly prefixed with UNSAFE_; ImagePreview refactored from UNSAFE_componentWillUpdate to componentDidUpdate (using prevProps comparison), eliminating strict mode warnings' },
+            { zh: '【评估】/batch_detect 端点对比 /detect 4-path 并发：实测 5 图 batch=0.58s vs 并发=0.74s（22% 提速）。改造 detectBatch 风险大、收益有限，本次不实施，留作后续重构', en: '[Assessment] /batch_detect vs /detect 4-path concurrency: 5-image batch 0.58s vs concurrent 0.74s (22% faster). Rewriting detectBatch is high-risk for limited gain — deferred to a future refactor' },
+        ]
+    },
+    {
         version: '2.5.9',
         date: '2026-05-08',
         changes: [

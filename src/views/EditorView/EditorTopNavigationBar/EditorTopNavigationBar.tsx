@@ -406,7 +406,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         }
     }, [smartAnnotationActive, loadedModels, activeModelName]);
 
-    // 切换模型：调用后端 /switch-model，立即乐观更新
+    // 切换模型：调用后端 /switch-model，立即乐观更新；切换成功后强制刷新一次状态
+    const fetchModelsRef = useRef<() => void>();
     const switchModel = useCallback((modelName: string) => {
         if (modelName === activeModelName) return;
         setActiveModelName(modelName); // 乐观更新，轮询不会覆盖
@@ -417,6 +418,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
             body: JSON.stringify({ model: modelName }),
         }).then(r => r.json()).then(data => {
             if (data.active) setActiveModelName(data.active);
+            fetchModelsRef.current?.();
         }).catch(() => {});
     }, [activeModelName]);
 
@@ -462,11 +464,13 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 if (Array.isArray(data.models)) setAvailableModels(data.models);
             }).catch(() => {});
         };
+        fetchModelsRef.current = fetchModels;
         fetchModels();
-        // Page Visibility 守卫：标签页/屏幕休眠时暂停 poll，避免 idle 一整夜累积 ~5760 次 fetch
-        // 引发 dev 模式下的内存增长导致浏览器崩溃。
+        // Page Visibility 守卫：标签页/屏幕休眠时暂停 poll。
+        // 间隔 30s（v2.6.0 起，原 5s 在推理时也持续打满 health/available-models 通道）。
+        // 切换模型时由 switchModel 主动调 fetchModelsRef 强制刷新，不靠轮询。
         const tick = () => { if (!document.hidden) fetchModels(); };
-        const timer = setInterval(tick, 5000);
+        const timer = setInterval(tick, 30000);
         return () => clearInterval(timer);
     }, []);
 

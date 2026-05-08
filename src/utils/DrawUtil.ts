@@ -111,17 +111,11 @@ export class DrawUtil {
     }
 
     public static drawPolygonWithFill(canvas:HTMLCanvasElement, anchors: IPoint[], color = '#fff'): void {
-        // 添加数据验证
-        if (!anchors || anchors.length < 3) {
-            console.warn('DrawUtil.drawPolygonWithFill: 无效的anchors数据', anchors);
-            return;
-        }
-
-        // 验证第一个点
-        if (!anchors[0] || typeof anchors[0].x !== 'number' || typeof anchors[0].y !== 'number') {
-            console.warn('DrawUtil.drawPolygonWithFill: 第一个锚点无效', anchors[0]);
-            return;
-        }
+        // 防御性检查：anchors < 3 时直接 silent skip（无法形成多边形）。
+        // 之前会 console.warn，但每帧推理触发 14+ 次刷屏，毫无信息量——这是
+        // 渲染层针对临时/部分 polygon 的正常路径（绘制中的多边形、刚创建未完成的 path）。
+        if (!anchors || anchors.length < 3) return;
+        if (!anchors[0] || typeof anchors[0].x !== 'number' || typeof anchors[0].y !== 'number') return;
 
         const ctx:CanvasRenderingContext2D = canvas.getContext('2d');
         ctx.save();
@@ -129,11 +123,7 @@ export class DrawUtil {
         ctx.beginPath();
         ctx.moveTo(anchors[0].x, anchors[0].y);
         for (let i = 1; i < anchors.length; i ++) {
-            // 验证每个点
-            if (!anchors[i] || typeof anchors[i].x !== 'number' || typeof anchors[i].y !== 'number') {
-                console.warn(`DrawUtil.drawPolygonWithFill: 锚点${i}无效`, anchors[i]);
-                continue; // 跳过无效点
-            }
+            if (!anchors[i] || typeof anchors[i].x !== 'number' || typeof anchors[i].y !== 'number') continue;
             ctx.lineTo(anchors[i].x, anchors[i].y);
         }
         ctx.closePath();

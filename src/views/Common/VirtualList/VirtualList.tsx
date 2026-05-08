@@ -46,7 +46,7 @@ export class VirtualList extends React.Component<IProps, IState> {
         });
     }
 
-    public componentWillUpdate(nextProps: Readonly<IProps>, nextState: Readonly<IState>, nextContext: any): void {
+    public UNSAFE_componentWillUpdate(nextProps: Readonly<IProps>, nextState: Readonly<IState>, nextContext: any): void {
         const {size, childSize, childCount} = nextProps;
         if (this.props.size.height !== size.height || this.props.size.width !== size.width ||
             this.props.childCount !== childCount) {

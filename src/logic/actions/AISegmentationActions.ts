@@ -31,6 +31,9 @@ function computeBatchConcurrency(width: number, height: number): number {
 
 export class AISegmentationActions {
 
+    /** 自动模式 UX 提示：每会话首次进入 segmentBatch 时弹一次，告诉用户 ~20s/图 是正常的 */
+    private static automaticModeHintShown = false;
+
     private static yieldToUI(): Promise<void> {
         return new Promise(r => setTimeout(r, 0));
     }
@@ -75,6 +78,17 @@ export class AISegmentationActions {
      */
     public static async segmentBatch(imagesToSegment: ImageData[], isBatch: boolean = true): Promise<void> {
         if (!SegmentationAPIDetector.isEnabled() || imagesToSegment.length === 0) return;
+
+        // SAM2 自动模式（无 prompt）每图 ~20s 是 grid sampling 的算法特性，不是卡死。
+        // 首次告知用户预期，之后不再打扰。
+        if (!AISegmentationActions.automaticModeHintShown) {
+            AISegmentationActions.automaticModeHintShown = true;
+            const lang = store.getState().general.language;
+            const hint = lang === 'zh'
+                ? { header: 'SAM2 自动模式', description: '无 prompt 时每张图约 20 秒（grid sampling）。如需更快，先画 bbox 或点作为提示。' }
+                : { header: 'SAM2 automatic mode', description: '~20s per image without prompt (grid sampling). Draw a bbox or points first for instant results.' };
+            store.dispatch(submitNewNotification(NotificationUtil.createMessageNotification(hint)));
+        }
 
         const startTime = Date.now();
         const t = () => LanguageConfig[store.getState().general.language]; // 实时读语言
@@ -324,9 +338,16 @@ export class AISegmentationActions {
         if (!currentImg) return;
 
         // mask → LabelPolygon
+        // isFinite 过滤后 vertices 可能 < 3（NaN/Infinity 被剔），下游 DrawUtil.drawPolygonWithFill
+        // 会反复抛 "无效的 anchors 数据"——所以 map 里直接 return null + filter 掉。
         const newPolygons: LabelPolygon[] = results
             .filter(result => result.mask && result.mask.length >= 3)
             .map(result => {
+                const vertices = result.mask
+                    .filter(([x, y]) => isFinite(x) && isFinite(y))
+                    .map(([x, y]) => ({ x, y }));
+                if (vertices.length < 3) return null;
+
                 const matchingLabel = updatedLabels.find(l =>
                     l.name.toLowerCase() === result.info.name.toLowerCase()
                 );
@@ -335,9 +356,7 @@ export class AISegmentationActions {
                 return {
                     id: uuidv4(),
                     labelId,
-                    vertices: result.mask
-                        .filter(([x, y]) => isFinite(x) && isFinite(y))
-                        .map(([x, y]) => ({ x, y })),
+                    vertices,
                     isCreatedByAI: true,
                     isVisible: true,
                     status: LabelStatus.ACCEPTED,
@@ -345,7 +364,8 @@ export class AISegmentationActions {
                     confidence: result.info.confidence ?? 0,
                     trackingGroupId,
                 };
-            });
+            })
+            .filter((p): p is LabelPolygon => p !== null);
 
         if (newPolygons.length > 0) {
             const updatedImg = {
