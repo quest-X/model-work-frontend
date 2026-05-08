@@ -19,6 +19,9 @@ export class AutoSaveService {
     private static readonly EDIT_DEBOUNCE_MS = 3000;
     private static editDebounceTimer: NodeJS.Timeout | null = null;
     private static unsubscribeStore: (() => void) | null = null;
+    /** 视频 on-demand 模式下"全占位帧 → 跳过 IDB 写入"会反复触发，节流避免刷屏（首次 + 每 N 次 warn 一次） */
+    private static placeholderFilterWarnCount = 0;
+    private static readonly PLACEHOLDER_FILTER_WARN_INTERVAL = 20;
     private static visibilityListener: (() => void) | null = null;
     private static isInitialized = false;
     // 保存完成回调：UI 层注册，用于触发绿色闪烁等视觉反馈
@@ -245,10 +248,17 @@ export class AutoSaveService {
         // 把 images:[] 写进 IDB，否则会覆盖之前真正有数据的快照，导致下次"恢复工作"
         // 弹窗显示 0 张 / 0 帧、点击恢复后进到空白编辑器。
         if (storedImages.length === 0 && imagesData.length > 0) {
-            console.warn(
-                `[AutoSave] all ${imagesData.length} imagesData entries filtered (byteLength=0 placeholders); ` +
-                `skipping IDB write to preserve prior snapshot`
-            );
+            this.placeholderFilterWarnCount++;
+            // 首次和每 N 次打 warn，其余 N-1 次完全静默——视频 on-demand 期间 autosave
+            // 每 3 分钟跑一次，几小时累积下来这条会刷上百遍，对调试毫无帮助。
+            if (this.placeholderFilterWarnCount === 1 ||
+                this.placeholderFilterWarnCount % this.PLACEHOLDER_FILTER_WARN_INTERVAL === 0) {
+                console.warn(
+                    `[AutoSave] all ${imagesData.length} imagesData entries filtered (byteLength=0 placeholders); ` +
+                    `skipping IDB write to preserve prior snapshot ` +
+                    `(occurrence #${this.placeholderFilterWarnCount})`
+                );
+            }
             return false;
         }
 
