@@ -19,9 +19,6 @@ import { ProjectRestoreService } from './services/ProjectRestoreService';
 interface IProps {
     projectType: ProjectType;
     windowSize: ISize;
-    isObjectDetectorLoaded: boolean;
-    isPoseDetectionLoaded: boolean;
-    isYOLOV5ObjectDetectorLoaded: boolean;
     roboflowAPIDetails: RoboflowAPIDetails;
 }
 
@@ -41,9 +38,6 @@ const App: React.FC<IProps> = (
     {
         projectType,
         windowSize,
-        isObjectDetectorLoaded,
-        isPoseDetectionLoaded,
-        isYOLOV5ObjectDetectorLoaded,
         roboflowAPIDetails
     }
 ) => {
@@ -208,10 +202,7 @@ const App: React.FC<IProps> = (
         }
     };
 
-    const isAILoaded = isObjectDetectorLoaded
-        || isPoseDetectionLoaded
-        || isYOLOV5ObjectDetectorLoaded
-        || (roboflowAPIDetails.model !== '' && roboflowAPIDetails.key !== '' && roboflowAPIDetails.status)
+    const isAILoaded = (roboflowAPIDetails.model !== '' && roboflowAPIDetails.key !== '' && roboflowAPIDetails.status)
 
     return (
         <div className={classNames('App', {'AI': isAILoaded})} draggable={false}
@@ -227,9 +218,6 @@ const App: React.FC<IProps> = (
 const mapStateToProps = (state: AppState) => ({
     projectType: state.general.projectData.type,
     windowSize: state.general.windowSize,
-    isSSDObjectDetectorLoaded: state.ai.isSSDObjectDetectorLoaded,
-    isPoseDetectorLoaded: state.ai.isPoseDetectorLoaded,
-    isYOLOV5ObjectDetectorLoaded: state.ai.isYOLOV5ObjectDetectorLoaded,
     roboflowAPIDetails: state.ai.roboflowAPIDetails
 });
 

@@ -8,5 +8,4 @@ export enum EventType {
     KEY_PRESS = "keypress",
     KEY_UP = "keyup",
     FOCUS = "focus",
-    DOUBLE_CLICK = "dblclick"
 }

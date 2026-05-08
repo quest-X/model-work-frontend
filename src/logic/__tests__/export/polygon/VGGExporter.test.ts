@@ -37,9 +37,8 @@ describe('VGGExporter mapImageDataToVGG method', () => {
             labelLines: [],
             labelNameIds: [],
             fileData: {} as File,
-            isVisitedByYOLOObjectDetector: false,
-            isVisitedBySSDObjectDetector: false,
-            isVisitedByPoseDetector: true,
+
+
             isVisitedByRoboflowAPI: false
         };
         expect(VGGExporter.mapImageDataToVGG(givenImageData, [])).toBeNull();
@@ -79,9 +78,8 @@ describe('VGGExporter mapImageDataToVGG method', () => {
             labelLines: [],
             labelNameIds: [],
             fileData: {} as File,
-            isVisitedByYOLOObjectDetector: false,
-            isVisitedBySSDObjectDetector: false,
-            isVisitedByPoseDetector: true,
+
+
             isVisitedByRoboflowAPI: false
         };
 
@@ -157,9 +155,8 @@ describe('VGGExporter mapImageDataToVGG method', () => {
             labelLines: [],
             labelNameIds: [],
             fileData: {} as File,
-            isVisitedByYOLOObjectDetector: false,
-            isVisitedBySSDObjectDetector: false,
-            isVisitedByPoseDetector: true,
+
+
             isVisitedByRoboflowAPI: false
         };
 

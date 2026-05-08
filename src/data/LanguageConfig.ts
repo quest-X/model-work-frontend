@@ -156,11 +156,7 @@ export interface LanguageTexts {
             selectModel: string;
             acceptButton: string;
             rejectButton: string;
-            models: {
-                yolov5: string;
-                ssd: string;
-                posenet: string;
-            };
+            models: Record<string, never>;
             welcomeMessage: string;
         };
         suggestLabels: {
@@ -637,11 +633,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 selectModel: '选择要加载的模型：',
                 acceptButton: '进入',
                 rejectButton: '关闭',
-                models: {
-                    yolov5: 'YOLOv5 - 使用矩形框进行目标检测',
-                    ssd: 'COCO SSD - 使用矩形框进行目标检测',
-                    posenet: 'POSE-NET - 使用点进行姿态估计'
-                },
+                models: {},
                 welcomeMessage: '使用AI加速标注过程。别担心，照片仍然安全。为了保护隐私，我们决定不将图像发送到服务器，而是将AI带给您。请确保您有快速稳定的连接 - 加载模型可能需要一些时间。'
             },
             suggestLabels: {
@@ -1114,11 +1106,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 selectModel: 'Select model to load:',
                 acceptButton: 'Next',
                 rejectButton: 'Close',
-                models: {
-                    yolov5: 'YOLOv5 - object detection using rectangles',
-                    ssd: 'COCO SSD - object detection using rectangles',
-                    posenet: 'POSE-NET - pose estimation using points'
-                },
+                models: {},
                 welcomeMessage: 'Speed up your annotation process using AI. Don\'t worry, your photos are still safe. To take care of your privacy, we decided not to send your images to the server, but instead bring AI to you. Make sure that you have a fast and stable connection - it may take a while to load the model.'
             },
             suggestLabels: {

@@ -14,9 +14,6 @@ export class ImageDataUtil {
             labelLines: [],
             labelPolygons: [],
             labelNameIds: [],
-            isVisitedByYOLOObjectDetector: false,
-            isVisitedBySSDObjectDetector: false,
-            isVisitedByPoseDetector: false,
             isVisitedByRoboflowAPI: false
         }
     }

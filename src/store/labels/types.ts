@@ -65,15 +65,6 @@ export type ImageData = {
     // Multi-selection support
     isSelected?: boolean;
 
-    // YOLO
-    isVisitedByYOLOObjectDetector: boolean;
-
-    // SSD
-    isVisitedBySSDObjectDetector: boolean;
-
-    // POSE NET
-    isVisitedByPoseDetector: boolean;
-
     // ROBOFLOW API
     isVisitedByRoboflowAPI: boolean;
 }

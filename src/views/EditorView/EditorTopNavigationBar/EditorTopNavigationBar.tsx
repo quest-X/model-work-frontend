@@ -645,10 +645,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     }, [imagesData, isFullImageInferenceInProgress, updateFullImageInferenceStatus, isSegModel, trackingMode, language, activeModelName]);
 
     const withAI = (
-        ((activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isAISSDObjectDetectorModelLoaded()) ||
-        ((activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isAIYOLOObjectDetectorModelLoaded()) ||
-        ((activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isRoboflowAPIModelLoaded()) ||
-        (activeLabelType === LabelType.POINT && AISelector.isAIPoseDetectorModelLoaded())
+        (activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isRoboflowAPIModelLoaded()
     )
 
     return (

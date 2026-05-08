@@ -15,9 +15,6 @@ const getDummyImageData = (id: string, fileName: string = 'filename.txt'): Image
         labelLines: [],
         labelPolygons: [],
         labelNameIds: [],
-        isVisitedByYOLOObjectDetector: false,
-        isVisitedBySSDObjectDetector: false,
-        isVisitedByPoseDetector: false,
         isVisitedByRoboflowAPI: false
     };
 };

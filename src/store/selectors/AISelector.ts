@@ -10,18 +10,6 @@ export class AISelector {
         return store.getState().ai.rejectedSuggestedLabelList;
     }
 
-    public static isAISSDObjectDetectorModelLoaded(): boolean {
-        return store.getState().ai.isSSDObjectDetectorLoaded;
-    }
-
-    public static isAIYOLOObjectDetectorModelLoaded(): boolean {
-        return store.getState().ai.isYOLOV5ObjectDetectorLoaded;
-    }
-
-    public static isAIPoseDetectorModelLoaded(): boolean {
-        return store.getState().ai.isPoseDetectorLoaded;
-    }
-
     public static isRoboflowAPIModelLoaded(): boolean {
         const roboflowAPIDetails = store.getState().ai.roboflowAPIDetails;
         return (

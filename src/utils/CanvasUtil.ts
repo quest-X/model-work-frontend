@@ -15,19 +15,6 @@ export class CanvasUtil {
         return null;
     }
 
-    public static getClientRect(canvas: HTMLCanvasElement): IRect {
-        if (canvas) {
-            const canvasRect: DOMRect = canvas.getBoundingClientRect();
-            return {
-                x: canvasRect.left,
-                y: canvasRect.top,
-                width: canvasRect.width,
-                height: canvasRect.height
-            }
-        }
-        return null;
-    }
-
     public static getSize(canvas: HTMLCanvasElement): ISize {
         if (canvas) {
             const canvasRect: DOMRect = canvas.getBoundingClientRect();

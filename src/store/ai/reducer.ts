@@ -42,9 +42,6 @@ const storedAIState = AIStateStorageManager.loadImageAIStates();
 const initialState: AIState = {
     suggestedLabelList: [],
     rejectedSuggestedLabelList: [],
-    isSSDObjectDetectorLoaded: false,
-    isYOLOV5ObjectDetectorLoaded: false,
-    isPoseDetectorLoaded: false,
     roboflowAPIDetails: {
         status: false,
         model: '',
@@ -72,24 +69,6 @@ export function aiReducer(
             return {
                 ...state,
                 rejectedSuggestedLabelList: action.payload.labelList
-            }
-        }
-        case Action.UPDATE_SSD_OBJECT_DETECTOR_STATUS: {
-            return {
-                ...state,
-                isSSDObjectDetectorLoaded: action.payload.isSSDObjectDetectorLoaded
-            }
-        }
-        case Action.UPDATE_YOLO_V5_OBJECT_DETECTOR_STATUS: {
-            return {
-                ...state,
-                isYOLOV5ObjectDetectorLoaded: action.payload.isYOLOV5ObjectDetectorLoaded
-            }
-        }
-        case Action.UPDATE_POSE_DETECTOR_STATUS: {
-            return {
-                ...state,
-                isPoseDetectorLoaded: action.payload.isPoseDetectorLoaded
             }
         }
         case Action.UPDATE_DISABLED_AI_FLAG: {

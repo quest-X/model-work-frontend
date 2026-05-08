@@ -108,9 +108,6 @@ export class ProjectRestoreService {
                 labelPolygons: storedImage.labelPolygons || [],
                 labelNameIds: storedImage.labelNameIds || [],
                 // 添加AI相关的默认字段
-                isVisitedByYOLOObjectDetector: false,
-                isVisitedBySSDObjectDetector: false,
-                isVisitedByPoseDetector: false,
                 isVisitedByRoboflowAPI: false
             }));
             

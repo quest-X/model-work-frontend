@@ -16,6 +16,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.5.9',
+        date: '2026-05-08',
+        changes: [
+            { zh: '【清理】移除浏览器端 AI 推理：删除 TensorFlow.js（SSD/PoseNet）和 yolov5js 共 8 个依赖包，所有 AI 检测/分割已迁移至后端 API', en: '[Cleanup] Remove browser-side AI inference: deleted TensorFlow.js (SSD/PoseNet) and yolov5js — 8 npm packages removed; all AI detection/segmentation now uses backend API' },
+            { zh: '【清理】移除 moment.js 依赖：唯一用处改为原生 Date 格式化，减少 ~300KB 打包体积', en: '[Cleanup] Remove moment.js dependency: replaced with native Date formatting, saving ~300KB bundle size' },
+            { zh: '【清理】删除死视图组件：MainView（已跳过）、TextInput、UnderlineTextButton', en: '[Cleanup] Delete dead view components: MainView (bypassed), TextInput, UnderlineTextButton' },
+            { zh: '【清理】移除未使用的方法和枚举值：CanvasUtil.getClientRect、EnvironmentUtil.isDev、AcceptedFileType.JSON/XML、EventType.DOUBLE_CLICK、LabelStatus.REJECTED、ContextType.DROPDOWN', en: '[Cleanup] Remove unused methods and enum values: CanvasUtil.getClientRect, EnvironmentUtil.isDev, AcceptedFileType.JSON/XML, EventType.DOUBLE_CLICK, LabelStatus.REJECTED, ContextType.DROPDOWN' },
+        ]
+    },
+    {
         version: '2.5.8',
         date: '2026-05-08',
         changes: [
