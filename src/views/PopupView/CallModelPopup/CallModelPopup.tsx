@@ -16,10 +16,11 @@ export interface YOLOModelFamily {
     id: string;
     name: string;
     variants: string[];
+    defaultVariant?: string;
 }
 
 export const YOLO_MODEL_FAMILIES: YOLOModelFamily[] = [
-    { id: 'yolo26', name: 'ultralytics/yolo26', variants: ['yolo26n', 'yolo26s', 'yolo26m', 'yolo26l', 'yolo26x'] },
+    { id: 'yolo26', name: 'ultralytics/yolo26', variants: ['yolo26n', 'yolo26s', 'yolo26m', 'yolo26l', 'yolo26x'], defaultVariant: 'yolo26x' },
     { id: 'yolo12', name: 'ultralytics/yolo12', variants: ['yolo12n', 'yolo12s', 'yolo12m', 'yolo12l', 'yolo12x'] },
     { id: 'yolo11', name: 'ultralytics/yolo11', variants: ['yolo11n', 'yolo11s', 'yolo11m', 'yolo11l', 'yolo11x'] },
     { id: 'yolov10', name: 'ultralytics/yolov10', variants: ['yolov10n', 'yolov10s', 'yolov10m', 'yolov10l', 'yolov10x'] },
@@ -31,7 +32,7 @@ export const SEG_MODEL_FAMILIES: YOLOModelFamily[] = [
     { id: 'yolov8-seg', name: 'ultralytics/yolov8-seg', variants: ['yolov8n-seg', 'yolov8s-seg', 'yolov8m-seg', 'yolov8l-seg', 'yolov8x-seg'] },
     { id: 'yolo11-seg', name: 'ultralytics/yolo11-seg', variants: ['yolo11n-seg', 'yolo11s-seg', 'yolo11m-seg', 'yolo11l-seg', 'yolo11x-seg'] },
     { id: 'sam', name: 'ultralytics/SAM', variants: ['sam_b', 'sam_l'] },
-    { id: 'sam2', name: 'ultralytics/SAM 2', variants: ['sam2.1_t', 'sam2.1_s', 'sam2.1_b', 'sam2.1_l'] },
+    { id: 'sam2', name: 'ultralytics/SAM 2', variants: ['sam2_t', 'sam2_s', 'sam2_b', 'sam2_l'], defaultVariant: 'sam2_l' },
     { id: 'sam3', name: 'ultralytics/SAM 3', variants: ['sam3'] },
     { id: 'mobile-sam', name: 'ultralytics/MobileSAM', variants: ['mobile_sam'] },
     { id: 'fast-sam', name: 'ultralytics/FastSAM', variants: ['FastSAM-s', 'FastSAM-x'] },

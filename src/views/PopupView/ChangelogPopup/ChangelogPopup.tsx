@@ -16,6 +16,22 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.5.6',
+        date: '2026-05-08',
+        changes: [
+            { zh: '【优化】智能标注 bbox 视觉区分：绘制过程和完成后均显示为白色虚线框（无内部填充），与手动标注实线彩色框一眼可辨', en: '[Optimize] Smart annotation bbox visual distinction: drawing and completed bbox both render as white dashed outline (no fill), clearly distinguishable from manual solid-colored annotation rects' },
+            { zh: '【交互】智能标注 bbox 内部可添加 point prompt：点击 bbox 内部新增正/负点，仅边缘拖拽移动 bbox', en: '[UX] Smart annotation bbox interior supports point prompts: click inside to add positive/negative points; only edge dragging moves the bbox' },
+            { zh: '【修复】SAM2 bbox 推理 500 报错：bbox-only 路径恢复为 bboxes 参数传递；points+bbox 同时存在时分别推理取最佳结果', en: '[Fix] SAM2 bbox inference 500 error: bbox-only path restored to native bboxes parameter; points+bbox co-exist by running separate inferences and picking the best result' },
+            { zh: '【修复】SAM2 模型 variant 名称修正：sam2.1_x → sam2_x，匹配 ultralytics 实际模型名', en: '[Fix] SAM2 model variant names corrected: sam2.1_x → sam2_x to match actual ultralytics model names' },
+            { zh: '【修复】多边形顶点交叉：_limit_polygon_points 从 RDP 二分搜索改为等弧长均匀采样，消除凹形轮廓简化后的自交问题', en: '[Fix] Polygon vertex crossing: _limit_polygon_points changed from adaptive RDP binary search to equal-arc-length subsampling, eliminating self-intersections on concave contours' },
+            { zh: '【修复】后端 Python 3.9 兼容：routes.py 的 str|None 联合类型改为 Optional[str]', en: '[Fix] Backend Python 3.9 compatibility: str|None union syntax in routes.py replaced with Optional[str]' },
+            { zh: '【调整】默认模型变更：检测默认 yolo26x，分割默认 sam2_l；前端模型选择面板同步默认选中', en: '[Adjust] Default models changed: detection defaults to yolo26x, segmentation defaults to sam2_l; frontend model selection panel defaults updated accordingly' },
+            { zh: '【调整】推理流程默认：前处理、推理过程默认不激活，仅后处理默认激活', en: '[Adjust] Pipeline defaults: preprocess and inference stages deactivated by default; only postprocess activated' },
+            { zh: '【调整】自动保存周期从 15 秒改为 3 分钟（编辑防抖和切标签页 flush 保存不受影响）', en: '[Adjust] Autosave interval changed from 15s to 3 minutes (edit-debounce and visibility-change flush unaffected)' },
+            { zh: '【UI】模型引擎详情页去除冒号，与标题行风格统一', en: '[UI] Removed colons from model engine detail labels to match title row style' },
+        ]
+    },
+    {
         version: '2.5.5',
         date: '2026-05-08',
         changes: [

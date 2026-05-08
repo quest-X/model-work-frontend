@@ -11,9 +11,9 @@ import { LanguageConfig } from '../data/LanguageConfig';
 
 export class AutoSaveService {
     private static saveTimer: NodeJS.Timeout | null = null;
-    // 周期 save 间隔：60s 太稀疏，丢电/崩溃时容易丢数据。配 signature-skip
-    // (v2.4.2) 后无变化 tick 是 0 序列化的，所以可以放心调激进。
-    private static readonly SAVE_INTERVAL = 15000;
+    // 周期 save 间隔：配合 edit-debounce 和 visibilitychange flush，
+    // 周期保存仅作兜底，3 分钟足够。
+    private static readonly SAVE_INTERVAL = 180000;
     // Edit-driven debounce：每次 Redux dispatch 后 N 毫秒无新动作就 save。
     // 比纯 interval 反应快，比"每个 dispatch 都 save"省得多。
     private static readonly EDIT_DEBOUNCE_MS = 3000;

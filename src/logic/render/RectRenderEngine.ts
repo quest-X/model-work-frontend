@@ -399,15 +399,32 @@ export class RectRenderEngine extends BaseRenderEngine {
                 height: mousePositionSnapped.y - this.startCreateRectPoint.y
             };
             const activeRectBetweenPixels = RenderEngineUtil.setRectBetweenPixels(activeRect);
-            const lineColor: string = BaseRenderEngine.resolveLabelLineColor(null, true, false)
-            DrawUtil.drawRect(this.canvas, activeRectBetweenPixels, lineColor, RenderEngineSettings.LINE_THICKNESS);
+
+            if (GeneralSelector.getSmartAnnotationActiveStatus()) {
+                // 智能标注模式 → 白色虚线框
+                const ctx = this.canvas.getContext('2d');
+                if (ctx) {
+                    ctx.save();
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([6, 4]);
+                    ctx.strokeRect(
+                        activeRectBetweenPixels.x, activeRectBetweenPixels.y,
+                        activeRectBetweenPixels.width, activeRectBetweenPixels.height
+                    );
+                    ctx.restore();
+                }
+            } else {
+                const lineColor: string = BaseRenderEngine.resolveLabelLineColor(null, true, false)
+                DrawUtil.drawRect(this.canvas, activeRectBetweenPixels, lineColor, RenderEngineSettings.LINE_THICKNESS);
+            }
         }
     }
 
     /**
      * 绘制 SAM prompt rect:
      * - 有 promptLabel 的小 rect → 绘制为彩色圆点 + 外环（正点绿色、负点红色）
-     * - 没有 promptLabel 的正常 rect → 绘制为蓝色虚线框
+     * - 没有 promptLabel 的正常 rect → 绘制为白色虚线框
      * - 推理中时半透明闪烁
      * - 如果正在被拖拽（moveRectId 匹配），跟随鼠标偏移渲染
      */
@@ -458,7 +475,7 @@ export class RectRenderEngine extends BaseRenderEngine {
             ctx.arc(vp.x, vp.y, 11, 0, Math.PI * 2);
             ctx.stroke();
         } else {
-            // ── bbox prompt → 蓝色虚线框 ──
+            // ── bbox prompt → 白色虚线框 ──
             const tl = RenderEngineUtil.transferPointFromImageToViewPortContent(
                 {x: rectForDraw.x, y: rectForDraw.y}, data);
             const br = RenderEngineUtil.transferPointFromImageToViewPortContent(
@@ -466,13 +483,9 @@ export class RectRenderEngine extends BaseRenderEngine {
             const w = br.x - tl.x;
             const h = br.y - tl.y;
 
-            ctx.strokeStyle = '#4488ff';
-            ctx.fillStyle = '#4488ff';
+            ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2;
             ctx.setLineDash([6, 4]);
-            ctx.globalAlpha = alpha * 0.15;
-            ctx.fillRect(tl.x, tl.y, w, h);
-            ctx.globalAlpha = alpha;
             ctx.strokeRect(tl.x, tl.y, w, h);
         }
 
@@ -636,15 +649,24 @@ export class RectRenderEngine extends BaseRenderEngine {
                 const dy = vpPt.y - data.mousePositionOnViewPortContent.y;
                 if (dx * dx + dy * dy < HIT_RADIUS_SQ) return p;
             } else {
-                // bbox prompt — 内部命中
+                // bbox prompt — 仅边缘命中（内部留给点击添加 point prompt）
+                const EDGE_TOLERANCE = 6; // px
                 const tl = RenderEngineUtil.transferPointFromImageToViewPortContent(
                     {x: p.rect.x, y: p.rect.y}, data);
                 const br = RenderEngineUtil.transferPointFromImageToViewPortContent(
                     {x: p.rect.x + p.rect.width, y: p.rect.y + p.rect.height}, data);
-                if (data.mousePositionOnViewPortContent.x >= tl.x &&
-                    data.mousePositionOnViewPortContent.x <= br.x &&
-                    data.mousePositionOnViewPortContent.y >= tl.y &&
-                    data.mousePositionOnViewPortContent.y <= br.y) return p;
+                const mx = data.mousePositionOnViewPortContent.x;
+                const my = data.mousePositionOnViewPortContent.y;
+                // 先判断在外接矩形扩展区域内
+                if (mx >= tl.x - EDGE_TOLERANCE && mx <= br.x + EDGE_TOLERANCE &&
+                    my >= tl.y - EDGE_TOLERANCE && my <= br.y + EDGE_TOLERANCE) {
+                    // 再排除远离边缘的内部区域
+                    const nearLeft   = Math.abs(mx - tl.x) <= EDGE_TOLERANCE;
+                    const nearRight  = Math.abs(mx - br.x) <= EDGE_TOLERANCE;
+                    const nearTop    = Math.abs(my - tl.y) <= EDGE_TOLERANCE;
+                    const nearBottom = Math.abs(my - br.y) <= EDGE_TOLERANCE;
+                    if (nearLeft || nearRight || nearTop || nearBottom) return p;
+                }
             }
         }
         return null;

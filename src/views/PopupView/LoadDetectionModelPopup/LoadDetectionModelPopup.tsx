@@ -55,7 +55,7 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
     const variants = modelFamily?.variants || [];
 
     const [modelSource, setModelSource] = useState(modelFamily ? ModelSource.OFFICIAL : ModelSource.UPLOAD);
-    const [selectedVariant, setSelectedVariant] = useState(variants[0] || '');
+    const [selectedVariant, setSelectedVariant] = useState(modelFamily?.defaultVariant || variants[0] || '');
     const [isLoading, setIsLoading] = useState(false);
     const [loadProgress, setLoadProgress] = useState(0);
     const [loadState, setLoadState] = useState('');

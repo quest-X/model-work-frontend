@@ -236,8 +236,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     // 退出橡皮擦：点击其他工具按钮（查看标签/绘制矩形框/绘制多边形）
     const eraserOnClick = useCallback(() => {
         if (!eraserMode) {
-            // 未激活 → 整体擦除
+            // 未激活 → 默认局部擦除
             updateEraserModeAction(true);
+            store.dispatch(updateEraserFineMode(true));
             if (smartAnnotationActive) updateSmartAnnotationActiveStatusAction(false);
             if (trackingMode) updateTrackingModeStatusAction(false);
             if (imageDragMode) updateImageDragModeStatusAction(false);

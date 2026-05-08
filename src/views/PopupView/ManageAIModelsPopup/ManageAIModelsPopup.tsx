@@ -322,16 +322,16 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                     </div>
                 </div>
                 <div className='ModelField'>
-                    <label>{currentTexts.modelManagement.apiEndpoint}:</label>
+                    <label>{currentTexts.modelManagement.apiEndpoint}</label>
                     <span className='url'>{selectedModel.url}</span>
                 </div>
                 <div className='ModelField'>
-                    <label>{language === Language.CHINESE ? '模型密钥' : 'Model Key'}:</label>
+                    <label>{language === Language.CHINESE ? '模型密钥' : 'Model Key'}</label>
                     <span>{selectedModel.apiKey ? '••••••••' : currentTexts.modelManagement.none}</span>
                 </div>
                 {/* 模型描述字段暂时隐藏，以后再启用
                 <div className='ModelField'>
-                    <label>{currentTexts.modelManagement.description}:</label>
+                    <label>{currentTexts.modelManagement.description}</label>
                     <span>{selectedModel.description || currentTexts.modelManagement.noDescription}</span>
                 </div>
                 */}

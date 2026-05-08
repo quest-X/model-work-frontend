@@ -14,8 +14,8 @@ export interface PipelineActivation {
 }
 
 export const DEFAULT_ACTIVATION: PipelineActivation = {
-    preprocess: true,
-    inference: true,
+    preprocess: false,
+    inference: false,
     postprocess: true,
 };
 
