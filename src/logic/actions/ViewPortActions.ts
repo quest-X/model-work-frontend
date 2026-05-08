@@ -205,7 +205,7 @@ export class ViewPortActions {
         const currentZoom: number = GeneralSelector.getZoom();
         const currentRelativeScrollPosition: IPoint = ViewPortActions.getRelativeScrollPosition();
         const nextRelativeScrollPosition = currentZoom === 1 ? {x: 0.5, y: 0.5} : currentRelativeScrollPosition;
-        const nextZoom: number = EditorModel.image.width / EditorModel.defaultRenderImageRect.width
+        const nextZoom: number = ImageUtil.getSize(EditorModel.image).width / EditorModel.defaultRenderImageRect.width
         ViewPortActions.setZoom(nextZoom);
         ViewPortActions.resizeViewPortContent();
         ViewPortActions.setScrollPosition(ViewPortActions.calculateAbsoluteScrollPosition(nextRelativeScrollPosition));

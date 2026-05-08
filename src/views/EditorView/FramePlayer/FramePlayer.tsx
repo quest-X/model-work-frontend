@@ -22,11 +22,15 @@ import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { EditorModel } from '../../../staticModels/EditorModel';
 import { EditorActions } from '../../../logic/actions/EditorActions';
 import { FrameExtractorService, SessionExpiredError } from '../../../services/FrameExtractorService';
+import { VideoDemuxer } from '../../../services/VideoDemuxer';
+import { WebCodecsFramePlayer } from '../../../services/WebCodecsFramePlayer';
+import { closeFrame } from '../../../utils/FrameSourceUtil';
 
 interface IProps {
     language: Language;
     frames: File[];
     sessionId?: string;  // fast_ffmpeg_mode (on-demand): backend session ID for batch frame fetching
+    webcodecsUrl?: string;  // v2.6.0: 若提供则启用 WebCodecs 硬解路径,优先于 sessionId/frames
     fps: number;
     duration: number;
     totalFrames: number;
@@ -69,6 +73,7 @@ const FramePlayer: React.FC<IProps> = ({
     language,
     frames,
     sessionId,
+    webcodecsUrl,
     fps,
     duration,
     totalFrames,
@@ -129,6 +134,12 @@ const FramePlayer: React.FC<IProps> = ({
     const thumbnailDoneRef = useRef<Set<number>>(new Set());
     const p3CursorRef = useRef(0);
 
+    // === v2.6.0 WebCodecs 路径 ===
+    const webcodecsPlayerRef = useRef<WebCodecsFramePlayer | null>(null);
+    const webcodecsInitRef = useRef<Promise<void> | null>(null);
+    const [webcodecsActive, setWebcodecsActive] = useState(false);
+    const [webcodecsFailed, setWebcodecsFailed] = useState(false);  // 探测失败 → fallback 现有路径
+
     // 稳定 ref
     const onTimeUpdateRef = useRef(onTimeUpdate);
     onTimeUpdateRef.current = onTimeUpdate;
@@ -157,6 +168,54 @@ const FramePlayer: React.FC<IProps> = ({
     // 稳定 ref
     const loadFrameFullRef = useRef<(frameIdx: number) => Promise<void>>(() => Promise.resolve());
     const maintainRef = useRef<() => void>(() => {});
+
+    // === v2.6.0 WebCodecs 初始化 + 清理 ===
+    useEffect(() => {
+        if (!webcodecsUrl) return undefined;
+        let cancelled = false;
+        const initPromise = (async () => {
+            try {
+                console.log('[WebCodecs] init starting:', webcodecsUrl);
+                const demuxer = await VideoDemuxer.create(webcodecsUrl);
+                if (cancelled) return;
+                const info = demuxer.getInfo();
+                console.log('[WebCodecs] demuxed:', info.codec, info.width, 'x', info.height,
+                    info.totalFrames, 'frames @', info.fps.toFixed(1), 'fps');
+                const supported = await WebCodecsFramePlayer.isSupported(info.codec);
+                if (cancelled) return;
+                if (!supported) {
+                    console.warn(`[WebCodecs] codec ${info.codec} not supported, fallback to JPEG path`);
+                    setWebcodecsFailed(true);
+                    return;
+                }
+                const player = await WebCodecsFramePlayer.create(demuxer);
+                if (cancelled) {
+                    player.close();
+                    return;
+                }
+                webcodecsPlayerRef.current = player;
+                setWebcodecsActive(true);
+                console.log('[WebCodecs] ready');
+            } catch (err) {
+                console.error('[WebCodecs] init failed, fallback to JPEG path:', err);
+                if (!cancelled) setWebcodecsFailed(true);
+            }
+        })();
+        webcodecsInitRef.current = initPromise;
+        return () => {
+            cancelled = true;
+            const player = webcodecsPlayerRef.current;
+            if (player) {
+                player.close();
+                webcodecsPlayerRef.current = null;
+            }
+            // 释放可能挂在 EditorModel 上的 VideoFrame
+            if (EditorModel.videoFrameImage) {
+                closeFrame(EditorModel.videoFrameImage);
+                EditorModel.videoFrameImage = null;
+            }
+        };
+    }, [webcodecsUrl]);
 
     // 加载单帧图像（缓存 → 全局帧池 → 后端批量取）
     const loadFrameImage = useCallback(async (frameIdx: number): Promise<HTMLImageElement> => {
@@ -250,6 +309,22 @@ const FramePlayer: React.FC<IProps> = ({
         if (!ctx) return;
         ensureCanvasSize(canvas);
         try {
+            // v2.6.0: WebCodecs 硬解路径
+            const wcPlayer = webcodecsPlayerRef.current;
+            if (wcPlayer) {
+                const frame = await wcPlayer.getFrame(frameIdx);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(frame as any, 0, 0, canvas.width, canvas.height);
+                // 把上一个 videoFrameImage(可能是 VideoFrame clone)关掉,然后克隆新的
+                closeFrame(EditorModel.videoFrameImage);
+                EditorModel.videoFrameImage = frame.clone();
+                if (!isPlayingRef.current && EditorModel.canvas) {
+                    EditorActions.setActiveImage(EditorModel.videoFrameImage);
+                    EditorActions.fullRender();
+                }
+                return;
+            }
+            // 老路径(JPEG decode)
             const img = await loadFrameImage(frameIdx);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -377,6 +452,8 @@ const FramePlayer: React.FC<IProps> = ({
 
     // 持续维护 available_frames：保证当前位置前方始终有 MIN_AHEAD 帧可播放
     const maintainAvailableFrames = useCallback(async () => {
+        // v2.6.0: WebCodecs 路径不需要 JPEG 滑动窗口(GPU 硬解,用过即弃)
+        if (webcodecsPlayerRef.current) return;
         const gen = ++loadGenRef.current;
 
         while (loadGenRef.current === gen) {
@@ -451,7 +528,33 @@ const FramePlayer: React.FC<IProps> = ({
 
         const init = async () => {
             try {
-                // 移入解析阶段预加载缓存
+                // v2.6.0: 等 WebCodecs 初始化完成(若启用)。失败则走 JPEG 路径
+                if (webcodecsUrl) {
+                    if (webcodecsInitRef.current) await webcodecsInitRef.current;
+                    if (cancelled) return;
+                }
+                const isWebCodecs = !!webcodecsPlayerRef.current;
+
+                // WebCodecs 路径: 简化 init,只画第 0 帧,直接 setIsLoaded
+                if (isWebCodecs) {
+                    await drawFrame(0);
+                    if (cancelled) return;
+                    initDoneRef.current = true;
+                    onLoadedMetadata?.(duration, totalFrames, fps, videoSize);
+                    if (canvasRef.current) {
+                        setTimeout(() => {
+                            if (!cancelled && canvasRef.current) onFirstFrameDrawn?.(canvasRef.current);
+                        }, 0);
+                    }
+                    focusableElementRef.current?.focus();
+                    setIsLoaded(true);
+                    initPhaseRef.current = false;
+                    setLoadingProgress(100);
+                    console.log('[FramePlayer] WebCodecs init 完成,跳过 JPEG 滑动窗');
+                    return;
+                }
+
+                // 移入解析阶段预加载缓存 (JPEG 路径)
                 const preloaded = EditorModel.preloadedImageCache;
                 if (preloaded.size > 0) {
                     for (const [idx, img] of preloaded) {
@@ -553,7 +656,7 @@ const FramePlayer: React.FC<IProps> = ({
 
         init();
         return () => { cancelled = true; };
-    }, [frames.length, sessionId, videoSize.width, videoSize.height]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [frames.length, sessionId, webcodecsUrl, webcodecsActive, videoSize.width, videoSize.height]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // 播放帧 ref
     const currentFrameRef = useRef(currentFrame);

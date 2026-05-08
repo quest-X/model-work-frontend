@@ -19,7 +19,7 @@ export class EditorModel {
     public static mousePositionIndicator: HTMLDivElement;
     public static cursor: HTMLDivElement;
     public static viewPortScrollbars: Scrollbars;
-    public static image: HTMLImageElement;
+    public static image: HTMLImageElement | VideoFrame; // v2.6.0: WebCodecs 路径下为 VideoFrame
 
     public static primaryRenderingEngine: PrimaryEditorRenderEngine;
     public static supportRenderingEngine: BaseRenderEngine;
@@ -27,7 +27,7 @@ export class EditorModel {
     public static viewPortHelper: ViewPortHelper;
 
     public static videoElement: HTMLVideoElement; // raw_browser_mode: the native <video> element
-    public static videoFrameImage: HTMLImageElement; // Persistent video-resolution image for coordinate mapping (both modes)
+    public static videoFrameImage: HTMLImageElement | VideoFrame | null; // v2.6.0: WebCodecs 路径下为 VideoFrame, 否则 HTMLImageElement
     public static playbackImageData: any; // During playback: direct ref to current frame ImageData, bypasses Redux selector
     public static latestImagesData: any[] | null = null; // Cache after batchApplyResults dispatch, avoids ref staleness
     public static videoFrameFiles: (File | undefined)[] = []; // fast_ffmpeg_mode (full-load): global frame file pool. Slot may be undefined after eviction (sparse array).

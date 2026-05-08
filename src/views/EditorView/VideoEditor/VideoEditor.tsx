@@ -17,6 +17,8 @@ import {
 import { updateImageDataById, updateImageData, updateActiveImageIndex, addImageData, toggleImageSelection } from '../../../store/labels/actionCreators';
 import { ImageDataUtil } from '../../../utils/ImageDataUtil';
 import { ImageRepository } from '../../../logic/imageRepository/ImageRepository';
+import { getFrameWidth, getFrameHeight } from '../../../utils/FrameSourceUtil';
+import { getDefaultBackendUrl } from '../../../utils/DefaultBackendUrl';
 import { EditorActions } from '../../../logic/actions/EditorActions';
 import { ViewPortActions } from '../../../logic/actions/ViewPortActions';
 import { EditorModel } from '../../../staticModels/EditorModel';
@@ -251,8 +253,8 @@ const VideoEditor: React.FC<IProps> = ({
                 const targetW = activeVideo.videoSize.width || canvas.width;
                 const targetH = activeVideo.videoSize.height || canvas.height;
                 if (EditorModel.videoFrameImage &&
-                    EditorModel.videoFrameImage.naturalWidth === targetW &&
-                    EditorModel.videoFrameImage.naturalHeight === targetH) {
+                    getFrameWidth(EditorModel.videoFrameImage) === targetW &&
+                    getFrameHeight(EditorModel.videoFrameImage) === targetH) {
                     EditorActions.setActiveImage(EditorModel.videoFrameImage);
                     return;
                 }
@@ -616,6 +618,15 @@ const VideoEditor: React.FC<IProps> = ({
                             language={language}
                             frames={activeVideo.preExtractedFrames || EMPTY_FRAMES}
                             sessionId={activeVideo.sessionId}
+                            webcodecsUrl={
+                                // v2.6.0: 启用 WebCodecs 硬解路径需满足:
+                                //   1. sessionId 存在 (后端有 mp4 流可读)
+                                //   2. 浏览器支持 WebCodecs API
+                                // codec 兼容性在 FramePlayer 内部探测,失败则 fallback 到 JPEG 路径
+                                activeVideo.sessionId && typeof VideoDecoder !== 'undefined'
+                                    ? getDefaultBackendUrl(`/video-stream/${activeVideo.sessionId}`)
+                                    : undefined
+                            }
                             fps={activeVideo.fps}
                             duration={activeVideo.duration}
                             totalFrames={activeVideo.totalFrames}

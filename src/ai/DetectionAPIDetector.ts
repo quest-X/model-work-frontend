@@ -7,6 +7,7 @@ import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
 import {getDefaultBackendUrl} from '../utils/DefaultBackendUrl';
 import {PipelineStore} from './PipelineStore';
 import {FrameExtractorService} from '../services/FrameExtractorService';
+import {getFrameWidth, getFrameHeight} from '../utils/FrameSourceUtil';
 
 export interface InferenceParams {
     conf: number;
@@ -297,16 +298,16 @@ export class DetectionAPIDetector {
                 });
                 formData.append('file', blob, 'video_frame.jpg');
             } else if (EditorModel.videoFrameImage) {
-                // fast_ffmpeg_mode with pre-extracted frames: capture pixels from the decoded frame Image
+                // fast_ffmpeg_mode with pre-extracted frames: capture pixels from the decoded frame Image (or VideoFrame in WebCodecs path)
                 const img = EditorModel.videoFrameImage;
-                const w = img.naturalWidth || img.width;
-                const h = img.naturalHeight || img.height;
+                const w = getFrameWidth(img);
+                const h = getFrameHeight(img);
                 if (!w || !h) throw new Error('Frame image has no dimensions');
                 const canvas = document.createElement('canvas');
                 canvas.width = w;
                 canvas.height = h;
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, w, h);
+                ctx.drawImage(img as any, 0, 0, w, h);
                 const blob: Blob = await new Promise((resolve, reject) => {
                     canvas.toBlob((b) => {
                         if (b) resolve(b);

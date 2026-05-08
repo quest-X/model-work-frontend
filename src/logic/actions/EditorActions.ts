@@ -88,7 +88,7 @@ export class EditorActions {
     public static setLoadingStatus(status: boolean) {
         EditorModel.isLoading = status;
     }
-    public static setActiveImage(image: HTMLImageElement) {
+    public static setActiveImage(image: HTMLImageElement | VideoFrame) {
         EditorModel.image = image;
     }
 

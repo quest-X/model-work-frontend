@@ -44,24 +44,31 @@ export class PrimaryEditorRenderEngine extends BaseRenderEngine {
             kind: 'point' | 'bbox';
             point?: IPoint;
             bbox?: IRect;
+            pointLabel?: 'positive' | 'negative';
         }> | undefined;
         if (!prompts || prompts.length === 0) return;
         const ctx = this.canvas.getContext('2d');
         if (!ctx) return;
-        // Blinking alpha: 800ms period, 0.25–1.0 range
-        const phase = (Math.sin(Date.now() / 150) + 1) / 2;
-        const alpha = 0.25 + 0.75 * phase;
+
+        // 推理中（有 inferring 标记）才闪烁，否则静态绘制
+        const isInferring = (window as any).__openSightPromptInferring === true;
+        let alpha = 1;
+        if (isInferring) {
+            const phase = (Math.sin(Date.now() / 150) + 1) / 2;
+            alpha = 0.25 + 0.75 * phase;
+        }
 
         ctx.save();
         ctx.globalAlpha = alpha;
-        ctx.strokeStyle = '#ffffff';
-        ctx.fillStyle = '#ffffff';
         ctx.lineWidth = 2;
         ctx.setLineDash([]);
 
         for (const p of prompts) {
             if (p.kind === 'point' && p.point) {
                 const vp = RenderEngineUtil.transferPointFromImageToViewPortContent(p.point, data);
+                const color = p.pointLabel === 'negative' ? '#ff4444' : '#44ff88';
+                ctx.strokeStyle = color;
+                ctx.fillStyle = color;
                 // Solid inner dot
                 ctx.beginPath();
                 ctx.arc(vp.x, vp.y, 5, 0, Math.PI * 2);
@@ -81,8 +88,9 @@ export class PrimaryEditorRenderEngine extends BaseRenderEngine {
                 );
                 const w = br.x - tl.x;
                 const h = br.y - tl.y;
-                // 半透明填充 + 描边，都随 alpha 一起闪烁
-                ctx.globalAlpha = alpha * 0.3;
+                ctx.strokeStyle = '#4488ff';
+                ctx.fillStyle = '#4488ff';
+                ctx.globalAlpha = alpha * 0.15;
                 ctx.fillRect(tl.x, tl.y, w, h);
                 ctx.globalAlpha = alpha;
                 ctx.strokeRect(tl.x, tl.y, w, h);
@@ -137,10 +145,11 @@ export class PrimaryEditorRenderEngine extends BaseRenderEngine {
         ].every(Boolean)
     }
 
-    public drawImage(image: HTMLImageElement, imageRect: IRect) {
+    public drawImage(image: HTMLImageElement | VideoFrame, imageRect: IRect) {
         if (!!image && !!this.canvas) {
             const ctx = this.canvas.getContext('2d');
-            ctx.drawImage(image, imageRect.x, imageRect.y, imageRect.width, imageRect.height);
+            // VideoFrame 是 CanvasImageSource (TS 4.7 lib 不知道, 这里 as any 安全)
+            ctx.drawImage(image as any, imageRect.x, imageRect.y, imageRect.width, imageRect.height);
         }
     }
 

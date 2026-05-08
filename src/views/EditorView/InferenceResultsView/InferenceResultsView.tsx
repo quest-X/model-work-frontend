@@ -268,7 +268,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
             // 优先级：videoFrameImage（原始分辨率 Image）→ VideoCanvas（FramePlayer canvas，原始分辨率）→ <video>
             return new Promise<string>((resolve) => {
                 if (EditorModel.videoFrameImage) {
-                    cropAndResolve(EditorModel.videoFrameImage, resolve);
+                    cropAndResolve(EditorModel.videoFrameImage as any, resolve);
                 } else {
                     const videoCanvas = document.querySelector('.VideoCanvas') as HTMLCanvasElement;
                     if (videoCanvas && videoCanvas.width > 0) {
@@ -414,7 +414,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
 
             const trySource = (): CanvasImageSource | null => {
                 const vfi = EditorModel.videoFrameImage;
-                if (vfi && (vfi.naturalWidth > 0 || vfi.width > 0)) return vfi;
+                if (vfi && getFrameWidth(vfi) > 0) return vfi as any;
                 const vc = document.querySelector('.VideoCanvas') as HTMLCanvasElement;
                 if (vc && vc.width > 0) return vc;
                 return null;

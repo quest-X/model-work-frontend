@@ -12,7 +12,7 @@ export class VideoPrimaryRenderEngine extends PrimaryEditorRenderEngine {
         super(canvas);
     }
 
-    public drawImage(image: HTMLImageElement, imageRect: IRect) {
+    public drawImage(image: HTMLImageElement | VideoFrame, imageRect: IRect) {
         if (!imageRect) return;
         const src = VideoSelector.isVideoPlaying()
             ? (EditorModel.videoFrameImage || image)

@@ -1,11 +1,13 @@
 import {ISize} from "../interfaces/ISize";
+import {FrameSource, getFrameWidth, getFrameHeight} from "./FrameSourceUtil";
 
 export class ImageUtil {
-    public static getSize(image: HTMLImageElement): ISize {
+    // v2.6.0: 接受 HTMLImageElement | VideoFrame, 用 FrameSourceUtil 抽象 width/height 访问
+    public static getSize(image: FrameSource | null): ISize {
         if (!image) return null;
         return {
-            width: image.width,
-            height: image.height
+            width: getFrameWidth(image),
+            height: getFrameHeight(image)
         }
     }
 }
