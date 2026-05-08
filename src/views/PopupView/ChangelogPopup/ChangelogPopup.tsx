@@ -16,6 +16,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.2',
+        date: '2026-05-09',
+        changes: [
+            { zh: '【根因修复】ERR_FILE_NOT_FOUND 17×：FileUtil.loadImage 公共入口加 0 字节守卫。v2.6.1 只在 FramePlayer 加守卫不够——FileUtil 是所有图片加载的根入口，给占位文件就直接 createObjectURL → img.src 触发浏览器层失败。这次修在源头', en: '[Root-cause Fix] ERR_FILE_NOT_FOUND 17×: FileUtil.loadImage now guards against 0-byte placeholder Files at the public entry point. v2.6.1\'s guard in FramePlayer wasn\'t enough — FileUtil is the root loader for all image loads; previously it called createObjectURL → img.src on placeholder Files unconditionally, triggering browser-level load failures. Fixed at the source' },
+            { zh: '【实测】视频模式 SAM2 推理实际工作正常：清空状态后直接走默认 sam2_l 能正常发起推理。之前测试时遇到的"silent return"是 race condition（先切检测又切回分割），不必现。runInference 入口的 [Infer] entry 诊断日志（v2.6.1 加）下次复现时能立即定位', en: '[Verified] Video-mode SAM2 inference works fine: clean-state default-sam2_l flow correctly triggers segmentBatch. The earlier "silent return" was a race condition (detection → segmentation switch sequence), not always reproducible. v2.6.1\'s [Infer] entry diagnostic log will pinpoint the cause next time it occurs' },
+            { zh: '【新基线】/retrieve + /index 完整链路：5 张 1440p 图建索引 40.7s，retrieve 720ms 命中 5 个相似 bird（confidence 0.69-0.73）。1440p 索引构建较慢（~8s/图）但检索本身极快', en: '[New baseline] /retrieve + /index full chain: 5× 1440p images indexed in 40.7s; retrieve takes 720ms returning 5 similar birds (confidence 0.69-0.73). 1440p index-building is the slow step (~8s/image) but retrieval itself is fast' },
+            { zh: '【已知限制】完整模式视频导出（标签 + 图像）：15094 帧 × 1440p ≈ 12GB 浏览器侧 zip，必 OOM。本次跳过实测，后续应改走 backend zip 流式导出', en: '[Known limit] Full-mode video export (labels + images): 15094 frames × 1440p ≈ 12GB browser-side zip will OOM. Skipped this round; future work should switch to backend streaming-zip export' },
+        ]
+    },
+    {
         version: '2.6.1',
         date: '2026-05-09',
         changes: [
