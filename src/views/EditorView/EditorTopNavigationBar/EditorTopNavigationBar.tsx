@@ -5,7 +5,7 @@ import classNames from 'classnames';
 import { AppState } from '../../../store';
 import { store } from '../../../index';
 import { connect } from 'react-redux';
-import { updateSmartAnnotationActiveStatus, updateImageDragModeStatus, updateActivePopupType, updateCustomCursorStyle, updateEraserMode, updateEraserFineMode, updateTrackingModeStatus } from '../../../store/general/actionCreators';
+import { updateSmartAnnotationActiveStatus, updateImageDragModeStatus, updateActivePopupType, updateCustomCursorStyle, updateEraserMode, updateEraserFineMode, updateTrackingModeStatus, updateSamNegativeMode } from '../../../store/general/actionCreators';
 import { PopupWindowType } from '../../../data/enums/PopupWindowType';
 import { CustomCursorStyle } from '../../../data/enums/CustomCursorStyle';
 import { GeneralSelector } from '../../../store/selectors/GeneralSelector';
@@ -28,6 +28,7 @@ import { AIDetectionActions } from '../../../logic/actions/AIDetectionActions';
 import { AISegmentationActions } from '../../../logic/actions/AISegmentationActions';
 import { DetectionAPIDetector } from '../../../ai/DetectionAPIDetector';
 import { SegmentationAPIDetector } from '../../../ai/SegmentationAPIDetector';
+import { SmartAnnotationActions } from '../../../logic/actions/SmartAnnotationActions';
 import { AIStateStorageManager } from '../../../utils/AIStateStorageManager';
 import { AIModelsSelector } from '../../../store/selectors/AIModelsSelector';
 import { YOLO_MODEL_FAMILIES, SEG_MODEL_FAMILIES } from '../../PopupView/CallModelPopup/CallModelPopup';
@@ -95,7 +96,9 @@ const getButtonWithTooltip = (
     isActive: boolean,
     href?: string,
     onClick?: () => any,
-    isDisabled?: boolean
+    isDisabled?: boolean,
+    onDoubleClick?: () => any,
+    externalClassName?: string,
 ): React.ReactElement => {
     return <StyledTooltip
         key={key}
@@ -113,8 +116,10 @@ const getButtonWithTooltip = (
                 imageAlt={imageAlt}
                 href={href}
                 onClick={isDisabled ? undefined : onClick}
+                onDoubleClick={isDisabled ? undefined : onDoubleClick}
                 isActive={isActive}
                 isDisabled={isDisabled}
+                externalClassName={externalClassName}
             />
         </div>
     </StyledTooltip>;
@@ -134,6 +139,8 @@ interface IProps {
     addInferenceHistory: (imageId: string, detectedCount: number, success?: boolean) => any;
     imageDragMode: boolean;
     smartAnnotationActive: boolean;
+    samNegativeMode: boolean;
+    updateSamNegativeModeAction: (v: boolean) => any;
     eraserMode: boolean;
     eraserFineMode: boolean;
     updateEraserModeAction: (eraserMode: boolean) => any;
@@ -165,6 +172,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         addInferenceHistory,
         imageDragMode,
         smartAnnotationActive,
+        samNegativeMode,
+        updateSamNegativeModeAction,
         eraserMode,
         eraserFineMode,
         updateEraserModeAction,
@@ -272,6 +281,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     // ── 推理下拉菜单 ──
     const [showInferenceMenu, setShowInferenceMenu] = useState(false);
     const inferenceMenuRef = useRef<HTMLDivElement>(null);
+    // 用于区分智能标注按钮的单击 vs 双击（延迟单击 200ms）
+    const smartClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // 多模型：后端同时保持多个模型在内存，前端下拉展示所有已加载模型
     const [loadedModels, setLoadedModels] = useState<string[]>([]);
     const [activeModelName, setActiveModelName] = useState('');
@@ -300,39 +311,82 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         [loadedModels]
     );
 
-    // 智能标注按钮的点击：未加载 SAM 时打开模型加载弹窗，否则切换模式
-    // 事件路由由 AllLabelsRenderEngine → rectEngine 负责，SAM 劫持在 rectEngine 里
+    // 智能标注按钮：单击 = 激活正点 / 关闭，双击 = 激活负点
+    // 用 200ms 延迟区分单击与双击，避免双击时先触发单击
     const smartAnnotationOnClick = useCallback(() => {
         if (!isSAMLoaded) {
-            // 引导用户去加载 SAM 模型
             updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
             return;
         }
-        const willActivate = !smartAnnotationActive;
-        updateSmartAnnotationActiveStatusAction(willActivate);
-        if (willActivate) {
-            // 激活：挂 AllLabelsRenderEngine（smart 劫持走 rectEngine）
+        if (smartClickTimerRef.current) {
+            clearTimeout(smartClickTimerRef.current);
+            smartClickTimerRef.current = null;
+        }
+        smartClickTimerRef.current = setTimeout(() => {
+            smartClickTimerRef.current = null;
+            if (smartAnnotationActive) {
+                // 已激活 → 关闭智能标注
+                // 保持 ALL 视图，否则切回 RECT 视图时 SAM 生成的 polygon 会不可见
+                updateSmartAnnotationActiveStatusAction(false);
+                updateSamNegativeModeAction(false);
+                updateActiveLabelType(LabelType.ALL);
+            } else {
+                // 未激活 → 激活正点模式
+                updateSmartAnnotationActiveStatusAction(true);
+                updateSamNegativeModeAction(false);
+                updateActiveLabelType(LabelType.ALL);
+                if (trackingMode) updateTrackingModeStatusAction(false);
+                if (imageDragMode) updateImageDragModeStatusAction(false);
+            }
+        }, 200);
+    }, [isSAMLoaded, smartAnnotationActive, trackingMode, imageDragMode, activeLabelViewType,
+        updateSmartAnnotationActiveStatusAction, updateSamNegativeModeAction,
+        updateActiveLabelType, updateTrackingModeStatusAction, updateImageDragModeStatusAction,
+        updateActivePopupTypeAction]);
+
+    // 智能标注按钮双击 → 激活负点模式
+    const smartAnnotationOnDoubleClick = useCallback(() => {
+        if (!isSAMLoaded) {
+            updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
+            return;
+        }
+        // 取消待执行的单击
+        if (smartClickTimerRef.current) {
+            clearTimeout(smartClickTimerRef.current);
+            smartClickTimerRef.current = null;
+        }
+        updateSamNegativeModeAction(true);
+        if (!smartAnnotationActive) {
+            updateSmartAnnotationActiveStatusAction(true);
             updateActiveLabelType(LabelType.ALL);
             if (trackingMode) updateTrackingModeStatusAction(false);
-            if (imageDragMode) {
-                updateImageDragModeStatusAction(false);
-            }
-        } else {
-            // 关闭：工具跟随当前侧栏视图 —— 用户在分割视图里就落到绘制多边形，
-            // 在检测视图里就落到绘制矩形框，查看全部里就落到 ALL 手拖模式。
-            updateActiveLabelType(activeLabelViewType);
+            if (imageDragMode) updateImageDragModeStatusAction(false);
         }
-    }, [isSAMLoaded, smartAnnotationActive, trackingMode, imageDragMode, activeLabelViewType, updateSmartAnnotationActiveStatusAction, updateTrackingModeStatusAction, updateImageDragModeStatusAction, updateActiveLabelType, updateActivePopupTypeAction]);
+    }, [isSAMLoaded, smartAnnotationActive, trackingMode, imageDragMode,
+        updateSmartAnnotationActiveStatusAction, updateSamNegativeModeAction,
+        updateActiveLabelType, updateTrackingModeStatusAction, updateImageDragModeStatusAction,
+        updateActivePopupTypeAction]);
 
-    // 检索按钮：切换检索模式（纯开关），不改变标注工具或智能标注状态。
-    // 检索模式 ON 时，推理按钮行为变为"用当前帧 polygon 作为 seed mask 跨帧跟踪"。
+    // 检索按钮：只负责切换 trackingMode，不涉及正/负点逻辑
     const trackingOnClick = useCallback(() => {
         if (!isTrackingModelLoaded) {
             updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
             return;
         }
-        updateTrackingModeStatusAction(!trackingMode);
-    }, [isTrackingModelLoaded, trackingMode, updateTrackingModeStatusAction, updateActivePopupTypeAction]);
+        const willActivate = !trackingMode;
+        updateTrackingModeStatusAction(willActivate);
+        if (willActivate) {
+            // 激活检索 → 关闭智能标注和其他互斥模式
+            if (smartAnnotationActive) {
+                updateSmartAnnotationActiveStatusAction(false);
+                updateSamNegativeModeAction(false);
+            }
+            if (imageDragMode) updateImageDragModeStatusAction(false);
+            if (eraserMode) updateEraserModeAction(false);
+        }
+    }, [isTrackingModelLoaded, trackingMode, smartAnnotationActive, imageDragMode, eraserMode,
+        updateTrackingModeStatusAction, updateSmartAnnotationActiveStatusAction, updateSamNegativeModeAction,
+        updateImageDragModeStatusAction, updateEraserModeAction, updateActivePopupTypeAction]);
 
     // 智能标注激活时自动切换到 SAM 模型
     useEffect(() => {
@@ -500,6 +554,14 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 
         const activeImageData = LabelsSelector.getActiveImageData();
         if (!activeImageData) return;
+
+        // ── 智能标注模式：收集 prompt LabelRects，统一发 SAM 推理 ──
+        if (smartAnnotationActive) {
+            const prompts = SmartAnnotationActions.getPromptRects(activeImageData);
+            if (prompts.length === 0) return;
+            SmartAnnotationActions.runAllPrompts();
+            return;
+        }
 
         // ── 检索模式：用当前帧的 polygon 作为 seed mask 跨帧跟踪 ──
         if (trackingMode) {
@@ -694,25 +756,21 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         () => onToolClick(LabelType.POLYGON)
                     )
                 }
-            </div>
-            {useMemo(() => {
-                if (imagesData.length === 0) return null;
-                const activeImageData = LabelsSelector.getActiveImageData();
-                const hasImage = imagesData.length > 0;
-                const aiState = activeImageData ? imageAIStates.get(activeImageData.id) : null;
-                const rectsVisible = aiState?.aiLabelsVisible ?? true;
-                const polysVisible = aiState?.segmentationLabelsVisible ?? true;
-                const anyVisible = rectsVisible || polysVisible;
-                const hasAnyLabel = hasImage && (
-                    (activeImageData?.labelRects?.length || 0) > 0 ||
-                    (activeImageData?.labelPolygons?.length || 0) > 0
-                );
-                const isDisabled = !hasImage || !hasAnyLabel;
-                const icon = isDisabled ? 'ico/eye-slash.png'
-                    : anyVisible ? 'ico/eye.png' : 'ico/eye-off.png';
-
-                return <div className='ButtonWrapper'>
-                    {getButtonWithTooltip(
+                {(() => {
+                    const activeImageData = LabelsSelector.getActiveImageData();
+                    const hasImage = imagesData.length > 0;
+                    const aiState = activeImageData ? imageAIStates.get(activeImageData.id) : null;
+                    const rectsVisible = aiState?.aiLabelsVisible ?? true;
+                    const polysVisible = aiState?.segmentationLabelsVisible ?? true;
+                    const anyVisible = rectsVisible || polysVisible;
+                    const hasAnyLabel = hasImage && (
+                        (activeImageData?.labelRects?.length || 0) > 0 ||
+                        (activeImageData?.labelPolygons?.length || 0) > 0
+                    );
+                    const isDisabled = !hasImage || !hasAnyLabel;
+                    const icon = isDisabled ? 'ico/eye-slash.png'
+                        : anyVisible ? 'ico/eye.png' : 'ico/eye-off.png';
+                    return getButtonWithTooltip(
                         'toggle-ai-labels',
                         anyVisible ? '隐藏标签' : '显示标签',
                         icon,
@@ -721,27 +779,42 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         undefined,
                         isDisabled ? undefined : toggleAILabelsOnClick,
                         isDisabled
-                    )}
+                    );
+                })()}
+            </div>
+            {useMemo(() => {
+                if (imagesData.length === 0) return null;
+                const activeImageData = LabelsSelector.getActiveImageData();
+                const hasAnyLabel = imagesData.length > 0 && (
+                    (activeImageData?.labelRects?.length || 0) > 0 ||
+                    (activeImageData?.labelPolygons?.length || 0) > 0
+                );
+
+                return <div className='ButtonWrapper'>
                     {isSAMLoaded && getButtonWithTooltip(
                         'smart-annotation',
-                        currentTexts.editorTopNavBar.smartAnnotationOn,
+                        smartAnnotationActive
+                            ? (samNegativeMode
+                                ? (language === 'zh' ? '负点模式（单击关闭）' : 'Negative mode (click to close)')
+                                : (language === 'zh' ? '正点模式（单击关闭/双击切负点）' : 'Positive mode (click off / dbl-click neg)'))
+                            : (language === 'zh' ? '智能标注（单击正点/双击负点）' : 'Smart Annotation (click pos / dbl-click neg)'),
                         'ico/cross-hair.png',
                         'smart-annotation',
                         smartAnnotationActive && !eraserMode,
                         undefined,
-                        smartAnnotationOnClick
+                        smartAnnotationOnClick,
+                        false,
+                        smartAnnotationOnDoubleClick,
+                        smartAnnotationActive && samNegativeMode ? 'active-negative' : undefined,
                     )}
                     {isTrackingModelLoaded && getButtonWithTooltip(
                         'object-tracking',
-                        trackingMode
-                            ? (language === 'zh' ? '退出检索模式' : 'Exit Retrieval')
-                            : (language === 'zh' ? '检索' : 'Retrieval'),
+                        language === 'zh' ? '检索' : 'Retrieve',
                         'ico/tracking.png',
                         'object-tracking',
                         trackingMode && !eraserMode,
                         undefined,
-                        trackingInProgress ? undefined : trackingOnClick,
-                        trackingInProgress,
+                        trackingOnClick,
                     )}
                     {hasAnyLabel && getButtonWithTooltip(
                         'eraser',
@@ -755,7 +828,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                         eraserOnClick
                     )}
                 </div>;
-            }, [imageAIStates, imagesData, activeImageIndex, toggleAILabelsOnClick, isSAMLoaded, smartAnnotationActive, smartAnnotationOnClick, isTrackingModelLoaded, trackingOnClick, trackingMode, trackingInProgress, currentTexts, eraserMode, eraserFineMode, eraserOnClick, language])}
+            }, [imagesData, activeImageIndex, isSAMLoaded, smartAnnotationActive, samNegativeMode, smartAnnotationOnClick, smartAnnotationOnDoubleClick, isTrackingModelLoaded, trackingOnClick, trackingMode, trackingInProgress, currentTexts, eraserMode, eraserFineMode, eraserOnClick, language])}
             <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 6, height: '100%' }}>
                 <div ref={inferenceMenuRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <button
@@ -894,12 +967,14 @@ const mapDispatchToProps = {
     updateActiveLabelType,
     updateActiveLabelViewType,
     updateEraserModeAction: updateEraserMode,
+    updateSamNegativeModeAction: updateSamNegativeMode,
 };
 
 const mapStateToProps = (state: AppState) => ({
     activeContext: state.general.activeContext,
     imageDragMode: state.general.imageDragMode,
     smartAnnotationActive: state.general.smartAnnotationActive,
+    samNegativeMode: state.general.samNegativeMode ?? false,
     trackingMode: state.general.trackingMode ?? false,
     trackingInProgress: state.general.trackingInProgress ?? false,
     eraserMode: state.general.eraserMode ?? false,

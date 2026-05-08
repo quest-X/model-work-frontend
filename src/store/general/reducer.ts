@@ -13,6 +13,7 @@ const initialState: GeneralState = {
     preventCustomCursor: false,
     imageDragMode: false,
     smartAnnotationActive: false,
+    samNegativeMode: false,
     trackingMode: false,
     trackingInProgress: false,
     eraserMode: false,
@@ -97,6 +98,12 @@ export function generalReducer(
             return {
                 ...state,
                 eraserFineMode: action.payload.eraserFineMode
+            }
+        }
+        case Action.UPDATE_SAM_NEGATIVE_MODE: {
+            return {
+                ...state,
+                samNegativeMode: action.payload.samNegativeMode
             }
         }
         case Action.UPDATE_PROJECT_DATA: {

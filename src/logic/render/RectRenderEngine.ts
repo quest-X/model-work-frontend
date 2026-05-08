@@ -45,6 +45,9 @@ export class RectRenderEngine extends BaseRenderEngine {
     private movePolygonId: string;
     private startMovePolygonPoint: IPoint;
 
+    // SAM prompt 拖拽：复用 startMoveRectPoint / moveRectId 来移动 prompt rect
+
+
     public constructor(canvas: HTMLCanvasElement) {
         super(canvas);
         this.labelType = LabelType.RECT;
@@ -100,11 +103,17 @@ export class RectRenderEngine extends BaseRenderEngine {
                     }
                 }
             } else {
-                // 智能标注模式：跳过已有矩形的命中测试，永远开启新的 prompt-creation
-                // 这样 click/drag 都会被 mouseUpHandler 的智能标注分支接管
+                // 智能标注模式：先检查是否命中已有 prompt rect（拖拽/删除），否则新建 prompt
                 if (GeneralSelector.getSmartAnnotationActiveStatus()) {
                     if (isMouseOverImage) {
-                        this.startRectCreation(data.mousePositionOnViewPortContent);
+                        const hitRect = this.getPromptRectUnderMouse(data);
+                        if (hitRect) {
+                            // 命中已有 prompt → 复用原生矩形移动机制
+                            store.dispatch(updateActiveLabelId(hitRect.id));
+                            this.startRectMove(data.mousePositionOnViewPortContent, hitRect.id);
+                        } else {
+                            this.startRectCreation(data.mousePositionOnViewPortContent);
+                        }
                     }
                     return;
                 }
@@ -137,6 +146,8 @@ export class RectRenderEngine extends BaseRenderEngine {
             const activeLabelRect: LabelRect = LabelsSelector.getActiveRectLabel();
 
             // ── 智能标注劫持：click → SAM 单点 prompt；drag → SAM bbox prompt ──
+            // 注意：如果 mouseDown 命中了已有 prompt rect，会进入 startRectMove 路径，
+            // 由下方「处理矩形框移动」分支自动完成拖拽/删除。
             if (GeneralSelector.getSmartAnnotationActiveStatus() && !!this.startCreateRectPoint) {
                 const startInImage: IPoint = RenderEngineUtil.transferPointFromViewPortContentToImage(this.startCreateRectPoint, data);
                 const endInImage: IPoint = RenderEngineUtil.transferPointFromViewPortContentToImage(mousePositionSnapped, data);
@@ -145,7 +156,8 @@ export class RectRenderEngine extends BaseRenderEngine {
                 const dyView = this.startCreateRectPoint.y - mousePositionSnapped.y;
                 const isClick = (dxView * dxView + dyView * dyView) < 25; // 5px 半径
                 if (isClick) {
-                    SmartAnnotationActions.firePoint(startInImage);
+                    const isNegative = GeneralSelector.getSamNegativeMode();
+                    SmartAnnotationActions.addPoint(startInImage, isNegative);
                 } else {
                     const rectInImage: IRect = {
                         x: Math.min(startInImage.x, endInImage.x),
@@ -153,7 +165,7 @@ export class RectRenderEngine extends BaseRenderEngine {
                         width: Math.abs(endInImage.x - startInImage.x),
                         height: Math.abs(endInImage.y - startInImage.y),
                     };
-                    SmartAnnotationActions.fireBbox(rectInImage);
+                    SmartAnnotationActions.addBbox(rectInImage);
                 }
                 this.endRectTransformation();
                 return;  // 阻断后续 addRectLabel 路径
@@ -195,24 +207,30 @@ export class RectRenderEngine extends BaseRenderEngine {
             // 处理矩形框移动
             if (!!this.startMoveRectPoint && !!this.moveRectId && !!data.mousePositionOnViewPortContent) {
                 const delta: IPoint = PointUtil.subtract(data.mousePositionOnViewPortContent, this.startMoveRectPoint);
-                const scale: number = RenderEngineUtil.calculateImageScale(data);
-                const deltaOnImage: IPoint = PointUtil.multiply(delta, scale);
+                const distSq = delta.x * delta.x + delta.y * delta.y;
 
                 const imageData = LabelsSelector.getActiveImageData();
                 if (imageData) {
                     const rectToMove = imageData.labelRects.find(rect => rect.id === this.moveRectId);
                     if (!!rectToMove) {
-                        const movedRect: IRect = RectUtil.translate(rectToMove.rect, deltaOnImage);
-                        imageData.labelRects = imageData.labelRects.map((labelRect: LabelRect) => {
-                            if (labelRect.id === this.moveRectId) {
-                                return {
-                                    ...labelRect,
-                                    rect: movedRect
-                                };
-                            }
-                            return labelRect;
-                        });
-                        store.dispatch(updateImageDataById(imageData.id, imageData));
+                        // prompt rect: 点击不移动时什么都不做（不再自动删除）
+                        if (rectToMove.isPrompt && distSq < 25) {
+                            // no-op：用户可通过橡皮擦或 Delete 键删除 prompt
+                        } else {
+                            const scale: number = RenderEngineUtil.calculateImageScale(data);
+                            const deltaOnImage: IPoint = PointUtil.multiply(delta, scale);
+                            const movedRect: IRect = RectUtil.translate(rectToMove.rect, deltaOnImage);
+                            imageData.labelRects = imageData.labelRects.map((labelRect: LabelRect) => {
+                                if (labelRect.id === this.moveRectId) {
+                                    return {
+                                        ...labelRect,
+                                        rect: movedRect
+                                    };
+                                }
+                                return labelRect;
+                            });
+                            store.dispatch(updateImageDataById(imageData.id, imageData));
+                        }
                     }
                 }
             }
@@ -275,6 +293,10 @@ export class RectRenderEngine extends BaseRenderEngine {
         const activeLabelId: string = LabelsSelector.getActiveLabelId();
         imageData.labelRects.forEach((labelRect: LabelRect) => {
             if (!labelRect.isVisible) return;
+            if (labelRect.isPrompt) {
+                this.drawPromptRect(labelRect, data);
+                return;
+            }
             if (labelRect.status === LabelStatus.ACCEPTED && labelRect.id === activeLabelId) {
                 this.drawActiveRect(labelRect, data);
             } else {
@@ -311,7 +333,9 @@ export class RectRenderEngine extends BaseRenderEngine {
                 const shouldShow = labelRect.isVisible && aiLabelsVisible;
 
                 if (shouldShow) {
-                    if (labelRect.status === LabelStatus.ACCEPTED && labelRect.id === activeLabelId) {
+                    if (labelRect.isPrompt) {
+                        this.drawPromptRect(labelRect, data);
+                    } else if (labelRect.status === LabelStatus.ACCEPTED && labelRect.id === activeLabelId) {
                         this.drawActiveRect(labelRect, data)
                     } else {
                         this.drawInactiveRect(labelRect, data);
@@ -378,6 +402,81 @@ export class RectRenderEngine extends BaseRenderEngine {
             const lineColor: string = BaseRenderEngine.resolveLabelLineColor(null, true, false)
             DrawUtil.drawRect(this.canvas, activeRectBetweenPixels, lineColor, RenderEngineSettings.LINE_THICKNESS);
         }
+    }
+
+    /**
+     * 绘制 SAM prompt rect:
+     * - 有 promptLabel 的小 rect → 绘制为彩色圆点 + 外环（正点绿色、负点红色）
+     * - 没有 promptLabel 的正常 rect → 绘制为蓝色虚线框
+     * - 推理中时半透明闪烁
+     * - 如果正在被拖拽（moveRectId 匹配），跟随鼠标偏移渲染
+     */
+    private drawPromptRect(labelRect: LabelRect, data: EditorData): void {
+        const ctx = this.canvas.getContext('2d');
+        if (!ctx) return;
+
+        // 推理中闪烁
+        const isInferring = (window as any).__openSightPromptInferring === true;
+        let alpha = 1;
+        if (isInferring) {
+            const phase = (Math.sin(Date.now() / 150) + 1) / 2;
+            alpha = 0.25 + 0.75 * phase;
+        }
+
+        // 如果这个 prompt 正在被拖拽，应用鼠标偏移
+        let rectForDraw = labelRect.rect;
+        if (this.moveRectId === labelRect.id && this.startMoveRectPoint && data.mousePositionOnViewPortContent) {
+            // 计算视口空间的偏移，再转换到图像空间
+            const delta: IPoint = PointUtil.subtract(data.mousePositionOnViewPortContent, this.startMoveRectPoint);
+            const scale: number = RenderEngineUtil.calculateImageScale(data);
+            const deltaOnImage: IPoint = PointUtil.multiply(delta, scale);
+            rectForDraw = RectUtil.translate(rectForDraw, deltaOnImage);
+        }
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+
+        if (labelRect.promptLabel) {
+            // ── 点 prompt → 圆点 + 外环 ──
+            const center: IPoint = {
+                x: rectForDraw.x + rectForDraw.width / 2,
+                y: rectForDraw.y + rectForDraw.height / 2,
+            };
+            const vp = RenderEngineUtil.transferPointFromImageToViewPortContent(center, data);
+            const color = labelRect.promptLabel === 'negative' ? '#ff4444' : '#44ff88';
+
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
+            // 实心内圆
+            ctx.beginPath();
+            ctx.arc(vp.x, vp.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+            // 外环
+            ctx.beginPath();
+            ctx.arc(vp.x, vp.y, 11, 0, Math.PI * 2);
+            ctx.stroke();
+        } else {
+            // ── bbox prompt → 蓝色虚线框 ──
+            const tl = RenderEngineUtil.transferPointFromImageToViewPortContent(
+                {x: rectForDraw.x, y: rectForDraw.y}, data);
+            const br = RenderEngineUtil.transferPointFromImageToViewPortContent(
+                {x: rectForDraw.x + rectForDraw.width, y: rectForDraw.y + rectForDraw.height}, data);
+            const w = br.x - tl.x;
+            const h = br.y - tl.y;
+
+            ctx.strokeStyle = '#4488ff';
+            ctx.fillStyle = '#4488ff';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 4]);
+            ctx.globalAlpha = alpha * 0.15;
+            ctx.fillRect(tl.x, tl.y, w, h);
+            ctx.globalAlpha = alpha;
+            ctx.strokeRect(tl.x, tl.y, w, h);
+        }
+
+        ctx.restore();
     }
 
     private drawInactiveRect(labelRect: LabelRect, data: EditorData) {
@@ -514,6 +613,41 @@ export class RectRenderEngine extends BaseRenderEngine {
             }
         }
         return false;
+    }
+
+    /**
+     * 检测鼠标是否命中已有的 prompt LabelRect。
+     * 点 prompt（tiny rect）: 视口空间 15px 半径；bbox prompt: 点击在框内部。
+     */
+    private getPromptRectUnderMouse(data: EditorData): LabelRect | null {
+        const imageData: ImageData = LabelsSelector.getActiveImageData();
+        if (!imageData) return null;
+        const prompts = imageData.labelRects.filter(r => r.isPrompt);
+        const HIT_RADIUS_SQ = 15 * 15;
+        for (const p of prompts) {
+            if (p.promptLabel) {
+                // 点 prompt — 用中心点做距离检测
+                const center: IPoint = {
+                    x: p.rect.x + p.rect.width / 2,
+                    y: p.rect.y + p.rect.height / 2,
+                };
+                const vpPt = RenderEngineUtil.transferPointFromImageToViewPortContent(center, data);
+                const dx = vpPt.x - data.mousePositionOnViewPortContent.x;
+                const dy = vpPt.y - data.mousePositionOnViewPortContent.y;
+                if (dx * dx + dy * dy < HIT_RADIUS_SQ) return p;
+            } else {
+                // bbox prompt — 内部命中
+                const tl = RenderEngineUtil.transferPointFromImageToViewPortContent(
+                    {x: p.rect.x, y: p.rect.y}, data);
+                const br = RenderEngineUtil.transferPointFromImageToViewPortContent(
+                    {x: p.rect.x + p.rect.width, y: p.rect.y + p.rect.height}, data);
+                if (data.mousePositionOnViewPortContent.x >= tl.x &&
+                    data.mousePositionOnViewPortContent.x <= br.x &&
+                    data.mousePositionOnViewPortContent.y >= tl.y &&
+                    data.mousePositionOnViewPortContent.y <= br.y) return p;
+            }
+        }
+        return null;
     }
 
     private getRectUnderMouse(data: EditorData): LabelRect {

@@ -18,6 +18,7 @@ export type GeneralState = {
     preventCustomCursor: boolean;
     imageDragMode: boolean;
     smartAnnotationActive: boolean;
+    samNegativeMode: boolean;       // true = 负点模式；false = 正点模式（默认）
     trackingMode: boolean;
     trackingInProgress: boolean;
     eraserMode: boolean;
@@ -134,6 +135,13 @@ interface UpdateEraserFineMode {
     }
 }
 
+interface UpdateSamNegativeMode {
+    type: typeof Action.UPDATE_SAM_NEGATIVE_MODE;
+    payload: {
+        samNegativeMode: boolean;
+    }
+}
+
 export type GeneralActionTypes = UpdateProjectData
     | UpdateWindowSize
     | UpdateActivePopupType
@@ -146,6 +154,7 @@ export type GeneralActionTypes = UpdateProjectData
     | UpdateTrackingInProgressStatus
     | UpdateEraserMode
     | UpdateEraserFineMode
+    | UpdateSamNegativeMode
     | UpdateZoom
     | UpdatePerClassColoration
     | UpdateLanguage

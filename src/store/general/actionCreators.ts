@@ -69,6 +69,13 @@ export function updateSmartAnnotationActiveStatus(smartAnnotationActive: boolean
     };
 }
 
+export function updateSamNegativeMode(samNegativeMode: boolean): GeneralActionTypes {
+    return {
+        type: Action.UPDATE_SAM_NEGATIVE_MODE,
+        payload: { samNegativeMode },
+    };
+}
+
 export function updateTrackingModeStatus(trackingMode: boolean): GeneralActionTypes {
     return {
         type: Action.UPDATE_TRACKING_MODE_STATUS,

@@ -125,9 +125,11 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
         }
 
         // 按 viewType 过滤：检测标签只画矩形，分割标签只画多边形，查看全部都画
+        // 智能标注 / 橡皮擦 / 检索模式下强制显示全部，避免侧栏 tab 过滤导致标签"消失"
+        const forceAll = isSmart || isEraser || isTracking;
         const viewType = LabelsSelector.getActiveLabelViewType();
-        const showRects = viewType === LabelType.ALL || viewType === LabelType.RECT;
-        const showPolygons = viewType === LabelType.ALL || viewType === LabelType.POLYGON;
+        const showRects = forceAll || viewType === LabelType.ALL || viewType === LabelType.RECT;
+        const showPolygons = forceAll || viewType === LabelType.ALL || viewType === LabelType.POLYGON;
 
         if (showRects) {
             if (isSmart) {

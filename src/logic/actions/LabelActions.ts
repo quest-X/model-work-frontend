@@ -14,7 +14,8 @@ export class LabelActions {
     }
 
     public static deleteImageLabelById(imageId: string, labelId: string) {
-        switch (LabelsSelector.getActiveLabelType()) {
+        const labelType = LabelsSelector.getActiveLabelType();
+        switch (labelType) {
             case LabelType.POINT:
                 LabelActions.deletePointLabelById(imageId, labelId);
                 break;
@@ -27,6 +28,21 @@ export class LabelActions {
             case LabelType.LINE:
                 LabelActions.deleteLineLabelById(imageId, labelId);
                 break;
+            case LabelType.ALL: {
+                // ALL 视图（智能标注/橡皮擦等）：按 labelId 在各类型中查找并删除
+                const imageData = LabelsSelector.getImageDataById(imageId);
+                if (!imageData) break;
+                if (imageData.labelRects?.some(r => r.id === labelId)) {
+                    LabelActions.deleteRectLabelById(imageId, labelId);
+                } else if (imageData.labelPolygons?.some(p => p.id === labelId)) {
+                    LabelActions.deletePolygonLabelById(imageId, labelId);
+                } else if (imageData.labelPoints?.some(p => p.id === labelId)) {
+                    LabelActions.deletePointLabelById(imageId, labelId);
+                } else if (imageData.labelLines?.some(l => l.id === labelId)) {
+                    LabelActions.deleteLineLabelById(imageId, labelId);
+                }
+                break;
+            }
         }
     }
 

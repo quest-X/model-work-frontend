@@ -11,6 +11,7 @@ export interface ImageButtonProps extends React.HTMLProps<HTMLDivElement> {
     imageAlt:string,
     href?:string
     onClick?:() => any;
+    onDoubleClick?:() => any;
     style?:React.CSSProperties
     isActive?:boolean;
     isDisabled?:boolean;
@@ -18,12 +19,17 @@ export interface ImageButtonProps extends React.HTMLProps<HTMLDivElement> {
 }
 
 export const ImageButton = React.forwardRef((props: ImageButtonProps, ref: LegacyRef<HTMLDivElement>) => {
-    const {buttonSize, padding, image, imageAlt, href, onClick, style, isActive, isDisabled, externalClassName} = props;
+    const {buttonSize, padding, image, imageAlt, href, onClick, onDoubleClick, style, isActive, isDisabled, externalClassName} = props;
     const imagePadding:number = !!padding ? padding : 10;
 
-    const onClickHandler = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+    const onClickHandler = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
         event.stopPropagation();
         !!onClick && onClick();
+    };
+
+    const onDoubleClickHandler = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+        event.stopPropagation();
+        !!onDoubleClick && onDoubleClick();
     };
 
     const buttonStyle:React.CSSProperties = {
@@ -47,12 +53,13 @@ export const ImageButton = React.forwardRef((props: ImageButtonProps, ref: Legac
             }
         );
     };
-    
+
     return(
         <div
             className={getClassName()}
             style={buttonStyle}
             onClick={onClickHandler}
+            onDoubleClick={onDoubleClickHandler}
             ref={ref}
         >
             {!!href && <a href={href} style={imageStyle} target="_blank" rel="noopener noreferrer">

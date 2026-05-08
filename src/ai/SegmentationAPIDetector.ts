@@ -84,9 +84,9 @@ export const DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS: SegmentationPostprocessPar
     min_mask_area: 200,
     largest_cc_only: false,
     mask_dilate: 1,
-    max_polygon_points: 30,
+    max_polygon_points: 50,
     mask_iou_threshold: 0.5,
-    polygon_epsilon_enabled: true,
+    polygon_epsilon_enabled: false,
     min_mask_area_enabled: true,
     largest_cc_only_enabled: false,
     mask_dilate_enabled: false,
@@ -259,7 +259,15 @@ export class SegmentationAPIDetector {
     public static async predictFromBlob(
         blob: Blob,
         filename: string = 'frame.jpg',
-        prompt?: { bbox?: [number, number, number, number]; point?: [number, number] }
+        prompt?: {
+            bbox?: [number, number, number, number];
+            // legacy single-point (kept for backward compat)
+            point?: [number, number];
+            pointLabel?: number;
+            // multi-point support
+            points?: [number, number][];
+            pointLabels?: number[];
+        }
     ): Promise<SegmentationResult[]> {
         // 当没有 prompt 时(批量分割路径)才从 store 同步 activeModel;
         // 带 prompt 的 SAM 智能标注保持走 config(由 LoadDetectionModelPopup 设置)。
@@ -274,9 +282,18 @@ export class SegmentationAPIDetector {
 
         const formData = new FormData();
         formData.append('file', blob, filename);
-        if (prompt?.point) {
-            formData.append('point', `${Math.round(prompt.point[0])},${Math.round(prompt.point[1])}`);
-        } else if (prompt?.bbox) {
+
+        if (prompt?.points && prompt.points.length > 0) {
+            // Multi-point: "x1,y1;x2,y2;..."
+            formData.append('points', prompt.points.map(([x, y]) =>
+                `${Math.round(x)},${Math.round(y)}`).join(';'));
+            formData.append('point_labels', (prompt.pointLabels || prompt.points.map(() => 1)).join(';'));
+        } else if (prompt?.point) {
+            // Legacy single-point
+            formData.append('points', `${Math.round(prompt.point[0])},${Math.round(prompt.point[1])}`);
+            formData.append('point_labels', String(prompt.pointLabel ?? 1));
+        }
+        if (prompt?.bbox) {
             const [x1, y1, x2, y2] = prompt.bbox;
             formData.append('bbox', `${Math.round(x1)},${Math.round(y1)},${Math.round(x2)},${Math.round(y2)}`);
         }

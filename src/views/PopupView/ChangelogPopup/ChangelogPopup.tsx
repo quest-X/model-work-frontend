@@ -16,6 +16,19 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.5.5',
+        date: '2026-05-08',
+        changes: [
+            { zh: '【新功能】SAM 智能标注原生化：prompt 点/框存储为原生 LabelRect（isPrompt 标记），继承拖拽移动、Backspace 删除等全部标签交互', en: '[Feature] SAM smart annotation nativized: prompt points/bboxes stored as native LabelRect (isPrompt flag), inheriting drag-to-move, Backspace delete, and all label interactions' },
+            { zh: '【修复】SAM 多点 prompt 形状修正：多点从 (N,2) 改为 (1,N,2)，确保所有点合成一个 prompt 而非 N 个独立 prompt', en: '[Fix] SAM multi-point prompt shape: changed from (N,2) to (1,N,2) so all points form one combined prompt instead of N separate ones' },
+            { zh: '【修复】SAM points+bbox 同时传递：ultralytics 不支持同时传 points 和 bboxes，改为将 bbox 转为 label=2/3 的特殊点合并到 points 列表', en: '[Fix] SAM points+bbox simultaneous prompt: ultralytics cannot handle both; bbox corners are now converted to special points (label=2 top-left, label=3 bottom-right) merged into the points list' },
+            { zh: '【修复】ALL 视图标签消失：智能标注/橡皮擦/检索模式下强制显示全部标签类型，不受侧栏 tab 过滤', en: '[Fix] Labels disappearing in ALL view: smart annotation / eraser / retrieval modes now force-show all label types regardless of sidebar tab filter' },
+            { zh: '【修复】Backspace 在 ALL 视图下无法删除标签：LabelActions.deleteImageLabelById 新增 LabelType.ALL 分支，按 ID 在所有标签类型中查找并删除', en: '[Fix] Backspace not deleting labels in ALL view: LabelActions.deleteImageLabelById now handles LabelType.ALL by searching across all label types' },
+            { zh: '【UI】显示/隐藏标签按钮移至绘制工具组（多边形旁边）', en: '[UI] Toggle labels button moved to drawing tools group (next to polygon)' },
+            { zh: '【调整】后处理默认值：polygon_epsilon 默认关闭，max_polygon_points 默认 50', en: '[Adjust] Postprocess defaults: polygon_epsilon disabled by default, max_polygon_points default changed to 50' },
+        ]
+    },
+    {
         version: '2.5.4',
         date: '2026-05-07',
         changes: [

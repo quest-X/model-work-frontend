@@ -17,6 +17,10 @@ export type LabelRect = Annotation & {
     status: LabelStatus;
     suggestedLabel: string;
     confidence?: number; // AI 检测置信度 (0-1)
+    /** SAM prompt 标记：isPrompt=true 时为临时 prompt（推理后自动清除） */
+    isPrompt?: boolean;
+    /** 点 prompt 类型 */
+    promptLabel?: 'positive' | 'negative';
 }
 
 export type LabelPoint = Annotation & {

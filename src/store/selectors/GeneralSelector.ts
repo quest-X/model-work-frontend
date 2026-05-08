@@ -25,6 +25,10 @@ export class GeneralSelector {
         return store.getState().general.smartAnnotationActive;
     }
 
+    public static getSamNegativeMode(): boolean {
+        return store.getState().general.samNegativeMode ?? false;
+    }
+
     public static getTrackingMode(): boolean {
         return store.getState().general.trackingMode;
     }
