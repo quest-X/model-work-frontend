@@ -16,6 +16,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.5.7',
+        date: '2026-05-08',
+        changes: [
+            { zh: '【修复】Redux 幂等守卫：generalReducer 标量赋值 case 增加值相等短路返回，阻断 canvas render → dispatch → re-render 无限循环', en: '[Fix] Redux idempotency guards: scalar-assignment cases in generalReducer now short-circuit when value equals current state, preventing canvas render → dispatch → re-render infinite loops' },
+            { zh: '【修复】通知动画改用 translateX 替代 width 动画，消除布局抖动（layout thrashing）', en: '[Fix] Notification animation switched from width to translateX, eliminating layout thrashing' },
+            { zh: '【UI】任务管理器图标更新', en: '[UI] Task manager icon updated' },
+        ]
+    },
+    {
         version: '2.5.6',
         date: '2026-05-08',
         changes: [

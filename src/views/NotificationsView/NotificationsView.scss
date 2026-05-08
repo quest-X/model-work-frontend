@@ -12,6 +12,7 @@ $warningColor: #eed202;
 
 .notification-wrapper {
   position: fixed;
+  width: calc(#{$messageWidth} + 2 * #{$wrapperMargin});
   height: calc(#{$messageHeight} + 2 * #{$wrapperMargin});
   bottom: 0;
   right: 0;
@@ -289,28 +290,28 @@ $warningColor: #eed202;
 
 @keyframes animation-in {
   0%   {
-    width: 0;
+    transform: translateX(100%);
   }
   100%  {
-    width: calc(#{$messageWidth} + 2 * #{$wrapperMargin});
+    transform: translateX(0);
   }
 }
 
 @keyframes animation-display {
   0%   {
-    width: calc(#{$messageWidth} + 2 * #{$wrapperMargin});
+    transform: translateX(0);
   }
   100%  {
-    width: calc(#{$messageWidth} + 2 * #{$wrapperMargin});
+    transform: translateX(0);
   }
 }
 
 @keyframes animation-out {
   0%   {
-    width: calc(#{$messageWidth} + 2 * #{$wrapperMargin});
+    transform: translateX(0);
   }
   100%  {
-    width: 0;
+    transform: translateX(100%);
   }
 }
 
