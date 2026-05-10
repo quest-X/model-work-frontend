@@ -19,7 +19,8 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
         version: '2.6.6',
         date: '2026-05-10',
         changes: [
-            { zh: '【功能】任务管理器底栏新增实时资源监控（CPU / RAM / GPU）：每秒刷新，按占用率着色（<50% 绿 / 50-80% 橙 / >80% 红）；GPU 支持 macOS MPS (ioreg) 与 NVIDIA CUDA (torch.cuda.utilization())，跨平台兼容', en: '[Feat] Real-time resource monitor (CPU / RAM / GPU) in TaskManager footer: updates every second, colour-coded by utilisation (<50% green / 50-80% orange / >80% red); GPU supports macOS MPS via ioreg and NVIDIA CUDA via torch.cuda.utilization(), cross-platform' },
+            { zh: '【功能】任务管理器底栏新增实时资源监控（CPU / RAM / GPU）：后端 /health 新增 resources 字段，前端每秒轮询，按占用率着色（<50% 绿 / 50-80% 橙 / >80% 红）', en: '[Feat] Real-time resource monitor (CPU / RAM / GPU) in TaskManager footer: /health now exposes a resources field, frontend polls every second, colour-coded by utilisation (<50% green / 50-80% orange / >80% red)' },
+            { zh: '【功能】GPU 监控使用真实核心占用率：macOS MPS 通过 ioreg Device Utilization % 获取，NVIDIA CUDA 通过 torch.cuda.utilization()，跨平台兼容', en: '[Feat] GPU monitor reports real core utilisation: macOS MPS reads ioreg Device Utilization %, NVIDIA CUDA uses torch.cuda.utilization(), cross-platform' },
         ]
     },
     {
