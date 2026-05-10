@@ -11,8 +11,7 @@ interface ResourceStats {
     cpu_percent?: number;
     ram_used_gb?: number;
     ram_total_gb?: number;
-    gpu_vram_used_gb?: number;
-    gpu_vram_total_gb?: number;
+    gpu_percent?: number;
 }
 
 interface OwnProps {
@@ -161,10 +160,9 @@ const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, 
                         const pct = (resources.ram_used_gb / resources.ram_total_gb) * 100;
                         return <ResourceChip label='RAM' value={`${pct.toFixed(0)}%`} pct={pct}/>;
                     })()}
-                    {resources.gpu_vram_used_gb !== undefined && resources.gpu_vram_total_gb !== undefined && (() => {
-                        const pct = (resources.gpu_vram_used_gb / resources.gpu_vram_total_gb) * 100;
-                        return <ResourceChip label='GPU' value={`${pct.toFixed(0)}%`} pct={pct}/>;
-                    })()}
+                    {resources.gpu_percent !== undefined && (
+                        <ResourceChip label='GPU' value={`${resources.gpu_percent}%`} pct={resources.gpu_percent}/>
+                    )}
                 </div>
                 <label className='TaskManagerPanel__switch'>
                     <span className='TaskManagerPanel__switchLabel'>

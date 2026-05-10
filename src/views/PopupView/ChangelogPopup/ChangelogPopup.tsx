@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.9',
+        date: '2026-05-10',
+        changes: [
+            { zh: '【功能】GPU 监控改为真实核心占用率：macOS 通过 ioreg Device Utilization % 获取，CUDA 通过显存占比计算；移除 gpu_vram_used_gb / gpu_vram_total_gb 字段，统一用 gpu_percent', en: '[Feat] GPU monitor now reports real core utilisation: macOS reads ioreg Device Utilization %, CUDA uses VRAM ratio; removed gpu_vram_used_gb / gpu_vram_total_gb fields, unified as gpu_percent' },
+        ]
+    },
+    {
         version: '2.6.8',
         date: '2026-05-10',
         changes: [
