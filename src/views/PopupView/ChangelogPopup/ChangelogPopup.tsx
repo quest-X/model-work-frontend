@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.7.0',
+        date: '2026-05-10',
+        changes: [
+            { zh: '【功能】GPU 监控跨平台兼容：CUDA (Windows/Linux) 改用 torch.cuda.utilization() 获取真实核心占用率；macOS MPS 沿用 ioreg Device Utilization %', en: '[Feat] GPU monitor cross-platform: CUDA (Windows/Linux) now uses torch.cuda.utilization() for real core utilisation; macOS MPS continues using ioreg Device Utilization %' },
+        ]
+    },
+    {
         version: '2.6.9',
         date: '2026-05-10',
         changes: [
