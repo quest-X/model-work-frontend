@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.6',
+        date: '2026-05-10',
+        changes: [
+            { zh: '【功能】资源监控 (CPU/RAM) 实时显示在任务管理器底栏：后端 /health 新增 resources 字段（psutil 提供 CPU% / RAM，torch.cuda 提供 GPU VRAM），前端每 2 秒轮询，按使用率着色（<50% 绿 / 50-80% 橙 / >80% 红）', en: '[Feat] Real-time resource monitor (CPU/RAM) in TaskManager footer: /health now includes a resources field (psutil: cpu_percent/ram; torch.cuda: GPU VRAM), frontend polls every 2s and color-codes by utilisation (<50% green / 50-80% orange / >80% red)' },
+        ]
+    },
+    {
         version: '2.6.5',
         date: '2026-05-10',
         changes: [

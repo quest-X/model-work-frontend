@@ -4,7 +4,16 @@ import {AppState} from '../../../store';
 import {ManagedTask, TaskPriority} from '../../../store/tasks/types';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {TaskRow} from './TaskRow';
+import {getDefaultBackendBase} from '../../../utils/DefaultBackendUrl';
 import './TaskManagerPanel.scss';
+
+interface ResourceStats {
+    cpu_percent?: number;
+    ram_used_gb?: number;
+    ram_total_gb?: number;
+    gpu_vram_used_gb?: number;
+    gpu_vram_total_gb?: number;
+}
 
 interface OwnProps {
     onClose: () => void;
@@ -30,6 +39,21 @@ const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, 
     // 已完成任务的显示/隐藏开关，默认隐藏
     const [showCompleted, setShowCompleted] = useState(false);
     const toggleShowCompleted = useCallback(() => setShowCompleted(v => !v), []);
+
+    // 资源监控：面板打开时每 2s 轮询一次 /health
+    const [resources, setResources] = useState<ResourceStats>({});
+    useEffect(() => {
+        const base = getDefaultBackendBase();
+        const poll = () => {
+            fetch(`${base}/health`)
+                .then(r => r.json())
+                .then(data => { if (data.resources) setResources(data.resources); })
+                .catch(() => {});
+        };
+        poll();
+        const id = setInterval(poll, 2000);
+        return () => clearInterval(id);
+    }, []);
 
     // 面板的右下角贴在 anchor（按钮）的左上角。
     // 用 inline style 覆盖 SCSS 里的 bottom/right 默认值。anchor 缺失时退回默认右下角。
@@ -123,8 +147,31 @@ const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, 
                     )
                 ))}
             </div>
-            {/* 底栏：显示已完成开关 */}
+            {/* 底栏：资源监控 + 显示已完成开关 */}
             <div className='TaskManagerPanel__footer'>
+                <div className='TaskManagerPanel__resources'>
+                    {resources.cpu_percent !== undefined && (
+                        <ResourceChip
+                            label='CPU'
+                            value={`${resources.cpu_percent}%`}
+                            pct={resources.cpu_percent}
+                        />
+                    )}
+                    {resources.ram_used_gb !== undefined && resources.ram_total_gb !== undefined && (
+                        <ResourceChip
+                            label='RAM'
+                            value={`${resources.ram_used_gb.toFixed(1)}/${resources.ram_total_gb.toFixed(0)}G`}
+                            pct={(resources.ram_used_gb / resources.ram_total_gb) * 100}
+                        />
+                    )}
+                    {resources.gpu_vram_used_gb !== undefined && resources.gpu_vram_total_gb !== undefined && (
+                        <ResourceChip
+                            label='GPU'
+                            value={`${resources.gpu_vram_used_gb.toFixed(1)}/${resources.gpu_vram_total_gb.toFixed(0)}G`}
+                            pct={(resources.gpu_vram_used_gb / resources.gpu_vram_total_gb) * 100}
+                        />
+                    )}
+                </div>
                 <label className='TaskManagerPanel__switch'>
                     <span className='TaskManagerPanel__switchLabel'>
                         {t.showCompleted}{completedCount > 0 ? ` (${completedCount})` : ''}
@@ -138,6 +185,16 @@ const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, 
                 </label>
             </div>
         </div>
+    );
+};
+
+const ResourceChip: React.FC<{label: string; value: string; pct: number}> = ({label, value, pct}) => {
+    const color = pct >= 80 ? '#e05c5c' : pct >= 50 ? '#e0a85c' : '#5cc98a';
+    return (
+        <span className='TaskManagerPanel__resourceChip'>
+            <span className='TaskManagerPanel__resourceLabel'>{label}</span>
+            <span className='TaskManagerPanel__resourceValue' style={{color}}>{value}</span>
+        </span>
     );
 };
 
