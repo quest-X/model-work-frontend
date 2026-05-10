@@ -19,35 +19,7 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
         version: '2.7.0',
         date: '2026-05-10',
         changes: [
-            { zh: '【功能】GPU 监控跨平台兼容：CUDA (Windows/Linux) 改用 torch.cuda.utilization() 获取真实核心占用率；macOS MPS 沿用 ioreg Device Utilization %', en: '[Feat] GPU monitor cross-platform: CUDA (Windows/Linux) now uses torch.cuda.utilization() for real core utilisation; macOS MPS continues using ioreg Device Utilization %' },
-        ]
-    },
-    {
-        version: '2.6.9',
-        date: '2026-05-10',
-        changes: [
-            { zh: '【功能】GPU 监控改为真实核心占用率：macOS 通过 ioreg Device Utilization % 获取，CUDA 通过显存占比计算；移除 gpu_vram_used_gb / gpu_vram_total_gb 字段，统一用 gpu_percent', en: '[Feat] GPU monitor now reports real core utilisation: macOS reads ioreg Device Utilization %, CUDA uses VRAM ratio; removed gpu_vram_used_gb / gpu_vram_total_gb fields, unified as gpu_percent' },
-        ]
-    },
-    {
-        version: '2.6.8',
-        date: '2026-05-10',
-        changes: [
-            { zh: '【功能】资源监控统一百分比显示：RAM 和 GPU 显存由 "X.X/YG" 格式改为 "XX%"，与 CPU 显示风格保持一致', en: '[Feat] Resource monitor unified percentage display: RAM and GPU VRAM now show "XX%" instead of "X.X/YG", consistent with CPU display style' },
-        ]
-    },
-    {
-        version: '2.6.7',
-        date: '2026-05-10',
-        changes: [
-            { zh: '【功能】资源监控补全 GPU 显存：后端新增 MPS 支持（driver_allocated_memory + recommended_max_memory），并兼容只有 used 无 total 的芯片（仅显示已用量）；轮询间隔从 2s 提速至 1s', en: '[Feat] Resource monitor GPU VRAM completed: backend now supports MPS (driver_allocated_memory + recommended_max_memory) in addition to CUDA; frontend handles chips where only used VRAM is available (display used-only); polling interval reduced from 2s to 1s' },
-        ]
-    },
-    {
-        version: '2.6.6',
-        date: '2026-05-10',
-        changes: [
-            { zh: '【功能】资源监控 (CPU/RAM) 实时显示在任务管理器底栏：后端 /health 新增 resources 字段（psutil 提供 CPU% / RAM，torch.cuda 提供 GPU VRAM），前端每 2 秒轮询，按使用率着色（<50% 绿 / 50-80% 橙 / >80% 红）', en: '[Feat] Real-time resource monitor (CPU/RAM) in TaskManager footer: /health now includes a resources field (psutil: cpu_percent/ram; torch.cuda: GPU VRAM), frontend polls every 2s and color-codes by utilisation (<50% green / 50-80% orange / >80% red)' },
+            { zh: '【功能】任务管理器底栏新增实时资源监控（CPU / RAM / GPU）：每秒刷新，按占用率着色（<50% 绿 / 50-80% 橙 / >80% 红）；GPU 支持 macOS MPS (ioreg) 与 NVIDIA CUDA (torch.cuda.utilization())，跨平台兼容', en: '[Feat] Real-time resource monitor (CPU / RAM / GPU) in TaskManager footer: updates every second, colour-coded by utilisation (<50% green / 50-80% orange / >80% red); GPU supports macOS MPS via ioreg and NVIDIA CUDA via torch.cuda.utilization(), cross-platform' },
         ]
     },
     {
