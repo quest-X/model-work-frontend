@@ -16,7 +16,7 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
-        version: '2.7.0',
+        version: '2.6.6',
         date: '2026-05-10',
         changes: [
             { zh: '【功能】任务管理器底栏新增实时资源监控（CPU / RAM / GPU）：每秒刷新，按占用率着色（<50% 绿 / 50-80% 橙 / >80% 红）；GPU 支持 macOS MPS (ioreg) 与 NVIDIA CUDA (torch.cuda.utilization())，跨平台兼容', en: '[Feat] Real-time resource monitor (CPU / RAM / GPU) in TaskManager footer: updates every second, colour-coded by utilisation (<50% green / 50-80% orange / >80% red); GPU supports macOS MPS via ioreg and NVIDIA CUDA via torch.cuda.utilization(), cross-platform' },
