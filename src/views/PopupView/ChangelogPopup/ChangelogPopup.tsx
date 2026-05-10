@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.4',
+        date: '2026-05-10',
+        changes: [
+            { zh: '【修复】模型下载中断后无法重新下载：detection.py / segmentation.py 新增 _purge_corrupt_cache()，load_model() 失败时自动清理 ~/.cache/ultralytics/ 下的残缺 .pt 文件，下次请求可正常重新下载', en: '[Fix] Model re-download blocked after interrupted download: detection.py and segmentation.py now call _purge_corrupt_cache() on load_model() failure, automatically removing corrupt .pt files from ~/.cache/ultralytics/ so the next request can re-download cleanly' },
+        ]
+    },
+    {
         version: '2.6.3',
         date: '2026-05-09',
         changes: [
