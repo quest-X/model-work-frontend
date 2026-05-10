@@ -71,6 +71,11 @@
       background-color: rgba(0, 158, 253, 0.2);
     }
 
+    &.pinned {
+      background-color: rgba(0, 158, 253, 0.35);
+      box-shadow: 0 0 0 1.5px rgba(0, 158, 253, 0.7);
+    }
+
     .Badge {
       position: absolute;
       top: -4px;

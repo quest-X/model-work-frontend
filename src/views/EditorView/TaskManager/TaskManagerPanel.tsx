@@ -16,8 +16,9 @@ interface ResourceStats {
 
 interface OwnProps {
     onClose: () => void;
-    excludeRef?: React.RefObject<HTMLElement>; // 按钮自身 ref，click-outside 时排除
-    anchorRef?: React.RefObject<HTMLElement>; // 锚点：面板的右下角贴在锚点的左上角
+    excludeRef?: React.RefObject<HTMLElement>;
+    anchorRef?: React.RefObject<HTMLElement>;
+    pinned?: boolean;
 }
 
 interface StateProps {
@@ -31,7 +32,7 @@ const PRIORITIES: TaskPriority[] = ['P0', 'P1', 'P2'];
 
 const FINISHED: Set<string> = new Set(['completed', 'cancelled', 'error']);
 
-const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, excludeRef, anchorRef}) => {
+const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, excludeRef, anchorRef, pinned}) => {
     const panelRef = useRef<HTMLDivElement>(null);
     const t = LanguageConfig[language].taskManager;
 
@@ -78,6 +79,7 @@ const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, 
     // 否则会出现"点按钮关→onClick 又开"的来回切换。
     useEffect(() => {
         const handler = (e: MouseEvent) => {
+            if (pinned) return;
             const target = e.target as Node;
             if (panelRef.current && panelRef.current.contains(target)) return;
             if (excludeRef?.current && excludeRef.current.contains(target)) return;

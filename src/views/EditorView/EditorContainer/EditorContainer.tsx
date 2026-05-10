@@ -99,9 +99,30 @@ const EditorContainer: React.FC<IProps> = (
     const [isWindowDragActive, setIsWindowDragActive] = useState(false);
     const [videoProcessing, setVideoProcessing] = useState<{phase: string; progress: number; fileName: string} | null>(null);
 
-    // Task Manager 浮动面板开关 + 按钮 ref（click-outside 排除按钮自身）
+    // Task Manager 浮动面板开关 + 固定状态 + 按钮 ref
     const [taskPanelOpen, setTaskPanelOpen] = useState(false);
+    const [taskPanelPinned, setTaskPanelPinned] = useState(false);
     const taskButtonRef = useRef<HTMLDivElement>(null);
+    const taskClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleTaskButtonClick = useCallback(() => {
+        if (taskClickTimer.current !== null) {
+            // 双击：固定/取消固定
+            clearTimeout(taskClickTimer.current);
+            taskClickTimer.current = null;
+            setTaskPanelOpen(true);
+            setTaskPanelPinned(p => !p);
+        } else {
+            taskClickTimer.current = setTimeout(() => {
+                taskClickTimer.current = null;
+                // 单击：切换开关，关闭时清除固定
+                setTaskPanelOpen(o => {
+                    if (o) setTaskPanelPinned(false);
+                    return !o;
+                });
+            }, 220);
+        }
+    }, []);
 
     // 手动保存
     const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
@@ -647,7 +668,8 @@ const EditorContainer: React.FC<IProps> = (
             <TaskManagerButton
                 buttonRef={taskButtonRef}
                 isActive={taskPanelOpen}
-                onClick={() => setTaskPanelOpen(o => !o)}
+                isPinned={taskPanelPinned}
+                onClick={handleTaskButtonClick}
             />
         </>
     };
@@ -751,9 +773,10 @@ const EditorContainer: React.FC<IProps> = (
             />
             {taskPanelOpen && (
                 <TaskManagerPanel
-                    onClose={() => setTaskPanelOpen(false)}
+                    onClose={() => { setTaskPanelOpen(false); setTaskPanelPinned(false); }}
                     excludeRef={taskButtonRef}
                     anchorRef={taskButtonRef}
+                    pinned={taskPanelPinned}
                 />
             )}
         </div>

@@ -4,22 +4,25 @@ import {AppState} from '../../../store';
 import {LanguageConfig, Language} from '../../../data/LanguageConfig';
 
 interface IProps {
-    activeCount: number;   // running 中的数量
-    totalCount: number;    // 全部任务数量（含已完成）
+    activeCount: number;
+    totalCount: number;
     isActive: boolean;
+    isPinned?: boolean;
     language: Language;
     onClick: (e: React.MouseEvent) => void;
     buttonRef?: React.RefObject<HTMLDivElement>;
 }
 
-const TaskManagerButtonComponent: React.FC<IProps> = ({activeCount, totalCount, isActive, language, onClick, buttonRef}) => {
+const TaskManagerButtonComponent: React.FC<IProps> = ({activeCount, totalCount, isActive, isPinned, language, onClick, buttonRef}) => {
     const t = LanguageConfig[language].taskManager;
-    const tooltip = t.tooltip.replace('{count}', String(activeCount));
+    const tooltip = isPinned
+        ? (language === 'zh' ? '已固定（双击取消）' : 'Pinned — double-click to unpin')
+        : t.tooltip.replace('{count}', String(activeCount));
     const badgeCount = totalCount;
     return (
         <div
             ref={buttonRef}
-            className={'TaskManagerButtonBottom' + (isActive ? ' active' : '')}
+            className={'TaskManagerButtonBottom' + (isActive ? ' active' : '') + (isPinned ? ' pinned' : '')}
             onClick={onClick}
             title={tooltip}
         >
