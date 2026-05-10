@@ -16,6 +16,17 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.5',
+        date: '2026-05-10',
+        changes: [
+            { zh: '【修复】resolve_model_path 对 sam2.1_* 名称解析失败：Path.suffix 把 ".1_b" 误当扩展名导致 .pt 回退失效，改用显式后缀检查（endsWith .pt/.onnx/.pth）', en: '[Fix] resolve_model_path failed for sam2.1_* names: Path.suffix treated ".1_b" as the extension, skipping the .pt fallback. Replaced with explicit endsWith(.pt/.onnx/.pth) check' },
+            { zh: '【功能】SAM 模型分组重构：SAM 2 合并 sam2.1 全系列（sam2.1_t/s/b/l），SAM 3 合并 sam3.1_multiplex，默认变更为 sam2.1_b / sam3.1_multiplex', en: '[Feat] SAM model family restructure: SAM 2 now includes sam2.1 series (sam2.1_t/s/b/l); SAM 3 includes sam3.1_multiplex; defaults changed to sam2.1_b and sam3.1_multiplex' },
+            { zh: '【修复】本地模型加载显示"正在下载模型"改为"正在加载模型"：detection.py / segmentation.py 识别本地路径后直接进 loading 状态，不再走 downloading', en: '[Fix] Local model load now shows "loading" instead of "downloading": detection.py and segmentation.py now enter loading state immediately when a local path is found, skipping the downloading state' },
+            { zh: '【修复】TopNavigationBar 项目名称与左侧导航按钮重叠：移除动态 canvasCenterX ResizeObserver 定位，改回 CSS 静态居中', en: '[Fix] TopNavigationBar project name overlapping left nav buttons: removed dynamic canvasCenterX ResizeObserver positioning, reverted to CSS static centering' },
+            { zh: '【功能】批量下载检测模型：支持一键批量拉取 yolo11/yolo12/yolov9/yolov10 全系列模型', en: '[Feat] Batch download detection models: one-click bulk download of full yolo11/yolo12/yolov9/yolov10 model series' },
+        ]
+    },
+    {
         version: '2.6.4',
         date: '2026-05-10',
         changes: [

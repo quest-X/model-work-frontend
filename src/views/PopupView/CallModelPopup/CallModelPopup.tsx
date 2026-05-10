@@ -32,8 +32,8 @@ export const SEG_MODEL_FAMILIES: YOLOModelFamily[] = [
     { id: 'yolov8-seg', name: 'ultralytics/yolov8-seg', variants: ['yolov8n-seg', 'yolov8s-seg', 'yolov8m-seg', 'yolov8l-seg', 'yolov8x-seg'] },
     { id: 'yolo11-seg', name: 'ultralytics/yolo11-seg', variants: ['yolo11n-seg', 'yolo11s-seg', 'yolo11m-seg', 'yolo11l-seg', 'yolo11x-seg'] },
     { id: 'sam', name: 'ultralytics/SAM', variants: ['sam_b', 'sam_l'] },
-    { id: 'sam2', name: 'ultralytics/SAM 2', variants: ['sam2_t', 'sam2_s', 'sam2_b', 'sam2_l'], defaultVariant: 'sam2_l' },
-    { id: 'sam3', name: 'ultralytics/SAM 3', variants: ['sam3'] },
+    { id: 'sam2', name: 'ultralytics/SAM 2', variants: ['sam2_t', 'sam2_s', 'sam2_b', 'sam2_l', 'sam2.1_t', 'sam2.1_s', 'sam2.1_b', 'sam2.1_l'], defaultVariant: 'sam2.1_b' },
+    { id: 'sam3', name: 'ultralytics/SAM 3', variants: ['sam3', 'sam3.1_multiplex'], defaultVariant: 'sam3.1_multiplex' },
     { id: 'mobile-sam', name: 'ultralytics/MobileSAM', variants: ['mobile_sam'] },
     { id: 'fast-sam', name: 'ultralytics/FastSAM', variants: ['FastSAM-s', 'FastSAM-x'] },
 ];

@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useRef} from 'react';
+import React, {useState, useEffect} from 'react';
 import './TopNavigationBar.scss';
 import StateBar from '../StateBar/StateBar';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
@@ -24,25 +24,6 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
     const currentTexts = LanguageConfig[props.language];
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
     const [showModelsDropdown, setShowModelsDropdown] = useState(false);
-    const [canvasCenterX, setCanvasCenterX] = useState<number | null>(null);
-    const lastCenterRef = useRef<number | null>(null);
-
-    useEffect(() => {
-        const el = document.querySelector('.EditorWrapper');
-        if (!el) return;
-        const updateCenter = () => {
-            const rect = el.getBoundingClientRect();
-            const center = Math.round(rect.left + rect.width / 2);
-            if (center !== lastCenterRef.current) {
-                lastCenterRef.current = center;
-                setCanvasCenterX(center);
-            }
-        };
-        const observer = new ResizeObserver(updateCenter);
-        observer.observe(el);
-        updateCenter();
-        return () => observer.disconnect();
-    }, []);
 
     const onFocus = (event: React.FocusEvent<HTMLInputElement>) => {
         event.target.setSelectionRange(0, event.target.value.length);
@@ -176,7 +157,6 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                 </div>
                 <div
                     className='ProjectNameContainer'
-                    style={canvasCenterX != null ? { left: canvasCenterX, transform: 'translateX(-50%)' } : undefined}
                 >
                     <div className='ProjectName'>{currentTexts.projectName}</div>
                     <div
