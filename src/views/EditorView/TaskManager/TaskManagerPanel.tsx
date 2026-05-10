@@ -51,7 +51,7 @@ const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, 
                 .catch(() => {});
         };
         poll();
-        const id = setInterval(poll, 2000);
+        const id = setInterval(poll, 1000);
         return () => clearInterval(id);
     }, []);
 
@@ -164,11 +164,15 @@ const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, 
                             pct={(resources.ram_used_gb / resources.ram_total_gb) * 100}
                         />
                     )}
-                    {resources.gpu_vram_used_gb !== undefined && resources.gpu_vram_total_gb !== undefined && (
+                    {resources.gpu_vram_used_gb !== undefined && (
                         <ResourceChip
                             label='GPU'
-                            value={`${resources.gpu_vram_used_gb.toFixed(1)}/${resources.gpu_vram_total_gb.toFixed(0)}G`}
-                            pct={(resources.gpu_vram_used_gb / resources.gpu_vram_total_gb) * 100}
+                            value={resources.gpu_vram_total_gb !== undefined
+                                ? `${resources.gpu_vram_used_gb.toFixed(1)}/${resources.gpu_vram_total_gb.toFixed(0)}G`
+                                : `${resources.gpu_vram_used_gb.toFixed(1)}G`}
+                            pct={resources.gpu_vram_total_gb !== undefined
+                                ? (resources.gpu_vram_used_gb / resources.gpu_vram_total_gb) * 100
+                                : 0}
                         />
                     )}
                 </div>

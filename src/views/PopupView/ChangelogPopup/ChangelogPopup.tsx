@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.7',
+        date: '2026-05-10',
+        changes: [
+            { zh: '【功能】资源监控补全 GPU 显存：后端新增 MPS 支持（driver_allocated_memory + recommended_max_memory），并兼容只有 used 无 total 的芯片（仅显示已用量）；轮询间隔从 2s 提速至 1s', en: '[Feat] Resource monitor GPU VRAM completed: backend now supports MPS (driver_allocated_memory + recommended_max_memory) in addition to CUDA; frontend handles chips where only used VRAM is available (display used-only); polling interval reduced from 2s to 1s' },
+        ]
+    },
+    {
         version: '2.6.6',
         date: '2026-05-10',
         changes: [
