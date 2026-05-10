@@ -570,7 +570,7 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '167px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.6.7</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.6.8</div>
             <div
                 className='SaveButtonBottom'
                 onClick={handleSave}

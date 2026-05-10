@@ -157,24 +157,14 @@ const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, 
                             pct={resources.cpu_percent}
                         />
                     )}
-                    {resources.ram_used_gb !== undefined && resources.ram_total_gb !== undefined && (
-                        <ResourceChip
-                            label='RAM'
-                            value={`${resources.ram_used_gb.toFixed(1)}/${resources.ram_total_gb.toFixed(0)}G`}
-                            pct={(resources.ram_used_gb / resources.ram_total_gb) * 100}
-                        />
-                    )}
-                    {resources.gpu_vram_used_gb !== undefined && (
-                        <ResourceChip
-                            label='GPU'
-                            value={resources.gpu_vram_total_gb !== undefined
-                                ? `${resources.gpu_vram_used_gb.toFixed(1)}/${resources.gpu_vram_total_gb.toFixed(0)}G`
-                                : `${resources.gpu_vram_used_gb.toFixed(1)}G`}
-                            pct={resources.gpu_vram_total_gb !== undefined
-                                ? (resources.gpu_vram_used_gb / resources.gpu_vram_total_gb) * 100
-                                : 0}
-                        />
-                    )}
+                    {resources.ram_used_gb !== undefined && resources.ram_total_gb !== undefined && (() => {
+                        const pct = (resources.ram_used_gb / resources.ram_total_gb) * 100;
+                        return <ResourceChip label='RAM' value={`${pct.toFixed(0)}%`} pct={pct}/>;
+                    })()}
+                    {resources.gpu_vram_used_gb !== undefined && resources.gpu_vram_total_gb !== undefined && (() => {
+                        const pct = (resources.gpu_vram_used_gb / resources.gpu_vram_total_gb) * 100;
+                        return <ResourceChip label='GPU' value={`${pct.toFixed(0)}%`} pct={pct}/>;
+                    })()}
                 </div>
                 <label className='TaskManagerPanel__switch'>
                     <span className='TaskManagerPanel__switchLabel'>

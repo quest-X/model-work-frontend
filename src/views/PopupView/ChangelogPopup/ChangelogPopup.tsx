@@ -16,6 +16,13 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.8',
+        date: '2026-05-10',
+        changes: [
+            { zh: '【功能】资源监控统一百分比显示：RAM 和 GPU 显存由 "X.X/YG" 格式改为 "XX%"，与 CPU 显示风格保持一致', en: '[Feat] Resource monitor unified percentage display: RAM and GPU VRAM now show "XX%" instead of "X.X/YG", consistent with CPU display style' },
+        ]
+    },
+    {
         version: '2.6.7',
         date: '2026-05-10',
         changes: [
