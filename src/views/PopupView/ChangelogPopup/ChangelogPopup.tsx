@@ -16,6 +16,18 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.7',
+        date: '2026-05-11',
+        changes: [
+            { zh: '【功能】自定义脚本管道：支持上传 Python 脚本作为前处理/后处理 hook，检测与分割推理前后可执行用户逻辑（光流计算、阈值过滤等）', en: '[Feat] Custom script pipeline: upload Python scripts as pre/post-process hooks; detection and segmentation can execute user logic before/after inference (optical flow, threshold filtering, etc.)' },
+            { zh: '【功能】Canvas Overlay 渲染引擎：新增 OverlayRenderEngine，支持在 canvas 上绘制光流箭头、阈值线、文字等自定义叠加层', en: '[Feat] Canvas overlay render engine: new OverlayRenderEngine draws custom overlays (optical flow arrows, threshold lines, text) directly on the canvas' },
+            { zh: '【功能】脚本激活指示器：模型下拉名称旁显示绿色 * 标记，一眼看出 pre/post 脚本是否激活', en: '[Feat] Script activation indicator: green * markers next to model name in the dropdown show at a glance whether pre/post scripts are active' },
+            { zh: '【功能】模型下拉显示动态名称：ActiveModel 模块让非 React 组件（SmartAnnotation/Tracking）也能读取当前模型名，下拉按钮显示真实模型名而非硬编码', en: '[Feat] Dynamic model name in dropdown: ActiveModel module shares current model name with non-React components (SmartAnnotation/Tracking); dropdown button shows real model name instead of hardcoded text' },
+            { zh: '【优化】工具栏响应式折叠：ButtonWrapper 加 collapsible 类，窄屏时按钮组自动隐藏避免溢出', en: '[Optimize] Responsive toolbar collapse: ButtonWrapper gains collapsible class, auto-hiding button groups on narrow viewports to prevent overflow' },
+            { zh: '【优化】任务管理器双击固定 + 资源缓存：双击按钮 pin 面板不被外部点击关闭；重开面板时保留上次资源数据避免闪白', en: '[Optimize] TaskManager double-click pin + resource cache: double-click the button to pin the panel (click-outside won\'t close it); cached resource data avoids a white flash on reopen' },
+        ]
+    },
+    {
         version: '2.6.6',
         date: '2026-05-10',
         changes: [
