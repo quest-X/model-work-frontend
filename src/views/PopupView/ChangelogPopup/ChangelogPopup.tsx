@@ -16,6 +16,17 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.8',
+        date: '2026-05-11',
+        changes: [
+            { zh: '【功能】时间线 ↔ 图像列表双向选区同步：Shift/Ctrl 多选图像自动显示时间线灰色选区，反之亦然；Ctrl+A 全选/取消全选同步', en: '[Feat] Bidirectional timeline ↔ image list selection sync: Shift/Ctrl multi-select in image list shows grey range on timeline and vice versa; Ctrl+A select/deselect-all syncs both' },
+            { zh: '【优化】脚本弹窗：自定义区置顶、"自定义脚本"→"自定义"、规则文本按阶段显示对应签名', en: '[Optimize] Script popup: custom section moved to top, renamed "自定义脚本" → "自定义", contract text shows stage-specific function signature' },
+            { zh: '【优化】参数区标题无参数激活时变灰（不禁用交互），避免全部取消勾选后无法重新勾选', en: '[Optimize] Param section title dims when no params are checked (interaction stays enabled), preventing the deadlock where unchecking all made re-checking impossible' },
+            { zh: '【修复】CallModelPopup：自定义模型显示绿色已下载标识；分割模型蓝色胶囊实时刷新', en: '[Fix] CallModelPopup: custom models now show green "downloaded" badge; segmentation model blue active-badge refreshes via model-loaded event' },
+            { zh: '【调整】分割后处理 max_polygon_points 默认值 50→100', en: '[Tweak] Segmentation post-process max_polygon_points default changed from 50 to 100' },
+        ]
+    },
+    {
         version: '2.6.7',
         date: '2026-05-11',
         changes: [
