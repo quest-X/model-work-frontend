@@ -32,6 +32,9 @@ const PRIORITIES: TaskPriority[] = ['P0', 'P1', 'P2'];
 
 const FINISHED: Set<string> = new Set(['completed', 'cancelled', 'error']);
 
+// 模块级缓存：面板关闭再打开时立刻显示上次数据，不等首次 poll 返回。
+let _cachedResources: ResourceStats = {};
+
 const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, excludeRef, anchorRef, pinned}) => {
     const panelRef = useRef<HTMLDivElement>(null);
     const t = LanguageConfig[language].taskManager;
@@ -40,14 +43,19 @@ const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, 
     const [showCompleted, setShowCompleted] = useState(false);
     const toggleShowCompleted = useCallback(() => setShowCompleted(v => !v), []);
 
-    // 资源监控：面板打开时每 2s 轮询一次 /health
-    const [resources, setResources] = useState<ResourceStats>({});
+    // 资源监控：用缓存初始化，面板重开时立刻显示旧值；每 1s 轮询刷新。
+    const [resources, setResources] = useState<ResourceStats>(_cachedResources);
     useEffect(() => {
         const base = getDefaultBackendBase();
         const poll = () => {
             fetch(`${base}/health`)
                 .then(r => r.json())
-                .then(data => { if (data.resources) setResources(data.resources); })
+                .then(data => {
+                    if (data.resources) {
+                        _cachedResources = data.resources;
+                        setResources(data.resources);
+                    }
+                })
                 .catch(() => {});
         };
         poll();

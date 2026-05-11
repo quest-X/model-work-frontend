@@ -3,6 +3,7 @@ import {store} from '../index';
 import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
 import {getDefaultBackendUrl} from '../utils/DefaultBackendUrl';
 import {PipelineStore} from './PipelineStore';
+import {ScriptStore} from './ScriptStore';
 
 export interface SegmentationObjectInfo {
     id: number;
@@ -14,6 +15,7 @@ export interface SegmentationResult {
     info: SegmentationObjectInfo;
     bbox: [number, number, number, number]; // [x1, y1, x2, y2]
     mask: [number, number][]; // polygon vertices [[x,y], ...]
+    extra?: Record<string, any>; // 自定义后处理脚本注入的额外字段（含 overlays 等）
 }
 
 export interface SegmentationAPIResponse {
@@ -223,6 +225,15 @@ export class SegmentationAPIDetector {
             if (pp.mask_iou_threshold_enabled === true && pp.mask_iou_threshold > 0)
                 formData.append('mask_iou_threshold', String(pp.mask_iou_threshold));
         }
+
+        // ── 自定义脚本 ──
+        const sel = ScriptStore.get();
+        if (PipelineStore.isActivated('preprocess') && sel.preprocess)
+            formData.append('preprocess_script', sel.preprocess);
+        if (PipelineStore.isActivated('postprocess') && sel.postprocess)
+            formData.append('postprocess_script', sel.postprocess);
+        if ((sel.preprocess || sel.postprocess) && sel.params.trim())
+            formData.append('script_params', sel.params);
     }
 
     /**

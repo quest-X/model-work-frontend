@@ -16,6 +16,7 @@ import {
 } from '../../../ai/DetectionAPIDetector';
 import {PipelineStore} from '../../../ai/PipelineStore';
 import {AIModel} from '../../../store/aimodels/types';
+import {ScriptSection} from './ScriptSection';
 import './PipelinePopup.scss';
 
 const backToCallModel = () => store.dispatch(updateActivePopupType(PopupWindowType.CALL_MODEL));
@@ -375,6 +376,8 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                 </div>
                 </>}
             </div>}
+
+            <ScriptSection stage='postprocess' zh={zh} />
 
             <div className='ResetRow'>
                 <button onClick={onReset}>{zh ? '恢复默认' : 'Reset to defaults'}</button>

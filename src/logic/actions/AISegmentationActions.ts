@@ -79,14 +79,16 @@ export class AISegmentationActions {
     public static async segmentBatch(imagesToSegment: ImageData[], isBatch: boolean = true): Promise<void> {
         if (!SegmentationAPIDetector.isEnabled() || imagesToSegment.length === 0) return;
 
-        // SAM2 自动模式（无 prompt）每图 ~20s 是 grid sampling 的算法特性，不是卡死。
+        // SAM 自动模式（无 prompt）每图 ~20s 是 grid sampling 的算法特性，不是卡死。
         // 首次告知用户预期，之后不再打扰。
         if (!AISegmentationActions.automaticModeHintShown) {
             AISegmentationActions.automaticModeHintShown = true;
             const lang = store.getState().general.language;
+            const { ActiveModel, formatModelDisplay } = await import('../../ai/ActiveModel');
+            const display = formatModelDisplay(ActiveModel.getSegmentation());
             const hint = lang === 'zh'
-                ? { header: 'SAM2 自动模式', description: '无 prompt 时每张图约 20 秒（grid sampling）。如需更快，先画 bbox 或点作为提示。' }
-                : { header: 'SAM2 automatic mode', description: '~20s per image without prompt (grid sampling). Draw a bbox or points first for instant results.' };
+                ? { header: `${display} 自动模式`, description: '无 prompt 时每张图约 20 秒（grid sampling）。如需更快，先画 bbox 或点作为提示。' }
+                : { header: `${display} automatic mode`, description: '~20s per image without prompt (grid sampling). Draw a bbox or points first for instant results.' };
             store.dispatch(submitNewNotification(NotificationUtil.createMessageNotification(hint)));
         }
 
@@ -363,6 +365,7 @@ export class AISegmentationActions {
                     suggestedLabel: labelId ? null : result.info.name,
                     confidence: result.info.confidence ?? 0,
                     trackingGroupId,
+                    extra: result.extra,  // 透传自定义后处理脚本注入的字段（含 overlays）
                 };
             })
             .filter((p): p is LabelPolygon => p !== null);

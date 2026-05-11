@@ -9,6 +9,7 @@ import {Language} from '../../../data/LanguageConfig';
 import {DetectionAPIDetector, DEFAULT_INFERENCE_PARAMS} from '../../../ai/DetectionAPIDetector';
 import {SegmentationAPIDetector} from '../../../ai/SegmentationAPIDetector';
 import {PipelineStore} from '../../../ai/PipelineStore';
+import {ScriptSection} from './ScriptSection';
 import './PipelinePopup.scss';
 
 const backToCallModel = () => store.dispatch(updateActivePopupType(PopupWindowType.CALL_MODEL));
@@ -174,6 +175,8 @@ const PipelinePreprocessPopup: React.FC<IProps> = ({language}) => {
                     </div>
                 </div>
             </div>
+
+            <ScriptSection stage='preprocess' zh={zh} />
 
             <div className='ResetRow'>
                 <button onClick={onReset}>

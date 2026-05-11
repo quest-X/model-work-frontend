@@ -16,7 +16,7 @@ export interface PipelineActivation {
 export const DEFAULT_ACTIVATION: PipelineActivation = {
     preprocess: false,
     inference: false,
-    postprocess: true,
+    postprocess: false,
 };
 
 type Listener = (next: PipelineActivation) => void;

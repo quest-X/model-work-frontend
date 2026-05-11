@@ -19,6 +19,7 @@ import {RectRenderEngine} from './RectRenderEngine';
 import {PointRenderEngine} from './PointRenderEngine';
 import {LineRenderEngine} from './LineRenderEngine';
 import {PolygonRenderEngine} from './PolygonRenderEngine';
+import {OverlayRenderEngine} from './OverlayRenderEngine';
 
 export class CompositeRenderEngine extends BaseRenderEngine {
     private pathVerticesOnCanvas: IPoint[] = [];
@@ -27,6 +28,7 @@ export class CompositeRenderEngine extends BaseRenderEngine {
     private pointEngine: PointRenderEngine;
     private lineEngine: LineRenderEngine;
     private polygonEngine: PolygonRenderEngine;
+    private overlayEngine: OverlayRenderEngine;
 
     public constructor(canvas: HTMLCanvasElement) {
         super(canvas);
@@ -35,6 +37,7 @@ export class CompositeRenderEngine extends BaseRenderEngine {
         this.pointEngine = new PointRenderEngine(canvas);
         this.lineEngine = new LineRenderEngine(canvas);
         this.polygonEngine = new PolygonRenderEngine(canvas);
+        this.overlayEngine = new OverlayRenderEngine(canvas);
     }
 
     public update(data: EditorData): void {
@@ -185,6 +188,7 @@ export class CompositeRenderEngine extends BaseRenderEngine {
         this.polygonEngine.render(data);
         this.pointEngine.render(data);
         this.lineEngine.render(data);
+        this.overlayEngine.render(data);  // 在 polygon 之上叠加自定义脚本 overlays
         const color = RenderEngineSettings.DEFAULT_LINE_COLOR;
         const anchorColor = RenderEngineSettings.DEFAULT_ANCHOR_COLOR;
         

@@ -6,6 +6,7 @@ import {store} from '../index';
 import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
 import {getDefaultBackendUrl} from '../utils/DefaultBackendUrl';
 import {PipelineStore} from './PipelineStore';
+import {ScriptStore} from './ScriptStore';
 import {FrameExtractorService} from '../services/FrameExtractorService';
 
 export interface InferenceParams {
@@ -240,6 +241,15 @@ export class DetectionAPIDetector {
             if (pp.bbox_padding_enabled !== false && pp.bbox_padding > 0)
                 formData.append('bbox_padding', String(pp.bbox_padding));
         }
+
+        // ── 自定义脚本（pre/post 各自独立，按 stage 激活才传）──
+        const sel = ScriptStore.get();
+        if (PipelineStore.isActivated('preprocess') && sel.preprocess)
+            formData.append('preprocess_script', sel.preprocess);
+        if (PipelineStore.isActivated('postprocess') && sel.postprocess)
+            formData.append('postprocess_script', sel.postprocess);
+        if ((sel.preprocess || sel.postprocess) && sel.params.trim())
+            formData.append('script_params', sel.params);
     }
 
     /**

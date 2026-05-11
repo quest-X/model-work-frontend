@@ -28,6 +28,9 @@ import { AIDetectionActions } from '../../../logic/actions/AIDetectionActions';
 import { AISegmentationActions } from '../../../logic/actions/AISegmentationActions';
 import { DetectionAPIDetector } from '../../../ai/DetectionAPIDetector';
 import { SegmentationAPIDetector } from '../../../ai/SegmentationAPIDetector';
+import { ActiveModel } from '../../../ai/ActiveModel';
+import { ScriptStore } from '../../../ai/ScriptStore';
+import { PipelineStore } from '../../../ai/PipelineStore';
 import { SmartAnnotationActions } from '../../../logic/actions/SmartAnnotationActions';
 import { AIStateStorageManager } from '../../../utils/AIStateStorageManager';
 import { AIModelsSelector } from '../../../store/selectors/AIModelsSelector';
@@ -284,6 +287,22 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     const inferenceMenuRef = useRef<HTMLDivElement>(null);
     // 用于区分智能标注按钮的单击 vs 双击（延迟单击 200ms）
     const smartClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // 自定义脚本激活标记 —— 监听 ScriptStore 变更事件刷新
+    // ✱ 位置语义：preprocess 激活 → 模型名前面；postprocess 激活 → 后面
+    const [hasPreScript, setHasPreScript] = useState<boolean>(() => ScriptStore.hasPreprocess() && PipelineStore.isActivated('preprocess'));
+    const [hasPostScript, setHasPostScript] = useState<boolean>(() => ScriptStore.hasPostprocess() && PipelineStore.isActivated('postprocess'));
+    useEffect(() => {
+        const sync = () => {
+            setHasPreScript(ScriptStore.hasPreprocess() && PipelineStore.isActivated('preprocess'));
+            setHasPostScript(ScriptStore.hasPostprocess() && PipelineStore.isActivated('postprocess'));
+        };
+        window.addEventListener('opensight:script-changed', sync);
+        const unsubPipeline = PipelineStore.subscribe(sync);
+        return () => {
+            window.removeEventListener('opensight:script-changed', sync);
+            unsubPipeline();
+        };
+    }, []);
     // 多模型：后端同时保持多个模型在内存，前端下拉展示所有已加载模型
     const [loadedModels, setLoadedModels] = useState<string[]>([]);
     const [activeModelName, setActiveModelName] = useState('');
@@ -434,6 +453,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 if (data.model_tasks) setModelTasks(data.model_tasks);
                 setDetSlotName(data.model || '');
                 setSegSlotName(data.segmentation_model || '');
+                // 同步给非 React 模块（SmartAnnotation / Tracking）用，避免再 fetch 一次
+                ActiveModel.setDetection(data.model || '');
+                ActiveModel.setSegmentation(data.segmentation_model || '');
 
                 // 首次：用后端 detection slot 初始化
                 if (!initializedRef.current && data.model && data.model !== 'none') {
@@ -471,7 +493,12 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         // 切换模型时由 switchModel 主动调 fetchModelsRef 强制刷新，不靠轮询。
         const tick = () => { if (!document.hidden) fetchModels(); };
         const timer = setInterval(tick, 30000);
-        return () => clearInterval(timer);
+        const onModelLoaded = () => fetchModels();
+        window.addEventListener('opensight:model-loaded', onModelLoaded);
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener('opensight:model-loaded', onModelLoaded);
+        };
     }, []);
 
     // 点击外部关闭下拉
@@ -668,7 +695,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 
     return (
         <div className={getClassName()}>
-            <div className='ButtonWrapper'>
+            <div className='ButtonWrapper collapsible'>
                 {
                     getButtonWithTooltip(
                         'zoom-in',
@@ -714,7 +741,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                     )
                 }
             </div>
-            <div className='ButtonWrapper'>
+            <div className='ButtonWrapper collapsible'>
                 {
                     getButtonWithTooltip(
                         'tool-all',
@@ -870,7 +897,19 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                             boxSizing: 'border-box',
                         }}
                     >
-                        {activeModelLabel}
+                        {activeModelEntry
+                            ? <>
+                                {activeModelEntry.label}
+                                {hasPreScript && <span title={language === 'zh' ? '已激活自定义前处理脚本' : 'Custom preprocess script active'} style={{ color: '#5cc98a', fontWeight: 700 }}>*</span>}
+                                {hasPostScript && <span title={language === 'zh' ? '已激活自定义后处理脚本' : 'Custom postprocess script active'} style={{ color: '#5cc98a', fontWeight: 700 }}>*</span>}
+                                {` (${activeModelEntry.name})`}
+                            </>
+                            : <>
+                                {activeModelLabel}
+                                {hasPreScript && <span title={language === 'zh' ? '已激活自定义前处理脚本' : 'Custom preprocess script active'} style={{ color: '#5cc98a', fontWeight: 700 }}>*</span>}
+                                {hasPostScript && <span title={language === 'zh' ? '已激活自定义后处理脚本' : 'Custom postprocess script active'} style={{ color: '#5cc98a', fontWeight: 700 }}>*</span>}
+                            </>
+                        }
                         <span style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 9, pointerEvents: 'none' }}>▼</span>
                     </button>
                     {showInferenceMenu && modelDropdownEntries.length > 0 && (

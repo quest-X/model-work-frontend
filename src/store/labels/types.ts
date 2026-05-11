@@ -37,6 +37,7 @@ export type LabelPolygon = Annotation & {
     suggestedLabel: string;
     confidence?: number; // AI 分割置信度 (0-1)
     trackingGroupId?: string; // 同一次目标跟踪产出的所有帧 polygon 共享此 ID
+    extra?: Record<string, any>; // 自定义后处理脚本注入的字段（含 overlays 等）
 }
 
 export type LabelLine = Annotation & {

@@ -182,7 +182,9 @@ export class SmartAnnotationActions {
             }
 
             // Step 2: SAM inference
-            this.updateProgress(progressNotification, 2, 'SAM 推理中');
+            const { ActiveModel, formatModelDisplay } = await import('../../ai/ActiveModel');
+            const modelDisplay = formatModelDisplay(ActiveModel.getSegmentation());
+            this.updateProgress(progressNotification, 2, lang === 'zh' ? `${modelDisplay} 推理中` : `${modelDisplay} inferring`);
             const results = await SegmentationAPIDetector.predictFromBlob(
                 blob,
                 imageData.fileData?.name || 'image.jpg',

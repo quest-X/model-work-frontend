@@ -13,6 +13,7 @@ import { ImageData, LabelName, LabelPolygon } from '../../store/labels/types';
 import { LabelStatus } from '../../data/enums/LabelStatus';
 import { SegmentationResult, SegmentationAPIDetector } from '../../ai/SegmentationAPIDetector';
 import { PipelineStore } from '../../ai/PipelineStore';
+import { formatModelDisplay } from '../../ai/ActiveModel';
 import { TrackingAPIService } from '../../ai/TrackingAPIService';
 import {
     submitNewNotification,
@@ -313,13 +314,14 @@ export class ObjectTrackingActions {
                     scheduleTrackingFlush();
                 },
                 onStatus: (s) => {
+                    const display = formatModelDisplay(params.modelName);
                     if (s.status === 'clipping') {
                         updateProgress(1, `FFmpeg 切片 ${s.n_frames} 帧中...`);
                     } else if (s.status === 'preparing') {
-                        updateProgress(1, `预处理中：SAM 2 视频编码 ${s.frames_to_encode} 帧（clip 已就位）`);
+                        updateProgress(1, `预处理中：${display} 视频编码 ${s.frames_to_encode} 帧（clip 已就位）`);
                     } else if (s.status === 'walking') {
                         // 旧路径残留；clip 模式下不再触发，但保留以兼容
-                        updateProgress(1, `预处理中：SAM 2 视频编码 ${s.current}/${s.target}`);
+                        updateProgress(1, `预处理中：${display} 视频编码 ${s.current}/${s.target}`);
                     }
                 },
                 onDone: (total) => {
@@ -498,14 +500,15 @@ export class ObjectTrackingActions {
                     scheduleTrackingFlush();
                 },
                 onStatus: (s) => {
+                    const display = formatModelDisplay(params.modelName);
                     if (s.status === 'clipping') {
                         updateProgress(1, lang === 'zh'
                             ? `FFmpeg 切片 ${s.n_frames} 帧中...`
                             : `FFmpeg clipping ${s.n_frames} frames...`);
                     } else if (s.status === 'preparing') {
                         updateProgress(1, lang === 'zh'
-                            ? `预处理中：SAM 2 视频编码 ${s.frames_to_encode} 帧`
-                            : `Preparing: SAM 2 encoding ${s.frames_to_encode} frames`);
+                            ? `预处理中：${display} 视频编码 ${s.frames_to_encode} 帧`
+                            : `Preparing: ${display} encoding ${s.frames_to_encode} frames`);
                     }
                 },
                 onDone: (total) => {

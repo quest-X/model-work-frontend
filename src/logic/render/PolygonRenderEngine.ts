@@ -1,4 +1,5 @@
 import {store} from '../../index';
+import {OverlayRenderEngine} from './OverlayRenderEngine';
 import {RectUtil} from '../../utils/RectUtil';
 import {updateCustomCursorStyle} from '../../store/general/actionCreators';
 import {CustomCursorStyle} from '../../data/enums/CustomCursorStyle';
@@ -238,7 +239,21 @@ export class PolygonRenderEngine extends BaseRenderEngine {
             }
             this.drawLabelText(labelPolygon, pathOnCanvas);
         });
+        // 自定义后处理脚本的 overlays（红线/黄线/光流箭头/状态文本等）
+        this.drawOverlays(imageData, data);
     }
+
+    /**
+     * 渲染所有 labelPolygon.extra.overlays —— 通用自定义后处理图层。
+     * 委托到 OverlayRenderEngine（同一套指令协议，所有视图共用）。
+     */
+    private drawOverlays(imageData: ImageData, data: EditorData): void {
+        if (!this._overlayEngine) {
+            this._overlayEngine = new OverlayRenderEngine(this.canvas);
+        }
+        this._overlayEngine.render(data);
+    }
+    private _overlayEngine: OverlayRenderEngine | null = null;
 
     private drawLabelText(labelPolygon: LabelPolygon, pathOnCanvas: IPoint[]): void {
         let labelText = '';

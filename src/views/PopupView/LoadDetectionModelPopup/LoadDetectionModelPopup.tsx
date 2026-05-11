@@ -121,6 +121,7 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
             DetectionAPIDetector.setConfig({ url: baseUrl + '/detect', enabled: true });
             EditorModel.lastLoadedModelService = 'detection';
         }
+        window.dispatchEvent(new CustomEvent('opensight:model-loaded'));
         PopupActions.close();
     };
 
