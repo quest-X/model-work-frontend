@@ -69,6 +69,16 @@
         pointer-events: none;
       }
     }
+
+    &.section-dimmed {
+      .ParamSectionTitle {
+        opacity: 0.3;
+
+        &:hover {
+          opacity: 0.5;
+        }
+      }
+    }
   }
 
   // section 标题行

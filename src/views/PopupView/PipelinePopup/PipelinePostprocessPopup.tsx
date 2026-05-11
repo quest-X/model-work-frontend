@@ -39,10 +39,6 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
     const detSectionActive = !isMultiModel || !selectedModelTask || selectedModelTask === 'detect';
     const segSectionActive = !isMultiModel || !selectedModelTask || selectedModelTask === 'segment';
 
-    // 折叠状态：非激活 section 默认折叠
-    const [detCollapsed, setDetCollapsed] = useState<boolean>(!detSectionActive);
-    const [segCollapsed, setSegCollapsed] = useState<boolean>(!segSectionActive);
-
     // 检测后处理
     const [minBboxArea, setMinBboxArea] = useState<number>(initialDet.min_bbox_area);
     const [bboxPadding, setBboxPadding] = useState<number>(initialDet.bbox_padding);
@@ -61,6 +57,15 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
     const [maxPolygonPointsEnabled, setMaxPolygonPointsEnabled] = useState<boolean>(segSectionActive && initialSeg.max_polygon_points_enabled !== false && initialSeg.max_polygon_points > 0);
     const [maskIouThreshold, setMaskIouThreshold] = useState<number>(initialSeg.mask_iou_threshold);
     const [maskIouThresholdEnabled, setMaskIouThresholdEnabled] = useState<boolean>(segSectionActive && initialSeg.mask_iou_threshold_enabled !== false);
+
+    const detHasAnyEnabled = minBboxAreaEnabled || bboxPaddingEnabled;
+    const segHasAnyEnabled = epsilonEnabled || minAreaEnabled || maskDilateEnabled || maxPolygonPointsEnabled || maskIouThresholdEnabled || largestOnly;
+    const detEffectiveActive = detSectionActive && detHasAnyEnabled;
+    const segEffectiveActive = segSectionActive && segHasAnyEnabled;
+
+    // 折叠状态：无激活参数时自动折叠
+    const [detCollapsed, setDetCollapsed] = useState<boolean>(!detEffectiveActive);
+    const [segCollapsed, setSegCollapsed] = useState<boolean>(!segEffectiveActive);
 
     const onAccept = () => {
         DetectionAPIDetector.setPostprocessParams({
@@ -115,6 +120,8 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                 </div>
             )}
 
+            <ScriptSection stage='postprocess' zh={zh} />
+
             {!showDet && !showSeg && (
                 <div className='StageInactiveWarning'>
                     <span className='Dot' />
@@ -122,7 +129,7 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                 </div>
             )}
 
-            {showDet && <div className={`ParamSection${!detSectionActive ? ' section-inactive' : ''}`}>
+            {showDet && <div className={`ParamSection${!detSectionActive ? ' section-inactive' : !detHasAnyEnabled ? ' section-dimmed' : ''}`}>
                 <div className='ParamSectionTitle' onClick={() => setDetCollapsed(c => !c)}>
                     {zh ? '[ 检测参数 ]' : '[ Detection ]'}
                     <span className='SectionTitleLine' />
@@ -192,7 +199,7 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                 </>}
             </div>}
 
-            {showSeg && <div className={`ParamSection${!segSectionActive ? ' section-inactive' : ''}`}>
+            {showSeg && <div className={`ParamSection${!segSectionActive ? ' section-inactive' : !segHasAnyEnabled ? ' section-dimmed' : ''}`}>
                 <div className='ParamSectionTitle' onClick={() => setSegCollapsed(c => !c)}>
                     {zh ? '[ 分割参数 ]' : '[ Segmentation ]'}
                     <span className='SectionTitleLine' />
@@ -376,8 +383,6 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
                 </div>
                 </>}
             </div>}
-
-            <ScriptSection stage='postprocess' zh={zh} />
 
             <div className='ResetRow'>
                 <button onClick={onReset}>{zh ? '恢复默认' : 'Reset to defaults'}</button>

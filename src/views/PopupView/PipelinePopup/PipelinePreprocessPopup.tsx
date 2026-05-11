@@ -56,6 +56,8 @@ const PipelinePreprocessPopup: React.FC<IProps> = ({language}) => {
 
     const renderContent = () => (
         <div className='PipelinePopupContent'>
+            <ScriptSection stage='preprocess' zh={zh} />
+
             {!isActive && (
                 <div className='StageInactiveWarning'>
                     <span className='Dot' />
@@ -175,8 +177,6 @@ const PipelinePreprocessPopup: React.FC<IProps> = ({language}) => {
                     </div>
                 </div>
             </div>
-
-            <ScriptSection stage='preprocess' zh={zh} />
 
             <div className='ResetRow'>
                 <button onClick={onReset}>

@@ -94,7 +94,7 @@ export const ScriptSection: React.FC<IProps> = ({stage, zh}) => {
     return (
         <div className='ParamSection'>
             <div className='ParamSectionTitle' onClick={() => setCollapsed(c => !c)}>
-                {zh ? '[ 自定义脚本 ]' : '[ Custom script ]'}
+                {zh ? '[ 自定义 ]' : '[ Custom ]'}
                 <span className='SectionTitleLine' />
                 <span className={`SectionChevron${!collapsed ? ' open' : ''}`}>▾</span>
             </div>
@@ -179,7 +179,7 @@ export const ScriptSection: React.FC<IProps> = ({stage, zh}) => {
                     <textarea
                         value={paramsText}
                         onChange={(e) => onParamsChange(e.target.value)}
-                        placeholder='{"min_conf": 0.5}'
+                        placeholder='{}  // 留空即可，等同于不传任何参数'
                         rows={3}
                         style={{
                             width: '100%',
@@ -199,8 +199,8 @@ export const ScriptSection: React.FC<IProps> = ({stage, zh}) => {
 
                 <div style={{fontSize: 10, color: '#666', marginTop: 10, lineHeight: 1.5}}>
                     {zh
-                        ? '契约：def preprocess(image, params) / def postprocess(detections, image, params)。详见 backend/scripts/example.py。'
-                        : 'Contract: def preprocess(image, params) / def postprocess(detections, image, params). See backend/scripts/example.py.'}
+                        ? `规则：${stage === 'preprocess' ? 'def preprocess(image, params)' : 'def postprocess(detections, image, params)'}，详见 backend/scripts/example.py。`
+                        : `Contract: ${stage === 'preprocess' ? 'def preprocess(image, params)' : 'def postprocess(detections, image, params)'}. See backend/scripts/example.py.`}
                 </div>
             </div>}
         </div>

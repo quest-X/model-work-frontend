@@ -119,21 +119,24 @@ class ImagesList extends React.Component<IProps, IState> {
         }
     };
 
+    private notifySelectionChanged = (startIndex: number, endIndex: number) => {
+        window.dispatchEvent(new CustomEvent('opensight:image-selection-changed', {
+            detail: { startIndex, endIndex }
+        }));
+    };
+
     private onClickHandler = (index: number) => {
         const imageData = this.props.imagesData[index];
-        
+
         if (this.state.isShiftPressed && this.state.lastClickedIndex !== null) {
-            // Shift+click: select range from last clicked to current
             store.dispatch(selectImageRange(this.state.lastClickedIndex, index));
-            // Don't change active image during range selection
+            this.notifySelectionChanged(this.state.lastClickedIndex, index);
         } else if (this.state.isCtrlPressed) {
-            // Ctrl+click: toggle selection without changing active image
             store.dispatch(toggleImageSelection(imageData.id));
             this.setState({ lastClickedIndex: index });
+            this.notifySelectionChanged(-1, -1);
         } else {
-            // Normal click: change active image and clear other selections
             ImageActions.goToImageByIndex(index);
-            // Clear all selections first, then select only the clicked image
             this.props.imagesData.forEach((img, idx) => {
                 if (img.isSelected && idx !== index) {
                     store.dispatch(toggleImageSelection(img.id));
@@ -143,19 +146,25 @@ class ImagesList extends React.Component<IProps, IState> {
                 store.dispatch(toggleImageSelection(imageData.id));
             }
             this.setState({ lastClickedIndex: index });
+            this.notifySelectionChanged(-1, -1);
         }
     };
 
     private handleSelectAll = () => {
         // Check if all images are currently selected
         const allSelected = this.props.imagesData.every(img => img.isSelected);
-        
+
         // If all are selected, deselect all; otherwise select all
         store.dispatch(selectAllImages(!allSelected));
-        
+
         // Update last clicked index to the last image for potential Shift operations
         if (!allSelected && this.props.imagesData.length > 0) {
             this.setState({ lastClickedIndex: this.props.imagesData.length - 1 });
+            // 全选 → 通知时间线显示全范围
+            this.notifySelectionChanged(0, this.props.imagesData.length - 1);
+        } else {
+            // 取消全选 → 清空时间线选区
+            this.notifySelectionChanged(-1, -1);
         }
     };
 

@@ -80,6 +80,15 @@ const CallModelPopup: React.FC<IProps> = ({
         ? stripInferenceSuffix(activeEngine.url)
         : getDefaultBackendBase();
 
+    const refreshHealth = () => {
+        fetch(`${derivedBaseUrl}/health`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.loaded_models) setLoadedModels(data.loaded_models);
+            })
+            .catch(() => {});
+    };
+
     useEffect(() => {
         fetch(`${derivedBaseUrl}/available-models`)
             .then(r => r.json())
@@ -91,12 +100,10 @@ const CallModelPopup: React.FC<IProps> = ({
                 setAvailableModels(names);
             })
             .catch(() => {});
-        fetch(`${derivedBaseUrl}/health`)
-            .then(r => r.json())
-            .then(data => {
-                if (data.loaded_models) setLoadedModels(data.loaded_models);
-            })
-            .catch(() => {});
+        refreshHealth();
+        const onModelLoaded = () => refreshHealth();
+        window.addEventListener('opensight:model-loaded', onModelLoaded);
+        return () => window.removeEventListener('opensight:model-loaded', onModelLoaded);
     }, [derivedBaseUrl]);
 
     const getDownloadedCount = (family: YOLOModelFamily): number => {
@@ -188,7 +195,7 @@ const CallModelPopup: React.FC<IProps> = ({
                 <div className='SectionHeader'>{zhTexts ? '自定义' : 'Custom'}</div>
                 <div className='Options'>
                     <div
-                        className={`OptionsItem${customPtModels.length > 0 ? ' active-model' : ''}`}
+                        className={`OptionsItem${customPtModels.length > 0 ? ' has-models active-model' : ''}`}
                         onClick={() => onSelect('custom-pt')}
                     >
                         <img
@@ -200,7 +207,7 @@ const CallModelPopup: React.FC<IProps> = ({
                         {customPtModels.map(n => <span key={n} className='active-badge'>✓ {n}</span>)}
                     </div>
                     <div
-                        className={`OptionsItem${customOnnxModels.length > 0 ? ' active-model' : ''}`}
+                        className={`OptionsItem${customOnnxModels.length > 0 ? ' has-models active-model' : ''}`}
                         onClick={() => onSelect('custom-onnx')}
                     >
                         <img

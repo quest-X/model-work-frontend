@@ -86,7 +86,7 @@ export const DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS: SegmentationPostprocessPar
     min_mask_area: 200,
     largest_cc_only: false,
     mask_dilate: 1,
-    max_polygon_points: 50,
+    max_polygon_points: 100,
     mask_iou_threshold: 0.5,
     polygon_epsilon_enabled: false,
     min_mask_area_enabled: true,

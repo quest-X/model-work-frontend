@@ -4,6 +4,8 @@ import { ISize } from '../../../interfaces/ISize';
 import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { connect } from 'react-redux';
 import { AppState } from '../../../store';
+import { store } from '../../../index';
+import { selectImageRange, selectAllImages } from '../../../store/labels/actionCreators';
 
 /** 选区范围（帧号，闭区间） */
 export interface FrameRange {
@@ -361,10 +363,39 @@ const VideoTimeline: React.FC<IProps> = ({
     }, [currentFrame, frames, fps, onFrameChange, selectionRange]);
 
     // 同步选区到全局，让 EditorTopNavigationBar 的推理按钮能读到
+    // 同时同步到图像列表的 multi-selection
+    const syncSourceRef = useRef<'timeline' | 'images' | null>(null);
     useEffect(() => {
         setGlobalRange(selectionRange);
-        return () => { setGlobalRange(null); }; // 卸载时清除
+        if (syncSourceRef.current === 'images') { syncSourceRef.current = null; return; }
+        if (selectionRange) {
+            store.dispatch(selectImageRange(selectionRange.startFrame, selectionRange.endFrame));
+        } else {
+            store.dispatch(selectAllImages(false));
+        }
+        return () => { setGlobalRange(null); };
     }, [selectionRange]);
+
+    // 图像列表选中 → 更新时间线灰色选区
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            // 始终标记来源为 images，防止 selectionRange useEffect 反向同步回 Redux
+            syncSourceRef.current = 'images';
+            if (!detail) { setSelectionRange(null); return; }
+            const { startIndex, endIndex } = detail as { startIndex: number; endIndex: number };
+            if (startIndex < 0 || endIndex < 0 || startIndex === endIndex) {
+                setSelectionRange(null);
+                return;
+            }
+            setSelectionRange({
+                startFrame: Math.min(startIndex, endIndex),
+                endFrame: Math.max(startIndex, endIndex),
+            });
+        };
+        window.addEventListener('opensight:image-selection-changed', handler);
+        return () => window.removeEventListener('opensight:image-selection-changed', handler);
+    }, []);
 
     // 重绘时间轴
     useEffect(() => {
