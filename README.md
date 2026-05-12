@@ -4,6 +4,8 @@ AI-powered visual annotation tool with object detection, instance segmentation, 
 
 Built on [make-sense](https://github.com/SkalskiP/make-sense) by Skalski.
 
+**Live Demo**: [https://model.work](https://model.work/)
+
 ## Features
 
 - **Object Detection** — YOLO family (v8/v9/v10/11/12/26), custom .pt/.onnx models
