@@ -14,7 +14,7 @@
  * 可以在「模型引擎」popup 里手动填写任意 URL 覆盖默认值。
  */
 
-const DEFAULT_BACKEND_PORT = 8000;
+const DEFAULT_BACKEND_PORT = 58600;
 
 /** 返回不带路径的 backend base URL,例如 `http://192.168.1.205:8000`。 */
 export const getDefaultBackendBase = (): string => {
