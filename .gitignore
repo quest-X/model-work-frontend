@@ -27,5 +27,19 @@ yarn-error.log*
 
 # model files
 *.pt
+*.onnx
+*.engine
 server/models/
+
+# claude / dev artifacts
 .claude/
+CLAUDE.md
+HANDOFF_*.md
+runs/
+tmp.json
+*.work-report.html
+ai-pair-workflow.html
+branch-tree.html
+dev-assessment.html
+work-report.html
+work-visualization.html
