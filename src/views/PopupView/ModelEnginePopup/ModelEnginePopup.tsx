@@ -45,7 +45,7 @@ const ModelEnginePopup: React.FC<IProps> = (
         segmentation: 'baosight@ABC123!',
         ocr: '',
     };
-    const [modelUrl, setModelUrl] = useState('https://api.model.work:58600');
+    const [modelUrl, setModelUrl] = useState('https://localhost:58600');
     const [modelType, setModelType] = useState<EngineType>('core');
     const [apiKey, setApiKey] = useState(DEFAULT_API_KEY_BY_TYPE.detection);
     const [isConnecting, setIsConnecting] = useState(false);
