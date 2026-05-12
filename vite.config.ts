@@ -9,7 +9,9 @@ import react from '@vitejs/plugin-react';
 
 export default ({ mode }: UserConfig): UserConfigExport => {
   process.env = { ...process.env, ...loadEnv(mode || 'development', process.cwd()) };
+  const base = process.env.GITHUB_ACTIONS ? '/model-work/' : '/';
   return defineConfig({
+    base,
     plugins: [react()],
     build: {
       minify: 'terser',
