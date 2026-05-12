@@ -212,7 +212,7 @@ const ModelEnginePopup: React.FC<IProps> = (
                         value={modelUrl}
                         onChange={modelUrlOnChangeCallback}
                         style={{ width: '100%', marginBottom: '20px' }}
-                        placeholder="http://localhost:8000"
+                        placeholder="https://localhost:58600"
                         InputLabelProps={{ shrink: true }}
                         sx={{
                             '& .MuiInputBase-input': {
