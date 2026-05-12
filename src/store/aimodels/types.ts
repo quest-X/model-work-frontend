@@ -5,7 +5,7 @@ export interface AIModel {
     // 'custom' = user-uploaded weights (backend classifies by filename);
     // 'detection' / 'segmentation' = built-in YOLO / SAM / FastSAM / RT-DETR family.
     // Backend /health and /available-models are the authoritative source of this tag.
-    modelType: 'custom' | 'detection' | 'segmentation';
+    modelType: 'custom' | 'detection' | 'segmentation' | 'ocr';
     apiKey?: string;
     description?: string;
     createdAt: Date;

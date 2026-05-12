@@ -15,7 +15,7 @@
  */
 import axios from 'axios';
 import JSZip from 'jszip';
-import {getDefaultBackendBase} from '../utils/DefaultBackendUrl';
+import {getEngineBaseUrl} from '../utils/DefaultBackendUrl';
 import {TaskTracker} from './TaskTracker';
 import {TaskType} from '../store/tasks/types';
 import {store} from '../index';
@@ -106,9 +106,7 @@ export class SessionExpiredError extends Error {
     }
 }
 
-// API_BASE 跟随浏览器 host:.151 浏览器访问 .205 前端时,会自动得到 http://192.168.x.205:8000
-// 而不是 localhost:8000(后者会被浏览器解析到 .151 自己的机器,跨机必失败)。
-const API_BASE = getDefaultBackendBase();
+const getApiBase = () => getEngineBaseUrl();
 
 export class FrameExtractorService {
 
@@ -177,7 +175,7 @@ export class FrameExtractorService {
         formData.append('file', videoFile, videoFile.name);
         formData.append('fps', targetFps.toString());
 
-        const response = await axios.post(`${API_BASE}/upload-video`, formData, {
+        const response = await axios.post(`${getApiBase()}/upload-video`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 600000,
             onUploadProgress: onProgress ? (e) => {
@@ -204,7 +202,7 @@ export class FrameExtractorService {
 
         let response;
         try {
-            response = await axios.get(`${API_BASE}/frames/${sessionId}`, {
+            response = await axios.get(`${getApiBase()}/frames/${sessionId}`, {
                 params: { start, count },
                 responseType: 'arraybuffer',
                 timeout: 0,

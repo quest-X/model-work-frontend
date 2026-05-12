@@ -4,7 +4,7 @@ import {AppState} from '../../../store';
 import {ManagedTask, TaskPriority} from '../../../store/tasks/types';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {TaskRow} from './TaskRow';
-import {getDefaultBackendBase} from '../../../utils/DefaultBackendUrl';
+import {getEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
 import './TaskManagerPanel.scss';
 
 interface ResourceStats {
@@ -46,7 +46,7 @@ const TaskManagerPanelComponent: React.FC<IProps> = ({tasks, language, onClose, 
     // 资源监控：用缓存初始化，面板重开时立刻显示旧值；每 1s 轮询刷新。
     const [resources, setResources] = useState<ResourceStats>(_cachedResources);
     useEffect(() => {
-        const base = getDefaultBackendBase();
+        const base = getEngineBaseUrl();
         const poll = () => {
             fetch(`${base}/health`)
                 .then(r => r.json())

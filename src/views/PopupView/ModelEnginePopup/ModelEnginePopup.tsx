@@ -38,12 +38,13 @@ const ModelEnginePopup: React.FC<IProps> = (
 ) => {
     const currentTexts = LanguageConfig[language];
     
-    const DEFAULT_API_KEY_BY_TYPE: Record<'detection' | 'segmentation', string> = {
+    const DEFAULT_API_KEY_BY_TYPE: Record<'detection' | 'segmentation' | 'ocr', string> = {
         detection: '123456',
         segmentation: 'baosight@ABC123!',
+        ocr: '',
     };
     const [modelUrl, setModelUrl] = useState('https://api.model.work:58600');
-    const [modelType, setModelType] = useState<'detection' | 'segmentation'>('detection');
+    const [modelType, setModelType] = useState<'detection' | 'segmentation' | 'ocr'>('detection');
     const [apiKey, setApiKey] = useState(DEFAULT_API_KEY_BY_TYPE.detection);
     const [isConnecting, setIsConnecting] = useState(false);
     const [modelTypeOpen, setModelTypeOpen] = useState(false);
@@ -91,9 +92,12 @@ const ModelEnginePopup: React.FC<IProps> = (
             // 模拟集成过程
             await new Promise(resolve => setTimeout(resolve, 2000));
             
-            const defaultName = language === Language.CHINESE
-                ? (modelType === 'detection' ? '检测引擎' : '分割引擎')
-                : (modelType === 'detection' ? 'Detection Engine' : 'Segmentation Engine');
+            const nameMap = {
+                detection: language === Language.CHINESE ? '检测引擎' : 'Detection Engine',
+                segmentation: language === Language.CHINESE ? '分割引擎' : 'Segmentation Engine',
+                ocr: language === Language.CHINESE ? 'OCR 引擎' : 'OCR Engine',
+            };
+            const defaultName = nameMap[modelType];
             // 创建新的AI模型并添加到状态
             const newModel: AIModel = {
                 id: uuidv4(),
@@ -142,7 +146,7 @@ const ModelEnginePopup: React.FC<IProps> = (
     }
 
     const modelTypeOnChangeCallback = (event: SelectChangeEvent) => {
-        const newType = event.target.value as 'detection' | 'segmentation';
+        const newType = event.target.value as 'detection' | 'segmentation' | 'ocr';
         setModelType(newType);
         setApiKey(DEFAULT_API_KEY_BY_TYPE[newType]);
     }
@@ -287,9 +291,9 @@ const ModelEnginePopup: React.FC<IProps> = (
                                         position: 'relative',
                                     }}
                                 >
-                                    {modelType === 'detection'
-                                        ? currentTexts.popups.modelEngine.taskTypeDetection
-                                        : currentTexts.popups.modelEngine.taskTypeSegmentation}
+                                    {{ detection: currentTexts.popups.modelEngine.taskTypeDetection,
+                                       segmentation: currentTexts.popups.modelEngine.taskTypeSegmentation,
+                                       ocr: currentTexts.popups.modelEngine.taskTypeOCR }[modelType]}
                                     <span style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 9 }}>▼</span>
                                 </div>
                                 {modelTypeOpen && (
@@ -305,7 +309,7 @@ const ModelEnginePopup: React.FC<IProps> = (
                                         boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
                                         overflow: 'hidden',
                                     }}>
-                                        {(['detection', 'segmentation'] as const).map(t => (
+                                        {(['detection', 'segmentation', 'ocr'] as const).map(t => (
                                             <div
                                                 key={t}
                                                 onClick={() => {
@@ -323,9 +327,9 @@ const ModelEnginePopup: React.FC<IProps> = (
                                                 onMouseEnter={ev => { if (t !== modelType) (ev.currentTarget as HTMLDivElement).style.background = '#3a3a3a'; }}
                                                 onMouseLeave={ev => { if (t !== modelType) (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
                                             >
-                                                {t === 'detection'
-                                                    ? currentTexts.popups.modelEngine.taskTypeDetection
-                                                    : currentTexts.popups.modelEngine.taskTypeSegmentation}
+                                                {{ detection: currentTexts.popups.modelEngine.taskTypeDetection,
+                                                   segmentation: currentTexts.popups.modelEngine.taskTypeSegmentation,
+                                                   ocr: currentTexts.popups.modelEngine.taskTypeOCR }[t]}
                                                 {t === modelType ? ' ✓' : ''}
                                             </div>
                                         ))}

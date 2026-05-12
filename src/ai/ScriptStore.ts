@@ -6,7 +6,7 @@
  *
  * 落盘到 localStorage，刷新后保留选择。
  */
-import {getDefaultBackendBase} from '../utils/DefaultBackendUrl';
+import {getEngineBaseUrl} from '../utils/DefaultBackendUrl';
 
 export interface ScriptInfo {
     name: string;
@@ -78,7 +78,7 @@ export const ScriptStore = {
 
 /** 调用后端 /scripts/list 拉取列表。 */
 export async function fetchScripts(): Promise<ScriptInfo[]> {
-    const base = getDefaultBackendBase();
+    const base = getEngineBaseUrl();
     const res = await fetch(`${base}/scripts/list`);
     if (!res.ok) throw new Error(`scripts/list ${res.status}`);
     const data = await res.json();
@@ -87,7 +87,7 @@ export async function fetchScripts(): Promise<ScriptInfo[]> {
 
 /** 上传 .py 文件到后端 /scripts/upload。 */
 export async function uploadScript(file: File): Promise<string> {
-    const base = getDefaultBackendBase();
+    const base = getEngineBaseUrl();
     const fd = new FormData();
     fd.append('file', file);
     const res = await fetch(`${base}/scripts/upload`, {method: 'POST', body: fd});
@@ -98,7 +98,7 @@ export async function uploadScript(file: File): Promise<string> {
 
 /** 删除一个脚本。 */
 export async function deleteScript(name: string): Promise<void> {
-    const base = getDefaultBackendBase();
+    const base = getEngineBaseUrl();
     const res = await fetch(`${base}/scripts/${encodeURIComponent(name)}`, {method: 'DELETE'});
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));

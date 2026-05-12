@@ -7,7 +7,7 @@ import { PopupActions } from '../../../logic/actions/PopupActions';
 import { GenericYesNoPopup } from '../GenericYesNoPopup/GenericYesNoPopup';
 import { ObjectTrackingActions } from '../../../logic/actions/ObjectTrackingActions';
 import { VideoData } from '../../../store/video/types';
-import { getDefaultBackendBase } from '../../../utils/DefaultBackendUrl';
+import { getEngineBaseUrl } from '../../../utils/DefaultBackendUrl';
 
 // 模块级暂存：RectRenderEngine 画完 bbox 后写入；popup 打开后读取
 let _pendingBbox: [number, number, number, number] | null = null;
@@ -52,7 +52,7 @@ const ObjectTrackingPopup: React.FC<IProps> = ({ language, activeVideo }) => {
 
     // 从 /health 取当前 det / seg slot；优先使用 SAM 2/3
     useEffect(() => {
-        const url = `${getDefaultBackendBase()}/health`;
+        const url = `${getEngineBaseUrl()}/health`;
         fetch(url).then(r => r.json()).then(data => {
             const seg = (data.segmentation_model || '').trim();
             const det = (data.model || '').trim();

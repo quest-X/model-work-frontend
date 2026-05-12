@@ -5,7 +5,7 @@
  * whole response before resolving. One POST per tracking run; the caller gets
  * an AbortController to cancel mid-stream.
  */
-import { getDefaultBackendBase } from '../utils/DefaultBackendUrl';
+import { getEngineBaseUrl } from '../utils/DefaultBackendUrl';
 
 export type TrackFrameResult = {
     frame_idx: number;
@@ -55,7 +55,7 @@ export class TrackingAPIService {
         cb: StreamTrackCallbacks,
     ): AbortController {
         const controller = new AbortController();
-        const url = `${getDefaultBackendBase()}/track`;
+        const url = `${getEngineBaseUrl()}/track`;
 
         const run = async () => {
             let response: Response;

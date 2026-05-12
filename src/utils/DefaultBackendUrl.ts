@@ -38,3 +38,28 @@ export const getDefaultBackendUrl = (path: string = ''): string => {
     if (!path) return base;
     return path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
 };
+
+/**
+ * 优先用用户在「推理引擎」配置的地址,没有活跃引擎时 fallback 到 getDefaultBackendBase()。
+ *
+ * 解决"model.work 前端 + 远程/本地后端"场景:getDefaultBackendBase() 在公网域名下
+ * 回退到 localhost,但用户手动配的引擎 URL 才是正确的后端地址。
+ *
+ * FrameExtractorService / TrackingAPIService 等应该调本函数。
+ */
+export const getEngineBaseUrl = (): string => {
+    try {
+        const { store } = require('../index');
+        const state = store.getState();
+        const activeId = state.aimodels?.activeModelId;
+        if (activeId) {
+            const model = state.aimodels.models.find((m: any) => m.id === activeId);
+            if (model?.url) {
+                return model.url.replace(/\/+$/, '');
+            }
+        }
+    } catch {
+        // store 还没初始化
+    }
+    return getDefaultBackendBase();
+};
