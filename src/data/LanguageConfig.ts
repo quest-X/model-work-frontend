@@ -670,8 +670,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 apiKey: '引擎密钥',
                 testConnection: '测试连接',
                 integrationMessage: '配置本地或远程推理引擎的连接信息。填写引擎根地址（如 http://localhost:8000），前端会自动拼接 /detect、/segment 等路径。',
-                taskTypeDetection: '检测引擎',
-                taskTypeSegmentation: '分割引擎'
+                taskTypeDetection: '检测模型',
+                taskTypeSegmentation: '分割模型'
             }
         },
         
