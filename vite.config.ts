@@ -24,10 +24,9 @@ export default ({ mode }: UserConfig): UserConfigExport => {
           manualChunks: {
             lodash: ['lodash'],
             classnames: ['classnames'],
-            runtime: ['react', 'react-is'],
+            runtime: ['react'],
             'runtime-dom': ['react-dom'],
             ui: ['@mui/material', '@mui/system'],
-            moment: ['moment'],
           },
         },
       },
