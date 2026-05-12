@@ -253,7 +253,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                         <StyledTextField
                             variant='standard'
                             type='password'
-                            label={currentTexts.modelManagement.modelKeyOptional || '模型密钥 (可选)'}
+                            label={currentTexts.modelManagement.apiKeyOptional}
                             value={editingModel.apiKey || ''}
                             onChange={(e) => updateEditingField('apiKey', e.target.value)}
                             style={{ width: '100%', marginBottom: '16px' }}
@@ -326,7 +326,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                     <span className='url'>{selectedModel.url}</span>
                 </div>
                 <div className='ModelField'>
-                    <label>{language === Language.CHINESE ? '模型密钥' : 'Model Key'}</label>
+                    <label>{currentTexts.modelManagement.apiKey}</label>
                     <span>{selectedModel.apiKey ? '••••••••' : currentTexts.modelManagement.none}</span>
                 </div>
                 {/* 模型描述字段暂时隐藏，以后再启用

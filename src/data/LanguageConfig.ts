@@ -326,7 +326,7 @@ export interface LanguageTexts {
     // AI Model Management
     modelManagement: {
         callModels: string;   // 原 localModels —— 调用模型
-        modelEngines: string; // 原 remoteModels —— 模型引擎
+        modelEngines: string;
         manage: string;
         noModels: string;
         noModelsHint: string;
@@ -557,8 +557,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 description: '在服务器上运行标注模型'
             },
             integrateAIModel: {
-                name: '模型管理',
-                description: '集成外部AI模型服务'
+                name: '引擎管理',
+                description: '接入本地或远程推理引擎'
             }
         },
         
@@ -662,16 +662,16 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 localYoloUrl: '服务地址'
             },
             modelEngine: {
-                title: '模型引擎',
+                title: '推理引擎',
                 acceptButton: '保存',
                 rejectButton: '取消',
-                modelUrl: '模型地址',
-                modelType: '模型类型',
-                apiKey: '模型密钥',
+                modelUrl: '引擎地址',
+                modelType: '引擎类型',
+                apiKey: '引擎密钥',
                 testConnection: '测试连接',
-                integrationMessage: '配置您要接入的外部AI模型服务的详细信息。模型地址和模型类型是必填项，模型密钥为可选项。',
-                taskTypeDetection: '检测模型',
-                taskTypeSegmentation: '分割模型'
+                integrationMessage: '配置本地或远程推理引擎的连接信息。填写引擎根地址（如 http://localhost:8000），前端会自动拼接 /detect、/segment 等路径。',
+                taskTypeDetection: '检测引擎',
+                taskTypeSegmentation: '分割引擎'
             }
         },
         
@@ -824,24 +824,24 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         // AI Model Management
         modelManagement: {
             callModels: '推理中心',
-            modelEngines: '模型引擎',
+            modelEngines: '推理引擎',
             manage: '管理',
-            noModels: '暂无AI模型',
-            noModelsHint: '点击添加第一个AI模型',
-            modelName: '模型名称',
-            modelUrl: '模型地址',
-            apiKeyOptional: 'API密钥 (可选)',
-            descriptionOptional: '模型描述 (可选)',
-            selectModelHint: '请选择一个模型查看详情',
-            unnamedModel: '未命名模型',
+            noModels: '暂无推理引擎',
+            noModelsHint: '点击添加第一个推理引擎',
+            modelName: '引擎名称',
+            modelUrl: '引擎地址',
+            apiKeyOptional: '引擎密钥 (可选)',
+            descriptionOptional: '引擎描述 (可选)',
+            selectModelHint: '请选择一个引擎查看详情',
+            unnamedModel: '未命名引擎',
             none: '无',
             noDescription: '暂无描述',
-            manageMessage: '管理您的AI模型。您可以添加、编辑或删除模型，选择要使用的默认模型。',
-            modelDetails: '模型详情',
-            title: '模型引擎',
+            manageMessage: '管理您的推理引擎。您可以添加、编辑或删除引擎，选择要使用的默认引擎。',
+            modelDetails: '引擎详情',
+            title: '推理引擎',
             close: '关闭',
-            apiEndpoint: '接口地址',
-            apiKey: '模型密钥',
+            apiEndpoint: '引擎地址',
+            apiKey: '引擎密钥',
             description: '模型描述',
         },
 
@@ -1135,16 +1135,16 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 localYoloUrl: 'Server URL'
             },
             modelEngine: {
-                title: 'Model Engine',
+                title: 'Inference Engine',
                 acceptButton: 'Save',
                 rejectButton: 'Cancel',
-                modelUrl: 'Model URL',
-                modelType: 'Model Type',
-                apiKey: 'Model Key',
+                modelUrl: 'Engine URL',
+                modelType: 'Engine Type',
+                apiKey: 'Engine Key',
                 testConnection: 'Test Connection',
-                integrationMessage: 'Configure the details of the external AI model service you want to integrate. Model URL and model type are required, model key is optional.',
-                taskTypeDetection: 'Object Detection',
-                taskTypeSegmentation: 'Object Segmentation'
+                integrationMessage: 'Configure the connection to a local or remote inference engine. Enter the engine base URL (e.g. http://localhost:8000) — the frontend auto-appends /detect, /segment, etc.',
+                taskTypeDetection: 'Detection Engine',
+                taskTypeSegmentation: 'Segmentation Engine'
             }
         },
         
@@ -1297,24 +1297,24 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         // AI Model Management
         modelManagement: {
             callModels: 'Inference Center',
-            modelEngines: 'Model Engines',
+            modelEngines: 'Inference Engines',
             manage: 'Manage',
-            noModels: 'No AI Models',
-            noModelsHint: 'Click to add your first AI model',
-            modelName: 'Model Name',
-            modelUrl: 'Model URL',
-            apiKeyOptional: 'API Key (optional)',
+            noModels: 'No Inference Engines',
+            noModelsHint: 'Click to add your first inference engine',
+            modelName: 'Engine Name',
+            modelUrl: 'Engine URL',
+            apiKeyOptional: 'Engine Key (optional)',
             descriptionOptional: 'Description (optional)',
-            selectModelHint: 'Select a model to view details',
-            unnamedModel: 'Unnamed Model',
+            selectModelHint: 'Select an engine to view details',
+            unnamedModel: 'Unnamed Engine',
             none: 'None',
             noDescription: 'No description',
-            manageMessage: 'Manage your AI models. You can add, edit or delete models, and select a default model to use.',
-            modelDetails: 'Model Details',
-            title: 'AI Models Management',
+            manageMessage: 'Manage your inference engines. You can add, edit or delete engines, and select a default engine.',
+            modelDetails: 'Engine Details',
+            title: 'Inference Engines',
             close: 'Close',
-            apiEndpoint: 'API Endpoint',
-            apiKey: 'API Key',
+            apiEndpoint: 'Engine URL',
+            apiKey: 'Engine Key',
             description: 'Description',
         },
 

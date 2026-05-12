@@ -207,7 +207,8 @@ export class DetectionAPIDetector {
                 if (!active.url) {
                     return { ok: false, reason: `Active model "${active.name}" has no url` };
                 }
-                this.config = { url: active.url, enabled: true };
+                const base = active.url.replace(/\/+$/, '');
+                this.config = { url: base.endsWith('/detect') ? base : `${base}/detect`, enabled: true };
                 return { ok: true };
             }
             // 没有 activeModel 时回退到 config(由老弹窗设置的 URL)

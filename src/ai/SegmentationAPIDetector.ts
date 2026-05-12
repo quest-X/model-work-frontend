@@ -251,7 +251,8 @@ export class SegmentationAPIDetector {
                 if (!active.url) {
                     return { ok: false, reason: `Active model "${active.name}" has no url` };
                 }
-                this.config = { url: active.url, enabled: true };
+                const base = active.url.replace(/\/+$/, '');
+                this.config = { url: base.endsWith('/segment') ? base : `${base}/segment`, enabled: true };
                 return { ok: true };
             }
             if (this.config.enabled && this.config.url) return { ok: true };
