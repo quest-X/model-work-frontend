@@ -38,13 +38,15 @@ const ModelEnginePopup: React.FC<IProps> = (
 ) => {
     const currentTexts = LanguageConfig[language];
     
-    const DEFAULT_API_KEY_BY_TYPE: Record<'detection' | 'segmentation' | 'ocr', string> = {
+    type EngineType = 'core' | 'detection' | 'segmentation' | 'ocr';
+    const DEFAULT_API_KEY_BY_TYPE: Record<EngineType, string> = {
+        core: '',
         detection: '123456',
         segmentation: 'baosight@ABC123!',
         ocr: '',
     };
     const [modelUrl, setModelUrl] = useState('https://api.model.work:58600');
-    const [modelType, setModelType] = useState<'detection' | 'segmentation' | 'ocr'>('detection');
+    const [modelType, setModelType] = useState<EngineType>('core');
     const [apiKey, setApiKey] = useState(DEFAULT_API_KEY_BY_TYPE.detection);
     const [isConnecting, setIsConnecting] = useState(false);
     const [modelTypeOpen, setModelTypeOpen] = useState(false);
@@ -89,10 +91,24 @@ const ModelEnginePopup: React.FC<IProps> = (
         try {
             setIsConnecting(true);
             
-            // 模拟集成过程
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            const nameMap = {
+            const base = modelUrl.replace(/\/+$/, '');
+            const ac = new AbortController();
+            const timer = setTimeout(() => ac.abort(), 8000);
+            const healthRes = await fetch(`${base}/health`, { signal: ac.signal });
+            clearTimeout(timer);
+            const health = await healthRes.json();
+
+            const typeCheck: Record<EngineType, string | null> = {
+                core: health.status === 'ok' ? null : 'backend not ok',
+                detection: health.services?.detection === 'ready' ? null : (language === Language.CHINESE ? '检测服务未就绪' : 'Detection service not ready'),
+                segmentation: health.services?.segmentation === 'ready' ? null : (language === Language.CHINESE ? '分割服务未就绪' : 'Segmentation service not ready'),
+                ocr: health.services?.ocr && health.services.ocr !== 'not_loaded' ? null : (language === Language.CHINESE ? 'OCR 服务未就绪' : 'OCR service not ready'),
+            };
+            const err = typeCheck[modelType];
+            if (err) throw new Error(err);
+
+            const nameMap: Record<EngineType, string> = {
+                core: language === Language.CHINESE ? '核心引擎' : 'Core Engine',
                 detection: language === Language.CHINESE ? '检测引擎' : 'Detection Engine',
                 segmentation: language === Language.CHINESE ? '分割引擎' : 'Segmentation Engine',
                 ocr: language === Language.CHINESE ? 'OCR 引擎' : 'OCR Engine',
@@ -146,7 +162,7 @@ const ModelEnginePopup: React.FC<IProps> = (
     }
 
     const modelTypeOnChangeCallback = (event: SelectChangeEvent) => {
-        const newType = event.target.value as 'detection' | 'segmentation' | 'ocr';
+        const newType = event.target.value as EngineType;
         setModelType(newType);
         setApiKey(DEFAULT_API_KEY_BY_TYPE[newType]);
     }
@@ -291,7 +307,8 @@ const ModelEnginePopup: React.FC<IProps> = (
                                         position: 'relative',
                                     }}
                                 >
-                                    {{ detection: currentTexts.popups.modelEngine.taskTypeDetection,
+                                    {{ core: currentTexts.popups.modelEngine.taskTypeCore,
+                                       detection: currentTexts.popups.modelEngine.taskTypeDetection,
                                        segmentation: currentTexts.popups.modelEngine.taskTypeSegmentation,
                                        ocr: currentTexts.popups.modelEngine.taskTypeOCR }[modelType]}
                                     <span style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 9 }}>▼</span>
@@ -309,7 +326,7 @@ const ModelEnginePopup: React.FC<IProps> = (
                                         boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
                                         overflow: 'hidden',
                                     }}>
-                                        {(['detection', 'segmentation', 'ocr'] as const).map(t => (
+                                        {(['core', 'detection', 'segmentation', 'ocr'] as const).map(t => (
                                             <div
                                                 key={t}
                                                 onClick={() => {
@@ -327,7 +344,8 @@ const ModelEnginePopup: React.FC<IProps> = (
                                                 onMouseEnter={ev => { if (t !== modelType) (ev.currentTarget as HTMLDivElement).style.background = '#3a3a3a'; }}
                                                 onMouseLeave={ev => { if (t !== modelType) (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
                                             >
-                                                {{ detection: currentTexts.popups.modelEngine.taskTypeDetection,
+                                                {{ core: currentTexts.popups.modelEngine.taskTypeCore,
+                                                   detection: currentTexts.popups.modelEngine.taskTypeDetection,
                                                    segmentation: currentTexts.popups.modelEngine.taskTypeSegmentation,
                                                    ocr: currentTexts.popups.modelEngine.taskTypeOCR }[t]}
                                                 {t === modelType ? ' ✓' : ''}

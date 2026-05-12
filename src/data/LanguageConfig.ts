@@ -193,6 +193,7 @@ export interface LanguageTexts {
             apiKey: string;
             testConnection: string;
             integrationMessage: string;
+            taskTypeCore: string;
             taskTypeDetection: string;
             taskTypeSegmentation: string;
             taskTypeOCR: string;
@@ -671,8 +672,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 apiKey: '引擎密钥',
                 testConnection: '测试连接',
                 integrationMessage: '配置本地或远程推理引擎的连接信息。填写引擎根地址（如 http://localhost:58600），前端会自动拼接 /detect、/segment、/ocr 等路径。',
-                taskTypeDetection: '检测模型',
-                taskTypeSegmentation: '分割模型',
+                taskTypeCore: '核心引擎',
+                taskTypeDetection: '检测引擎',
+                taskTypeSegmentation: '分割引擎',
                 taskTypeOCR: '文字识别 (OCR)'
             }
         },
@@ -1145,6 +1147,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 apiKey: 'Engine Key',
                 testConnection: 'Test Connection',
                 integrationMessage: 'Configure the connection to a local or remote inference engine. Enter the engine base URL (e.g. http://localhost:58600) — the frontend auto-appends /detect, /segment, /ocr, etc.',
+                taskTypeCore: 'Core Engine',
                 taskTypeDetection: 'Detection Engine',
                 taskTypeSegmentation: 'Segmentation Engine',
                 taskTypeOCR: 'Text Recognition (OCR)'

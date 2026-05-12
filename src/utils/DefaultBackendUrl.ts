@@ -51,12 +51,14 @@ export const getEngineBaseUrl = (): string => {
     try {
         const { store } = require('../index');
         const state = store.getState();
+        const models: any[] = state.aimodels?.models ?? [];
+        // 优先找 core 引擎，其次用当前激活引擎
+        const core = models.find((m: any) => m.modelType === 'core' && m.isActive);
+        if (core?.url) return core.url.replace(/\/+$/, '');
         const activeId = state.aimodels?.activeModelId;
         if (activeId) {
-            const model = state.aimodels.models.find((m: any) => m.id === activeId);
-            if (model?.url) {
-                return model.url.replace(/\/+$/, '');
-            }
+            const model = models.find((m: any) => m.id === activeId);
+            if (model?.url) return model.url.replace(/\/+$/, '');
         }
     } catch {
         // store 还没初始化
