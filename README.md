@@ -4,6 +4,8 @@ AI-powered visual annotation tool with object detection, instance segmentation, 
 
 Built on [make-sense](https://github.com/SkalskiP/make-sense) by Skalski.
 
+![OpenSight Platform](docs/preview.png)
+
 **Live Demo**: [https://model.work](https://model.work/)
 
 ## Features
