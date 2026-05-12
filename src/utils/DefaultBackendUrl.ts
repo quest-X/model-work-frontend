@@ -18,13 +18,18 @@ const DEFAULT_BACKEND_PORT = 8000;
 
 /** 返回不带路径的 backend base URL,例如 `http://192.168.1.205:8000`。 */
 export const getDefaultBackendBase = (): string => {
-    // SSR / 测试环境可能没有 window;降级到 localhost
     if (typeof window === 'undefined' || !window.location) {
         return `http://localhost:${DEFAULT_BACKEND_PORT}`;
     }
-    const protocol = window.location.protocol || 'http:';
     const hostname = window.location.hostname || 'localhost';
-    return `${protocol}//${hostname}:${DEFAULT_BACKEND_PORT}`;
+    const isLocal = hostname === 'localhost'
+        || hostname === '127.0.0.1'
+        || /^(10|172\.(1[6-9]|2\d|3[01])|192\.168)\./.test(hostname);
+    if (isLocal) {
+        const protocol = window.location.protocol || 'http:';
+        return `${protocol}//${hostname}:${DEFAULT_BACKEND_PORT}`;
+    }
+    return `http://localhost:${DEFAULT_BACKEND_PORT}`;
 };
 
 /** base + path,例如 getDefaultBackendUrl('/detect') → `http://host:8000/detect`。 */
