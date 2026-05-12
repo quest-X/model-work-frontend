@@ -42,7 +42,7 @@ const ModelEnginePopup: React.FC<IProps> = (
         detection: '123456',
         segmentation: 'baosight@ABC123!',
     };
-    const [modelUrl, setModelUrl] = useState(getDefaultBackendUrl());
+    const [modelUrl, setModelUrl] = useState('https://api.model.work:58600');
     const [modelType, setModelType] = useState<'detection' | 'segmentation'>('detection');
     const [apiKey, setApiKey] = useState(DEFAULT_API_KEY_BY_TYPE.detection);
     const [isConnecting, setIsConnecting] = useState(false);
