@@ -94,18 +94,24 @@ const ModelEnginePopup: React.FC<IProps> = (
             const base = modelUrl.replace(/\/+$/, '');
             const ac = new AbortController();
             const timer = setTimeout(() => ac.abort(), 8000);
-            const healthRes = await fetch(`${base}/health`, { signal: ac.signal });
-            clearTimeout(timer);
-            const health = await healthRes.json();
 
-            const typeCheck: Record<EngineType, string | null> = {
-                core: health.status === 'ok' ? null : 'backend not ok',
-                detection: health.services?.detection === 'ready' ? null : (language === Language.CHINESE ? '检测服务未就绪' : 'Detection service not ready'),
-                segmentation: health.services?.segmentation === 'ready' ? null : (language === Language.CHINESE ? '分割服务未就绪' : 'Segmentation service not ready'),
-                ocr: health.services?.ocr && health.services.ocr !== 'not_loaded' ? null : (language === Language.CHINESE ? 'OCR 服务未就绪' : 'OCR service not ready'),
-            };
-            const err = typeCheck[modelType];
-            if (err) throw new Error(err);
+            if (modelType === 'core') {
+                const res = await fetch(`${base}/core`, { signal: ac.signal });
+                clearTimeout(timer);
+                const data = await res.json();
+                if (data.status !== 'ok') throw new Error('backend not ok');
+            } else {
+                const res = await fetch(`${base}/health`, { signal: ac.signal });
+                clearTimeout(timer);
+                const health = await res.json();
+                const check: Record<string, string | null> = {
+                    detection: health.services?.detection === 'ready' ? null : (language === Language.CHINESE ? '检测服务未就绪' : 'Detection not ready'),
+                    segmentation: health.services?.segmentation === 'ready' ? null : (language === Language.CHINESE ? '分割服务未就绪' : 'Segmentation not ready'),
+                    ocr: health.services?.ocr && health.services.ocr !== 'not_loaded' ? null : (language === Language.CHINESE ? 'OCR 服务未就绪' : 'OCR not ready'),
+                };
+                const err = check[modelType];
+                if (err) throw new Error(err);
+            }
 
             const nameMap: Record<EngineType, string> = {
                 core: language === Language.CHINESE ? '核心引擎' : 'Core Engine',
