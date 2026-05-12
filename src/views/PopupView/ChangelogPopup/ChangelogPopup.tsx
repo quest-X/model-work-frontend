@@ -16,6 +16,18 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.6.9',
+        date: '2026-05-12',
+        changes: [
+            { zh: '【功能】核心引擎类型：新增 core 引擎分类，/core 独立健康验证，检测/分割/OCR 各走 /health', en: '[Feat] Core engine type: new core engine category with independent /core health check; detection/segmentation/OCR each use /health' },
+            { zh: '【功能】OCR 引擎类型支持：引擎下拉新增 OCR 选项', en: '[Feat] OCR engine type: engine dropdown now includes OCR option' },
+            { zh: '【功能】getEngineBaseUrl 动态引擎 URL：根据引擎类型动态拼接后端地址，支持多引擎多端口部署', en: '[Feat] getEngineBaseUrl dynamic engine URL: dynamically builds backend address per engine type, supporting multi-engine multi-port deployments' },
+            { zh: '【优化】自动 HTTPS：前端部署在公网域名时默认使用 https，localhost 开发时保持 http', en: '[Optimize] Auto HTTPS: defaults to https when frontend is deployed on a public domain; stays http for localhost development' },
+            { zh: '【部署】GitHub Pages 自动部署：新增 CI workflow，推送 main 自动构建并发布到 GitHub Pages', en: '[Deploy] GitHub Pages auto-deploy: new CI workflow builds and publishes to GitHub Pages on push to main' },
+            { zh: '【发布】在线预览版上线 model.work：无需安装即可体验标注功能，README 新增预览截图', en: '[Release] Online preview at model.work: try annotation features without installing; README updated with preview screenshots' },
+        ]
+    },
+    {
         version: '2.6.8',
         date: '2026-05-11',
         changes: [
