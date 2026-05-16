@@ -611,13 +611,13 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 
         // ── 检索模式：用当前帧的 polygon 作为 seed mask 跨帧跟踪 ──
         if (trackingMode) {
-            const polygons = activeImageData.labelPolygons || [];
+            const polygons = (activeImageData.labelPolygons || []).filter(p => p.isVisible !== false);
             if (polygons.length === 0) {
                 const errNote = NotificationUtil.createErrorNotification({
                     header: language === 'zh' ? '检索失败' : 'Retrieval failed',
                     description: language === 'zh'
-                        ? '当前帧没有标注，请先用智能标注创建 seed mask'
-                        : 'No annotations on current frame. Use smart annotation to create a seed mask first.',
+                        ? '当前帧没有可见标注，请先用智能标注创建 seed mask（或取消隐藏已有标注）'
+                        : 'No visible annotations on current frame. Create a seed mask first or unhide existing ones.',
                 });
                 store.dispatch(submitNewNotification(errNote));
                 setTimeout(() => store.dispatch(deleteNotificationById(errNote.id)), 5000);
