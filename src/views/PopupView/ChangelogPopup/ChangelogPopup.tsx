@@ -16,6 +16,17 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.7.0',
+        date: '2026-05-16',
+        changes: [
+            { zh: '【修复】模型管理弹窗分割模型已下载计数始终为 0：getLocalDownloadedCount 只查找检测模型列表，现在同时查找分割模型列表', en: '[Fix] ManageAIModelsPopup segmentation model download count always 0: getLocalDownloadedCount now searches both detection and segmentation model families' },
+            { zh: '【修复】标签可见性切换后眼睛图标不更新：getAllLabels 每次重建时硬编码 isVisible，忽略 store 中的实际状态', en: '[Fix] Eye icon not updating after toggling label visibility: getAllLabels was hardcoding isVisible on each rebuild, ignoring the actual store state' },
+            { zh: '【修复】检索模式只使用当前帧可见的标签作为 seed mask，隐藏的标签不再发送到后端', en: '[Fix] Retrieval mode now only uses visible labels as seed mask; hidden labels are no longer sent to backend' },
+            { zh: '【功能】支持反向检索/跟踪：seed 帧离选区末端更近时自动反向传播（从 seed 帧往选区起点方向），适用于中间帧最清晰的场景', en: '[Feat] Reverse retrieval/tracking: when the seed frame is closer to the end of the selection range, tracking automatically propagates backwards toward the start frame' },
+            { zh: '【后端】仅保留最大 mask 改为按类别分组：多标签模型每个类别各保留面积最大的 mask，而非全局只保留一个', en: '[Backend] "Keep largest mask only" now groups by class: multi-label models keep the largest mask per class instead of a single global largest' },
+        ]
+    },
+    {
         version: '2.6.9',
         date: '2026-05-12',
         changes: [
