@@ -68,7 +68,11 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
             .then(data => { if (data.model) setLoadedModel(data.model.replace(/\.(pt|onnx)$/, '')); })
             .catch(() => {});
         fetch(`${serverUrl}/available-models`).then(r => r.json())
-            .then(data => { if (data.models) setDownloadedModels(data.models); })
+            .then(data => {
+                if (data.models) setDownloadedModels(data.models.map((m: unknown) =>
+                    typeof m === 'string' ? m : (m as { name: string }).name
+                ));
+            })
             .catch(() => {});
     }, [serverUrl]);
 
