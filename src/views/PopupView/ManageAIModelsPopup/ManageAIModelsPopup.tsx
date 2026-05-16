@@ -114,7 +114,8 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
     };
 
     const getLocalDownloadedCount = (familyId: string): number => {
-        const family = YOLO_MODEL_FAMILIES.find(f => f.id === familyId);
+        const family = YOLO_MODEL_FAMILIES.find(f => f.id === familyId)
+            || SEG_MODEL_FAMILIES.find(f => f.id === familyId);
         if (!family) return 0;
         return family.variants.filter(v => availableLocalModels.includes(v)).length;
     };
