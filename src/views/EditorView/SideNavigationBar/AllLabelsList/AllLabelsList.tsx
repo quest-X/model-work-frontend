@@ -82,11 +82,11 @@ const AllLabelsList: React.FC<IProps> = (
                         isCreatedByAI: rect.isCreatedByAI,
                         status: rect.status,
                         suggestedLabel: rect.suggestedLabel,
-                        isVisible: rect.isCreatedByAI ? aiLabelsVisible : true
+                        isVisible: rect.isCreatedByAI ? (aiLabelsVisible && rect.isVisible !== false) : rect.isVisible !== false
                     });
                 });
         }
-        
+
         // 添加点标签（显示所有已接受的标签，AI标签始终显示但标记隐藏状态）
         if (imageData.labelPoints) {
             imageData.labelPoints
@@ -99,11 +99,11 @@ const AllLabelsList: React.FC<IProps> = (
                         isCreatedByAI: point.isCreatedByAI,
                         status: point.status,
                         suggestedLabel: point.suggestedLabel,
-                        isVisible: point.isCreatedByAI ? aiLabelsVisible : true
+                        isVisible: point.isCreatedByAI ? (aiLabelsVisible && point.isVisible !== false) : point.isVisible !== false
                     });
                 });
         }
-        
+
         // 添加多边形标签（显示所有已接受的标签，AI标签始终显示但标记隐藏状态）
         if (imageData.labelPolygons) {
             imageData.labelPolygons
@@ -116,11 +116,11 @@ const AllLabelsList: React.FC<IProps> = (
                         isCreatedByAI: polygon.isCreatedByAI,
                         status: polygon.status,
                         suggestedLabel: polygon.suggestedLabel,
-                        isVisible: polygon.isCreatedByAI ? segmentationLabelsVisible : true
+                        isVisible: polygon.isCreatedByAI ? (segmentationLabelsVisible && polygon.isVisible !== false) : polygon.isVisible !== false
                     });
                 });
         }
-        
+
         // 添加线条标签（显示所有已接受的标签，AI标签始终显示但标记隐藏状态）
         if (imageData.labelLines) {
             imageData.labelLines
@@ -133,7 +133,7 @@ const AllLabelsList: React.FC<IProps> = (
                         isCreatedByAI: line.isCreatedByAI,
                         status: line.status,
                         suggestedLabel: line.suggestedLabel,
-                        isVisible: line.isCreatedByAI ? aiLabelsVisible : true
+                        isVisible: line.isCreatedByAI ? (aiLabelsVisible && line.isVisible !== false) : line.isVisible !== false
                     });
                 });
         }
