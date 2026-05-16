@@ -38,6 +38,7 @@ type StartParams = {
     bboxImageSpace: [number, number, number, number];
     modelName: string;
     className?: string; // 可选；未给时用 "tracked"
+    reverse?: boolean;
 };
 
 /** 检索模式参数：用当前帧的 SAM polygon 作为 seed mask */
@@ -49,6 +50,7 @@ type RetrievalParams = {
     maskPolygons: [number, number][][];
     modelName: string;
     className?: string;
+    reverse?: boolean;
 };
 
 // ── Tracking dispatch coalescer ───────────────────────────────────────────────
@@ -270,6 +272,7 @@ export class ObjectTrackingActions {
                 endFrame: params.endFrameIdx,
                 bbox: params.bboxImageSpace,
                 modelName: params.modelName,
+                reverse: params.reverse,
                 postprocess,
             },
             {
@@ -459,6 +462,7 @@ export class ObjectTrackingActions {
                 endFrame: params.endFrameIdx,
                 maskPolygons: params.maskPolygons,
                 modelName: params.modelName,
+                reverse: params.reverse,
                 postprocess,
             },
             {

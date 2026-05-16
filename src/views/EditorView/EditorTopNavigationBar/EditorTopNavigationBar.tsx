@@ -633,10 +633,19 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 p.vertices.map((v: any) => [v.x, v.y] as [number, number])
             );
 
-            const startFrame = range ? range.startFrame : currentFrame;
-            const endFrame = range ? range.endFrame : imagesData.length - 1;
+            const rangeStart = range ? range.startFrame : 0;
+            const rangeEnd = range ? range.endFrame : imagesData.length - 1;
             const sessionId = activeVideo?.sessionId || '';
             const modelName = activeModelName;
+
+            // 自动判断方向：seed 帧离选区末端更近时反向检索
+            const distToStart = Math.abs(currentFrame - rangeStart);
+            const distToEnd = Math.abs(currentFrame - rangeEnd);
+            const reverse = distToEnd < distToStart;
+
+            // 反向：从 seed 帧往前走到选区起点；正向：从 seed 帧往后走到选区终点
+            const startFrame = reverse ? rangeStart : currentFrame;
+            const endFrame = reverse ? currentFrame : rangeEnd;
 
             // 尝试从第一个 polygon 的 labelId 获取 className
             const labels = store.getState().labels.labels;
@@ -651,6 +660,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 maskPolygons,
                 modelName,
                 className,
+                reverse,
             });
             return;
         }

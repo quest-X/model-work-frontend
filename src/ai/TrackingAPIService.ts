@@ -25,6 +25,9 @@ export type StreamTrackParams = {
      *  Backend rasterizes them into a binary mask for SAM 2/3 tracking. */
     maskPolygons?: [number, number][][];
     modelName: string;
+    /** When true, tracking runs from endFrame backwards to startFrame.
+     *  The seed prompt is applied to endFrame (reversed clip frame 0). */
+    reverse?: boolean;
     /** Mirrors /segment postprocess. Only present keys are applied; absent =
      *  use backend defaults (polygon_epsilon=2px memory baseline, others off).
      *  Caller is responsible for honoring the pipeline activation toggle. */
@@ -72,6 +75,7 @@ export class TrackingAPIService {
                             ? { mask: params.maskPolygons }
                             : { bbox: params.bbox },
                         model: params.modelName,
+                        ...(params.reverse ? { reverse: true } : {}),
                         ...(params.postprocess ? { postprocess: params.postprocess } : {}),
                     }),
                 });
