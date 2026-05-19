@@ -28,6 +28,7 @@ import { AIDetectionActions } from '../../../logic/actions/AIDetectionActions';
 import { AISegmentationActions } from '../../../logic/actions/AISegmentationActions';
 import { DetectionAPIDetector } from '../../../ai/DetectionAPIDetector';
 import { SegmentationAPIDetector } from '../../../ai/SegmentationAPIDetector';
+import { getEngineBaseUrl } from '../../../utils/DefaultBackendUrl';
 import { ActiveModel } from '../../../ai/ActiveModel';
 import { ScriptStore } from '../../../ai/ScriptStore';
 import { PipelineStore } from '../../../ai/PipelineStore';
@@ -413,7 +414,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         if (smartAnnotationActive) {
             const samModel = loadedModels.find(name => /^(sam2|sam3|sam_|mobile_sam|FastSAM)/i.test(name));
             if (samModel && samModel !== activeModelName) {
-                const url = DetectionAPIDetector.getConfig().url.replace('/detect', '/switch-model');
+                const url = `${getEngineBaseUrl()}/switch-model`;
                 fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -430,7 +431,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     const switchModel = useCallback((modelName: string) => {
         if (modelName === activeModelName) return;
         setActiveModelName(modelName); // 乐观更新，轮询不会覆盖
-        const url = DetectionAPIDetector.getConfig().url.replace('/detect', '/switch-model');
+        const url = `${getEngineBaseUrl()}/switch-model`;
         fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -447,8 +448,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     const initializedRef = useRef(false);
     const loadedModelsRef = useRef<string[]>([]);
     useEffect(() => {
-        const baseUrl = DetectionAPIDetector.getConfig().url.replace('/detect', '');
         const fetchModels = () => {
+            const baseUrl = getEngineBaseUrl();
             fetch(`${baseUrl}/health`).then(r => r.json()).then(data => {
                 if (data.model_tasks) setModelTasks(data.model_tasks);
                 setDetSlotName(data.model || '');

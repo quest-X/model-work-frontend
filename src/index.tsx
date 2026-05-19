@@ -5,8 +5,10 @@ import App from './App';
 import configureStore from './configureStore';
 import { Provider } from 'react-redux';
 import { AppInitializer } from './logic/initializer/AppInitializer';
+import { registerEngineStore } from './utils/DefaultBackendUrl';
 
 export const store = configureStore();
+registerEngineStore(store);
 AppInitializer.inti();
 
 const root = ReactDOM.createRoot(document.getElementById('root') || document.createElement('div'));

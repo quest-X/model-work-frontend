@@ -38,6 +38,14 @@ export const getDefaultBackendUrl = (path: string = ''): string => {
     return path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
 };
 
+// 由 index.tsx 在 store 初始化后注入,避免循环依赖 + require() 不可用的问题。
+let _storeRef: { getState: () => any } | null = null;
+
+/** index.tsx 在 store 创建后调用一次,之后 getEngineBaseUrl() 就能读到正确的 store 状态。 */
+export const registerEngineStore = (s: { getState: () => any }): void => {
+    _storeRef = s;
+};
+
 /**
  * 优先用用户在「推理引擎」配置的地址,没有活跃引擎时 fallback 到 getDefaultBackendBase()。
  *
@@ -48,19 +56,23 @@ export const getDefaultBackendUrl = (path: string = ''): string => {
  */
 export const getEngineBaseUrl = (): string => {
     try {
-        const { store } = require('../index');
-        const state = store.getState();
-        const models: any[] = state.aimodels?.models ?? [];
-        // 优先找 core 引擎，其次用当前激活引擎
-        const core = models.find((m: any) => m.modelType === 'core' && m.isActive);
-        if (core?.url) return core.url.replace(/\/+$/, '');
-        const activeId = state.aimodels?.activeModelId;
-        if (activeId) {
-            const model = models.find((m: any) => m.id === activeId);
-            if (model?.url) return model.url.replace(/\/+$/, '');
+        if (_storeRef) {
+            const state = _storeRef.getState();
+            const models: any[] = state.aimodels?.models ?? [];
+            // 优先找 core 引擎，其次用当前激活引擎
+            const core = models.find((m: any) => m.modelType === 'core' && m.isActive);
+            if (core?.url) return core.url.replace(/\/+$/, '');
+            const activeId = state.aimodels?.activeModelId;
+            if (activeId) {
+                const model = models.find((m: any) => m.id === activeId);
+                if (model?.url) return model.url.replace(/\/+$/, '');
+            }
+            // 没有 activeModelId 时，取第一个有 url 的 model 作为兜底
+            const first = models.find((m: any) => m.url);
+            if (first?.url) return first.url.replace(/\/+$/, '');
         }
     } catch {
-        // store 还没初始化
+        // store 访问失败
     }
     return getDefaultBackendBase();
 };
