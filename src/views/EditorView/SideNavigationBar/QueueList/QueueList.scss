@@ -4,6 +4,40 @@
     align-self: stretch;
     flex: 1;
     overflow: hidden;
+    position: relative;
+    transition: background-color 0.15s ease;
+
+    &.drag-over {
+        background-color: rgba(0, 154, 255, 0.08);
+        outline: 2px dashed rgba(0, 154, 255, 0.5);
+        outline-offset: -4px;
+    }
+
+    .queue-drop-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        z-index: 10;
+        pointer-events: none;
+
+        img {
+            width: 40px;
+            height: 40px;
+            filter: invert(48%) sepia(98%) saturate(1500%) hue-rotate(192deg) brightness(1.05);
+            opacity: 0.9;
+        }
+
+        p {
+            margin: 0;
+            font-size: 13px;
+            color: #009AFF;
+            font-weight: 500;
+        }
+    }
 
     .queue-list-empty {
         flex: 1;

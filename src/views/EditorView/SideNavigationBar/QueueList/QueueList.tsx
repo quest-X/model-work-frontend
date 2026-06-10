@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { connect } from 'react-redux';
 import classNames from 'classnames';
+import { useDropzone } from 'react-dropzone';
 import { AppState } from '../../../../store';
 import { QueueItem, QueueItemType, QueueItemStatus } from '../../../../store/queue/types';
 import { ImageData } from '../../../../store/labels/types';
@@ -109,8 +110,8 @@ interface IProps {
     activeQueueItemId: string | null;
     imagesData: ImageData[];
     language: Language;
-    removeQueueItemAction: (itemId: string) => any;
-    updateImageDataAction: (imageData: ImageData[]) => any;
+    removeQueueItemAction: (itemId: string) => void;
+    updateImageDataAction: (imageData: ImageData[]) => void;
 }
 
 const QueueList: React.FC<IProps> = ({
@@ -122,6 +123,22 @@ const QueueList: React.FC<IProps> = ({
     updateImageDataAction,
 }) => {
     const texts = LanguageConfig[language];
+
+    const onDrop = useCallback((files: File[]) => {
+        if (files.length === 0) return;
+        window.dispatchEvent(new CustomEvent('opensight:drop-files', { detail: files }));
+    }, []);
+
+    const { getRootProps, isDragActive } = useDropzone({
+        onDrop,
+        noClick: true,
+        noKeyboard: true,
+        accept: {
+            'image/*': ['.jpeg', '.png', '.jpg'],
+            'video/*': ['.mp4', '.mov', '.avi', '.webm'],
+        },
+    });
+
     const handleItemSelect = (item: QueueItem) => {
         if (item.id === activeQueueItemId) return;
         if (item.status === QueueItemStatus.PROCESSING) return;
@@ -137,13 +154,20 @@ const QueueList: React.FC<IProps> = ({
     };
 
     return (
-        <div className='queue-list'>
-            {items.length === 0 ? (
+        <div {...getRootProps({ className: classNames('queue-list', { 'drag-over': isDragActive }) })}>
+            {isDragActive && (
+                <div className='queue-drop-overlay'>
+                    <img src='/ico/box-opened.png' alt='drop' draggable={false} />
+                    <p>{texts.queueEmptyHint}</p>
+                </div>
+            )}
+            {!isDragActive && items.length === 0 ? (
                 <div className='queue-list-empty'>
                     <img src='/ico/box-opened.png' alt='empty' draggable={false} />
                     <p>{texts.queueEmpty}</p>
+                    <p className='queue-list-empty-hint'>{texts.queueEmptyHint}</p>
                 </div>
-            ) : (
+            ) : !isDragActive ? (
                 <div className='queue-list-scroll'>
                     {items.map(item => (
                         <QueueItemCard
@@ -156,7 +180,7 @@ const QueueList: React.FC<IProps> = ({
                         />
                     ))}
                 </div>
-            )}
+            ) : null}
         </div>
     );
 };

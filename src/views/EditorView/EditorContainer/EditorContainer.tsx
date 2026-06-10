@@ -333,21 +333,8 @@ const EditorContainer: React.FC<IProps> = (
     };
 
     // 拖拽上传功能 - 支持图片和视频（仅拖拽，不支持点击）
-    const {acceptedFiles, getRootProps, getInputProps, isDragActive, open: openFileDialog} = useDropzone({
-        noClick: true, // 禁用点击上传，只支持拖拽
-        noKeyboard: true, // 禁用键盘触发上传，避免Space键冲突
-        accept: {
-            'image/*': ['.jpeg', '.png', '.jpg'],
-            'video/*': ['.mp4', '.mov', '.avi', '.webm'],
-            'application/json': ['.json'],
-            'text/plain': ['.txt'],
-            'application/xml': ['.xml'],
-            'text/xml': ['.xml'],
-            'application/zip': ['.zip'],
-            'application/x-zip-compressed': ['.zip'],
-            'application/octet-stream': ['.zip'],
-        },
-        onDrop: async (files) => {
+    // handleFileDrop 也被 QueueList 侧边栏的 opensight:drop-files 事件复用
+    const handleFileDrop = useCallback(async (files: File[]) => {
             if (files.length > 0) {
                 const sortedFiles = sortBy(files, (item: File) => item.name);
 
@@ -519,8 +506,31 @@ const EditorContainer: React.FC<IProps> = (
                     AutoSaveService.saveCurrentState();
                 }, 500);
             }
-        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [imagesData, addQueueItemsAction, updateActivePopupTypeAction]);
+
+    const {acceptedFiles, getRootProps, getInputProps, isDragActive, open: openFileDialog} = useDropzone({
+        noClick: true,
+        noKeyboard: true,
+        accept: {
+            'image/*': ['.jpeg', '.png', '.jpg'],
+            'video/*': ['.mp4', '.mov', '.avi', '.webm'],
+            'application/json': ['.json'],
+            'text/plain': ['.txt'],
+            'application/xml': ['.xml'],
+            'text/xml': ['.xml'],
+            'application/zip': ['.zip'],
+            'application/x-zip-compressed': ['.zip'],
+            'application/octet-stream': ['.zip'],
+        },
+        onDrop: handleFileDrop,
     } as DropzoneOptions);
+
+    useEffect(() => {
+        const handler = (e: Event) => handleFileDrop((e as CustomEvent<File[]>).detail);
+        window.addEventListener('opensight:drop-files', handler);
+        return () => window.removeEventListener('opensight:drop-files', handler);
+    }, [handleFileDrop]);
 
     const calculateEditorSize = (): ISize => {
         if (windowSize) {
