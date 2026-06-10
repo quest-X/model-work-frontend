@@ -1,5 +1,6 @@
 import {store} from "../../index";
 import {DetectionAPIDetector, DetectionResult} from "../../ai/DetectionAPIDetector";
+import {DetectSessionAPIService} from "../../ai/DetectSessionAPIService";
 import {ImageData, LabelName, LabelRect} from "../../store/labels/types";
 import {LabelStatus} from "../../data/enums/LabelStatus";
 import {v4 as uuidv4} from "uuid";
@@ -175,12 +176,12 @@ export class AIDetectionActions {
                             
                             const totalTime = ((Date.now() - progressNotification.startTime!) / 1000).toFixed(2);
                             
-                            // 显示成功通知
-                            const language = store.getState().general.language;
-                            const texts = LanguageConfig[language];
+                            // 显示成功通知（重新读语言 — 推理期间用户可能切换了）
+                            const langNow = store.getState().general.language;
+                            const textsNow = LanguageConfig[langNow];
                             const successNotification = NotificationUtil.createSuccessNotification({
-                                header: texts.notifications.detectionCompleted,
-                                description: texts.notifications.detectionCompletedMessage
+                                header: textsNow.notifications.detectionCompleted,
+                                description: textsNow.notifications.detectionCompletedMessage
                                     .replace('{count}', String(results.length))
                                     .replace('{time}', totalTime)
                             });
@@ -209,12 +210,12 @@ export class AIDetectionActions {
                     // 删除进度通知
                     store.dispatch(deleteNotificationById(progressNotification.id));
                     
-                    // 显示错误通知
-                    const language = store.getState().general.language;
-                    const texts = LanguageConfig[language];
+                    // 显示错误通知（重新读语言）
+                    const langNow = store.getState().general.language;
+                    const textsNow = LanguageConfig[langNow];
                     const errorNotification = NotificationUtil.createErrorNotification({
-                        header: texts.notifications.detectionFailed,
-                        description: error.message || texts.notifications.detectionFailedMessage
+                        header: textsNow.notifications.detectionFailed,
+                        description: error.message || textsNow.notifications.detectionFailedMessage
                     });
                     errorNotification.i18nHeader = 'notifications.detectionFailed';
                     store.dispatch(submitNewNotification(errorNotification));
@@ -233,6 +234,85 @@ export class AIDetectionActions {
     /** 让出主线程给 UI 渲染 */
     private static yieldToUI(): Promise<void> {
         return new Promise(r => setTimeout(r, 0));
+    }
+
+    /**
+     * 视频批量检测的流式路径：POST /detect-session/{sid}，后端拉帧 + 批量推理，
+     * NDJSON 每帧回流。对比"逐帧下载 ZIP → 逐帧 POST /detect"的旧链路
+     * （1440p 实测 ~0.8s/帧，大头在前端取帧往返），流式路径只剩后端推理耗时。
+     *
+     * frameQueue 按 frameIdx 升序；跳帧（部分帧已有 AI 框）切成连续区间逐段流。
+     * @returns true = 流路径完成（或用户取消）；false = 流不可用（旧后端 / 会话
+     *          失效），调用方应回退 blob 路径处理剩余帧。
+     */
+    private static async streamDetectViaSession(args: {
+        sessionId: string;
+        frameQueue: { frameIdx: number; imageData: ImageData }[];
+        notify: (step: number, stepDesc: string, detail: string, force?: boolean) => void;
+        t: () => typeof LanguageConfig[keyof typeof LanguageConfig];
+        counters: { success: number; fail: number; objects: number };
+    }): Promise<boolean> {
+        const { sessionId, frameQueue, notify, t, counters } = args;
+        if (frameQueue.length === 0) return true;
+
+        const byIdx = new Map(frameQueue.map(q => [q.frameIdx, q.imageData]));
+        // 连续 frameIdx 区间（[start, end) 半开）
+        const runs: Array<[number, number]> = [];
+        let runStart = frameQueue[0].frameIdx;
+        let prev = runStart;
+        for (let i = 1; i < frameQueue.length; i++) {
+            const idx = frameQueue[i].frameIdx;
+            if (idx === prev + 1) { prev = idx; continue; }
+            runs.push([runStart, prev + 1]);
+            runStart = idx;
+            prev = idx;
+        }
+        runs.push([runStart, prev + 1]);
+
+        const params = DetectionAPIDetector.buildParamsDict();
+        const totalFrames = frameQueue.length;
+        let done = 0;
+        console.log('[BatchDetect] detect-session stream:', { runs: runs.length, totalFrames });
+
+        for (const [start, end] of runs) {
+            if (this.isCancelled()) return true;
+            // eslint-disable-next-line no-await-in-loop -- 区间必须顺序流式消费
+            const ok = await new Promise<boolean>((resolve) => {
+                const controller = DetectSessionAPIService.streamDetectSession(
+                    { sessionId, start, end, params },
+                    {
+                        onFrame: (f) => {
+                            if (this.isCancelled()) {
+                                controller.abort();
+                                resolve(true);
+                                return;
+                            }
+                            done++;
+                            const img = byIdx.get(f.frame_idx);
+                            if (!img) return;
+                            if (f.error || !f.detections) {
+                                counters.fail++;
+                                store.dispatch(addInferenceHistory(img.id, 0, false, 'detection'));
+                            } else {
+                                this.applySingleResult(img, f.detections, f.frame_idx);
+                                counters.objects += f.detections.length;
+                                counters.success++;
+                            }
+                            const pct = Math.round((done / totalFrames) * 100);
+                            notify(2, `${t().aiInference.steps.inferring} (${done}/${totalFrames})`,
+                                `${pct}% — ${t().video.frame} ${f.frame_idx}`);
+                        },
+                        onDone: () => resolve(true),
+                        onError: (err) => {
+                            console.warn('[BatchDetect] detect-session stream failed:', err.message);
+                            resolve(false);
+                        },
+                    },
+                );
+            });
+            if (!ok) return false;
+        }
+        return true;
     }
 
     /** 用户是否已按下停止按钮(即把 isFullImageInferenceInProgress 翻成 false) */
@@ -365,27 +445,52 @@ export class AIDetectionActions {
                 return;
             }
 
-            let capturedBlobs: Array<Blob | null>;
+            // ── 首选：后端 /detect-session 流式路径（帧不过前端，真批量推理）──
+            // 失败（旧后端 404 / 会话失效）才回退到下面的取帧 + 逐帧推理链路。
+            let pending = frameQueue;
+            if (sessionId) {
+                const counters = { success: successCount, fail: failCount, objects: totalObjects };
+                const handled = await this.streamDetectViaSession({ sessionId, frameQueue, notify, t, counters });
+                successCount = counters.success;
+                failCount = counters.fail;
+                totalObjects = counters.objects;
+                if (handled) {
+                    pending = [];
+                } else {
+                    console.warn('[BatchDetect] detect-session 流不可用，回退逐帧 blob 路径');
+                    forceFlushPendingImageUpdates();
+                    const latest = store.getState().labels.imagesData;
+                    const doneIds = new Set(
+                        latest.filter(im => im.labelRects.some((r: LabelRect) => r.isCreatedByAI)).map(im => im.id)
+                    );
+                    pending = frameQueue.filter(q => !doneIds.has(q.imageData.id));
+                }
+            }
+            const pendingTotal = pending.length;
 
-            if (preFrames) {
+            let capturedBlobs: Array<Blob | null> = [];
+
+            if (pendingTotal === 0) {
+                // 流式路径已清空队列 — 跳过取帧与推理
+            } else if (preFrames) {
                 // === fast_ffmpeg_mode (full-load): use pre-extracted JPEG Files directly as Blobs ===
-                console.log('[Capture] fast_ffmpeg_mode (full-load): using pre-extracted frames', { captureTotal });
-                notify(1, `Using pre-extracted frames (${captureTotal})`, 'Skipping capture phase...', true);
-                capturedBlobs = frameQueue.map(({ frameIdx }) =>
+                console.log('[Capture] fast_ffmpeg_mode (full-load): using pre-extracted frames', { pendingTotal });
+                notify(1, `Using pre-extracted frames (${pendingTotal})`, 'Skipping capture phase...', true);
+                capturedBlobs = pending.map(({ frameIdx }) =>
                     frameIdx < preFrames.length ? (preFrames[frameIdx] as Blob) : null
                 );
             } else if (sessionId) {
                 // === fast_ffmpeg_mode (on-demand): 按真实帧索引逐帧取帧 ===
-                // 注意：必须用 frameQueue[i].frameIdx（视频中的真实位置），
-                // 而不是循环变量 i（frameQueue 的下标）——跳帧推理时两者不同！
-                console.log('[Capture] fast_ffmpeg_mode (on-demand): fetching frames from backend', { captureTotal, sessionId });
-                capturedBlobs = new Array(captureTotal).fill(null);
-                for (let i = 0; i < captureTotal; i++) {
+                // 注意：必须用 pending[i].frameIdx（视频中的真实位置），
+                // 而不是循环变量 i（pending 的下标）——跳帧推理时两者不同！
+                console.log('[Capture] fast_ffmpeg_mode (on-demand): fetching frames from backend', { pendingTotal, sessionId });
+                capturedBlobs = new Array(pendingTotal).fill(null);
+                for (let i = 0; i < pendingTotal; i++) {
                     if (this.isCancelled()) { console.log('[Capture] 用户取消,中止按需取帧'); break; }
-                    const { frameIdx } = frameQueue[i];
-                    const pct = Math.round((i / captureTotal) * 33);
+                    const { frameIdx } = pending[i];
+                    const pct = Math.round((i / pendingTotal) * 33);
                     notify(1,
-                        `${t().aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`,
+                        `${t().aiInference.steps.captureFrame} (${i + 1}/${pendingTotal})`,
                         `${pct}% — frame ${frameIdx}`
                     );
                     try {
@@ -404,25 +509,25 @@ export class AIDetectionActions {
                 captureCanvas.height = video.videoHeight;
                 const captureCtx = captureCanvas.getContext('2d')!;
 
-                capturedBlobs = new Array(captureTotal).fill(null);
+                capturedBlobs = new Array(pendingTotal).fill(null);
                 let captureSuccess = 0;
                 let captureFail = 0;
                 const captureStartTime = Date.now();
 
                 console.log('[Capture] Phase 1 starting', {
-                    captureTotal,
+                    pendingTotal,
                     videoSize: `${video.videoWidth}x${video.videoHeight}`,
                     readyState: video.readyState
                 });
 
-                for (let i = 0; i < captureTotal; i++) {
+                for (let i = 0; i < pendingTotal; i++) {
                     if (this.isCancelled()) { console.log('[Capture] 用户取消,中止 raw_browser_mode 取帧'); break; }
-                    const { frameIdx } = frameQueue[i];
+                    const { frameIdx } = pending[i];
                     const targetTime = frameIdx / fps;
 
-                    if (i % 5 === 0 || i === captureTotal - 1) {
-                        const pct = Math.round((i / captureTotal) * 33);
-                        notify(1, `${t().aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`, `${pct}% — ${t().video.frame} ${frameIdx}`);
+                    if (i % 5 === 0 || i === pendingTotal - 1) {
+                        const pct = Math.round((i / pendingTotal) * 33);
+                        notify(1, `${t().aiInference.steps.captureFrame} (${i + 1}/${pendingTotal})`, `${pct}% — ${t().video.frame} ${frameIdx}`);
                     }
                     if (i % 8 === 0 && i > 0) await this.yieldToUI();
 
@@ -456,14 +561,14 @@ export class AIDetectionActions {
                 console.log('[Capture] Phase 1 complete', {
                     success: captureSuccess,
                     failed: captureFail,
-                    total: captureTotal,
+                    total: pendingTotal,
                     elapsed: captureElapsed + 's'
                 });
             }
 
             // === 流式推理：4路并发，每张完成立即写入 ===
             const inferStartTime = Date.now();
-            console.log('[Inference] Streaming start', { captureTotal, concurrency: 4 });
+            console.log('[Inference] Streaming start', { pendingTotal, concurrency: 4 });
 
             // 批量推理前统一设置标签视图（避免对每帧 dispatch 一次）
             store.dispatch(updateActiveLabelViewType(LabelType.RECT));
@@ -475,22 +580,22 @@ export class AIDetectionActions {
                 return async (): Promise<DetectionResult[] | null> => {
                     if (!blob) {
                         failCount++;
-                        store.dispatch(addInferenceHistory(frameQueue[i].imageData.id, 0, false, 'detection'));
+                        store.dispatch(addInferenceHistory(pending[i].imageData.id, 0, false, 'detection'));
                         return null;
                     }
                     try {
                         const results = await DetectionAPIDetector.predictFromBlob(
-                            blob, `frame_${frameQueue[i].frameIdx}.jpg`
+                            blob, `frame_${pending[i].frameIdx}.jpg`
                         );
                         // 立即写入 Redux
-                        this.applySingleResult(frameQueue[i].imageData, results);
+                        this.applySingleResult(pending[i].imageData, results, pending[i].frameIdx);
                         totalObjects += results.length;
                         successCount++;
                         return results;
                     } catch (err) {
-                        console.error(`[Inference] Frame ${frameQueue[i].frameIdx} FAILED:`, (err as Error).message);
+                        console.error(`[Inference] Frame ${pending[i].frameIdx} FAILED:`, (err as Error).message);
                         failCount++;
-                        store.dispatch(addInferenceHistory(frameQueue[i].imageData.id, 0, false, 'detection'));
+                        store.dispatch(addInferenceHistory(pending[i].imageData.id, 0, false, 'detection'));
                         return null;
                     }
                 };
@@ -501,7 +606,7 @@ export class AIDetectionActions {
             console.log(`[Inference] concurrency=${concurrency} (videoSize=${videoSize?.width}x${videoSize?.height})`);
             await this.withConcurrency(tasks, concurrency, (done, ttl) => {
                 const pct = preFrames ? Math.round((done / ttl) * 90) : 33 + Math.round((done / ttl) * 55);
-                notify(2, `${t().aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${t().video.frame} ${frameQueue[Math.min(done - 1, ttl - 1)].frameIdx}`);
+                notify(2, `${t().aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${t().video.frame} ${pending[Math.min(done - 1, ttl - 1)].frameIdx}`);
             });
 
             const inferElapsed = ((Date.now() - inferStartTime) / 1000).toFixed(1);
@@ -607,7 +712,8 @@ export class AIDetectionActions {
      */
     private static applySingleResult(
         imageData: ImageData,
-        results: DetectionResult[]
+        results: DetectionResult[],
+        frameIdx?: number
     ): void {
         if (!results || results.length === 0) return;
 
@@ -615,9 +721,13 @@ export class AIDetectionActions {
         this.createMissingLabelsIfNeeded(results);
 
         const updatedLabels: LabelName[] = store.getState().labels.labels;
-        // 重新读取最新的 imageData（可能已被其他并发写入更新）
+        // 重新读取最新的 imageData（可能已被其他并发写入更新）。
+        // 视频模式 frameIdx 即数组下标 — O(1)；find() 在 1.5 万帧视频上是 O(N)/帧。
         const currentImagesData: ImageData[] = store.getState().labels.imagesData;
-        const currentImg = currentImagesData.find(img => img.id === imageData.id);
+        const byIdx = frameIdx !== undefined ? currentImagesData[frameIdx] : undefined;
+        const currentImg = (byIdx && byIdx.id === imageData.id)
+            ? byIdx
+            : currentImagesData.find(img => img.id === imageData.id);
         if (!currentImg) return;
 
         // 保持原生推理结果：不做任何去重/过滤，所有模型输出的框原样入库。
@@ -657,7 +767,9 @@ export class AIDetectionActions {
             const videoState = store.getState().video;
             if (videoState.isVideoMode && videoState.activeVideo) {
                 const curFrame = videoState.activeVideo.currentFrame;
-                const imgIdx = currentImagesData.findIndex(img => img.id === imageData.id);
+                const imgIdx = frameIdx !== undefined && currentImagesData[frameIdx]?.id === imageData.id
+                    ? frameIdx
+                    : currentImagesData.findIndex(img => img.id === imageData.id);
                 if (imgIdx === curFrame) {
                     EditorModel.playbackImageData = updatedImg;
                 }

@@ -107,6 +107,7 @@ function loadInferenceParams(): InferenceParams {
             iou_enabled: parsed.iou_enabled !== false,
             max_det_enabled: parsed.max_det_enabled !== false,
             augment_enabled: parsed.augment_enabled !== false,
+            half_enabled: parsed.half_enabled !== false,
             agnostic_nms_enabled: parsed.agnostic_nms_enabled !== false,
             classes_enabled: parsed.classes_enabled !== false,
         };
@@ -220,37 +221,83 @@ export class DetectionAPIDetector {
         }
     }
 
-    private static appendInferenceParams(formData: FormData) {
-        // 按 PipelineStore 阶段激活 + 各参数独立 enabled 标志双重过滤。
+    /** preprocess 阶段参数（PipelineStore 激活 + per-param enabled 双重门控）。 */
+    private static collectPreprocessParams(out: Record<string, unknown>): void {
         const p = this.inferenceParams;
-        if (PipelineStore.isActivated('preprocess')) {
-            if (p.imgsz_enabled !== false)   formData.append('imgsz', String(p.imgsz));
-            if (p.augment_enabled !== false)  formData.append('augment', p.augment ? '1' : '0');
-        }
-        if (PipelineStore.isActivated('inference')) {
-            if (p.conf_enabled !== false)         formData.append('conf',         String(p.conf));
-            if (p.iou_enabled !== false)          formData.append('iou',          String(p.iou));
-            if (p.max_det_enabled !== false)      formData.append('max_det',      String(p.max_det));
-            if (p.agnostic_nms_enabled !== false) formData.append('agnostic_nms', p.agnostic_nms ? '1' : '0');
-            if (p.classes_enabled !== false && p.classes.trim())
-                formData.append('classes', p.classes.trim());
-        }
-        if (PipelineStore.isActivated('postprocess')) {
-            const pp = this.postprocessParams;
-            if (pp.min_bbox_area_enabled !== false && pp.min_bbox_area > 0)
-                formData.append('min_bbox_area', String(pp.min_bbox_area));
-            if (pp.bbox_padding_enabled !== false && pp.bbox_padding > 0)
-                formData.append('bbox_padding', String(pp.bbox_padding));
-        }
+        if (!PipelineStore.isActivated('preprocess')) return;
+        if (p.imgsz_enabled !== false)   out.imgsz = p.imgsz;
+        if (p.augment_enabled !== false) out.augment = p.augment;
+    }
 
-        // ── 自定义脚本（pre/post 各自独立，按 stage 激活才传）──
+    private static collectInferenceParams(out: Record<string, unknown>): void {
+        const p = this.inferenceParams;
+        if (!PipelineStore.isActivated('inference')) return;
+        if (p.conf_enabled !== false)           out.conf = p.conf;
+        if (p.iou_enabled !== false)            out.iou = p.iou;
+        if (p.max_det_enabled !== false)        out.max_det = p.max_det;
+        if (p.half_enabled !== false && p.half) out.half = true;
+        if (p.agnostic_nms_enabled !== false)   out.agnostic_nms = p.agnostic_nms;
+        if (p.classes_enabled !== false && p.classes.trim()) {
+            const ids = p.classes.split(',')
+                .map(s => parseInt(s.trim(), 10))
+                .filter(n => Number.isFinite(n));
+            if (ids.length > 0) out.classes = ids;
+        }
+    }
+
+    private static collectPostprocessParams(out: Record<string, unknown>): void {
+        if (!PipelineStore.isActivated('postprocess')) return;
+        const pp = this.postprocessParams;
+        if (pp.min_bbox_area_enabled !== false && pp.min_bbox_area > 0)
+            out.min_bbox_area = pp.min_bbox_area;
+        if (pp.bbox_padding_enabled !== false && pp.bbox_padding > 0)
+            out.bbox_padding = pp.bbox_padding;
+    }
+
+    private static collectScriptParams(out: Record<string, unknown>): void {
         const sel = ScriptStore.get();
         if (PipelineStore.isActivated('preprocess') && sel.preprocess)
-            formData.append('preprocess_script', sel.preprocess);
+            out.preprocess_script = sel.preprocess;
         if (PipelineStore.isActivated('postprocess') && sel.postprocess)
-            formData.append('postprocess_script', sel.postprocess);
-        if ((sel.preprocess || sel.postprocess) && sel.params.trim())
+            out.postprocess_script = sel.postprocess;
+        if ((out.preprocess_script || out.postprocess_script) && sel.params.trim()) {
+            try { out.script_params = JSON.parse(sel.params); }
+            catch { /* malformed user JSON — omit, same as backend rejecting it */ }
+        }
+    }
+
+    /**
+     * 推理参数的单一来源 — detect-session 流式接口直接用这个字典（后端
+     * `detection.detect(**params)` 的 kwargs 形态：classes 是 int[]，
+     * script_params 是对象）；FormData 路径由 appendInferenceParams 派生。
+     */
+    public static buildParamsDict(): Record<string, unknown> {
+        const out: Record<string, unknown> = {};
+        this.collectPreprocessParams(out);
+        this.collectInferenceParams(out);
+        this.collectPostprocessParams(out);
+        this.collectScriptParams(out);
+        return out;
+    }
+
+    private static appendInferenceParams(formData: FormData) {
+        // 与 buildParamsDict 同一套门控；仅做 dict → multipart 字段的形态转换。
+        const dict = this.buildParamsDict();
+        for (const [k, v] of Object.entries(dict)) {
+            if (k === 'classes') {
+                formData.append('classes', (v as number[]).join(','));
+            } else if (k === 'script_params') {
+                continue; // 下面用原始字符串发送（保留后端对坏 JSON 的 400 反馈）
+            } else if (typeof v === 'boolean') {
+                formData.append(k, v ? '1' : '0');
+            } else {
+                formData.append(k, String(v));
+            }
+        }
+        const sel = ScriptStore.get();
+        if ((dict.preprocess_script || dict.postprocess_script) && sel.params.trim()) {
             formData.append('script_params', sel.params);
+        }
     }
 
     /**
