@@ -36,7 +36,6 @@ import BatchStatisticsView from '../BatchStatisticsView/BatchStatisticsView';
 import {AutoSaveService} from '../../../services/AutoSaveService';
 import {TaskManagerButton} from '../TaskManager/TaskManagerButton';
 import {TaskManagerPanel} from '../TaskManager/TaskManagerPanel';
-import {EditorContext} from '../../../logic/hotkey/EditorContext';
 import {v4 as uuidv4} from 'uuid';
 import {ImageRepository} from '../../../logic/imageRepository/ImageRepository';
 import {FrameExtractorService} from '../../../services/FrameExtractorService';
@@ -126,30 +125,31 @@ const EditorContainer: React.FC<IProps> = (
 
     // 手动保存
     const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
-    const [saveFlashColor, setSaveFlashColor] = useState<string | null>(null);
-    const isManualSaveRef = useRef(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     const triggerSaveFlash = useCallback(() => {
         setLastSavedTime(new Date());
-        // 手动保存(按钮/Ctrl+S) → 绿色，自动保存 → 蓝色
-        setSaveFlashColor(isManualSaveRef.current ? '#009944' : '#009efd');
-        isManualSaveRef.current = false;
-        setTimeout(() => setSaveFlashColor(null), 800);
+        setIsSaving(true);
+        setTimeout(() => setIsSaving(false), 800);
     }, []);
 
     const handleSave = useCallback(() => {
-        isManualSaveRef.current = true;
         AutoSaveService.saveCurrentState();
     }, []);
 
     useEffect(() => {
         AutoSaveService.onSaveComplete = triggerSaveFlash;
-        EditorContext.onSaveCallback = () => { isManualSaveRef.current = true; };
-        return () => {
-            AutoSaveService.onSaveComplete = null;
-            EditorContext.onSaveCallback = null;
-        };
+        return () => { AutoSaveService.onSaveComplete = null; };
     }, [triggerSaveFlash]);
+
+    // 盾牌颜色：绿色 = backend 已连接，灰色 = 未连接
+    const [backendConnected, setBackendConnected] = useState(false);
+    useEffect(() => {
+        const handler = (e: Event) =>
+            setBackendConnected((e as CustomEvent<{connected: boolean}>).detail.connected);
+        window.addEventListener('opensight:backend-status', handler);
+        return () => window.removeEventListener('opensight:backend-status', handler);
+    }, []);
 
     const formatSavedTime = (d: Date): string => {
         const yyyy = d.getFullYear();
@@ -603,13 +603,13 @@ const EditorContainer: React.FC<IProps> = (
                     src='ico/shield.png'
                     style={{
                         width: 14, height: 14,
-                        filter: saveFlashColor === '#009944'
+                        filter: isSaving
                             ? 'brightness(0) invert(35%) sepia(90%) saturate(800%) hue-rotate(115deg) brightness(1.1)'
-                            : saveFlashColor === '#009efd'
-                            ? 'brightness(0) invert(48%) sepia(98%) saturate(1500%) hue-rotate(192deg) brightness(1.05)'
-                            : 'brightness(0) invert(1)',
-                        opacity: saveFlashColor ? 1 : 0.6,
-                        transition: 'filter 0.3s ease, opacity 0.3s ease',
+                            : backendConnected
+                                ? 'brightness(0) invert(48%) sepia(98%) saturate(1500%) hue-rotate(192deg) brightness(1.05)'
+                                : 'brightness(0) invert(1)',
+                        opacity: (isSaving || backendConnected) ? 1 : 0.4,
+                        transition: 'filter 0.4s ease, opacity 0.4s ease',
                     }}
                 />
             </div>

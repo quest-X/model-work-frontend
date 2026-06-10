@@ -451,6 +451,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         const fetchModels = () => {
             const baseUrl = getEngineBaseUrl();
             fetch(`${baseUrl}/health`).then(r => r.json()).then(data => {
+                window.dispatchEvent(new CustomEvent('opensight:backend-status', { detail: { connected: true } }));
                 if (data.model_tasks) setModelTasks(data.model_tasks);
                 setDetSlotName(data.model || '');
                 setSegSlotName(data.segmentation_model || '');
@@ -481,7 +482,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 if (EditorModel.lastLoadedModelService) {
                     EditorModel.lastLoadedModelService = null;
                 }
-            }).catch(() => {});
+            }).catch(() => {
+                window.dispatchEvent(new CustomEvent('opensight:backend-status', { detail: { connected: false } }));
+            });
             // 磁盘上所有模型（供 slot 被自定义占用时选一个内置代表）
             fetch(`${baseUrl}/available-models`).then(r => r.json()).then(data => {
                 if (Array.isArray(data.models)) setAvailableModels(data.models);

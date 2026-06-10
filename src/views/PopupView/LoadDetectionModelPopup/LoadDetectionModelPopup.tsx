@@ -50,8 +50,9 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
     const texts = LanguageConfig[language];
     const modelFamily = getSelectedModelFamily();
     const serverUrl = getServerUrl();
-    const customExt = getSelectedCustomExt() || 'pt';   // 'pt' | 'onnx', defaults to .pt
+    const customExt = getSelectedCustomExt() || 'pt';   // 'pt' | 'onnx' | 'mlpackage', defaults to .pt
     const customExtDot = `.${customExt}`;
+    const isMlpackage = customExt === 'mlpackage';
     const variants = modelFamily?.variants || [];
 
     const [modelSource, setModelSource] = useState(modelFamily ? ModelSource.OFFICIAL : ModelSource.UPLOAD);
@@ -60,6 +61,9 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
     const [loadProgress, setLoadProgress] = useState(0);
     const [loadState, setLoadState] = useState('');
     const [modelFile, setModelFile] = useState<File | null>(null);
+    // .mlpackage 是目录包，拖进来会递归出一堆文件 —— 单独存（文件列表 + 包名）
+    const [mlpkgFiles, setMlpkgFiles] = useState<File[]>([]);
+    const [mlpkgName, setMlpkgName] = useState<string>('');
     const [loadedModel, setLoadedModel] = useState<string>('');
     const [downloadedModels, setDownloadedModels] = useState<string[]>([]);
 
@@ -100,19 +104,42 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
         });
     };
 
+    // 拖进来的可能是 .mlpackage 本身或它的父目录 —— 把相对路径重锚到 *.mlpackage 段
+    const reRootToMlpackage = (relPath: string): string | null => {
+        const parts = relPath.split('/');
+        const idx = parts.findIndex(p => /\.mlpackage$/i.test(p));
+        return idx < 0 ? null : parts.slice(idx).join('/');
+    };
+
     const onDrop = (accepted: File[]) => {
+        if (isMlpackage) {
+            const roots = new Set<string>();
+            const kept: File[] = [];
+            for (const f of accepted) {
+                const meta = f as File & {path?: string; webkitRelativePath?: string};
+                const rel = reRootToMlpackage(meta.path || meta.webkitRelativePath || f.name);
+                if (!rel) continue;
+                roots.add(rel.split('/')[0]);
+                kept.push(f);
+            }
+            if (kept.length > 0 && roots.size === 1) {
+                setMlpkgFiles(kept);
+                setMlpkgName([...roots][0]);
+            }
+            return;
+        }
         const modelFiles = accepted.filter((f: File) => f.name.toLowerCase().endsWith(customExtDot));
         if (modelFiles.length > 0) {
             setModelFile(modelFiles[0]);
         }
     };
 
-    const {getRootProps, getInputProps} = useDropzone({
-        onDrop,
-        accept: {
-            'application/octet-stream': [customExtDot]
-        }
-    });
+    const {getRootProps, getInputProps} = useDropzone(
+        // .mlpackage：不能点选(选不中包)、不设 accept(否则包内文件被过滤)，只走拖拽
+        isMlpackage
+            ? {onDrop, noClick: true}
+            : {onDrop, accept: {'application/octet-stream': [customExtDot]}}
+    );
 
     const isSegModel = modelFamily && SEG_MODEL_FAMILIES.some(f => f.id === modelFamily.id);
 
@@ -129,77 +156,118 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
         PopupActions.close();
     };
 
+    // .mlpackage 目录包上传：把拖进来的所有文件按相对路径打包，POST /upload-mlpackage
+    const doMlpackageUpload = async () => {
+        if (mlpkgFiles.length === 0) { setIsLoading(false); setLoadState(''); return; }
+        const formData = new FormData();
+        for (const f of mlpkgFiles) {
+            const meta = f as File & {path?: string; webkitRelativePath?: string};
+            const rel = reRootToMlpackage(meta.path || meta.webkitRelativePath || f.name);
+            if (rel) formData.append('files', f, rel);  // 第三参 = 相对路径
+        }
+        try {
+            setLoadProgress(30);
+            const res = await fetch(`${serverUrl}/upload-mlpackage`, { method: 'POST', body: formData });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.detail || res.statusText);
+            }
+            setLoadProgress(100);
+            const data = await res.json().catch(() => ({}));
+            const baseUrl = serverUrl.replace(/\/+$/, '');
+            if ((data.service || 'segmentation') === 'segmentation') {
+                SegmentationAPIDetector.setConfig({ url: baseUrl + '/segment', enabled: true });
+                EditorModel.lastLoadedModelService = 'segmentation';
+            } else {
+                DetectionAPIDetector.setConfig({ url: baseUrl + '/detect', enabled: true });
+                EditorModel.lastLoadedModelService = 'detection';
+            }
+            window.dispatchEvent(new CustomEvent('opensight:model-loaded'));
+            PopupActions.close();
+        } catch (e) {
+            setIsLoading(false);
+            setLoadState('');
+            const base = NotificationsDataMap[Notification.MODEL_LOAD_ERROR];
+            const errMsg = (e as Error)?.message?.trim();
+            submitNewNotificationAction(NotificationUtil.createErrorNotification({
+                header: base.header,
+                description: errMsg || base.description,
+            }));
+        }
+    };
+
+    const doOfficialLoad = async () => {
+        try {
+            const res = await fetch(`${serverUrl}/load-model`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: `${selectedVariant}.pt`,
+                    service: modelFamily && SEG_MODEL_FAMILIES.some(f => f.id === modelFamily.id) ? 'segmentation' : 'detection'
+                })
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.detail || res.statusText);
+            }
+            await pollLoadStatus();
+            triggerDetection();
+        } catch (e) {
+            setIsLoading(false);
+            setLoadState('');
+            // 优先显示后端真实错误（torch / 文件损坏 / 网络下载失败），兜底才用通用文案。
+            const base = NotificationsDataMap[Notification.MODEL_DOWNLOAD_ERROR];
+            const errMsg = (e as Error)?.message?.trim();
+            submitNewNotificationAction(NotificationUtil.createErrorNotification({
+                header: base.header,
+                description: errMsg || base.description,
+            }));
+        }
+    };
+
+    const doSingleFileUpload = async () => {
+        if (!modelFile) return;
+        const formData = new FormData();
+        formData.append('file', modelFile);
+        try {
+            setLoadProgress(30);
+            const res = await fetch(`${serverUrl}/upload`, { method: 'POST', body: formData });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.detail || res.statusText);
+            }
+            setLoadProgress(100);
+            // 根据文件名自动识别模型类型：seg_/SAM/sam → 分割，其他 → 检测
+            const data = await res.json().catch(() => ({}));
+            const uploadedService = data.service || 'detection';
+            const baseUrl = serverUrl.replace(/\/+$/, '');
+            if (uploadedService === 'segmentation') {
+                SegmentationAPIDetector.setConfig({ url: baseUrl + '/segment', enabled: true });
+                EditorModel.lastLoadedModelService = 'segmentation';
+            } else {
+                DetectionAPIDetector.setConfig({ url: baseUrl + '/detect', enabled: true });
+                EditorModel.lastLoadedModelService = 'detection';
+            }
+            PopupActions.close();
+        } catch (e) {
+            setIsLoading(false);
+            setLoadState('');
+            const base = NotificationsDataMap[Notification.MODEL_LOAD_ERROR];
+            const errMsg = (e as Error)?.message?.trim();
+            submitNewNotificationAction(NotificationUtil.createErrorNotification({
+                header: base.header,
+                description: errMsg || base.description,
+            }));
+        }
+    };
+
     const onAccept = async () => {
         setIsLoading(true);
         setLoadProgress(0);
         setLoadState('downloading');
-
-        if (modelSource === ModelSource.OFFICIAL) {
-            try {
-                const res = await fetch(`${serverUrl}/load-model`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: `${selectedVariant}.pt`,
-                        service: modelFamily && SEG_MODEL_FAMILIES.some(f => f.id === modelFamily.id) ? 'segmentation' : 'detection'
-                    })
-                });
-                if (!res.ok) {
-                    const data = await res.json().catch(() => ({}));
-                    throw new Error(data.detail || res.statusText);
-                }
-                await pollLoadStatus();
-                triggerDetection();
-            } catch (e) {
-                setIsLoading(false);
-                setLoadState('');
-                // 优先显示后端真实错误（torch / 文件损坏 / 网络下载失败），
-                // 兜底才用通用文案"无法连接推理服务器"。
-                const base = NotificationsDataMap[Notification.MODEL_DOWNLOAD_ERROR];
-                const errMsg = (e as Error)?.message?.trim();
-                submitNewNotificationAction(NotificationUtil.createErrorNotification({
-                    header: base.header,
-                    description: errMsg || base.description,
-                }));
-            }
-        } else {
-            if (!modelFile) return;
-            const formData = new FormData();
-            formData.append('file', modelFile);
-            try {
-                setLoadProgress(30);
-                const res = await fetch(`${serverUrl}/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
-                if (!res.ok) {
-                    const data = await res.json().catch(() => ({}));
-                    throw new Error(data.detail || res.statusText);
-                }
-                setLoadProgress(100);
-                // 根据文件名自动识别模型类型：seg_/SAM/sam → 分割，其他 → 检测
-                const data = await res.json().catch(() => ({}));
-                const uploadedService = data.service || 'detection';
-                const baseUrl = serverUrl.replace(/\/+$/, '');
-                if (uploadedService === 'segmentation') {
-                    SegmentationAPIDetector.setConfig({ url: baseUrl + '/segment', enabled: true });
-                    EditorModel.lastLoadedModelService = 'segmentation';
-                } else {
-                    DetectionAPIDetector.setConfig({ url: baseUrl + '/detect', enabled: true });
-                    EditorModel.lastLoadedModelService = 'detection';
-                }
-                PopupActions.close();
-            } catch (e) {
-                setIsLoading(false);
-                setLoadState('');
-                const base = NotificationsDataMap[Notification.MODEL_LOAD_ERROR];
-                const errMsg = (e as Error)?.message?.trim();
-                submitNewNotificationAction(NotificationUtil.createErrorNotification({
-                    header: base.header,
-                    description: errMsg || base.description,
-                }));
-            }
-        }
+        if (isMlpackage) { await doMlpackageUpload(); return; }
+        if (modelSource === ModelSource.OFFICIAL) { await doOfficialLoad(); return; }
+        await doSingleFileUpload();
     };
 
     const onReject = () => {
@@ -293,7 +361,24 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
         </div>)
     };
 
+    const renderMlpackageDropZone = () => {
+        const has = mlpkgFiles.length > 0;
+        const zh = language === Language.CHINESE;
+        return(<div {...getRootProps({ className: 'drop-zone' })}>
+            <input {...getInputProps()} />
+            <img draggable={false} alt={has ? 'uploaded' : 'upload'} src={has ? 'ico/box-closed.png' : 'ico/box-opened.png'} />
+            {has ? <>
+                <p className='extraBold'>{mlpkgName}</p>
+                <p>{mlpkgFiles.length} {zh ? '个文件' : 'files'}</p>
+            </> : <>
+                <p className='extraBold'>{zh ? '把 .mlpackage 拖到这里' : 'Drag a .mlpackage here'}</p>
+                <p>{zh ? '（CoreML · Apple 神经引擎，不能点选、只能拖）' : '(CoreML · Apple Neural Engine — drag only)'}</p>
+            </>}
+        </div>)
+    };
+
     const renderDropZone = () => {
+        if (isMlpackage) return renderMlpackageDropZone();
         const hasFile = modelFile !== null;
         return(<div {...getRootProps({ className: 'drop-zone' })}>
             <input {...getInputProps()} />

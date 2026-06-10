@@ -42,11 +42,11 @@ export const SEG_MODEL_FAMILIES: YOLOModelFamily[] = [
 let _selectedModelFamily: YOLOModelFamily | null = null;
 // 默认跟随浏览器当前 host —— 跨机访问时直接打到前端所在机器的 :8000
 let _serverUrl: string = getDefaultBackendBase();
-let _selectedCustomExt: 'pt' | 'onnx' | null = null;
+let _selectedCustomExt: 'pt' | 'onnx' | 'mlpackage' | null = null;
 
 export const getSelectedModelFamily = (): YOLOModelFamily | null => _selectedModelFamily;
 export const getServerUrl = (): string => _serverUrl;
-export const getSelectedCustomExt = (): 'pt' | 'onnx' | null => _selectedCustomExt;
+export const getSelectedCustomExt = (): 'pt' | 'onnx' | 'mlpackage' | null => _selectedCustomExt;
 
 interface IProps {
     updateActivePopupType: (activePopupType: PopupWindowType) => GeneralActionTypes;
@@ -115,11 +115,12 @@ const CallModelPopup: React.FC<IProps> = ({
     };
 
     const onAccept = () => {
-        // 自定义 .pt / .onnx 上传
-        if (selectedId === 'custom-pt' || selectedId === 'custom-onnx') {
+        // 自定义 .pt / .onnx / .mlpackage 上传 —— 统一进二级页 LoadDetectionModelPopup
+        if (selectedId === 'custom-pt' || selectedId === 'custom-onnx' || selectedId === 'custom-mlpackage') {
             _selectedModelFamily = null;
             _serverUrl = derivedBaseUrl;
-            _selectedCustomExt = selectedId === 'custom-onnx' ? 'onnx' : 'pt';
+            _selectedCustomExt = selectedId === 'custom-onnx' ? 'onnx'
+                : selectedId === 'custom-mlpackage' ? 'mlpackage' : 'pt';
             updateActivePopupType(PopupWindowType.LOAD_DETECTION_MODEL);
             return;
         }
@@ -179,11 +180,30 @@ const CallModelPopup: React.FC<IProps> = ({
         ...SEG_MODEL_FAMILIES.flatMap(f => f.variants),
     ];
     const customLoadedModels = loadedModels.filter(name => {
-        const baseName = name.replace(/\.(pt|onnx)$/i, '');
+        const baseName = name.replace(/\.(pt|onnx|mlpackage|mlmodel)$/i, '');
         return !allBuiltinVariants.includes(baseName);
     });
-    const customPtModels = customLoadedModels.filter(n => !n.endsWith('.onnx'));
-    const customOnnxModels = customLoadedModels.filter(n => n.endsWith('.onnx'));
+    const isCoremlName = (n: string) => /\.(mlpackage|mlmodel)$/i.test(n);
+    const customOnnxModels = customLoadedModels.filter(n => n.toLowerCase().endsWith('.onnx'));
+    const customMlpkgModels = customLoadedModels.filter(isCoremlName);
+    // 其余（既非 .onnx 也非 CoreML）才算 .pt —— 避免 .mlpackage 误挂到 .pt 行
+    const customPtModels = customLoadedModels.filter(n => !n.toLowerCase().endsWith('.onnx') && !isCoremlName(n));
+
+    // .mlpackage 行 —— 和 .pt/.onnx 一样的勾选行；点「进入」跳二级页 LoadDetectionModelPopup 拖拽上传
+    const renderMlpackageRow = () => (
+        <div
+            className={`OptionsItem${customMlpkgModels.length > 0 ? ' has-models active-model' : ''}`}
+            onClick={() => onSelect('custom-mlpackage')}
+        >
+            <img
+                draggable={false}
+                src={selectedId === 'custom-mlpackage' ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'}
+                alt={selectedId === 'custom-mlpackage' ? 'checked' : 'unchecked'}
+            />
+            {zhTexts ? '模型 .mlpackage 文件（CoreML / ANE）' : '.mlpackage model file (CoreML / ANE)'}
+            {customMlpkgModels.map(n => <span key={n} className='active-badge'>✓ {n}</span>)}
+        </div>
+    );
 
     const renderContent = () => {
         return <div className='CallModelPopupContent'>
@@ -218,6 +238,7 @@ const CallModelPopup: React.FC<IProps> = ({
                         {zhTexts ? '模型 .onnx 文件' : '.onnx model file'}
                         {customOnnxModels.map(n => <span key={n} className='active-badge'>✓ {n}</span>)}
                     </div>
+                    {renderMlpackageRow()}
                     <div className='OptionsItem disabled'>
                         <img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />
                         {zhTexts ? '模型 .engine / .trt 文件（即将推出）' : '.engine / .trt model file (coming soon)'}

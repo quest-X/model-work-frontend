@@ -31,6 +31,10 @@ yarn-error.log*
 *.engine
 server/models/
 
+# electron build artifacts
+electron/node_modules/
+electron/dist-build/
+
 # claude / dev artifacts
 .claude/
 CLAUDE.md
