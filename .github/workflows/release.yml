@@ -1,0 +1,49 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest    # arm64 runner → universal dmg
+            eb_flag: --mac
+          - os: windows-latest  # x64 runner → nsis installer
+            eb_flag: --win
+          - os: ubuntu-latest   # x64 runner → AppImage
+            eb_flag: --linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install libfuse (Linux only — required by AppImage)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y libfuse2
+
+      - name: Install frontend dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Install Electron dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Build & publish to GitHub Release
+        working-directory: electron
+        run: npx electron-builder ${{ matrix.eb_flag }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false

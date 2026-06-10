@@ -1,0 +1,69 @@
+{
+  "name": "opensight-electron",
+  "version": "1.0.0",
+  "description": "opensight desktop — Electron wrapper for frontend + backend",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build-frontend": "cd .. && npm run build",
+    "dev": "npm run build-frontend && electron .",
+    "dist": "npm run build-frontend && electron-builder --publish never",
+    "dist-mac": "npm run build-frontend && electron-builder --mac --publish=never",
+    "dist-win": "npm run build-frontend && electron-builder --win --publish never",
+    "dist-linux": "npm run build-frontend && electron-builder --linux --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.opensight.app",
+    "productName": "opensight",
+    "directories": {
+      "output": "dist-build"
+    },
+    "files": [
+      "main.js",
+      "preload.js"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist",
+        "to": "frontend-dist"
+      }
+    ],
+    "publish": [
+      { "provider": "github" }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        { "target": "dmg", "arch": ["universal"] }
+      ],
+      "icon": "icon.png"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "icon.png"
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] }
+      ],
+      "icon": "icon.png",
+      "category": "Graphics"
+    },
+    "dmg": {
+      "title": "opensight ${version}",
+      "window": { "width": 540, "height": 380 }
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "icon.png",
+      "uninstallerIcon": "icon.png"
+    }
+  }
+}
