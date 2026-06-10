@@ -16,6 +16,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.8.0',
+        date: '2026-06-10',
+        changes: [
+            { zh: '【性能】视频批量检测接入后端流式 detect-session：帧不再经前端中转，后端批量推理 NDJSON 实时回流（同机实测 34ms/帧 → 5.5ms/帧）；旧后端或会话失效自动回退原链路', en: '[Perf] Video batch detection now streams via backend /detect-session: frames no longer round-trip through the frontend, batched inference streams back live (34ms → 5.5ms per frame measured); auto-fallback to the legacy path on old backends or expired sessions' },
+            { zh: '【性能】后端事件循环解放：SAM2 跟踪/自动模式/批量推理期间 /health 不再被冻结（压测 p90 87ms → 3.5ms），推理中不再误报"后端断开"', en: '[Perf] Backend event loop liberated: /health no longer freezes during SAM2 tracking / automatic mode / batch inference (p90 87ms → 3.5ms under load) — no more false "backend disconnected" mid-inference' },
+            { zh: '【性能】SAM2 自动模式提速底座：后端 /segment 新增 points_stride / points_batch 网格采样参数（stride=8 实测 24.5s → 1.6s，约 15×），参数面板的 UI 暴露方式待定', en: '[Perf] SAM2 automatic-mode groundwork: backend /segment accepts points_stride / points_batch grid-sampling params (24.5s → 1.6s at stride=8, ~15×); panel UI exposure TBD' },
+            { zh: '【功能】检测推理参数 half（FP16 半精度）前后端打通：参数面板启用后随请求下发', en: '[Feat] Detection half (FP16) inference param wired end-to-end — sent with requests when enabled in the params panel' },
+        ],
+    },
+    {
         version: '2.7.0',
         date: '2026-05-16',
         changes: [
