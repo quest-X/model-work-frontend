@@ -16,6 +16,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.8.1',
+        date: '2026-06-10',
+        changes: [
+            { zh: '【功能】Electron 桌面客户端封装 + GitHub Actions 三平台（macOS/Windows/Linux）自动构建发布流水线', en: '[Feat] Electron desktop wrapper + GitHub Actions CI for automated three-platform (macOS/Windows/Linux) release builds' },
+            { zh: '【功能】支持加载 .mlpackage CoreML/ANE 模型：CallModelPopup 新增选项，LoadDetectionModelPopup 支持目录包拖拽上传至后端', en: '[Feat] Load .mlpackage CoreML/ANE models: new option in CallModelPopup, LoadDetectionModelPopup supports directory-bundle drag-upload to backend' },
+            { zh: '【功能】盾牌图标实时显示 backend 连接状态（蓝色=已连接，白色=未连接，绿色闪烁=保存中）', en: '[Feat] Shield icon now reflects live backend connection status (blue=connected, white=disconnected, green flash=saving)' },
+            { zh: '【功能】侧边栏文件队列支持拖拽上传：直接拖图片/视频到左侧队列面板即可批量添加', en: '[Feat] Sidebar file queue supports drag-and-drop: drag images/videos directly onto the left queue panel to batch-add files' },
+        ],
+    },
+    {
         version: '2.8.0',
         date: '2026-06-10',
         changes: [
