@@ -47,7 +47,7 @@
       "target": [
         { "target": "nsis", "arch": ["x64"] }
       ],
-      "icon": "icon.png"
+      "icon": "icon.ico"
     },
     "linux": {
       "target": [
