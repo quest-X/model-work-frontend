@@ -827,8 +827,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
 
         // AI Model Management
         modelManagement: {
-            callModels: '推理中心',
-            modelEngines: '推理引擎',
+            callModels: '推理任务',
+            modelEngines: '核心引擎',
             manage: '管理',
             noModels: '暂无推理引擎',
             noModelsHint: '点击添加第一个推理引擎',
@@ -1302,8 +1302,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
 
         // AI Model Management
         modelManagement: {
-            callModels: 'Inference Center',
-            modelEngines: 'Inference Engines',
+            callModels: 'Inference Tasks',
+            modelEngines: 'Core Engine',
             manage: 'Manage',
             noModels: 'No Inference Engines',
             noModelsHint: 'Click to add your first inference engine',
