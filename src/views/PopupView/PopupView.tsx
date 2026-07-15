@@ -23,6 +23,8 @@ import ChangelogPopup from './ChangelogPopup/ChangelogPopup';
 import PipelinePreprocessPopup from './PipelinePopup/PipelinePreprocessPopup';
 import PipelineInferencePopup from './PipelinePopup/PipelineInferencePopup';
 import PipelinePostprocessPopup from './PipelinePopup/PipelinePostprocessPopup';
+import DataCenterPopup from './DataCenterPopup/DataCenterPopup';
+import TrainingTaskPopup from './TrainingTaskPopup/TrainingTaskPopup';
 
 
 interface IProps {
@@ -54,57 +56,33 @@ const PopupView: React.FC<IProps> = ({ activePopupType }) => {
         };
     }, [activePopupType]);
 
+    const popupComponents: Partial<Record<PopupWindowType, () => any>> = {
+        [PopupWindowType.LOAD_LABEL_NAMES]: () => <LoadLabelsPopup />,
+        [PopupWindowType.EXPORT_ANNOTATIONS]: () => <ExportLabelPopup />,
+        [PopupWindowType.IMPORT_ANNOTATIONS]: () => <ImportLabelPopup />,
+        [PopupWindowType.INSERT_LABEL_NAMES]: () => <InsertLabelNamesPopup isUpdate={false} />,
+        [PopupWindowType.UPDATE_LABEL]: () => <InsertLabelNamesPopup isUpdate={true} />,
+        [PopupWindowType.EXIT_PROJECT]: () => <ExitProjectPopup />,
+        [PopupWindowType.IMPORT_IMAGES]: () => <LoadMoreMediaPopup />,
+        [PopupWindowType.CALL_MODEL]: () => <CallModelPopup />,
+        [PopupWindowType.LOAD_DETECTION_MODEL]: () => <LoadDetectionModelPopup />,
+        [PopupWindowType.CONNECT_AI_MODEL_VIA_API]: () => <ConnectInferenceServerPopup />,
+        [PopupWindowType.MODEL_ENGINE]: () => <ModelEnginePopup />,
+        [PopupWindowType.MANAGE_AI_MODELS]: () => <ManageAIModelsPopup />,
+        [PopupWindowType.SUGGEST_LABEL_NAMES]: () => <SuggestLabelNamesPopup />,
+        [PopupWindowType.KEYBOARD_SHORTCUTS]: () => <KeyboardShortcutsPopup />,
+        [PopupWindowType.CHANGELOG]: () => <ChangelogPopup />,
+        [PopupWindowType.PIPELINE_PREPROCESS]: () => <PipelinePreprocessPopup />,
+        [PopupWindowType.PIPELINE_INFERENCE]: () => <PipelineInferencePopup />,
+        [PopupWindowType.PIPELINE_POSTPROCESS]: () => <PipelinePostprocessPopup />,
+        [PopupWindowType.DATA_CENTER]: () => <DataCenterPopup />,
+        [PopupWindowType.TRAINING_TASK]: () => <TrainingTaskPopup />,
+        [PopupWindowType.LOADER]: () => <ClipLoader size={50} color={CSSHelper.getLeadingColor()} loading={true} />,
+    };
+
     const selectPopup = () => {
-        switch (activePopupType) {
-            case PopupWindowType.LOAD_LABEL_NAMES:
-                return <LoadLabelsPopup />;
-            case PopupWindowType.EXPORT_ANNOTATIONS:
-                return <ExportLabelPopup />;
-            case PopupWindowType.IMPORT_ANNOTATIONS:
-                return <ImportLabelPopup />;
-            case PopupWindowType.INSERT_LABEL_NAMES:
-                return <InsertLabelNamesPopup
-                    isUpdate={false}
-                />;
-            case PopupWindowType.UPDATE_LABEL:
-                return <InsertLabelNamesPopup
-                    isUpdate={true}
-                />;
-            case PopupWindowType.EXIT_PROJECT:
-                return <ExitProjectPopup />;
-            case PopupWindowType.IMPORT_IMAGES:
-                return <LoadMoreMediaPopup />;
-            case PopupWindowType.CALL_MODEL:
-                return <CallModelPopup />;
-            case PopupWindowType.LOAD_DETECTION_MODEL:
-                return <LoadDetectionModelPopup />;
-            case PopupWindowType.CONNECT_AI_MODEL_VIA_API:
-                return <ConnectInferenceServerPopup />;
-            case PopupWindowType.MODEL_ENGINE:
-                return <ModelEnginePopup />;
-            case PopupWindowType.MANAGE_AI_MODELS:
-                return <ManageAIModelsPopup />;
-            case PopupWindowType.SUGGEST_LABEL_NAMES:
-                return <SuggestLabelNamesPopup />;
-            case PopupWindowType.KEYBOARD_SHORTCUTS:
-                return <KeyboardShortcutsPopup />;
-            case PopupWindowType.CHANGELOG:
-                return <ChangelogPopup />;
-            case PopupWindowType.PIPELINE_PREPROCESS:
-                return <PipelinePreprocessPopup />;
-            case PopupWindowType.PIPELINE_INFERENCE:
-                return <PipelineInferencePopup />;
-            case PopupWindowType.PIPELINE_POSTPROCESS:
-                return <PipelinePostprocessPopup />;
-            case PopupWindowType.LOADER:
-                return <ClipLoader
-                    size={50}
-                    color={CSSHelper.getLeadingColor()}
-                    loading={true}
-                />;
-            default:
-                return null;
-        }
+        const render = popupComponents[activePopupType];
+        return render ? render() : null;
     };
 
     return (
