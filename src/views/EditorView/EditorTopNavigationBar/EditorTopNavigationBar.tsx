@@ -447,10 +447,11 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
     // activeModelName 仅在首次加载或用户主动切换时设置，轮询不覆盖。
     const initializedRef = useRef(false);
     const loadedModelsRef = useRef<string[]>([]);
+    const lastConnectedRef = useRef(false);
     useEffect(() => {
-        const fetchModels = () => {
+        const fetchModels = (): Promise<boolean> => {
             const baseUrl = getEngineBaseUrl();
-            fetch(`${baseUrl}/health`).then(r => r.json()).then(data => {
+            const healthPromise = fetch(`${baseUrl}/health`).then(r => r.json()).then(data => {
                 window.dispatchEvent(new CustomEvent('opensight:backend-status', { detail: { connected: true } }));
                 if (data.model_tasks) setModelTasks(data.model_tasks);
                 setDetSlotName(data.model || '');
@@ -482,21 +483,43 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 if (EditorModel.lastLoadedModelService) {
                     EditorModel.lastLoadedModelService = null;
                 }
+                return true;
             }).catch(() => {
                 window.dispatchEvent(new CustomEvent('opensight:backend-status', { detail: { connected: false } }));
+                return false;
             });
             // 磁盘上所有模型（供 slot 被自定义占用时选一个内置代表）
             fetch(`${baseUrl}/available-models`).then(r => r.json()).then(data => {
                 if (Array.isArray(data.models)) setAvailableModels(data.models);
             }).catch(() => {});
+            return healthPromise;
         };
         fetchModelsRef.current = fetchModels;
-        fetchModels();
-        // Page Visibility 守卫：标签页/屏幕休眠时暂停 poll。
-        // 间隔 30s（v2.6.0 起，原 5s 在推理时也持续打满 health/available-models 通道）。
+
+        // 自适应轮询：未连接时用短间隔（2s）快速发现刚启动的后端，
+        // 一旦连上就退回 30s（v2.6.0 起的节流，避免推理时打满 health 通道）。
         // 切换模型时由 switchModel 主动调 fetchModelsRef 强制刷新，不靠轮询。
-        const tick = () => { if (!document.hidden) fetchModels(); };
-        const timer = setInterval(tick, 30000);
+        const CONNECTED_INTERVAL = 30000;
+        const DISCONNECTED_INTERVAL = 2000;
+        let timer: ReturnType<typeof setInterval>;
+        const scheduleTick = (intervalMs: number) => {
+            clearInterval(timer);
+            timer = setInterval(tick, intervalMs);
+        };
+        const tick = () => {
+            if (document.hidden) return;
+            const wasConnected = lastConnectedRef.current;
+            fetchModels().then((connected) => {
+                if (connected !== wasConnected) {
+                    lastConnectedRef.current = connected;
+                    scheduleTick(connected ? CONNECTED_INTERVAL : DISCONNECTED_INTERVAL);
+                }
+            });
+        };
+        fetchModels().then((connected) => {
+            lastConnectedRef.current = connected;
+            scheduleTick(connected ? CONNECTED_INTERVAL : DISCONNECTED_INTERVAL);
+        });
         const onModelLoaded = () => fetchModels();
         window.addEventListener('opensight:model-loaded', onModelLoaded);
         return () => {
