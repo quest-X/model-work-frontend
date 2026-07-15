@@ -19,6 +19,44 @@ export class YOLOUtils {
             .map((name: string) => LabelUtil.createLabelName(name))
     }
 
+    /**
+     * Ultralytics 导出的 data.yaml/dataset.yaml 里 names 字段有两种写法：
+     *   names: [person, car]          — 内联数组
+     *   names:                        — 逐行，key 可选（"0: person" 或纯 "- person"）
+     *     0: person
+     *     1: car
+     * 不引入 yaml 依赖，只解析这两种常见写法。
+     */
+    public static parseLabelsNamesFromYamlString(content: string): LabelName[] {
+        const namesLineMatch = content.match(/^\s*names\s*:\s*(.*)$/m);
+        if (!namesLineMatch) throw new LabelNamesNotUniqueError();
+
+        const inline = namesLineMatch[1].trim();
+        let labelNames: string[];
+        if (inline.startsWith('[')) {
+            labelNames = inline.replace(/^\[|\]$/g, '').split(',')
+                .map(s => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+        } else {
+            const startIdx = content.indexOf(namesLineMatch[0]) + namesLineMatch[0].length;
+            const rest = content.slice(startIdx).split(/\r?\n/);
+            labelNames = [];
+            for (const rawLine of rest) {
+                if (!rawLine.trim()) continue;
+                const indented = /^\s+/.test(rawLine) || /^\s*-/.test(rawLine);
+                if (!indented) break;
+                const entry = rawLine.replace(/^\s*-\s*/, '').trim();
+                const kvMatch = entry.match(/^\d+\s*:\s*(.*)$/);
+                const name = (kvMatch ? kvMatch[1] : entry).trim().replace(/^['"]|['"]$/g, '');
+                if (name) labelNames.push(name);
+            }
+        }
+
+        if (uniq(labelNames).length !== labelNames.length) {
+            throw new LabelNamesNotUniqueError();
+        }
+        return labelNames.map((name: string) => LabelUtil.createLabelName(name));
+    }
+
     public static loadLabelsList(
         fileData: File,
         onSuccess: (labels: LabelName[]) => void,
