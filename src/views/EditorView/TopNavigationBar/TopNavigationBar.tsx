@@ -63,6 +63,16 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
         props.updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
     };
 
+    const openDataCenter = () => {
+        setShowModelsDropdown(false);
+        props.updateActivePopupTypeAction(PopupWindowType.DATA_CENTER);
+    };
+
+    const openTrainingTask = () => {
+        setShowModelsDropdown(false);
+        props.updateActivePopupTypeAction(PopupWindowType.TRAINING_TASK);
+    };
+
     const toggleLanguage = () => {
         const newLanguage = props.language === Language.CHINESE ? Language.ENGLISH : Language.CHINESE;
         props.updateLanguageAction(newLanguage);
@@ -150,6 +160,18 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                                     <div className='Marker'/>
                                     <img src='ico/ai.png' alt='local-models'/>
                                     {currentTexts.modelManagement.callModels}
+                                </div>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openDataCenter}>
+                                    <div className='Marker'/>
+                                    <img src='ico/api.png' alt='data-center'/>
+                                    {currentTexts.modelManagement.dataCenter}
+                                </div>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openTrainingTask}>
+                                    <div className='Marker'/>
+                                    <img src='ico/ai.png' alt='training-task'/>
+                                    {currentTexts.modelManagement.trainingTask}
                                 </div>
                             </div>
                         )}

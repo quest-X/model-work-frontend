@@ -1,0 +1,144 @@
+@import '../../../settings/Settings';
+
+.GenericYesNoPopup:has(.TrainingTaskPopupContent) {
+  width: 640px;
+}
+
+.TrainingTaskPopupContent {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 40px;
+  flex: 1;
+  min-width: 640px;
+  color: white;
+
+  .SectionHeader {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    opacity: 0.7;
+  }
+
+  .FormRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+
+    label {
+      font-size: 13px;
+      opacity: 0.85;
+    }
+
+    select, input {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: white;
+      border-radius: 4px;
+      padding: 4px 8px;
+      min-width: 180px;
+    }
+  }
+
+  .StartButton {
+    margin-top: 10px;
+    align-self: flex-start;
+    background: #4caf50;
+    border: none;
+    color: white;
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+  }
+
+  .JobListSection {
+    margin-top: 20px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .EmptyHint {
+    font-size: 13px;
+    opacity: 0.5;
+    padding: 8px 0;
+  }
+
+  .JobRow {
+    padding: 8px 10px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    margin-bottom: 8px;
+  }
+
+  .JobRowHeader {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .JobState {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+
+    &.state-running { color: #4da6ff; background: rgba(77, 166, 255, 0.15); }
+    &.state-completed { color: #4caf50; background: rgba(76, 175, 80, 0.15); }
+    &.state-failed { color: #ff6b6b; background: rgba(255, 107, 107, 0.15); }
+    &.state-cancelled, &.state-queued { color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.08); }
+  }
+
+  .ProgressBar {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.15);
+    overflow: hidden;
+    margin-top: 6px;
+  }
+
+  .ProgressBarFill {
+    height: 100%;
+    background: #4da6ff;
+    transition: width 0.2s ease;
+  }
+
+  .JobEpoch {
+    font-size: 11px;
+    opacity: 0.7;
+  }
+
+  .JobActions {
+    margin-top: 6px;
+
+    button {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: white;
+      border-radius: 4px;
+      padding: 3px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      margin-right: 6px;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.18);
+      }
+    }
+  }
+
+  .errorMessage {
+    color: #ff6b6b;
+    font-size: 12px;
+  }
+}

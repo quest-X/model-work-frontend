@@ -329,6 +329,8 @@ export interface LanguageTexts {
     modelManagement: {
         callModels: string;   // 原 localModels —— 调用模型
         modelEngines: string;
+        dataCenter: string;
+        trainingTask: string;
         manage: string;
         noModels: string;
         noModelsHint: string;
@@ -829,6 +831,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         modelManagement: {
             callModels: '推理任务',
             modelEngines: '核心引擎',
+            dataCenter: '数据中心',
+            trainingTask: '训练任务',
             manage: '管理',
             noModels: '暂无推理引擎',
             noModelsHint: '点击添加第一个推理引擎',
@@ -1304,6 +1308,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         modelManagement: {
             callModels: 'Inference Tasks',
             modelEngines: 'Core Engine',
+            dataCenter: 'Data Center',
+            trainingTask: 'Training Task',
             manage: 'Manage',
             noModels: 'No Inference Engines',
             noModelsHint: 'Click to add your first inference engine',
