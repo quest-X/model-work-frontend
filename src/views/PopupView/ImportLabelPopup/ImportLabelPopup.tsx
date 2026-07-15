@@ -136,13 +136,31 @@ const ImportLabelPopup: React.FC<IProps> = ({
 
     type ImportResult = { imageData: ImageData[]; labelNames: LabelName[] };
 
-    const importYOLOAsync = (imageFiles: File[], annotationFiles: File[]): Promise<ImportResult> => {
-        const labelsFile = annotationFiles.find(f => f.name.toLowerCase() === 'labels.txt');
-        if (!labelsFile) return Promise.reject(new Error('labels.txt not found in zip'));
+    // Ultralytics 导出的类别名文件名不固定：labels.txt（本工具原生格式）、
+    // classes.txt（同样一行一个类名）、data.yaml/dataset.yaml（names 字段）。
+    const findLabelsSource = (annotationFiles: File[]): { file: File; isYaml: boolean } | null => {
+        const byName = (name: string) => annotationFiles.find(f => f.name.toLowerCase() === name);
+        const labelsTxt = byName('labels.txt');
+        if (labelsTxt) return { file: labelsTxt, isYaml: false };
+        const classesTxt = byName('classes.txt');
+        if (classesTxt) return { file: classesTxt, isYaml: false };
+        const yamlFile = byName('data.yaml') || byName('dataset.yaml');
+        if (yamlFile) return { file: yamlFile, isYaml: true };
+        return null;
+    };
 
-        const labelsPromise = FileUtil.readFile(labelsFile).then(content => YOLOUtils.parseLabelsNamesFromString(content));
+    const importYOLOAsync = (imageFiles: File[], annotationFiles: File[]): Promise<ImportResult> => {
+        const labelsSource = findLabelsSource(annotationFiles);
+        if (!labelsSource) return Promise.reject(new Error('labels.txt/classes.txt/data.yaml not found in zip'));
+
+        const labelsPromise = FileUtil.readFile(labelsSource.file).then(content =>
+            labelsSource.isYaml
+                ? YOLOUtils.parseLabelsNamesFromYamlString(content)
+                : YOLOUtils.parseLabelsNamesFromString(content)
+        );
         const imagesPromise = Promise.all(imageFiles.map(f => loadImageDimensions(f)));
-        const txtFiles = annotationFiles.filter(f => f.name.toLowerCase() !== 'labels.txt' && f.name.endsWith('.txt'));
+        const labelsSourceName = labelsSource.file.name.toLowerCase();
+        const txtFiles = annotationFiles.filter(f => f.name.toLowerCase() !== labelsSourceName && f.name.endsWith('.txt'));
         const txtContentsPromise = Promise.all(txtFiles.map(f => FileUtil.readFile(f)));
 
         return Promise.all([labelsPromise, imagesPromise, txtContentsPromise])
@@ -266,10 +284,11 @@ const ImportLabelPopup: React.FC<IProps> = ({
         setSourceInfo({zipCount: zips.length, looseCount: loose.length});
 
             if (zips.length > 0) {
-                const annotationExts = ['.json', '.txt', '.xml'];
+                const annotationExts = ['.json', '.txt', '.xml', '.yaml', '.yml'];
                 const imageExts = ['.jpg', '.jpeg', '.png', '.bmp', '.webp'];
                 const mimeMap: Record<string, string> = {
                     '.json': 'application/json', '.txt': 'text/plain', '.xml': 'application/xml',
+                    '.yaml': 'text/yaml', '.yml': 'text/yaml',
                 };
                 const imageMimeMap: Record<string, string> = {
                     '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
