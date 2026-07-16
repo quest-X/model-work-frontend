@@ -96,6 +96,29 @@ const LoadMoreMediaPopup: React.FC<IProps> = ({ addImageData, addQueueItems, ima
             // 图像文件直接添加到当前项目
             if (imageFiles.length > 0) {
                 addImageData(imageFiles.map((fileData: File) => ImageDataUtil.createImageDataFromFileData(fileData)));
+
+                // 同时登记一个 COMPLETED 状态的队列项，仅用于让"文件队列"面板 /
+                // autosave-restore 快照如实反映这批已合并进当前项目的图片 —
+                // 否则 imagesData 里有帧但 queue.items 从未记录它们，restore 后
+                // 队列面板显示"队列为空"（图片本身通过 imagesData 快照正常恢复）。
+                const loadMoreItem: QueueItem = imageFiles.length === 1
+                    ? {
+                        id: uuidv4(),
+                        name: imageFiles[0].name,
+                        type: QueueItemType.IMAGE,
+                        file: imageFiles[0],
+                        status: QueueItemStatus.COMPLETED,
+                        uploadedAt: Date.now(),
+                    }
+                    : {
+                        id: uuidv4(),
+                        name: currentTexts.popups.uploadFiles.addNewFiles,
+                        type: QueueItemType.FOLDER,
+                        files: imageFiles,
+                        status: QueueItemStatus.COMPLETED,
+                        uploadedAt: Date.now(),
+                    };
+                addQueueItems([loadMoreItem]);
             }
 
             // 视频文件添加到队列
