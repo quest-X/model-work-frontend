@@ -29,6 +29,7 @@ import {LabelStatus} from '../../../data/enums/LabelStatus';
 import {isEqual} from 'lodash';
 import {AIActions} from '../../../logic/actions/AIActions';
 import {VideoSelector} from '../../../store/selectors/VideoSelector';
+import {ImageActions} from '../../../logic/actions/ImageActions';
 
 interface IProps {
     size: ISize;
@@ -233,7 +234,14 @@ class Editor extends React.Component<IProps, IState> {
     private handleWheelEvent = (event: WheelEvent) => {
         event.preventDefault();
 
-        if (event.ctrlKey || event.metaKey) {
+        if (event.shiftKey) {
+            // Shift+滚轮 — 切换上一张/下一张图，向下滚动=下一张
+            if (event.deltaY > 0) {
+                ImageActions.goToNextImage();
+            } else if (event.deltaY < 0) {
+                ImageActions.goToPreviousImage();
+            }
+        } else if (event.ctrlKey || event.metaKey) {
             // 触控板捏合缩放 (pinch) — 浏览器将 pinch 转换为 ctrlKey + wheel
             const zoomDelta = -event.deltaY * 0.01;
             ViewPortActions.zoomByDelta(zoomDelta);
