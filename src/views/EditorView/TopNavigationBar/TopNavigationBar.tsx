@@ -73,6 +73,11 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
         props.updateActivePopupTypeAction(PopupWindowType.TRAINING_TASK);
     };
 
+    const openVectorDb = () => {
+        setShowModelsDropdown(false);
+        props.updateActivePopupTypeAction(PopupWindowType.VECTOR_DB);
+    };
+
     const toggleLanguage = () => {
         const newLanguage = props.language === Language.CHINESE ? Language.ENGLISH : Language.CHINESE;
         props.updateLanguageAction(newLanguage);
@@ -172,6 +177,12 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                                     <div className='Marker'/>
                                     <img src='ico/ai.png' alt='training-task'/>
                                     {currentTexts.modelManagement.trainingTask}
+                                </div>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openVectorDb}>
+                                    <div className='Marker'/>
+                                    <img src='ico/api.png' alt='vector-db'/>
+                                    {currentTexts.modelManagement.vectorDb}
                                 </div>
                             </div>
                         )}

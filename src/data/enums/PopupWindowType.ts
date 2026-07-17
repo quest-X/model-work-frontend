@@ -21,4 +21,5 @@ export enum PopupWindowType {
     OBJECT_TRACKING = 'OBJECT_TRACKING',
     DATA_CENTER = 'DATA_CENTER',
     TRAINING_TASK = 'TRAINING_TASK',
+    VECTOR_DB = 'VECTOR_DB',
 }

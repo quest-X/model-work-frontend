@@ -25,6 +25,7 @@ import PipelineInferencePopup from './PipelinePopup/PipelineInferencePopup';
 import PipelinePostprocessPopup from './PipelinePopup/PipelinePostprocessPopup';
 import DataCenterPopup from './DataCenterPopup/DataCenterPopup';
 import TrainingTaskPopup from './TrainingTaskPopup/TrainingTaskPopup';
+import VectorDbPopup from './VectorDbPopup/VectorDbPopup';
 
 
 interface IProps {
@@ -77,6 +78,7 @@ const PopupView: React.FC<IProps> = ({ activePopupType }) => {
         [PopupWindowType.PIPELINE_POSTPROCESS]: () => <PipelinePostprocessPopup />,
         [PopupWindowType.DATA_CENTER]: () => <DataCenterPopup />,
         [PopupWindowType.TRAINING_TASK]: () => <TrainingTaskPopup />,
+        [PopupWindowType.VECTOR_DB]: () => <VectorDbPopup />,
         [PopupWindowType.LOADER]: () => <ClipLoader size={50} color={CSSHelper.getLeadingColor()} loading={true} />,
     };
 
