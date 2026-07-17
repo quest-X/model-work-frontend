@@ -1,0 +1,435 @@
+@import '../../../settings/Settings';
+
+.GenericYesNoPopup:has(.VectorDbPopupContent) {
+  width: 860px;
+}
+
+.VectorDbPopupContent {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 30px 20px;
+  flex: 1;
+  min-width: 860px;
+  color: white;
+
+  .StatusBanner {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+
+    &.ready {
+      background: rgba(76, 175, 80, 0.12);
+      color: #9ccc9c;
+    }
+
+    &.loading {
+      background: rgba(255, 193, 7, 0.12);
+      color: #e6c66e;
+    }
+
+    &.error {
+      background: rgba(255, 107, 107, 0.12);
+      color: #ff9b9b;
+    }
+  }
+
+  .Columns {
+    display: flex;
+    gap: 20px;
+    min-height: 380px;
+  }
+
+  .SectionHeader {
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    opacity: 0.7;
+  }
+
+  .errorMessage {
+    color: #ff6b6b;
+    font-size: 12px;
+    margin: 6px 0;
+  }
+
+  .EmptyHint {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 13px;
+    padding: 8px 0;
+
+    &.tall {
+      padding: 60px 0;
+      text-align: center;
+    }
+  }
+
+  // ── 左栏：集合 ──
+  .CollectionsPanel {
+    width: 280px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+
+    .CreateRow {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+
+      .CreateInput {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        color: white;
+        padding: 6px 8px;
+        font-size: 13px;
+        outline: none;
+
+        &:focus {
+          border-color: $primaryColor;
+        }
+      }
+
+      .CreateButton {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 4px;
+        color: white;
+        padding: 6px 12px;
+        cursor: pointer;
+        font-size: 13px;
+
+        &:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.18);
+        }
+
+        &:disabled {
+          opacity: 0.4;
+          cursor: default;
+        }
+      }
+    }
+
+    .CollectionList {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 320px;
+    }
+  }
+
+  .DatasetRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    &.selected {
+      background: rgba(77, 166, 255, 0.15);
+    }
+
+    .DatasetRowMain {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .DatasetName {
+      font-weight: 600;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .DatasetMeta {
+      font-size: 11px;
+      opacity: 0.7;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .DeleteButton {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0 6px;
+
+      &:hover {
+        color: #ff6b6b;
+      }
+    }
+  }
+
+  // ── 右栏：工作区 ──
+  .WorkPanel {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+
+    .TabBar {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+      margin-bottom: 12px;
+
+      .TabButton {
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        color: rgba(255, 255, 255, 0.6);
+        padding: 8px 14px;
+        font-size: 13px;
+        cursor: pointer;
+
+        &.active {
+          color: white;
+          border-bottom-color: $primaryColor;
+        }
+
+        &:hover {
+          color: white;
+        }
+      }
+    }
+  }
+
+  .TabBody {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .FieldLabel {
+    font-size: 12px;
+    opacity: 0.7;
+    width: 64px;
+    flex-shrink: 0;
+  }
+
+  .ModeRow,
+  .SourceRow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    select {
+      flex: 1;
+      background: #2f2f2f;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      color: white;
+      padding: 6px 8px;
+      font-size: 13px;
+      outline: none;
+    }
+  }
+
+  .DropZone {
+    border: 1px dashed rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    padding: 14px;
+    text-align: center;
+    cursor: pointer;
+
+    p {
+      margin: 2px 0;
+      font-size: 13px;
+    }
+
+    &.query {
+      width: 180px;
+      height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+
+      .QueryPreview {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+    }
+  }
+
+  .PrimaryButton {
+    align-self: flex-start;
+    background: rgba(0, 158, 253, 0.2);
+    border: 1px solid $primaryColor;
+    border-radius: 4px;
+    color: white;
+    padding: 7px 18px;
+    font-size: 13px;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background: rgba(0, 158, 253, 0.35);
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+  }
+
+  .JobPanel {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    padding: 10px;
+
+    .JobHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+
+      .CancelButton {
+        background: none;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 4px;
+        color: rgba(255, 255, 255, 0.8);
+        padding: 2px 10px;
+        font-size: 12px;
+        cursor: pointer;
+
+        &:hover {
+          border-color: #ff6b6b;
+          color: #ff6b6b;
+        }
+      }
+    }
+
+    .JobStats {
+      font-size: 12px;
+      opacity: 0.75;
+      margin-top: 6px;
+    }
+  }
+
+  .ProgressBar {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.15);
+    overflow: hidden;
+    margin-top: 8px;
+  }
+
+  .ProgressBarFill {
+    height: 100%;
+    background: #4caf50;
+    transition: width 0.2s ease;
+  }
+
+  .SearchControls {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+
+    .SearchParams {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      input[type='number'] {
+        width: 64px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        color: white;
+        padding: 6px 8px;
+        font-size: 13px;
+        outline: none;
+      }
+    }
+  }
+
+  .ResultGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  .ResultCard {
+    position: relative;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    overflow: hidden;
+
+    img {
+      width: 100%;
+      height: 90px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .ThumbPlaceholder {
+      width: 100%;
+      height: 90px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.4);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .ScoreBadge {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: rgba(0, 0, 0, 0.65);
+      color: #7fd67f;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+
+    .ResultMeta {
+      display: flex;
+      flex-direction: column;
+      padding: 4px 6px;
+
+      .ClassTag {
+        font-size: 11px;
+        color: $primaryColor;
+      }
+
+      .FileName {
+        font-size: 10px;
+        opacity: 0.6;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+  }
+}
