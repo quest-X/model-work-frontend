@@ -136,6 +136,14 @@ const QueueList: React.FC<IProps> = ({
         accept: {
             'image/*': ['.jpeg', '.png', '.jpg'],
             'video/*': ['.mp4', '.mov', '.avi', '.webm'],
+            // 标注/数据集包 — handleFileDrop（EditorContainer）会拦截并转发到导入标注弹窗
+            'application/json': ['.json'],
+            'text/plain': ['.txt'],
+            'application/xml': ['.xml'],
+            'text/xml': ['.xml'],
+            'application/zip': ['.zip'],
+            'application/x-zip-compressed': ['.zip'],
+            'application/octet-stream': ['.zip'],
         },
     });
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import classNames from 'classnames';
 import {connect} from "react-redux";
 import {LabelType} from "../../../../data/enums/LabelType";
 import {ISize} from "../../../../interfaces/ISize";
@@ -14,12 +15,14 @@ import {EventType} from "../../../../data/enums/EventType";
 import {LabelStatus} from "../../../../data/enums/LabelStatus";
 import {toggleImageSelection, selectImageRange, selectAllImages} from "../../../../store/labels/actionCreators";
 import {store} from "../../../../index";
+import {Language, LanguageConfig} from "../../../../data/LanguageConfig";
 
 interface IProps {
     activeImageIndex: number;
     imagesData: ImageData[];
     activeLabelType: LabelType;
     imageAIStates: Map<string, any>;
+    language: Language;
 }
 
 interface IState {
@@ -27,6 +30,7 @@ interface IState {
     isCtrlPressed: boolean;
     isShiftPressed: boolean;
     lastClickedIndex: number | null;
+    isDragActive: boolean;
 }
 
 class ImagesList extends React.Component<IProps, IState> {
@@ -40,8 +44,41 @@ class ImagesList extends React.Component<IProps, IState> {
             isCtrlPressed: false,
             isShiftPressed: false,
             lastClickedIndex: null,
+            isDragActive: false,
         }
     }
+
+    // 与 QueueList 复用同一条上传入口：派发 opensight:drop-files，
+    // 由 EditorContainer.handleFileDrop 统一处理图片/视频/zip 标注包路由
+    private dragCounter = 0;
+
+    private handleDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        this.dragCounter++;
+        this.setState({ isDragActive: true });
+    };
+
+    private handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+    };
+
+    private handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        this.dragCounter--;
+        if (this.dragCounter <= 0) {
+            this.dragCounter = 0;
+            this.setState({ isDragActive: false });
+        }
+    };
+
+    private handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        this.dragCounter = 0;
+        this.setState({ isDragActive: false });
+        const files = Array.from(event.dataTransfer.files || []);
+        if (files.length === 0) return;
+        window.dispatchEvent(new CustomEvent('opensight:drop-files', { detail: files }));
+    };
 
     public componentDidMount(): void {
         this.updateListSize();
@@ -216,13 +253,30 @@ class ImagesList extends React.Component<IProps, IState> {
     };
 
     public render() {
-        const { size } = this.state;
+        const { size, isDragActive } = this.state;
+        const texts = LanguageConfig[this.props.language];
         return(
             <div
-                className="ImagesList"
+                className={classNames("ImagesList", { "drag-over": isDragActive })}
                 ref={ref => this.imagesListRef = ref}
                 onClick={() => ContextManager.switchCtx(ContextType.LEFT_NAVBAR)}
+                onDragEnter={this.handleDragEnter}
+                onDragOver={this.handleDragOver}
+                onDragLeave={this.handleDragLeave}
+                onDrop={this.handleDrop}
             >
+                {isDragActive && (
+                    <div className="images-list-drop-overlay">
+                        <img src="/ico/box-opened.png" alt="drop" draggable={false} />
+                        <p>{texts.queueEmptyHint}</p>
+                    </div>
+                )}
+                {this.props.imagesData.length === 0 && (
+                    <div className="images-list-empty">
+                        <img src="/ico/box-opened.png" alt="empty" draggable={false} />
+                        <p className="images-list-empty-hint">{texts.queueEmptyHint}</p>
+                    </div>
+                )}
                 {!!size && <VirtualList
                     size={size}
                     childSize={{width: 150, height: 150}}
@@ -241,7 +295,8 @@ const mapStateToProps = (state: AppState) => ({
     activeImageIndex: state.labels.activeImageIndex,
     imagesData: state.labels.imagesData,
     activeLabelType: state.labels.activeLabelType,
-    imageAIStates: state.ai.imageAIStates
+    imageAIStates: state.ai.imageAIStates,
+    language: state.general.language
 });
 
 export default connect(

@@ -8,6 +8,8 @@ import { connect } from 'react-redux';
 import { useDropzone } from 'react-dropzone';
 import { ImageData, LabelName } from '../../../store/labels/types';
 import { addImageData, updateActiveImageIndex, updateActiveLabelType, updateImageData, updateLabelNames } from '../../../store/labels/actionCreators';
+import { QueueItem, QueueItemType, QueueItemStatus } from '../../../store/queue/types';
+import { addQueueItems } from '../../../store/queue/actionCreators';
 import { ImporterSpecData } from '../../../data/ImporterSpecData';
 import { ImageDataUtil } from '../../../utils/ImageDataUtil';
 import { YOLOUtils } from '../../../logic/import/yolo/YOLOUtils';
@@ -36,6 +38,7 @@ interface IProps {
     updateLabelNamesAction: (labels: LabelName[]) => any;
     updateActiveLabelTypeAction: (activeLabelType: LabelType) => any;
     updateActiveImageIndexAction: (index: number) => any;
+    addQueueItemsAction: (items: QueueItem[]) => any;
     language: Language;
 }
 
@@ -46,6 +49,7 @@ const ImportLabelPopup: React.FC<IProps> = ({
     updateLabelNamesAction,
     updateActiveLabelTypeAction,
     updateActiveImageIndexAction,
+    addQueueItemsAction,
     language
 }) => {
     const currentTexts = LanguageConfig[language];
@@ -406,14 +410,71 @@ const ImportLabelPopup: React.FC<IProps> = ({
         onDrop: handleFiles,
     });
 
-    const onAccept = () => {
+    // 与 EditorContainer/LoadMoreMediaPopup 里的同名函数一致：生成 100px 缩略图，
+    // 让导入批次在文件队列面板里也有封面图，而不是退化成类型图标
+    const generateThumbnail = (file: File): Promise<string | undefined> => {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const maxSize = 100;
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > height) {
+                        if (width > maxSize) { height *= maxSize / width; width = maxSize; }
+                    } else {
+                        if (height > maxSize) { width *= maxSize / height; height = maxSize; }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx?.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL());
+                };
+                img.onerror = () => resolve(undefined);
+                img.src = e.target?.result as string;
+            };
+            reader.onerror = () => resolve(undefined);
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const onAccept = async () => {
         EditorModel.lastBatchInferenceImageCount = 0;
         if (loadedLabelNames.length !== 0 && loadedImageData.length !== 0) {
             // If loaded images have fileData (from full import), add them; otherwise update existing
-            const hasNewImages = loadedImageData.some(d => d.fileData && d.id && !LabelsSelector.getImagesData().find(e => e.id === d.id));
+            const existingIds = new Set(LabelsSelector.getImagesData().map(e => e.id));
+            const newImages = loadedImageData.filter(d => d.fileData && d.id && !existingIds.has(d.id));
+            const hasNewImages = newImages.length > 0;
             if (hasNewImages) {
                 addImageDataAction(loadedImageData);
                 updateActiveImageIndexAction(0);
+
+                // 登记一个 COMPLETED 状态的队列项，与「加载更多媒体」保持一致 —
+                // 否则这批图片只进 imagesData，文件队列面板/autosave 快照都不知道它们存在
+                const thumbnail = await generateThumbnail(newImages[0].fileData);
+                const importItem: QueueItem = newImages.length === 1
+                    ? {
+                        id: uuidv4(),
+                        name: newImages[0].fileData.name,
+                        type: QueueItemType.IMAGE,
+                        file: newImages[0].fileData,
+                        status: QueueItemStatus.COMPLETED,
+                        uploadedAt: Date.now(),
+                        thumbnail,
+                    }
+                    : {
+                        id: uuidv4(),
+                        name: currentTexts.popups.importAnnotations.title,
+                        type: QueueItemType.FOLDER,
+                        files: newImages.map(d => d.fileData),
+                        status: QueueItemStatus.COMPLETED,
+                        uploadedAt: Date.now(),
+                        thumbnail,
+                    };
+                addQueueItemsAction([importItem]);
             } else {
                 updateImageDataAction(loadedImageData);
             }
@@ -536,7 +597,8 @@ const mapDispatchToProps = {
     updateImageDataAction: updateImageData,
     updateLabelNamesAction: updateLabelNames,
     updateActiveLabelTypeAction: updateActiveLabelType,
-    updateActiveImageIndexAction: updateActiveImageIndex
+    updateActiveImageIndexAction: updateActiveImageIndex,
+    addQueueItemsAction: addQueueItems
 };
 
 const mapStateToProps = (state: AppState) => ({
