@@ -910,6 +910,18 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 </div>;
             }, [imagesData, activeImageIndex, isSAMLoaded, smartAnnotationActive, samNegativeMode, smartAnnotationOnClick, smartAnnotationOnDoubleClick, isTrackingModelLoaded, trackingOnClick, trackingMode, trackingInProgress, currentTexts, eraserMode, eraserFineMode, eraserOnClick, language])}
             <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 6, height: '100%' }}>
+                <button
+                    className='model-inspector-trigger'
+                    data-testid='open-model-inspector'
+                    disabled={imagesData.length === 0}
+                    onClick={() => updateActivePopupTypeAction(PopupWindowType.MODEL_INSPECTOR)}
+                    title={language === 'zh'
+                        ? '查看当前图片在已加载模型各语义阶段的激活热图'
+                        : 'Inspect activation heatmaps across the loaded model stages'}
+                >
+                    <span className='model-inspector-trigger-icon' aria-hidden='true'><i/><i/><i/></span>
+                    {language === 'zh' ? '透视' : 'Inspect'}
+                </button>
                 <div ref={inferenceMenuRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <button
                         disabled={isFullImageInferenceInProgress || loadedModels.length === 0}

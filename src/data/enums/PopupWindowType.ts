@@ -22,4 +22,5 @@ export enum PopupWindowType {
     DATA_CENTER = 'DATA_CENTER',
     TRAINING_TASK = 'TRAINING_TASK',
     VECTOR_DB = 'VECTOR_DB',
+    MODEL_INSPECTOR = 'MODEL_INSPECTOR',
 }
