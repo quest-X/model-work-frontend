@@ -16,6 +16,17 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.8.2',
+        date: '2026-07-20',
+        changes: [
+            { zh: '【架构】引擎体系拆分为核心引擎与拓展引擎：核心服务统一承载硬件加速、数据中心、推理、训练、检测、分割与 OCR，拓展服务承载向量数据库和高精度检索，并按引擎接入状态控制菜单显示', en: '[Architecture] Split the engine system into core and extension engines: core services now cover hardware acceleration, datasets, inference, training, detection, segmentation, and OCR, while extension services provide vector database and high-precision retrieval; menus are gated by registered engines' },
+            { zh: '【功能】新增数据中心与训练任务工作流：支持上传 YOLO 数据集、查看数据集状态、配置训练参数并跟踪训练任务', en: '[Feat] Added dataset center and training workflows for uploading YOLO datasets, reviewing dataset status, configuring training parameters, and tracking training jobs' },
+            { zh: '【功能】新增向量数据库与高精度检索（L2G）：支持集合管理、图片入库、相似检索，以及局部到全局的高精度检索流程', en: '[Feat] Added vector database and high-precision retrieval (L2G), including collection management, image ingestion, similarity search, and local-to-global retrieval workflows' },
+            { zh: '【功能】新增模型检查工作台，并统一检测、分割、OCR 等模型能力归属核心引擎', en: '[Feat] Added the model inspection workbench and consolidated detection, segmentation, OCR, and related model capabilities under the core engine' },
+            { zh: '【界面】统一服务弹窗的响应式宽高、紧凑表单、空状态与页脚布局，修复引擎管理表单随文案收缩的问题', en: '[UI] Standardized responsive popup sizing, compact forms, empty states, and footer layouts, and fixed the engine-management form shrinking with short copy' },
+        ],
+    },
+    {
         version: '2.8.1',
         date: '2026-06-10',
         changes: [
