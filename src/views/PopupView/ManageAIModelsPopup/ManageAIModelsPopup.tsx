@@ -141,8 +141,8 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
     const renderLocalModels = () => {
         const selectedEngine = aiModels.find(m => m.id === selectedModelId);
         const engineType = selectedEngine?.modelType;
-        const families = engineType === 'segmentation' ? SEG_MODEL_FAMILIES
-            : engineType === 'detection' ? YOLO_MODEL_FAMILIES
+        const families = engineType === 'core'
+            ? [...YOLO_MODEL_FAMILIES, ...SEG_MODEL_FAMILIES]
             : null;
         return (
             <div className='LocalModelsSection'>
@@ -153,7 +153,9 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
                     {families ? renderModelFamilyList(families) : (
                         <div className='LocalModelEntry'>
                             <div className='LocalModelName' style={{color: 'rgba(255,255,255,0.5)', fontStyle: 'italic'}}>
-                                {language === Language.CHINESE ? '请选择模型引擎' : 'Select a model engine'}
+                                {language === Language.CHINESE
+                                    ? '拓展引擎不管理推理模型'
+                                    : 'Extension engines do not manage inference models'}
                             </div>
                         </div>
                     )}

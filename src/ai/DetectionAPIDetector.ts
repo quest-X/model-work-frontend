@@ -4,7 +4,7 @@ import {ImageData} from '../store/labels/types';
 import {EditorModel} from '../staticModels/EditorModel';
 import {store} from '../index';
 import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
-import {getDefaultBackendUrl} from '../utils/DefaultBackendUrl';
+import {getDefaultCoreServiceUrl} from '../utils/DefaultBackendUrl';
 import {PipelineStore} from './PipelineStore';
 import {ScriptStore} from './ScriptStore';
 import {FrameExtractorService} from '../services/FrameExtractorService';
@@ -145,7 +145,7 @@ export interface DetectionAPIResponse {
 export class DetectionAPIDetector {
     private static config: DetectionAPIConfig = {
         // 默认检测 API:跟随 window.location.hostname,支持局域网跨机访问
-        url: getDefaultBackendUrl('/detect'),
+        url: getDefaultCoreServiceUrl('/detect'),
         enabled: true
     };
 
@@ -200,11 +200,8 @@ export class DetectionAPIDetector {
     private static syncFromActiveModel(): { ok: boolean; reason?: string } {
         try {
             const state = store.getState();
-            const active = AIModelsSelector.getActiveAIModel(state);
+            const active = AIModelsSelector.getActiveModelByType(state, 'core');
             if (active) {
-                if (active.modelType !== 'detection' && active.modelType !== 'custom') {
-                    return { ok: false, reason: `Active model "${active.name}" is ${active.modelType}, not detection/custom` };
-                }
                 if (!active.url) {
                     return { ok: false, reason: `Active model "${active.name}" has no url` };
                 }

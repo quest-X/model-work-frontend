@@ -7,7 +7,7 @@ import { INotification, NotificationsActionType } from '../../../store/notificat
 import { submitNewNotification } from '../../../store/notifications/actionCreators';
 import { updateActivePopupType } from '../../../store/general/actionCreators';
 import { addAIModel } from '../../../store/aimodels/actionCreators';
-import { AIModel } from '../../../store/aimodels/types';
+import { AIModel, EngineType } from '../../../store/aimodels/types';
 import { NotificationUtil } from '../../../utils/NotificationUtil';
 import { NotificationsDataMap } from '../../../data/info/NotificationsData';
 import { Notification } from '../../../data/enums/Notification';
@@ -18,8 +18,12 @@ import { ClipLoader } from 'react-spinners';
 import { CSSHelper } from '../../../logic/helpers/CSSHelper';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import { v4 as uuidv4 } from 'uuid';
-import { FormControl, InputLabel, Select, MenuItem, SelectChangeEvent } from '@mui/material';
-import { getDefaultBackendUrl } from '../../../utils/DefaultBackendUrl';
+import { FormControl } from '@mui/material';
+import {
+    getDefaultCoreServiceBase,
+    getDefaultExtensionServiceBase,
+    normalizeEngineBaseUrl,
+} from '../../../utils/DefaultBackendUrl';
 
 interface IProps {
     submitNewNotificationAction: (notification: INotification) => NotificationsActionType;
@@ -38,24 +42,29 @@ const ModelEnginePopup: React.FC<IProps> = (
 ) => {
     const currentTexts = LanguageConfig[language];
     
-    type EngineType = 'core' | 'detection' | 'segmentation' | 'ocr';
     const DEFAULT_API_KEY_BY_TYPE: Record<EngineType, string> = {
         core: '',
-        detection: '123456',
-        segmentation: 'baosight@ABC123!',
-        ocr: '',
+        extension: '',
     };
-    const [modelUrl, setModelUrl] = useState('https://localhost:58600');
+    const defaultUrlByType: Record<EngineType, string> = {
+        core: getDefaultCoreServiceBase(),
+        extension: getDefaultExtensionServiceBase(),
+    };
+    const [modelUrl, setModelUrl] = useState(defaultUrlByType.core);
     const [modelType, setModelType] = useState<EngineType>('core');
-    const [apiKey, setApiKey] = useState(DEFAULT_API_KEY_BY_TYPE.detection);
+    const [apiKey, setApiKey] = useState(DEFAULT_API_KEY_BY_TYPE.core);
     const [isConnecting, setIsConnecting] = useState(false);
     const [modelTypeOpen, setModelTypeOpen] = useState(false);
     const modelTypeRef = useRef<HTMLDivElement>(null);
     const modelTypeTriggerRef = useRef<HTMLDivElement>(null);
     const [modelTypePos, setModelTypePos] = useState({ top: 0, left: 0, width: 0 });
 
+    const onReject = () => {
+        PopupActions.close();
+    };
+
     useEffect(() => {
-        if (!modelTypeOpen) return;
+        if (!modelTypeOpen) return undefined;
         const handler = (e: MouseEvent) => {
             if (modelTypeRef.current && !modelTypeRef.current.contains(e.target as Node)) {
                 setModelTypeOpen(false);
@@ -81,7 +90,7 @@ const ModelEnginePopup: React.FC<IProps> = (
 
     const disableAcceptButton = () => {
         if (isConnecting) return true;
-        // modelType 初始化为 'detection' 且只能在两个合法值之间切换,不会为空,只需校验 URL
+        // Engine type has exactly two legal values; only the URL needs validation.
         return modelUrl.trim() === '';
     }
 
@@ -91,40 +100,30 @@ const ModelEnginePopup: React.FC<IProps> = (
         try {
             setIsConnecting(true);
             
-            const base = modelUrl.replace(/\/+$/, '');
+            const base = normalizeEngineBaseUrl(modelUrl, modelType);
             const ac = new AbortController();
             const timer = setTimeout(() => ac.abort(), 8000);
-
-            if (modelType === 'core') {
-                const res = await fetch(`${base}/core`, { signal: ac.signal });
-                clearTimeout(timer);
-                const data = await res.json();
-                if (data.status !== 'ok') throw new Error('backend not ok');
-            } else {
-                const res = await fetch(`${base}/health`, { signal: ac.signal });
-                clearTimeout(timer);
-                const health = await res.json();
-                const check: Record<string, string | null> = {
-                    detection: health.services?.detection === 'ready' ? null : (language === Language.CHINESE ? '检测服务未就绪' : 'Detection not ready'),
-                    segmentation: health.services?.segmentation === 'ready' ? null : (language === Language.CHINESE ? '分割服务未就绪' : 'Segmentation not ready'),
-                    ocr: health.services?.ocr && health.services.ocr !== 'not_loaded' ? null : (language === Language.CHINESE ? 'OCR 服务未就绪' : 'OCR not ready'),
-                };
-                const err = check[modelType];
-                if (err) throw new Error(err);
+            const res = await fetch(`${base}/health`, { signal: ac.signal });
+            clearTimeout(timer);
+            if (!res.ok) throw new Error(`health ${res.status}`);
+            const health = await res.json();
+            if (health.status && !['ok', 'ready', 'healthy'].includes(health.status)) {
+                throw new Error(`backend status: ${health.status}`);
+            }
+            if (health.engine?.type && health.engine.type !== modelType) {
+                throw new Error(`expected ${modelType} engine, received ${health.engine.type}`);
             }
 
             const nameMap: Record<EngineType, string> = {
                 core: language === Language.CHINESE ? '核心引擎' : 'Core Engine',
-                detection: language === Language.CHINESE ? '检测引擎' : 'Detection Engine',
-                segmentation: language === Language.CHINESE ? '分割引擎' : 'Segmentation Engine',
-                ocr: language === Language.CHINESE ? 'OCR 引擎' : 'OCR Engine',
+                extension: language === Language.CHINESE ? '拓展引擎' : 'Extension Engine',
             };
             const defaultName = nameMap[modelType];
             // 创建新的AI模型并添加到状态
             const newModel: AIModel = {
                 id: uuidv4(),
                 name: defaultName,
-                url: modelUrl,
+                url: base,
                 modelType: modelType,
                 apiKey: apiKey.trim() || undefined,
                 description: undefined,
@@ -159,18 +158,15 @@ const ModelEnginePopup: React.FC<IProps> = (
         }
     };
 
-    const onReject = () => {
-        PopupActions.close();
-    };
-
     const modelUrlOnChangeCallback = (event: React.ChangeEvent<HTMLInputElement>) => {
         setModelUrl(event.target.value);
     }
 
-    const modelTypeOnChangeCallback = (event: SelectChangeEvent) => {
-        const newType = event.target.value as EngineType;
+    const selectEngineType = (newType: EngineType) => {
+        const oldDefault = defaultUrlByType[modelType];
         setModelType(newType);
         setApiKey(DEFAULT_API_KEY_BY_TYPE[newType]);
+        setModelUrl(current => current === oldDefault ? defaultUrlByType[newType] : current);
     }
 
     const apiKeyOnChangeCallback = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -212,7 +208,7 @@ const ModelEnginePopup: React.FC<IProps> = (
                         value={modelUrl}
                         onChange={modelUrlOnChangeCallback}
                         style={{ width: '100%', marginBottom: '20px' }}
-                        placeholder="https://localhost:58600"
+                        placeholder={defaultUrlByType[modelType]}
                         InputLabelProps={{ shrink: true }}
                         sx={{
                             '& .MuiInputBase-input': {
@@ -314,9 +310,7 @@ const ModelEnginePopup: React.FC<IProps> = (
                                     }}
                                 >
                                     {{ core: currentTexts.popups.modelEngine.taskTypeCore,
-                                       detection: currentTexts.popups.modelEngine.taskTypeDetection,
-                                       segmentation: currentTexts.popups.modelEngine.taskTypeSegmentation,
-                                       ocr: currentTexts.popups.modelEngine.taskTypeOCR }[modelType]}
+                                       extension: currentTexts.popups.modelEngine.taskTypeExtension }[modelType]}
                                     <span style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 9 }}>▼</span>
                                 </div>
                                 {modelTypeOpen && (
@@ -332,12 +326,11 @@ const ModelEnginePopup: React.FC<IProps> = (
                                         boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
                                         overflow: 'hidden',
                                     }}>
-                                        {(['core', 'detection', 'segmentation', 'ocr'] as const).map(t => (
+                                        {(['core', 'extension'] as const).map(t => (
                                             <div
                                                 key={t}
                                                 onClick={() => {
-                                                    setModelType(t);
-                                                    setApiKey(DEFAULT_API_KEY_BY_TYPE[t]);
+                                                    selectEngineType(t);
                                                     setModelTypeOpen(false);
                                                 }}
                                                 style={{
@@ -351,9 +344,7 @@ const ModelEnginePopup: React.FC<IProps> = (
                                                 onMouseLeave={ev => { if (t !== modelType) (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
                                             >
                                                 {{ core: currentTexts.popups.modelEngine.taskTypeCore,
-                                                   detection: currentTexts.popups.modelEngine.taskTypeDetection,
-                                                   segmentation: currentTexts.popups.modelEngine.taskTypeSegmentation,
-                                                   ocr: currentTexts.popups.modelEngine.taskTypeOCR }[t]}
+                                                   extension: currentTexts.popups.modelEngine.taskTypeExtension }[t]}
                                                 {t === modelType ? ' ✓' : ''}
                                             </div>
                                         ))}

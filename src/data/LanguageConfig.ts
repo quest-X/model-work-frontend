@@ -194,9 +194,7 @@ export interface LanguageTexts {
             testConnection: string;
             integrationMessage: string;
             taskTypeCore: string;
-            taskTypeDetection: string;
-            taskTypeSegmentation: string;
-            taskTypeOCR: string;
+            taskTypeExtension: string;
         };
     };
     
@@ -677,11 +675,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 modelType: '引擎类型',
                 apiKey: '引擎密钥',
                 testConnection: '测试连接',
-                integrationMessage: '配置本地或远程推理引擎的连接信息。填写引擎根地址（如 https://localhost:58600），前端会自动拼接 /detect、/segment、/ocr 等路径。',
+                integrationMessage: '接入核心引擎或拓展引擎。检测、分割和 OCR 均由核心引擎统一提供。',
                 taskTypeCore: '核心引擎',
-                taskTypeDetection: '检测引擎',
-                taskTypeSegmentation: '分割引擎',
-                taskTypeOCR: '文字识别 (OCR)'
+                taskTypeExtension: '拓展引擎'
             }
         },
         
@@ -1158,11 +1154,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 modelType: 'Engine Type',
                 apiKey: 'Engine Key',
                 testConnection: 'Test Connection',
-                integrationMessage: 'Configure the connection to a local or remote inference engine. Enter the engine base URL (e.g. https://localhost:58600) — the frontend auto-appends /detect, /segment, /ocr, etc.',
+                integrationMessage: 'Connect a core or extension engine. Detection, segmentation, and OCR are all provided by the core engine.',
                 taskTypeCore: 'Core Engine',
-                taskTypeDetection: 'Detection Engine',
-                taskTypeSegmentation: 'Segmentation Engine',
-                taskTypeOCR: 'Text Recognition (OCR)'
+                taskTypeExtension: 'Extension Engine'
             }
         },
         

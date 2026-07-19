@@ -31,9 +31,38 @@ export const getDefaultBackendBase = (): string => {
     return `https://localhost:${DEFAULT_BACKEND_PORT}`;
 };
 
-/** base + path,例如 getDefaultBackendUrl('/detect') → `http://host:8000/detect`。 */
+/** Legacy bare-server helper. Service calls should use a service-specific base below. */
 export const getDefaultBackendUrl = (path: string = ''): string => {
     const base = getDefaultBackendBase();
+    if (!path) return base;
+    return path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
+};
+
+export type ServiceEngineType = 'core' | 'extension';
+
+const SERVICE_PATH_BY_TYPE: Record<ServiceEngineType, string> = {
+    core: 'core_service',
+    extension: 'extension_service',
+};
+
+/** Canonicalise legacy root/capability URLs to the new service boundary. */
+export const normalizeEngineBaseUrl = (url: string, type: ServiceEngineType): string => {
+    const servicePath = SERVICE_PATH_BY_TYPE[type];
+    let base = url.trim().replace(/\/+$/, '');
+    if (!base) return base;
+    if (base.endsWith(`/${servicePath}`)) return base;
+    base = base.replace(/\/(?:core_service|extension_service|core|extension|detect|segment|ocr)$/i, '');
+    return `${base}/${servicePath}`;
+};
+
+export const getDefaultCoreServiceBase = (): string =>
+    normalizeEngineBaseUrl(getDefaultBackendBase(), 'core');
+
+export const getDefaultExtensionServiceBase = (): string =>
+    normalizeEngineBaseUrl(getDefaultBackendBase(), 'extension');
+
+export const getDefaultCoreServiceUrl = (path: string = ''): string => {
+    const base = getDefaultCoreServiceBase();
     if (!path) return base;
     return path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
 };
@@ -47,32 +76,40 @@ export const registerEngineStore = (s: { getState: () => any }): void => {
 };
 
 /**
- * 优先用用户在「推理引擎」配置的地址,没有活跃引擎时 fallback 到 getDefaultBackendBase()。
+ * 优先使用用户在「引擎管理」配置的对应引擎地址。
  *
  * 解决"model.work 前端 + 远程/本地后端"场景:getDefaultBackendBase() 在公网域名下
  * 回退到 localhost,但用户手动配的引擎 URL 才是正确的后端地址。
  *
- * FrameExtractorService / TrackingAPIService 等应该调本函数。
+ * Core capabilities call getEngineBaseUrl(); optional services call
+ * getExtensionEngineBaseUrl(). The two service boundaries never fall back to
+ * each other's registered engine.
  */
-export const getEngineBaseUrl = (): string => {
+const getRegisteredEngineBaseUrl = (type: ServiceEngineType): string | null => {
     try {
         if (_storeRef) {
             const state = _storeRef.getState();
             const models: any[] = state.aimodels?.models ?? [];
-            // 优先找 core 引擎，其次用当前激活引擎
-            const core = models.find((m: any) => m.modelType === 'core' && m.isActive);
-            if (core?.url) return core.url.replace(/\/+$/, '');
+            const matchingModels = models.filter((m: any) => m.modelType === type && m.url);
             const activeId = state.aimodels?.activeModelId;
             if (activeId) {
-                const model = models.find((m: any) => m.id === activeId);
-                if (model?.url) return model.url.replace(/\/+$/, '');
+                const active = matchingModels.find((m: any) => m.id === activeId);
+                if (active?.url) return normalizeEngineBaseUrl(active.url, type);
             }
-            // 没有 activeModelId 时，取第一个有 url 的 model 作为兜底
-            const first = models.find((m: any) => m.url);
-            if (first?.url) return first.url.replace(/\/+$/, '');
+            const enabled = matchingModels.find((m: any) => m.isActive);
+            if (enabled?.url) return normalizeEngineBaseUrl(enabled.url, type);
+            if (matchingModels[0]?.url) return normalizeEngineBaseUrl(matchingModels[0].url, type);
         }
     } catch {
         // store 访问失败
     }
-    return getDefaultBackendBase();
+    return null;
 };
+
+/** Core engine base used by detection, segmentation, OCR and core services. */
+export const getEngineBaseUrl = (): string =>
+    getRegisteredEngineBaseUrl('core') ?? getDefaultCoreServiceBase();
+
+/** Extension engine base used by vector search and other optional services. */
+export const getExtensionEngineBaseUrl = (): string =>
+    getRegisteredEngineBaseUrl('extension') ?? getDefaultExtensionServiceBase();

@@ -15,7 +15,7 @@ import {
     DEFAULT_DETECTION_POSTPROCESS_PARAMS,
 } from '../../../ai/DetectionAPIDetector';
 import {PipelineStore} from '../../../ai/PipelineStore';
-import {AIModel} from '../../../store/aimodels/types';
+import {InferenceModelType} from '../../../store/aimodels/types';
 import {ScriptSection} from './ScriptSection';
 import './PipelinePopup.scss';
 
@@ -24,7 +24,7 @@ const backToCallModel = () => store.dispatch(updateActivePopupType(PopupWindowTy
 const DEF = DEFAULT_SEGMENTATION_POSTPROCESS_PARAMS;
 const DEF_DET = DEFAULT_DETECTION_POSTPROCESS_PARAMS;
 
-interface IProps { language: Language; activeModelType: AIModel['modelType'] | null; selectedModelTask: string | null; }
+interface IProps { language: Language; activeModelType: InferenceModelType | null; selectedModelTask: string | null; }
 
 const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, selectedModelTask}) => {
     const zh = language === Language.CHINESE;
@@ -404,17 +404,9 @@ const PipelinePostprocessPopup: React.FC<IProps> = ({language, activeModelType, 
 
 const mapStateToProps = (state: AppState) => {
     const models = state.aimodels.models;
-    const hasCustom = models.some(m => m.modelType === 'custom');
-    let activeModelType: AIModel['modelType'] | null = null;
-    if (models.length > 0 && !hasCustom) {
-        const hasDet = models.some(m => m.modelType === 'detection');
-        const hasSeg = models.some(m => m.modelType === 'segmentation');
-        if (hasDet && hasSeg) activeModelType = 'custom';
-        else if (hasDet) activeModelType = 'detection';
-        else activeModelType = 'segmentation';
-    } else if (hasCustom) {
-        activeModelType = 'custom';
-    }
+    const activeModelType: InferenceModelType | null = models.some(m => m.modelType === 'core')
+        ? 'custom'
+        : null;
     return {
         language: state.general.language,
         activeModelType,

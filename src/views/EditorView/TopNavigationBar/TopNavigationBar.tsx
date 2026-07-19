@@ -17,7 +17,9 @@ interface IProps {
     updateLanguageAction: (language: Language) => any;
     projectData: ProjectData;
     language: Language;
-    hasAIModels: boolean;
+    hasRegisteredEngines: boolean;
+    hasCoreEngine: boolean;
+    hasExtensionEngine: boolean;
 }
 
 type ServicesDropdown = 'core' | 'extension' | null;
@@ -56,7 +58,7 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
     // 「模型引擎」按钮：有已接入的远程模型 → 打开管理弹窗，否则直接进入新增弹窗
     const openRemoteModelManager = () => {
         setActiveServicesDropdown(null);
-        const popupType = props.hasAIModels ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.MODEL_ENGINE;
+        const popupType = props.hasRegisteredEngines ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.MODEL_ENGINE;
         props.updateActivePopupTypeAction(popupType);
     };
 
@@ -169,50 +171,56 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                                     <img src='ico/api.png' alt='remote-models'/>
                                     {currentTexts.modelManagement.modelEngines}
                                 </div>
-                                <div className='DropDownMenuContentOption active'
-                                    onClick={openDataCenter}>
-                                    <div className='Marker'/>
-                                    <img src='ico/api.png' alt='data-center'/>
-                                    {currentTexts.modelManagement.dataCenter}
-                                </div>
-                                <div className='DropDownMenuContentOption active'
-                                    onClick={openLocalModelManager}>
-                                    <div className='Marker'/>
-                                    <img src='ico/ai.png' alt='local-models'/>
-                                    {currentTexts.modelManagement.callModels}
-                                </div>
-                                <div className='DropDownMenuContentOption active'
-                                    onClick={openTrainingTask}>
-                                    <div className='Marker'/>
-                                    <img src='ico/ai.png' alt='training-task'/>
-                                    {currentTexts.modelManagement.trainingTask}
-                                </div>
+                                {props.hasCoreEngine && (
+                                    <>
+                                        <div className='DropDownMenuContentOption active'
+                                            onClick={openDataCenter}>
+                                            <div className='Marker'/>
+                                            <img src='ico/api.png' alt='data-center'/>
+                                            {currentTexts.modelManagement.dataCenter}
+                                        </div>
+                                        <div className='DropDownMenuContentOption active'
+                                            onClick={openLocalModelManager}>
+                                            <div className='Marker'/>
+                                            <img src='ico/ai.png' alt='local-models'/>
+                                            {currentTexts.modelManagement.callModels}
+                                        </div>
+                                        <div className='DropDownMenuContentOption active'
+                                            onClick={openTrainingTask}>
+                                            <div className='Marker'/>
+                                            <img src='ico/ai.png' alt='training-task'/>
+                                            {currentTexts.modelManagement.trainingTask}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>
-                    <div className='ServicesDropdownContainer'>
-                        <TextButton
-                            label={currentTexts.modelManagement.extensionServices}
-                            onClick={() => toggleServicesDropdown('extension')}
-                            externalClassName={'services-button'}
-                        />
-                        {activeServicesDropdown === 'extension' && (
-                            <div className='DropDownMenuContent ServicesDropdown'>
-                                <div className='DropDownMenuContentOption active'
-                                    onClick={openVectorDb}>
-                                    <div className='Marker'/>
-                                    <img src='ico/api.png' alt='vector-db'/>
-                                    {currentTexts.modelManagement.vectorDb}
+                    {props.hasExtensionEngine && (
+                        <div className='ServicesDropdownContainer'>
+                            <TextButton
+                                label={currentTexts.modelManagement.extensionServices}
+                                onClick={() => toggleServicesDropdown('extension')}
+                                externalClassName={'services-button'}
+                            />
+                            {activeServicesDropdown === 'extension' && (
+                                <div className='DropDownMenuContent ServicesDropdown'>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openVectorDb}>
+                                        <div className='Marker'/>
+                                        <img src='ico/api.png' alt='vector-db'/>
+                                        {currentTexts.modelManagement.vectorDb}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openL2gRetrieval}>
+                                        <div className='Marker'/>
+                                        <img src='ico/ai.png' alt='l2g-retrieval'/>
+                                        {currentTexts.modelManagement.l2gRetrieval}
+                                    </div>
                                 </div>
-                                <div className='DropDownMenuContentOption active'
-                                    onClick={openL2gRetrieval}>
-                                    <div className='Marker'/>
-                                    <img src='ico/ai.png' alt='l2g-retrieval'/>
-                                    {currentTexts.modelManagement.l2gRetrieval}
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                            )}
+                        </div>
+                    )}
                 </div>
                 <div
                     className='ProjectNameContainer'
@@ -252,7 +260,9 @@ const mapDispatchToProps = {
 const mapStateToProps = (state: AppState) => ({
     projectData: state.general.projectData,
     language: state.general.language,
-    hasAIModels: !!(state.aimodels && state.aimodels.models.length > 0)
+    hasRegisteredEngines: !!(state.aimodels && state.aimodels.models.length > 0),
+    hasCoreEngine: !!state.aimodels?.models.some(model => model.modelType === 'core'),
+    hasExtensionEngine: !!state.aimodels?.models.some(model => model.modelType === 'extension')
 });
 
 export default connect(

@@ -5,7 +5,7 @@ import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
 import {PopupActions} from '../../../logic/actions/PopupActions';
 import {AppState} from '../../../store';
 import {Language} from '../../../data/LanguageConfig';
-import {getEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
+import {getEngineBaseUrl, getExtensionEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
 import './VectorDbPopup.scss';
 
 interface EmbedderStatus {
@@ -92,7 +92,8 @@ const VectorDbPopup: React.FC<IProps> = ({language}) => {
         (zhText: string, enText: string) => (zh ? zhText : enText),
         [zh],
     );
-    const baseUrl = getEngineBaseUrl();
+    const baseUrl = `${getExtensionEngineBaseUrl()}/vector_db`;
+    const coreBaseUrl = getEngineBaseUrl();
 
     const [status, setStatus] = useState<ExtStatus | null>(null);
     const [backendDown, setBackendDown] = useState(false);
@@ -127,7 +128,7 @@ const VectorDbPopup: React.FC<IProps> = ({language}) => {
     const serviceDisabled = backendDown || storeBad || embedderBad;
 
     const refreshCollections = useCallback(() => {
-        fetch(`${baseUrl}/extension/collections`).then(r => r.json()).then(data => {
+        fetch(`${baseUrl}/collections`).then(r => r.json()).then(data => {
             if (Array.isArray(data.collections)) setCollections(data.collections);
         }).catch(() => undefined);
     }, [baseUrl]);
@@ -135,12 +136,12 @@ const VectorDbPopup: React.FC<IProps> = ({language}) => {
     // 状态轮询：2s 心跳；embedder 冷态自动 warmup 一次
     useEffect(() => {
         const tick = () => {
-            fetch(`${baseUrl}/extension/status`).then(r => r.json()).then((s: ExtStatus) => {
+            fetch(`${baseUrl}/status`).then(r => r.json()).then((s: ExtStatus) => {
                 setBackendDown(false);
                 setStatus(s);
                 if (s.embedder.state === 'not_loaded' && !warmupFired.current) {
                     warmupFired.current = true;
-                    fetch(`${baseUrl}/extension/warmup`, {method: 'POST'}).catch(() => undefined);
+                    fetch(`${baseUrl}/warmup`, {method: 'POST'}).catch(() => undefined);
                 }
             }).catch(() => setBackendDown(true));
         };
@@ -151,16 +152,16 @@ const VectorDbPopup: React.FC<IProps> = ({language}) => {
 
     useEffect(() => {
         refreshCollections();
-        fetch(`${baseUrl}/datasets`).then(r => r.json()).then(data => {
+        fetch(`${coreBaseUrl}/datasets`).then(r => r.json()).then(data => {
             if (Array.isArray(data.datasets)) setDatasets(data.datasets);
         }).catch(() => undefined);
-    }, [baseUrl, refreshCollections]);
+    }, [coreBaseUrl, refreshCollections]);
 
     // 入库任务轮询
     useEffect(() => {
         if (!job || TERMINAL_JOB_STATES.includes(job.state)) return undefined;
         const timer = window.setInterval(() => {
-            fetch(`${baseUrl}/extension/jobs/${job.job_id}`).then(r => {
+            fetch(`${baseUrl}/jobs/${job.job_id}`).then(r => {
                 if (r.status === 404) {
                     setJob(null);
                     setIngestError(t('任务态丢失（后端可能重启过）', 'Job lost (backend may have restarted)'));
@@ -183,7 +184,7 @@ const VectorDbPopup: React.FC<IProps> = ({language}) => {
 
     const onCreate = () => {
         setCreateError(null);
-        fetch(`${baseUrl}/extension/collections`, {
+        fetch(`${baseUrl}/collections`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({name: newName, mode}),
@@ -200,7 +201,7 @@ const VectorDbPopup: React.FC<IProps> = ({language}) => {
 
     const onDelete = (name: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        fetch(`${baseUrl}/extension/collections/${name}`, {method: 'DELETE'}).then(() => {
+        fetch(`${baseUrl}/collections/${name}`, {method: 'DELETE'}).then(() => {
             if (selectedName === name) setSelectedName(null);
             refreshCollections();
         }).catch(() => undefined);
@@ -232,7 +233,7 @@ const VectorDbPopup: React.FC<IProps> = ({language}) => {
         } else {
             pendingFiles.forEach(f => form.append('files', f));
         }
-        fetch(`${baseUrl}/extension/collections/${selected.name}/ingest`, {
+        fetch(`${baseUrl}/collections/${selected.name}/ingest`, {
             method: 'POST',
             body: form,
         }).then(async r => {
@@ -256,7 +257,7 @@ const VectorDbPopup: React.FC<IProps> = ({language}) => {
 
     const cancelIngest = () => {
         if (!job) return;
-        fetch(`${baseUrl}/extension/jobs/${job.job_id}/cancel`, {method: 'POST'}).catch(() => undefined);
+        fetch(`${baseUrl}/jobs/${job.job_id}/cancel`, {method: 'POST'}).catch(() => undefined);
     };
 
     const onQueryDrop = useCallback((accepted: File[]) => {
@@ -286,7 +287,7 @@ const VectorDbPopup: React.FC<IProps> = ({language}) => {
         form.append('file', queryFile);
         form.append('collection', selected.name);
         form.append('top_k', String(topK));
-        fetch(`${baseUrl}/extension/search`, {method: 'POST', body: form}).then(async r => {
+        fetch(`${baseUrl}/search`, {method: 'POST', body: form}).then(async r => {
             setSearching(false);
             const body = await r.json().catch(() => ({}));
             if (r.ok) {

@@ -9,7 +9,7 @@ import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {GeneralActionTypes} from '../../../store/general/types';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {AIModel} from '../../../store/aimodels/types';
-import {getDefaultBackendBase} from '../../../utils/DefaultBackendUrl';
+import {getDefaultCoreServiceBase, normalizeEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
 import PipelineCanvas from './PipelineCanvas';
 
 export interface YOLOModelFamily {
@@ -41,7 +41,7 @@ export const SEG_MODEL_FAMILIES: YOLOModelFamily[] = [
 // Module-level state shared between CallModelPopup and LoadDetectionModelPopup
 let _selectedModelFamily: YOLOModelFamily | null = null;
 // 默认跟随浏览器当前 host —— 跨机访问时直接打到前端所在机器的 :8000
-let _serverUrl: string = getDefaultBackendBase();
+let _serverUrl: string = getDefaultCoreServiceBase();
 let _selectedCustomExt: 'pt' | 'onnx' | 'mlpackage' | null = null;
 
 export const getSelectedModelFamily = (): YOLOModelFamily | null => _selectedModelFamily;
@@ -55,10 +55,6 @@ interface IProps {
     aiModels: AIModel[];
     activeAIModelId: string | null;
 }
-
-// 引擎 URL 形如 http://host:port/detect 或 /segment —— 剥掉后缀得到 base。
-const stripInferenceSuffix = (url: string): string =>
-    url.replace(/\/(detect|segment)\/?$/, '');
 
 const CallModelPopup: React.FC<IProps> = ({
     updateActivePopupType,
@@ -74,11 +70,16 @@ const CallModelPopup: React.FC<IProps> = ({
     const [loadedModels, setLoadedModels] = useState<string[]>([]);
 
     // 推理基础地址从已注册的引擎推导 —— 不再让用户在这个弹窗里填 URL。
-    // 优先 active 引擎,退化到第一个注册的,最后兜底用浏览器 host 推导的默认地址。
-    const activeEngine = aiModels.find(m => m.id === activeAIModelId) || aiModels[0] || null;
+    // Only the core engine owns inference capabilities. An active extension
+    // engine must never receive detection/model-management requests.
+    const coreEngines = aiModels.filter(model => model.modelType === 'core');
+    const activeEngine = coreEngines.find(model => model.id === activeAIModelId)
+        || coreEngines.find(model => model.isActive)
+        || coreEngines[0]
+        || null;
     const derivedBaseUrl = activeEngine
-        ? stripInferenceSuffix(activeEngine.url)
-        : getDefaultBackendBase();
+        ? normalizeEngineBaseUrl(activeEngine.url, 'core')
+        : getDefaultCoreServiceBase();
 
     const refreshHealth = () => {
         fetch(`${derivedBaseUrl}/health`)
@@ -168,9 +169,7 @@ const CallModelPopup: React.FC<IProps> = ({
         </div>
     };
 
-    // 已注册的引擎按类型分组 —— 只用来控制下面两个 section 的显隐,不再单独渲染。
-    const hasDetectionEngine = aiModels.some(m => m.modelType === 'detection');
-    const hasSegmentationEngine = aiModels.some(m => m.modelType === 'segmentation');
+    const hasCoreEngine = coreEngines.length > 0;
 
     const zhTexts = language === Language.CHINESE;
 
@@ -245,7 +244,7 @@ const CallModelPopup: React.FC<IProps> = ({
                     </div>
                 </div>
             </div>
-            {hasDetectionEngine && (
+            {hasCoreEngine && (
                 <div className='ModelSection'>
                     <div className='SectionHeader'>{zhTexts ? '检测模型' : 'Detection Models'}</div>
                     <div className='Options'>
@@ -253,7 +252,7 @@ const CallModelPopup: React.FC<IProps> = ({
                     </div>
                 </div>
             )}
-            {hasSegmentationEngine && (
+            {hasCoreEngine && (
                 <div className='ModelSection'>
                     <div className='SectionHeader'>{zhTexts ? '分割模型' : 'Segmentation Models'}</div>
                     <div className='Options'>

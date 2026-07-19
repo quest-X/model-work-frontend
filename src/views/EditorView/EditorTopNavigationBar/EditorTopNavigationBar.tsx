@@ -1089,7 +1089,7 @@ const mapStateToProps = (state: AppState) => ({
     isAIDisabled: state.ai.isAIDisabled,
     activeImageIndex: state.labels.activeImageIndex,
     imagesData: state.labels.imagesData,
-    hasDetectionModel: AIModelsSelector.hasModelsOfType(state, 'detection') || DetectionAPIDetector.isEnabled(),
+    hasDetectionModel: AIModelsSelector.hasModelsOfType(state, 'core') || DetectionAPIDetector.isEnabled(),
 });
 
 export default connect(

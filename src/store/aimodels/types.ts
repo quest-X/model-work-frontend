@@ -1,11 +1,13 @@
+export type EngineType = 'core' | 'extension';
+export type InferenceModelType = 'custom' | 'detection' | 'segmentation' | 'ocr';
+
 export interface AIModel {
     id: string;
     name: string;
     url: string;
-    // 'custom' = user-uploaded weights (backend classifies by filename);
-    // 'detection' / 'segmentation' = built-in YOLO / SAM / FastSAM / RT-DETR family.
-    // Backend /health and /available-models are the authoritative source of this tag.
-    modelType: 'custom' | 'core' | 'detection' | 'segmentation' | 'ocr';
+    // Detection, segmentation and OCR are core-engine capabilities/model slots,
+    // not independently registered engine types.
+    modelType: EngineType;
     apiKey?: string;
     description?: string;
     createdAt: Date;

@@ -1,4 +1,42 @@
 import { AIModel } from '../store/aimodels/types';
+import {normalizeEngineBaseUrl, ServiceEngineType} from './DefaultBackendUrl';
+
+type StoredEngine = Omit<AIModel, 'modelType' | 'createdAt'> & {
+    modelType?: string;
+    createdAt: Date | string | number;
+};
+
+const LEGACY_CORE_TYPES = new Set(['core', 'custom', 'detection', 'segmentation', 'ocr']);
+
+const migrateEngine = (model: StoredEngine): AIModel | null => {
+    const modelType: ServiceEngineType | null = model.modelType === 'extension'
+        ? 'extension'
+        : LEGACY_CORE_TYPES.has(model.modelType || '') ? 'core' : null;
+    if (!modelType || !model.url) return null;
+    return {
+        ...model,
+        modelType,
+        url: normalizeEngineBaseUrl(model.url, modelType),
+        createdAt: new Date(model.createdAt),
+    };
+};
+
+const deduplicateEngines = (models: AIModel[]): AIModel[] => {
+    const unique = new Map<string, AIModel>();
+    models.forEach(model => {
+        const key = `${model.modelType}:${model.url}`;
+        const existing = unique.get(key);
+        if (!existing) {
+            unique.set(key, model);
+            return;
+        }
+        // Keep the first registration/id stable, but do not lose an enabled state.
+        if (model.isActive && !existing.isActive) {
+            unique.set(key, {...existing, isActive: true});
+        }
+    });
+    return Array.from(unique.values());
+};
 
 export class AIModelsStorageManager {
     private static readonly STORAGE_KEY = 'make-sense-ai-models';
@@ -8,7 +46,7 @@ export class AIModelsStorageManager {
             const dataToStore = {
                 models,
                 lastSaved: Date.now(),
-                version: '2.1.0'
+                version: '3.0.0'
             };
             localStorage.setItem(this.STORAGE_KEY, JSON.stringify(dataToStore));
             console.log('AI模型数据已保存到localStorage');
@@ -24,10 +62,10 @@ export class AIModelsStorageManager {
                 const data = JSON.parse(stored);
                 // 验证数据结构
                 if (data.models && Array.isArray(data.models)) {
-                    return data.models.map((model: any) => ({
-                        ...model,
-                        createdAt: new Date(model.createdAt) // 确保日期对象正确恢复
-                    }));
+                    const migrated = data.models
+                        .map((model: StoredEngine) => migrateEngine(model))
+                        .filter((model: AIModel | null): model is AIModel => model !== null);
+                    return deduplicateEngines(migrated);
                 }
             }
         } catch (error) {

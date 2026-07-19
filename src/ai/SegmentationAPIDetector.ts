@@ -1,7 +1,7 @@
 import axios from 'axios';
 import {store} from '../index';
 import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
-import {getDefaultBackendUrl} from '../utils/DefaultBackendUrl';
+import {getDefaultCoreServiceUrl} from '../utils/DefaultBackendUrl';
 import {PipelineStore} from './PipelineStore';
 import {ScriptStore} from './ScriptStore';
 
@@ -152,7 +152,7 @@ function loadSegPostprocessParams(): SegmentationPostprocessParams {
 export class SegmentationAPIDetector {
     private static config = {
         // 默认分割 API:跟随 window.location.hostname,支持局域网跨机访问
-        url: getDefaultBackendUrl('/segment'),
+        url: getDefaultCoreServiceUrl('/segment'),
         enabled: true
     };
 
@@ -238,16 +238,13 @@ export class SegmentationAPIDetector {
 
     /**
      * 从 store 读取 activeModel 并同步到 config。
-     * 要求 active model 的 modelType === 'segmentation'。
+     * 检测、分割和 OCR 都由 core engine 暴露为 capability。
      */
     private static syncFromActiveModel(): { ok: boolean; reason?: string } {
         try {
             const state = store.getState();
-            const active = AIModelsSelector.getActiveAIModel(state);
+            const active = AIModelsSelector.getActiveModelByType(state, 'core');
             if (active) {
-                if (active.modelType !== 'segmentation' && active.modelType !== 'custom') {
-                    return { ok: false, reason: `Active model "${active.name}" is ${active.modelType}, not segmentation/custom` };
-                }
                 if (!active.url) {
                     return { ok: false, reason: `Active model "${active.name}" has no url` };
                 }

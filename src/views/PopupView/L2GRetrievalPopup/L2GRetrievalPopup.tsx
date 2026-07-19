@@ -5,7 +5,7 @@ import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
 import {PopupActions} from '../../../logic/actions/PopupActions';
 import {AppState} from '../../../store';
 import {Language} from '../../../data/LanguageConfig';
-import {getEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
+import {getExtensionEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
 import './L2GRetrievalPopup.scss';
 
 interface PipelineStatus {
@@ -30,7 +30,7 @@ interface IProps {
     language: Language;
 }
 
-const EP = '/extensions/l2g-retrieval';
+const EP = '/l2g_retrieval';
 
 const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
     const zh = language === Language.CHINESE;
@@ -38,7 +38,7 @@ const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
         (zhText: string, enText: string) => (zh ? zhText : enText),
         [zh],
     );
-    const baseUrl = getEngineBaseUrl();
+    const baseUrl = getExtensionEngineBaseUrl();
 
     const [status, setStatus] = useState<L2GStatus | null>(null);
     const [backendDown, setBackendDown] = useState(false);

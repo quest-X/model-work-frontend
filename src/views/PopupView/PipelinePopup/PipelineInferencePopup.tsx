@@ -9,14 +9,14 @@ import {Language} from '../../../data/LanguageConfig';
 import {DetectionAPIDetector, DEFAULT_INFERENCE_PARAMS} from '../../../ai/DetectionAPIDetector';
 import {SegmentationAPIDetector} from '../../../ai/SegmentationAPIDetector';
 import {PipelineStore} from '../../../ai/PipelineStore';
-import {AIModel} from '../../../store/aimodels/types';
+import {InferenceModelType} from '../../../store/aimodels/types';
 import './PipelinePopup.scss';
 
 const backToCallModel = () => store.dispatch(updateActivePopupType(PopupWindowType.CALL_MODEL));
 
 const DEF = DEFAULT_INFERENCE_PARAMS;
 
-interface IProps { language: Language; activeModelType: AIModel['modelType'] | null; }
+interface IProps { language: Language; activeModelType: InferenceModelType | null; }
 
 const PipelineInferencePopup: React.FC<IProps> = ({language, activeModelType}) => {
     const zh = language === Language.CHINESE;
@@ -261,17 +261,10 @@ const PipelineInferencePopup: React.FC<IProps> = ({language, activeModelType}) =
 
 const mapStateToProps = (state: AppState) => {
     const models = state.aimodels.models;
-    const hasCustom = models.some(m => m.modelType === 'custom');
-    let activeModelType: AIModel['modelType'] | null = null;
-    if (models.length > 0 && !hasCustom) {
-        const hasDet = models.some(m => m.modelType === 'detection');
-        const hasSeg = models.some(m => m.modelType === 'segmentation');
-        if (hasDet && hasSeg) activeModelType = 'custom';
-        else if (hasDet) activeModelType = 'detection';
-        else activeModelType = 'segmentation';
-    } else if (hasCustom) {
-        activeModelType = 'custom';
-    }
+    // A registered core engine owns all inference capabilities/model slots.
+    const activeModelType: InferenceModelType | null = models.some(m => m.modelType === 'core')
+        ? 'custom'
+        : null;
     return { language: state.general.language, activeModelType };
 };
 export default connect(mapStateToProps)(PipelineInferencePopup);
