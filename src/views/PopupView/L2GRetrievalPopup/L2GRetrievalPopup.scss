@@ -1,0 +1,148 @@
+@import '../../../settings/Settings';
+
+.L2GRetrievalPopupContent {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 640px;
+    max-height: 60vh;
+    overflow-y: auto;
+    color: white;
+
+    .Banner {
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+
+        &.ok { background: rgba(60, 160, 90, 0.25); }
+        &.info { background: rgba(70, 120, 200, 0.25); }
+        &.error { background: rgba(200, 70, 70, 0.3); }
+
+        .InlineButton {
+            margin-left: 8px;
+            padding: 2px 10px;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 4px;
+            background: transparent;
+            color: white;
+            cursor: pointer;
+
+            &:hover { border-color: white; }
+        }
+    }
+
+    .Hint {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.55);
+        line-height: 1.5;
+    }
+
+    .SearchForm {
+        display: flex;
+        gap: 12px;
+
+        .QueryDropzone {
+            flex: 0 0 180px;
+            height: 140px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px dashed rgba(255, 255, 255, 0.4);
+            border-radius: 6px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            text-align: center;
+            padding: 8px;
+            cursor: pointer;
+
+            &.active { border-color: white; }
+
+            .QueryPreview {
+                max-width: 100%;
+                max-height: 100%;
+                object-fit: contain;
+            }
+        }
+
+        .Fields {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+
+            label {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                font-size: 12px;
+                color: rgba(255, 255, 255, 0.7);
+
+                input {
+                    padding: 6px 8px;
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    border-radius: 4px;
+                    background: rgba(0, 0, 0, 0.25);
+                    color: white;
+                    font-size: 13px;
+
+                    &:focus { outline: none; border-color: white; }
+                }
+            }
+
+            .SearchButton {
+                align-self: flex-start;
+                padding: 6px 24px;
+                border: none;
+                border-radius: 4px;
+                background: $secondaryColor;
+                color: white;
+                font-size: 13px;
+                cursor: pointer;
+
+                &:disabled {
+                    opacity: 0.4;
+                    cursor: not-allowed;
+                }
+            }
+        }
+    }
+
+    .ResultMeta {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.6);
+    }
+
+    .ResultList {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        .ResultRow {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 10px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.06);
+            font-size: 13px;
+
+            .Rank {
+                flex: 0 0 32px;
+                color: rgba(255, 255, 255, 0.5);
+            }
+
+            .Path {
+                flex: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .Score {
+                flex: 0 0 64px;
+                text-align: right;
+                font-family: monospace;
+            }
+        }
+    }
+}

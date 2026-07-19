@@ -78,6 +78,11 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
         props.updateActivePopupTypeAction(PopupWindowType.VECTOR_DB);
     };
 
+    const openL2gRetrieval = () => {
+        setShowModelsDropdown(false);
+        props.updateActivePopupTypeAction(PopupWindowType.L2G_RETRIEVAL);
+    };
+
     const toggleLanguage = () => {
         const newLanguage = props.language === Language.CHINESE ? Language.ENGLISH : Language.CHINESE;
         props.updateLanguageAction(newLanguage);
@@ -183,6 +188,12 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                                     <div className='Marker'/>
                                     <img src='ico/api.png' alt='vector-db'/>
                                     {currentTexts.modelManagement.vectorDb}
+                                </div>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openL2gRetrieval}>
+                                    <div className='Marker'/>
+                                    <img src='ico/ai.png' alt='l2g-retrieval'/>
+                                    {currentTexts.modelManagement.l2gRetrieval}
                                 </div>
                             </div>
                         )}

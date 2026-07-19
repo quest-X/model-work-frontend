@@ -332,6 +332,7 @@ export interface LanguageTexts {
         dataCenter: string;
         trainingTask: string;
         vectorDb: string;
+        l2gRetrieval: string;
         manage: string;
         noModels: string;
         noModelsHint: string;
@@ -835,6 +836,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             dataCenter: '数据中心',
             trainingTask: '训练任务',
             vectorDb: '向量数据库',
+            l2gRetrieval: '高精检索',
             manage: '管理',
             noModels: '暂无推理引擎',
             noModelsHint: '点击添加第一个推理引擎',
@@ -1313,6 +1315,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             dataCenter: 'Data Center',
             trainingTask: 'Training Task',
             vectorDb: 'Vector Database',
+            l2gRetrieval: 'L2G Retrieval',
             manage: 'Manage',
             noModels: 'No Inference Engines',
             noModelsHint: 'Click to add your first inference engine',
