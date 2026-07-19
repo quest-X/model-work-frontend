@@ -212,7 +212,7 @@ const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
 
     return (
         <GenericYesNoPopup
-            title={t('高精检索（L2G）', 'L2G Retrieval')}
+            title={t('高精度检索（L2G）', 'L2G Retrieval')}
             renderContent={renderContent}
             skipAcceptButton
             rejectLabel={t('关闭', 'Close')}

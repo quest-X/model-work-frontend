@@ -840,7 +840,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             dataCenter: '数据中心',
             trainingTask: '训练任务',
             vectorDb: '向量数据库',
-            l2gRetrieval: '高精检索',
+            l2gRetrieval: '高精度检索',
             manage: '管理',
             noModels: '暂无推理引擎',
             noModelsHint: '点击添加第一个推理引擎',
