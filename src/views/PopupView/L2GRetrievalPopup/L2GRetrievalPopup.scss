@@ -146,3 +146,69 @@
         }
     }
 }
+
+// Keep the retrieval workflow compact on large screens and fluid on smaller ones.
+.GenericYesNoPopup:has(.L2GRetrievalPopupContent) {
+    width: min(760px, calc(100vw - 48px));
+    max-width: 760px;
+    height: auto;
+    max-height: calc(100vh - 48px);
+
+    .Content {
+        min-height: 0;
+        flex: 0 1 auto;
+    }
+
+    .Footer {
+        height: 64px;
+        flex: 0 0 64px;
+        padding: 0 24px;
+    }
+}
+
+.L2GRetrievalPopupContent {
+    width: 100%;
+    min-width: 0;
+    max-height: calc(100vh - 152px);
+    padding: 16px 24px 18px;
+    box-sizing: border-box;
+
+    .SearchForm {
+        display: grid;
+        grid-template-columns: minmax(160px, 180px) minmax(0, 1fr);
+        gap: 16px;
+        align-items: start;
+
+        .QueryPanel {
+            min-width: 0;
+        }
+
+        .Fields {
+            min-width: 0;
+        }
+    }
+}
+
+@media (max-width: 680px) {
+    .GenericYesNoPopup:has(.L2GRetrievalPopupContent) {
+        width: calc(100vw - 24px);
+        max-height: calc(100vh - 24px);
+    }
+
+    .L2GRetrievalPopupContent {
+        max-height: calc(100vh - 128px);
+        padding: 14px 16px 16px;
+
+        .SearchForm {
+            grid-template-columns: minmax(0, 1fr);
+
+            .QueryPanel {
+                flex-basis: auto;
+            }
+
+            .QueryDropzone {
+                height: 150px;
+            }
+        }
+    }
+}
