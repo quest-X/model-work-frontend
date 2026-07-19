@@ -24,6 +24,7 @@ interface L2GStatus {
 interface L2GResult {
     path: string;
     score: number;
+    thumbnail: string | null;
 }
 
 interface IProps {
@@ -155,11 +156,14 @@ const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
                    'L2G local-to-global high-precision retrieval: FIRe local features + ASMK aggregation + global re-ranking. Seconds to minutes per query; for millisecond interactive search use Vector Database.')}
             </div>
             <div className='SearchForm'>
-                <div {...getRootProps({className: `QueryDropzone${isDragActive ? ' active' : ''}`})}>
-                    <input {...getInputProps()} />
-                    {queryPreview
-                        ? <img className='QueryPreview' src={queryPreview} alt='query'/>
-                        : <span>{t('拖入或点击选择查询图', 'Drop or click to pick a query image')}</span>}
+                <div className='QueryPanel'>
+                    <div {...getRootProps({className: `QueryDropzone${isDragActive ? ' active' : ''}`})}>
+                        <input {...getInputProps()} />
+                        {queryPreview
+                            ? <img className='QueryPreview' src={queryPreview} alt='query'/>
+                            : <span>{t('拖入或点击选择查询图', 'Drop or click to pick a query image')}</span>}
+                    </div>
+                    {queryFile && <div className='QueryFileName' title={queryFile.name}>{queryFile.name}</div>}
                 </div>
                 <div className='Fields'>
                     <label>
@@ -192,17 +196,25 @@ const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
             </div>
             {searchError && <div className='Banner error'>{searchError}</div>}
             {elapsed !== null && (
-                <div className='ResultMeta'>
+                <div className='ResultSummary'>
                     {t('耗时', 'Elapsed')} {elapsed}s · {results.length} {t('个结果', 'results')}
                 </div>
             )}
+            {elapsed !== null && results.length === 0 && (
+                <div className='EmptyHint'>{t('无相似结果', 'No similar results')}</div>
+            )}
             {results.length > 0 && (
-                <div className='ResultList'>
+                <div className='ResultGrid'>
                     {results.map((r, i) => (
-                        <div className='ResultRow' key={r.path}>
-                            <span className='Rank'>#{i + 1}</span>
-                            <span className='Path' title={r.path}>{r.path.split('/').pop()}</span>
-                            <span className='Score'>{r.score.toFixed(4)}</span>
+                        <div className='ResultCard' key={r.path}>
+                            {r.thumbnail
+                                ? <img src={r.thumbnail} alt={r.path}/>
+                                : <div className='ThumbPlaceholder'>{t('源图缺失', 'missing')}</div>}
+                            <div className='RankBadge'>{i + 1}</div>
+                            <div className='ScoreBadge'>{(r.score * 100).toFixed(1)}%</div>
+                            <div className='ResultMeta'>
+                                <span className='FileName' title={r.path}>{r.path}</span>
+                            </div>
                         </div>
                     ))}
                 </div>

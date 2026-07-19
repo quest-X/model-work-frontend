@@ -1,11 +1,16 @@
 @import '../../../settings/Settings';
 
+.GenericYesNoPopup:has(.L2GRetrievalPopupContent) {
+    width: 860px;
+}
+
 .L2GRetrievalPopupContent {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    width: 640px;
-    max-height: 60vh;
+    width: 860px;
+    min-width: 860px;
+    max-height: 72vh;
     overflow-y: auto;
     color: white;
 
@@ -41,8 +46,14 @@
         display: flex;
         gap: 12px;
 
-        .QueryDropzone {
+        .QueryPanel {
             flex: 0 0 180px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .QueryDropzone {
             height: 140px;
             display: flex;
             align-items: center;
@@ -62,6 +73,14 @@
                 max-height: 100%;
                 object-fit: contain;
             }
+        }
+
+        .QueryFileName {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .Fields {
@@ -107,41 +126,87 @@
         }
     }
 
-    .ResultMeta {
+    .ResultSummary {
         font-size: 12px;
         color: rgba(255, 255, 255, 0.6);
     }
 
-    .ResultList {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
+    .EmptyHint {
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.5);
+        padding: 8px 0;
+    }
 
-        .ResultRow {
+    .ResultGrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 10px;
+    }
+
+    .ResultCard {
+        position: relative;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        overflow: hidden;
+
+        img {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .ThumbPlaceholder {
+            width: 100%;
+            height: 100px;
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 6px 10px;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.06);
-            font-size: 13px;
+            justify-content: center;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.04);
+        }
 
-            .Rank {
-                flex: 0 0 32px;
-                color: rgba(255, 255, 255, 0.5);
-            }
+        .RankBadge {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 4px;
+            border-radius: 9px;
+            background: rgba(0, 0, 0, 0.65);
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-            .Path {
-                flex: 1;
+        .ScoreBadge {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            background: rgba(0, 0, 0, 0.65);
+            color: #7fd67f;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 1px 6px;
+            border-radius: 3px;
+        }
+
+        .ResultMeta {
+            display: flex;
+            flex-direction: column;
+            padding: 4px 6px;
+
+            .FileName {
+                font-size: 10px;
+                opacity: 0.6;
+                white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-
-            .Score {
-                flex: 0 0 64px;
-                text-align: right;
-                font-family: monospace;
             }
         }
     }
