@@ -327,6 +327,8 @@ export interface LanguageTexts {
 
     // AI Model Management
     modelManagement: {
+        coreServices: string;
+        extensionServices: string;
         callModels: string;   // 原 localModels —— 调用模型
         modelEngines: string;
         dataCenter: string;
@@ -831,6 +833,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
 
         // AI Model Management
         modelManagement: {
+            coreServices: '核心服务',
+            extensionServices: '拓展服务',
             callModels: '推理任务',
             modelEngines: '核心引擎',
             dataCenter: '数据中心',
@@ -1310,6 +1314,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
 
         // AI Model Management
         modelManagement: {
+            coreServices: 'Core Services',
+            extensionServices: 'Extension Services',
             callModels: 'Inference Tasks',
             modelEngines: 'Core Engine',
             dataCenter: 'Data Center',

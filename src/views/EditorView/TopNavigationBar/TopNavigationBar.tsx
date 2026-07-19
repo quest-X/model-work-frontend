@@ -159,41 +159,51 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                         />
                         {showModelsDropdown && (
                             <div className='DropDownMenuContent ModelsDropdown'>
-                                <div className='DropDownMenuContentOption active'
-                                    onClick={openRemoteModelManager}>
-                                    <div className='Marker'/>
-                                    <img src='ico/api.png' alt='remote-models'/>
-                                    {currentTexts.modelManagement.modelEngines}
+                                <div className='ModelsDropdownSection'>
+                                    <div className='ModelsDropdownSectionTitle'>
+                                        {currentTexts.modelManagement.coreServices}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openRemoteModelManager}>
+                                        <div className='Marker'/>
+                                        <img src='ico/api.png' alt='remote-models'/>
+                                        {currentTexts.modelManagement.modelEngines}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openDataCenter}>
+                                        <div className='Marker'/>
+                                        <img src='ico/api.png' alt='data-center'/>
+                                        {currentTexts.modelManagement.dataCenter}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openLocalModelManager}>
+                                        <div className='Marker'/>
+                                        <img src='ico/ai.png' alt='local-models'/>
+                                        {currentTexts.modelManagement.callModels}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openTrainingTask}>
+                                        <div className='Marker'/>
+                                        <img src='ico/ai.png' alt='training-task'/>
+                                        {currentTexts.modelManagement.trainingTask}
+                                    </div>
                                 </div>
-                                <div className='DropDownMenuContentOption active'
-                                    onClick={openDataCenter}>
-                                    <div className='Marker'/>
-                                    <img src='ico/api.png' alt='data-center'/>
-                                    {currentTexts.modelManagement.dataCenter}
-                                </div>
-                                <div className='DropDownMenuContentOption active'
-                                    onClick={openLocalModelManager}>
-                                    <div className='Marker'/>
-                                    <img src='ico/ai.png' alt='local-models'/>
-                                    {currentTexts.modelManagement.callModels}
-                                </div>
-                                <div className='DropDownMenuContentOption active'
-                                    onClick={openTrainingTask}>
-                                    <div className='Marker'/>
-                                    <img src='ico/ai.png' alt='training-task'/>
-                                    {currentTexts.modelManagement.trainingTask}
-                                </div>
-                                <div className='DropDownMenuContentOption active'
-                                    onClick={openVectorDb}>
-                                    <div className='Marker'/>
-                                    <img src='ico/api.png' alt='vector-db'/>
-                                    {currentTexts.modelManagement.vectorDb}
-                                </div>
-                                <div className='DropDownMenuContentOption active'
-                                    onClick={openL2gRetrieval}>
-                                    <div className='Marker'/>
-                                    <img src='ico/ai.png' alt='l2g-retrieval'/>
-                                    {currentTexts.modelManagement.l2gRetrieval}
+                                <div className='ModelsDropdownSection extension-services'>
+                                    <div className='ModelsDropdownSectionTitle'>
+                                        {currentTexts.modelManagement.extensionServices}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openVectorDb}>
+                                        <div className='Marker'/>
+                                        <img src='ico/api.png' alt='vector-db'/>
+                                        {currentTexts.modelManagement.vectorDb}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openL2gRetrieval}>
+                                        <div className='Marker'/>
+                                        <img src='ico/ai.png' alt='l2g-retrieval'/>
+                                        {currentTexts.modelManagement.l2gRetrieval}
+                                    </div>
                                 </div>
                             </div>
                         )}
