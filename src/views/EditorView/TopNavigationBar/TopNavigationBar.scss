@@ -139,11 +139,11 @@
     }
 
     .ActionsDropdownContainer,
-    .ModelsDropdownContainer {
+    .ServicesDropdownContainer {
       position: relative;
     }
 
-    .ModelsDropdown {
+    .ServicesDropdown {
       z-index: 10000;
       position: absolute;
       top: 100%;
@@ -158,27 +158,6 @@
       box-shadow: 0px 4px 8px 0px rgba(0,0,0,0.75);
       display: flex;
       flex-direction: column;
-
-      .ModelsDropdownSection {
-        display: flex;
-        flex-direction: column;
-
-        &.extension-services {
-          border-top: solid 1px rgba(255, 255, 255, 0.1);
-        }
-      }
-
-      .ModelsDropdownSectionTitle {
-        height: 28px;
-        box-sizing: border-box;
-        padding: 10px 20px 4px 45px;
-        color: rgba(255, 255, 255, 0.5);
-        font-size: 11px;
-        font-weight: 700;
-        line-height: 14px;
-        letter-spacing: 0.08em;
-        user-select: none;
-      }
 
       .DropDownMenuContentOption {
         display: flex;
@@ -216,7 +195,7 @@
 
     .actions-button,
     .upload-images-button,
-    .ai-model-button,
+    .services-button,
     .language-toggle-button {
       color: white;
       box-shadow: none;
@@ -248,7 +227,7 @@
       min-width: 80px;
     }
 
-    .ai-model-button {
+    .services-button {
       margin-left: 5px;
       margin-right: 5px;
       min-width: 80px;

@@ -20,10 +20,12 @@ interface IProps {
     hasAIModels: boolean;
 }
 
+type ServicesDropdown = 'core' | 'extension' | null;
+
 const TopNavigationBar: React.FC<IProps> = (props) => {
     const currentTexts = LanguageConfig[props.language];
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
-    const [showModelsDropdown, setShowModelsDropdown] = useState(false);
+    const [activeServicesDropdown, setActiveServicesDropdown] = useState<ServicesDropdown>(null);
 
     const onFocus = (event: React.FocusEvent<HTMLInputElement>) => {
         event.target.setSelectionRange(0, event.target.value.length);
@@ -46,40 +48,41 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
     
     const openLoadMoreMediaPopup = () => props.updateActivePopupTypeAction(PopupWindowType.IMPORT_IMAGES)
 
-    const toggleModelsDropdown = () => {
-        setShowModelsDropdown(!showModelsDropdown);
+    const toggleServicesDropdown = (dropdown: Exclude<ServicesDropdown, null>) => {
+        setShowActionsDropdown(false);
+        setActiveServicesDropdown((activeDropdown) => activeDropdown === dropdown ? null : dropdown);
     };
 
     // 「模型引擎」按钮：有已接入的远程模型 → 打开管理弹窗，否则直接进入新增弹窗
     const openRemoteModelManager = () => {
-        setShowModelsDropdown(false);
+        setActiveServicesDropdown(null);
         const popupType = props.hasAIModels ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.MODEL_ENGINE;
         props.updateActivePopupTypeAction(popupType);
     };
 
     // 「调用模型」按钮：打开本地模型挑选 / 加载弹窗
     const openLocalModelManager = () => {
-        setShowModelsDropdown(false);
+        setActiveServicesDropdown(null);
         props.updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
     };
 
     const openDataCenter = () => {
-        setShowModelsDropdown(false);
+        setActiveServicesDropdown(null);
         props.updateActivePopupTypeAction(PopupWindowType.DATA_CENTER);
     };
 
     const openTrainingTask = () => {
-        setShowModelsDropdown(false);
+        setActiveServicesDropdown(null);
         props.updateActivePopupTypeAction(PopupWindowType.TRAINING_TASK);
     };
 
     const openVectorDb = () => {
-        setShowModelsDropdown(false);
+        setActiveServicesDropdown(null);
         props.updateActivePopupTypeAction(PopupWindowType.VECTOR_DB);
     };
 
     const openL2gRetrieval = () => {
-        setShowModelsDropdown(false);
+        setActiveServicesDropdown(null);
         props.updateActivePopupTypeAction(PopupWindowType.L2G_RETRIEVAL);
     };
 
@@ -89,6 +92,7 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
     };
 
     const toggleActionsDropdown = () => {
+        setActiveServicesDropdown(null);
         setShowActionsDropdown(!showActionsDropdown);
     };
 
@@ -113,19 +117,19 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             const target = event.target as Element;
-            if (!target.closest('.ModelsDropdownContainer')) {
-                setShowModelsDropdown(false);
+            if (!target.closest('.ServicesDropdownContainer')) {
+                setActiveServicesDropdown(null);
             }
         };
 
-        if (showModelsDropdown) {
+        if (activeServicesDropdown) {
             document.addEventListener('mousedown', handleClickOutside);
         }
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [showModelsDropdown]);
+    }, [activeServicesDropdown]);
 
     return (
         <div className='TopNavigationBar'>
@@ -151,59 +155,60 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                         />
                         {showActionsDropdown && <DropDownMenu isVisible={true}/>}
                     </div>
-                    <div className='ModelsDropdownContainer'>
+                    <div className='ServicesDropdownContainer'>
                         <TextButton
-                            label={currentTexts.actions.integrateAIModel.name}
-                            onClick={toggleModelsDropdown}
-                            externalClassName={'ai-model-button'}
+                            label={currentTexts.modelManagement.coreServices}
+                            onClick={() => toggleServicesDropdown('core')}
+                            externalClassName={'services-button'}
                         />
-                        {showModelsDropdown && (
-                            <div className='DropDownMenuContent ModelsDropdown'>
-                                <div className='ModelsDropdownSection'>
-                                    <div className='ModelsDropdownSectionTitle'>
-                                        {currentTexts.modelManagement.coreServices}
-                                    </div>
-                                    <div className='DropDownMenuContentOption active'
-                                        onClick={openRemoteModelManager}>
-                                        <div className='Marker'/>
-                                        <img src='ico/api.png' alt='remote-models'/>
-                                        {currentTexts.modelManagement.modelEngines}
-                                    </div>
-                                    <div className='DropDownMenuContentOption active'
-                                        onClick={openDataCenter}>
-                                        <div className='Marker'/>
-                                        <img src='ico/api.png' alt='data-center'/>
-                                        {currentTexts.modelManagement.dataCenter}
-                                    </div>
-                                    <div className='DropDownMenuContentOption active'
-                                        onClick={openLocalModelManager}>
-                                        <div className='Marker'/>
-                                        <img src='ico/ai.png' alt='local-models'/>
-                                        {currentTexts.modelManagement.callModels}
-                                    </div>
-                                    <div className='DropDownMenuContentOption active'
-                                        onClick={openTrainingTask}>
-                                        <div className='Marker'/>
-                                        <img src='ico/ai.png' alt='training-task'/>
-                                        {currentTexts.modelManagement.trainingTask}
-                                    </div>
+                        {activeServicesDropdown === 'core' && (
+                            <div className='DropDownMenuContent ServicesDropdown'>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openRemoteModelManager}>
+                                    <div className='Marker'/>
+                                    <img src='ico/api.png' alt='remote-models'/>
+                                    {currentTexts.modelManagement.modelEngines}
                                 </div>
-                                <div className='ModelsDropdownSection extension-services'>
-                                    <div className='ModelsDropdownSectionTitle'>
-                                        {currentTexts.modelManagement.extensionServices}
-                                    </div>
-                                    <div className='DropDownMenuContentOption active'
-                                        onClick={openVectorDb}>
-                                        <div className='Marker'/>
-                                        <img src='ico/api.png' alt='vector-db'/>
-                                        {currentTexts.modelManagement.vectorDb}
-                                    </div>
-                                    <div className='DropDownMenuContentOption active'
-                                        onClick={openL2gRetrieval}>
-                                        <div className='Marker'/>
-                                        <img src='ico/ai.png' alt='l2g-retrieval'/>
-                                        {currentTexts.modelManagement.l2gRetrieval}
-                                    </div>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openDataCenter}>
+                                    <div className='Marker'/>
+                                    <img src='ico/api.png' alt='data-center'/>
+                                    {currentTexts.modelManagement.dataCenter}
+                                </div>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openLocalModelManager}>
+                                    <div className='Marker'/>
+                                    <img src='ico/ai.png' alt='local-models'/>
+                                    {currentTexts.modelManagement.callModels}
+                                </div>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openTrainingTask}>
+                                    <div className='Marker'/>
+                                    <img src='ico/ai.png' alt='training-task'/>
+                                    {currentTexts.modelManagement.trainingTask}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className='ServicesDropdownContainer'>
+                        <TextButton
+                            label={currentTexts.modelManagement.extensionServices}
+                            onClick={() => toggleServicesDropdown('extension')}
+                            externalClassName={'services-button'}
+                        />
+                        {activeServicesDropdown === 'extension' && (
+                            <div className='DropDownMenuContent ServicesDropdown'>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openVectorDb}>
+                                    <div className='Marker'/>
+                                    <img src='ico/api.png' alt='vector-db'/>
+                                    {currentTexts.modelManagement.vectorDb}
+                                </div>
+                                <div className='DropDownMenuContentOption active'
+                                    onClick={openL2gRetrieval}>
+                                    <div className='Marker'/>
+                                    <img src='ico/ai.png' alt='l2g-retrieval'/>
+                                    {currentTexts.modelManagement.l2gRetrieval}
                                 </div>
                             </div>
                         )}
