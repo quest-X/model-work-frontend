@@ -235,10 +235,11 @@ class Editor extends React.Component<IProps, IState> {
         event.preventDefault();
 
         if (event.shiftKey) {
-            // Shift+滚轮 — 水平平移画布（标准滚轮只报告 deltaY，shift 代表"当作水平处理"）
+            // Shift+滚轮 — 水平平移画布（部分浏览器会把 shift+滚轮 的位移量转写进 deltaX 而非 deltaY，两者都要兼容）
+            const horizontalDelta = event.deltaX !== 0 ? event.deltaX : event.deltaY;
             if (EditorModel.viewPortScrollbars) {
                 const currentScrollLeft = EditorModel.viewPortScrollbars.getScrollLeft();
-                EditorModel.viewPortScrollbars.scrollLeft(currentScrollLeft + event.deltaY);
+                EditorModel.viewPortScrollbars.scrollLeft(currentScrollLeft + horizontalDelta);
             }
         } else if (event.ctrlKey || event.metaKey) {
             // 触控板捏合缩放 (pinch) — 浏览器将 pinch 转换为 ctrlKey + wheel
@@ -246,8 +247,14 @@ class Editor extends React.Component<IProps, IState> {
             ViewPortActions.zoomByDelta(zoomDelta);
             EditorModel.mousePositionOnViewPortContent =
                 CanvasUtil.getMousePositionOnCanvasFromEvent(event, EditorModel.canvas);
+        } else if (event.altKey) {
+            // Alt+滚轮 — 竖直平移画布
+            if (EditorModel.viewPortScrollbars) {
+                const currentScrollTop = EditorModel.viewPortScrollbars.getScrollTop();
+                EditorModel.viewPortScrollbars.scrollTop(currentScrollTop + event.deltaY);
+            }
         } else {
-            // 无修饰键滚轮 — 切换上一张/下一张图，向下滚动=下一张（平移画布改用中键拖拽或滚动条）
+            // 无修饰键滚轮 — 切换上一张/下一张图，向下滚动=下一张
             if (event.deltaY > 0) {
                 ImageActions.goToNextImage();
             } else if (event.deltaY < 0) {
