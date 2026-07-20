@@ -29,6 +29,7 @@ import {LabelStatus} from '../../../data/enums/LabelStatus';
 import {isEqual} from 'lodash';
 import {AIActions} from '../../../logic/actions/AIActions';
 import {VideoSelector} from '../../../store/selectors/VideoSelector';
+import {ImageActions} from '../../../logic/actions/ImageActions';
 
 interface IProps {
     size: ISize;
@@ -246,12 +247,11 @@ class Editor extends React.Component<IProps, IState> {
             EditorModel.mousePositionOnViewPortContent =
                 CanvasUtil.getMousePositionOnCanvasFromEvent(event, EditorModel.canvas);
         } else {
-            // 双指滑动 — 平移画布
-            if (EditorModel.viewPortScrollbars) {
-                const currentScrollLeft = EditorModel.viewPortScrollbars.getScrollLeft();
-                const currentScrollTop = EditorModel.viewPortScrollbars.getScrollTop();
-                EditorModel.viewPortScrollbars.scrollLeft(currentScrollLeft + event.deltaX);
-                EditorModel.viewPortScrollbars.scrollTop(currentScrollTop + event.deltaY);
+            // 无修饰键滚轮 — 切换上一张/下一张图，向下滚动=下一张（平移画布改用中键拖拽或滚动条）
+            if (event.deltaY > 0) {
+                ImageActions.goToNextImage();
+            } else if (event.deltaY < 0) {
+                ImageActions.goToPreviousImage();
             }
         }
     };
