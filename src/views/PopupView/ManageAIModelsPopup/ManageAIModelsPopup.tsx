@@ -138,27 +138,37 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
         });
     };
 
+    const openExtensionService = (popupType: PopupWindowType) => {
+        updateActivePopupTypeAction(popupType);
+    };
+
+    const renderExtensionServices = () => {
+        return (
+            <>
+                <div className='LocalModelEntry has-models clickable'
+                    onClick={() => openExtensionService(PopupWindowType.VECTOR_DB)}>
+                    <div className='LocalModelName'>{currentTexts.modelManagement.vectorDb}</div>
+                </div>
+                <div className='LocalModelEntry has-models clickable'
+                    onClick={() => openExtensionService(PopupWindowType.L2G_RETRIEVAL)}>
+                    <div className='LocalModelName'>{currentTexts.modelManagement.l2gRetrieval}</div>
+                </div>
+            </>
+        );
+    };
+
     const renderLocalModels = () => {
         const selectedEngine = aiModels.find(m => m.id === selectedModelId);
         const engineType = selectedEngine?.modelType;
-        const families = engineType === 'core'
-            ? [...YOLO_MODEL_FAMILIES, ...SEG_MODEL_FAMILIES]
-            : null;
         return (
             <div className='LocalModelsSection'>
                 <div className='SectionTitle'>
                     {currentTexts.modelManagement.callModels}
                 </div>
                 <div className='LocalModelsList'>
-                    {families ? renderModelFamilyList(families) : (
-                        <div className='LocalModelEntry'>
-                            <div className='LocalModelName' style={{color: 'rgba(255,255,255,0.5)', fontStyle: 'italic'}}>
-                                {language === Language.CHINESE
-                                    ? '拓展引擎不管理推理模型'
-                                    : 'Extension engines do not manage inference models'}
-                            </div>
-                        </div>
-                    )}
+                    {engineType === 'core'
+                        ? renderModelFamilyList([...YOLO_MODEL_FAMILIES, ...SEG_MODEL_FAMILIES])
+                        : renderExtensionServices()}
                 </div>
             </div>
         );

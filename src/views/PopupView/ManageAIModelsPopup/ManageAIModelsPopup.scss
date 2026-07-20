@@ -237,6 +237,14 @@
               color: white;
             }
 
+            &.clickable {
+              cursor: pointer;
+
+              &:hover {
+                background-color: rgba(0, 0, 0, 0.1);
+              }
+            }
+
             .LocalModelName {
               flex: 1;
               white-space: nowrap;
