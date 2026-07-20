@@ -432,8 +432,8 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
     };
 
     const slotName = (value: InspectorSlot) => value === 'detection'
-        ? t('检测 slot', 'Detection slot')
-        : t('分割 slot', 'Segmentation slot');
+        ? t('检测视图', 'Detection slot')
+        : t('分割视图', 'Segmentation slot');
 
     return <div className='model-inspector-backdrop'>
         <section className='model-inspector-shell' aria-label={t('模型透视', 'Model Inspector')}>
@@ -530,7 +530,7 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
                             {!session || !activeLayer ? <div className='mi-empty-canvas'>
                                 <div className='mi-empty-orbit'><span/><span/><span/></div>
                                 <h3>{activeImage ? t('选择模型运行位并生成阶段透视', 'Choose a model slot and inspect its stages') : t('请先在 openSight 中打开一张图片', 'Open an image in openSight first')}</h3>
-                                <p>{t('插件只在你点击生成时挂载临时 Hook；关闭后不影响正常推理。', 'Temporary hooks are attached only on capture and never affect normal inference.')}</p>
+                                <p>{t('插件只在你点击生成时挂载临时钩子；关闭后不影响正常推理。', 'Temporary hooks are attached only on capture and never affect normal inference.')}</p>
                             </div> : <>
                                 <div className={`mi-viewports ${compareEnabled && compareLayer ? 'compare' : ''}`}>
                                     {renderViewport(activeLayer, 'A')}
@@ -606,7 +606,7 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
                                             {uniquePredictions.map(item => <option key={item.class_id} value={item.class_id}>{item.name} · {(item.confidence * 100).toFixed(1)}%</option>)}
                                         </select> : <label className='mi-class-input'>{t('类别 ID', 'Class ID')}<input type='number' min='0' value={targetClassId} onChange={event => setTargetClassId(Math.max(0, Number(event.target.value)))}/></label>}
                                         <button className='mi-secondary-button' disabled={attributionBusy} onClick={runAttribution}>{attributionBusy ? t('正在反向归因…', 'Attributing…') : t('生成类别响应图', 'Generate class response')}</button>
-                                    </> : <p className='mi-muted'>{t('SAM 当前提供激活特征；目标归因将在 mask prompt 目标契约稳定后开放。', 'SAM exposes activations; target attribution waits for a stable mask-prompt target contract.')}</p>}
+                                    </> : <p className='mi-muted'>{t('SAM 当前提供激活特征；目标归因将在掩码提示目标契约稳定后开放。', 'SAM exposes activations; target attribution waits for a stable mask-prompt target contract.')}</p>}
                                 </section>
 
                                 <section className='mi-analysis-section mi-export-section'>
