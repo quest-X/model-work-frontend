@@ -1,10 +1,11 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {useDropzone} from 'react-dropzone';
 import {connect} from 'react-redux';
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
 import {PopupActions} from '../../../logic/actions/PopupActions';
+import {PopupWindowType} from '../../../data/enums/PopupWindowType';
+import {updateActivePopupType} from '../../../store/general/actionCreators';
 import {AppState} from '../../../store';
-import {Language} from '../../../data/LanguageConfig';
+import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {getEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
 import './DataCenterPopup.scss';
 
@@ -26,17 +27,17 @@ interface DatasetStats {
 
 interface IProps {
     language: Language;
+    updateActivePopupTypeAction: (activePopupType: PopupWindowType) => void;
 }
 
-const DataCenterPopup: React.FC<IProps> = ({language}) => {
+const DataCenterPopup: React.FC<IProps> = ({language, updateActivePopupTypeAction}) => {
     const zh = language === Language.CHINESE;
+    const currentTexts = LanguageConfig[language];
     const baseUrl = getEngineBaseUrl();
 
     const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [stats, setStats] = useState<DatasetStats | null>(null);
-    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-    const [uploadError, setUploadError] = useState<string | null>(null);
 
     const refreshDatasets = useCallback(() => {
         fetch(`${baseUrl}/datasets`).then(r => r.json()).then(data => {
@@ -56,47 +57,9 @@ const DataCenterPopup: React.FC<IProps> = ({language}) => {
         fetch(`${baseUrl}/datasets/${selectedId}/stats`).then(r => r.json()).then(setStats).catch(() => undefined);
     }, [selectedId, baseUrl]);
 
-    const uploadZip = (file: File) => {
-        setUploadError(null);
-        setUploadProgress(0);
-        const xhr = new XMLHttpRequest();
-        const form = new FormData();
-        form.append('file', file);
-        form.append('name', file.name.replace(/\.zip$/i, ''));
-        xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
-        };
-        xhr.onload = () => {
-            setUploadProgress(null);
-            if (xhr.status >= 200 && xhr.status < 300) {
-                refreshDatasets();
-            } else {
-                try {
-                    const body = JSON.parse(xhr.responseText);
-                    setUploadError(body.detail || `upload failed (${xhr.status})`);
-                } catch {
-                    setUploadError(`upload failed (${xhr.status})`);
-                }
-            }
-        };
-        xhr.onerror = () => {
-            setUploadProgress(null);
-            setUploadError(zh ? '上传失败，请检查后端连接' : 'Upload failed — check backend connection');
-        };
-        xhr.open('POST', `${baseUrl}/datasets/upload`);
-        xhr.send(form);
-    };
+    const openInferenceSettings = () => updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
 
-    const onDrop = useCallback((accepted: File[]) => {
-        const zip = accepted.find(f => f.name.toLowerCase().endsWith('.zip'));
-        if (zip) uploadZip(zip);
-    }, [baseUrl]);
-
-    const {getRootProps, getInputProps} = useDropzone({
-        accept: {'application/zip': ['.zip'], 'application/x-zip-compressed': ['.zip'], 'application/octet-stream': ['.zip']},
-        multiple: false,
-        onDrop,
-    });
+    const openTrainingSettings = () => updateActivePopupTypeAction(PopupWindowType.TRAINING_TASK);
 
     const onDelete = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -108,21 +71,6 @@ const DataCenterPopup: React.FC<IProps> = ({language}) => {
 
     const renderContent = () => (
         <div className='DataCenterPopupContent'>
-            <div className='UploadSection'>
-                <div {...getRootProps({className: 'DropZone'})}>
-                    <input {...getInputProps()} />
-                    {uploadProgress !== null ? (
-                        <>
-                            <p className='extraBold'>{zh ? `上传中 ${uploadProgress}%` : `Uploading ${uploadProgress}%`}</p>
-                            <div className='ProgressBar'><div className='ProgressBarFill' style={{width: `${uploadProgress}%`}} /></div>
-                        </>
-                    ) : uploadError ? (
-                        <p className='errorMessage'>{uploadError}</p>
-                    ) : (
-                        <p className='extraBold'>{zh ? '拖拽或点击上传数据集 zip（YOLO 格式）' : 'Drop or click to upload a dataset zip (YOLO format)'}</p>
-                    )}
-                </div>
-            </div>
             <div className='DatasetListSection'>
                 <div className='SectionHeader'>{zh ? '已有数据集' : 'Datasets'}</div>
                 <div className='DatasetList'>
@@ -151,6 +99,17 @@ const DataCenterPopup: React.FC<IProps> = ({language}) => {
                     </div>
                 )}
             </div>
+            <div className='TaskLinksSection'>
+                <div className='SectionHeader'>{zh ? '相关任务' : 'Related Tasks'}</div>
+                <div className='TaskLinks'>
+                    <div className='TaskLink' onClick={openInferenceSettings}>
+                        {currentTexts.modelManagement.callModels}
+                    </div>
+                    <div className='TaskLink' onClick={openTrainingSettings}>
+                        {currentTexts.modelManagement.trainingTask}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 
@@ -165,8 +124,12 @@ const DataCenterPopup: React.FC<IProps> = ({language}) => {
     );
 };
 
+const mapDispatchToProps = {
+    updateActivePopupTypeAction: updateActivePopupType,
+};
+
 const mapStateToProps = (state: AppState) => ({
     language: state.general.language,
 });
 
-export default connect(mapStateToProps)(DataCenterPopup);
+export default connect(mapStateToProps, mapDispatchToProps)(DataCenterPopup);
