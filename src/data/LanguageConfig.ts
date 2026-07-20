@@ -831,7 +831,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         modelManagement: {
             coreServices: '核心引擎',
             extensionServices: '拓展引擎',
-            callModels: '推理任务',
+            callModels: '提供服务',
             modelEngines: '引擎管理',
             dataCenter: '数据中心',
             trainingTask: '训练任务',
@@ -1310,7 +1310,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         modelManagement: {
             coreServices: 'Core Engines',
             extensionServices: 'Extension Engines',
-            callModels: 'Inference Tasks',
+            callModels: 'Provided Services',
             modelEngines: 'Engine Management',
             dataCenter: 'Data Center',
             trainingTask: 'Training Task',
