@@ -115,7 +115,7 @@ const DataCenterPopup: React.FC<IProps> = ({language, updateActivePopupTypeActio
 
     return (
         <GenericYesNoPopup
-            title={zh ? '数据中心' : 'Data Center'}
+            title={zh ? '数据任务' : 'Data Tasks'}
             renderContent={renderContent}
             skipAcceptButton
             rejectLabel={zh ? '关闭' : 'Close'}

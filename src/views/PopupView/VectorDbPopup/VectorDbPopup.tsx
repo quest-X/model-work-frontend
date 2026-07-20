@@ -414,7 +414,7 @@ const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 <div className='SourceRow'>
                     <span className='FieldLabel'>{t('数据集', 'Dataset')}</span>
                     <select value={datasetId} onChange={e => { setDatasetId(e.target.value); setPendingFiles([]); }}>
-                        <option value=''>{t('—— 选择数据中心数据集 ——', '—— pick a Data Center dataset ——')}</option>
+                        <option value=''>{t('—— 选择数据任务数据集 ——', '—— pick a Data Tasks dataset ——')}</option>
                         {datasets.map(ds => (
                             <option key={ds.id} value={ds.id}>{ds.name}（{ds.image_count}）</option>
                         ))}
