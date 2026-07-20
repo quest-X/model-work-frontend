@@ -1042,7 +1042,7 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 description: 'Run annotation model on server'
             },
             integrateAIModel: {
-                name: 'AI Model',
+                name: 'Engine Management',
                 description: 'Integrate external AI model services'
             }
         },

@@ -24,6 +24,17 @@ export const getDropDownMenuData = (language: Language): DropDownMenuNode[] => {
             disabled: false,
             children: [
                 {
+                    name: texts.actions.integrateAIModel.name,
+                    description: texts.actions.integrateAIModel.description,
+                    imageSrc: 'ico/api.png',
+                    imageAlt: 'remote-models',
+                    disabled: false,
+                    onClick: () => {
+                        const hasRegisteredEngines = store.getState().aimodels.models.length > 0;
+                        store.dispatch(updateActivePopupType(hasRegisteredEngines ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.MODEL_ENGINE));
+                    }
+                },
+                {
                     name: texts.actions.uploadFiles.name,
                     description: texts.actions.uploadFiles.description,
                     imageSrc: 'ico/camera.png',

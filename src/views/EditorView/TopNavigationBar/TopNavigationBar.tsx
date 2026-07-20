@@ -17,7 +17,6 @@ interface IProps {
     updateLanguageAction: (language: Language) => any;
     projectData: ProjectData;
     language: Language;
-    hasRegisteredEngines: boolean;
     hasCoreEngine: boolean;
     hasExtensionEngine: boolean;
 }
@@ -53,13 +52,6 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
     const toggleServicesDropdown = (dropdown: Exclude<ServicesDropdown, null>) => {
         setShowActionsDropdown(false);
         setActiveServicesDropdown((activeDropdown) => activeDropdown === dropdown ? null : dropdown);
-    };
-
-    // 「模型引擎」按钮：有已接入的远程模型 → 打开管理弹窗，否则直接进入新增弹窗
-    const openRemoteModelManager = () => {
-        setActiveServicesDropdown(null);
-        const popupType = props.hasRegisteredEngines ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.MODEL_ENGINE;
-        props.updateActivePopupTypeAction(popupType);
     };
 
     // 「调用模型」按钮：打开本地模型挑选 / 加载弹窗
@@ -157,45 +149,37 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                         />
                         {showActionsDropdown && <DropDownMenu isVisible={true}/>}
                     </div>
-                    <div className='ServicesDropdownContainer'>
-                        <TextButton
-                            label={currentTexts.modelManagement.coreServices}
-                            onClick={() => toggleServicesDropdown('core')}
-                            externalClassName={'services-button'}
-                        />
-                        {activeServicesDropdown === 'core' && (
-                            <div className='DropDownMenuContent ServicesDropdown'>
-                                <div className='DropDownMenuContentOption active'
-                                    onClick={openRemoteModelManager}>
-                                    <div className='Marker'/>
-                                    <img src='ico/api.png' alt='remote-models'/>
-                                    {currentTexts.modelManagement.modelEngines}
+                    {props.hasCoreEngine && (
+                        <div className='ServicesDropdownContainer'>
+                            <TextButton
+                                label={currentTexts.modelManagement.coreServices}
+                                onClick={() => toggleServicesDropdown('core')}
+                                externalClassName={'services-button'}
+                            />
+                            {activeServicesDropdown === 'core' && (
+                                <div className='DropDownMenuContent ServicesDropdown'>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openDataCenter}>
+                                        <div className='Marker'/>
+                                        <img src='ico/api.png' alt='data-center'/>
+                                        {currentTexts.modelManagement.dataCenter}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openLocalModelManager}>
+                                        <div className='Marker'/>
+                                        <img src='ico/ai.png' alt='local-models'/>
+                                        {currentTexts.modelManagement.callModels}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openTrainingTask}>
+                                        <div className='Marker'/>
+                                        <img src='ico/ai.png' alt='training-task'/>
+                                        {currentTexts.modelManagement.trainingTask}
+                                    </div>
                                 </div>
-                                {props.hasCoreEngine && (
-                                    <>
-                                        <div className='DropDownMenuContentOption active'
-                                            onClick={openDataCenter}>
-                                            <div className='Marker'/>
-                                            <img src='ico/api.png' alt='data-center'/>
-                                            {currentTexts.modelManagement.dataCenter}
-                                        </div>
-                                        <div className='DropDownMenuContentOption active'
-                                            onClick={openLocalModelManager}>
-                                            <div className='Marker'/>
-                                            <img src='ico/ai.png' alt='local-models'/>
-                                            {currentTexts.modelManagement.callModels}
-                                        </div>
-                                        <div className='DropDownMenuContentOption active'
-                                            onClick={openTrainingTask}>
-                                            <div className='Marker'/>
-                                            <img src='ico/ai.png' alt='training-task'/>
-                                            {currentTexts.modelManagement.trainingTask}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                            )}
+                        </div>
+                    )}
                     {props.hasExtensionEngine && (
                         <div className='ServicesDropdownContainer'>
                             <TextButton
@@ -260,7 +244,6 @@ const mapDispatchToProps = {
 const mapStateToProps = (state: AppState) => ({
     projectData: state.general.projectData,
     language: state.general.language,
-    hasRegisteredEngines: !!(state.aimodels && state.aimodels.models.length > 0),
     hasCoreEngine: !!state.aimodels?.models.some(model => model.modelType === 'core'),
     hasExtensionEngine: !!state.aimodels?.models.some(model => model.modelType === 'extension')
 });
