@@ -280,6 +280,28 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
         setActiveChannel(activeLayer?.channels[0]?.index ?? null);
     }, [activeLayerId]);
 
+    const ribbonRef = useRef<HTMLDivElement>(null);
+    const [ribbonScroll, setRibbonScroll] = useState({atStart: true, atEnd: true});
+
+    const updateRibbonScroll = useCallback(() => {
+        const el = ribbonRef.current;
+        if (!el) return;
+        setRibbonScroll({
+            atStart: el.scrollLeft <= 2,
+            atEnd: el.scrollLeft + el.clientWidth >= el.scrollWidth - 2,
+        });
+    }, []);
+
+    useEffect(() => {
+        updateRibbonScroll();
+    }, [readyLayers.length, updateRibbonScroll]);
+
+    const scrollRibbon = (direction: 1 | -1): void => {
+        const el = ribbonRef.current;
+        if (!el) return;
+        el.scrollBy({left: direction * el.clientWidth * 0.8, behavior: 'smooth'});
+    };
+
     const uniquePredictions = useMemo(() => {
         const seen = new Set<number>();
         return (session?.predictions || []).filter(item => {
@@ -514,16 +536,30 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
                                     {renderViewport(activeLayer, 'A')}
                                     {compareEnabled && compareLayer && renderViewport(compareLayer, 'B', true)}
                                 </div>
-                                <div className='mi-stage-ribbon'>
-                                    {readyLayers.map((layer, index) => <button
-                                        key={layer.id}
-                                        className={activeLayerId === layer.id ? 'active' : ''}
-                                        onClick={() => setActiveLayerId(layer.id)}
-                                    >
-                                        <img loading='lazy' src={ModelInspectorAPI.mapUrl(session.id, layer.id, {kind: 'mean_abs', palette: 'gray'})} alt='' />
-                                        <span>{String(index + 1).padStart(2, '0')}</span>
-                                        <small>{layer.path.split('.').slice(-2).join('.')}</small>
-                                    </button>)}
+                                <div className='mi-stage-ribbon-wrap'>
+                                    <button
+                                        className='mi-ribbon-nav prev'
+                                        disabled={ribbonScroll.atStart}
+                                        onClick={() => scrollRibbon(-1)}
+                                        aria-label={t('向左滚动', 'Scroll left')}
+                                    >‹</button>
+                                    <div className='mi-stage-ribbon' ref={ribbonRef} onScroll={updateRibbonScroll}>
+                                        {readyLayers.map((layer, index) => <button
+                                            key={layer.id}
+                                            className={activeLayerId === layer.id ? 'active' : ''}
+                                            onClick={() => setActiveLayerId(layer.id)}
+                                        >
+                                            <img loading='lazy' src={ModelInspectorAPI.mapUrl(session.id, layer.id, {kind: 'mean_abs', palette: 'gray'})} alt='' />
+                                            <span>{String(index + 1).padStart(2, '0')}</span>
+                                            <small>{layer.path.split('.').slice(-2).join('.')}</small>
+                                        </button>)}
+                                    </div>
+                                    <button
+                                        className='mi-ribbon-nav next'
+                                        disabled={ribbonScroll.atEnd}
+                                        onClick={() => scrollRibbon(1)}
+                                        aria-label={t('向右滚动', 'Scroll right')}
+                                    >›</button>
                                 </div>
                             </>}
                         </main>
