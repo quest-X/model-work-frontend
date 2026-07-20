@@ -163,7 +163,7 @@ const ManageAIModelsPopup: React.FC<IProps> = ({
         return (
             <div className='LocalModelsSection'>
                 <div className='SectionTitle'>
-                    {currentTexts.modelManagement.callModels}
+                    {currentTexts.modelManagement.providedServices}
                 </div>
                 <div className='LocalModelsList'>
                     {engineType === 'core'

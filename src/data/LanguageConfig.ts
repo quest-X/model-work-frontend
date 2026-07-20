@@ -328,6 +328,7 @@ export interface LanguageTexts {
         coreServices: string;
         extensionServices: string;
         callModels: string;   // 原 localModels —— 调用模型
+        providedServices: string;   // 引擎管理弹窗内「服务清单」区块标题
         modelEngines: string;
         dataCenter: string;
         trainingTask: string;
@@ -831,7 +832,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         modelManagement: {
             coreServices: '核心引擎',
             extensionServices: '拓展引擎',
-            callModels: '提供服务',
+            callModels: '推理任务',
+            providedServices: '提供服务',
             modelEngines: '引擎管理',
             dataCenter: '数据中心',
             trainingTask: '训练任务',
@@ -1310,7 +1312,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         modelManagement: {
             coreServices: 'Core Engines',
             extensionServices: 'Extension Engines',
-            callModels: 'Provided Services',
+            callModels: 'Inference Tasks',
+            providedServices: 'Provided Services',
             modelEngines: 'Engine Management',
             dataCenter: 'Data Center',
             trainingTask: 'Training Task',
