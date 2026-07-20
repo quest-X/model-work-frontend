@@ -16,8 +16,8 @@ const initialState: GeneralState = {
     samNegativeMode: false,
     trackingMode: false,
     trackingInProgress: false,
-    eraserMode: false,
-    eraserFineMode: false,
+    eraserMode: true, // 默认激活橡皮擦工具
+    eraserFineMode: true, // 默认局部擦除
     enablePerClassColoration: true,
     projectData: {
         type: ProjectType.OBJECT_DETECTION, // 默认设置为目标检测项目
