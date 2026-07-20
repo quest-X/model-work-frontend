@@ -140,7 +140,7 @@ const DropDownMenu: React.FC<IProps> = ({updatePreventCustomCursorStatusAction, 
             height: 40 * getDropDownMenuData(language)[0].children.length
         }}>
             {getDropDownMenuData(language)[0].children.map((element, index) => {
-                return <div className='DropDownMenuContentOption active'
+                return <div className={classNames('DropDownMenuContentOption', 'active', {'divider': element.divider})}
                     onClick={() => {
                         if (element.onClick) element.onClick();
                         // 关闭下拉菜单的逻辑需要在父组件处理

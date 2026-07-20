@@ -9,6 +9,7 @@ export type DropDownMenuNode = {
     imageSrc: string
     imageAlt: string
     disabled: boolean
+    divider?: boolean
     onClick?: () => void
     children?: DropDownMenuNode[]
 }
@@ -29,6 +30,7 @@ export const getDropDownMenuData = (language: Language): DropDownMenuNode[] => {
                     imageSrc: 'ico/api.png',
                     imageAlt: 'remote-models',
                     disabled: false,
+                    divider: true,
                     onClick: () => {
                         const hasRegisteredEngines = store.getState().aimodels.models.length > 0;
                         store.dispatch(updateActivePopupType(hasRegisteredEngines ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.MODEL_ENGINE));
