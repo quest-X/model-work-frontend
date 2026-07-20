@@ -829,8 +829,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
 
         // AI Model Management
         modelManagement: {
-            coreServices: '核心服务',
-            extensionServices: '拓展服务',
+            coreServices: '核心引擎',
+            extensionServices: '拓展引擎',
             callModels: '推理任务',
             modelEngines: '引擎管理',
             dataCenter: '数据中心',
@@ -1308,8 +1308,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
 
         // AI Model Management
         modelManagement: {
-            coreServices: 'Core Services',
-            extensionServices: 'Extension Services',
+            coreServices: 'Core Engines',
+            extensionServices: 'Extension Engines',
             callModels: 'Inference Tasks',
             modelEngines: 'Engine Management',
             dataCenter: 'Data Center',
