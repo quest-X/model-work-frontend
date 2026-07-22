@@ -25,18 +25,6 @@ export const getDropDownMenuData = (language: Language): DropDownMenuNode[] => {
             disabled: false,
             children: [
                 {
-                    name: texts.actions.integrateAIModel.name,
-                    description: texts.actions.integrateAIModel.description,
-                    imageSrc: 'ico/api.png',
-                    imageAlt: 'remote-models',
-                    disabled: false,
-                    divider: true,
-                    onClick: () => {
-                        const hasRegisteredEngines = store.getState().aimodels.models.length > 0;
-                        store.dispatch(updateActivePopupType(hasRegisteredEngines ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.MODEL_ENGINE));
-                    }
-                },
-                {
                     name: texts.actions.uploadFiles.name,
                     description: texts.actions.uploadFiles.description,
                     imageSrc: 'ico/camera.png',
@@ -66,7 +54,19 @@ export const getDropDownMenuData = (language: Language): DropDownMenuNode[] => {
                     imageSrc: 'ico/export-labels.png',
                     imageAlt: 'export-labels',
                     disabled: false,
+                    divider: true,
                     onClick: () => store.dispatch(updateActivePopupType(PopupWindowType.EXPORT_ANNOTATIONS))
+                },
+                {
+                    name: texts.actions.integrateAIModel.name,
+                    description: texts.actions.integrateAIModel.description,
+                    imageSrc: 'ico/api.png',
+                    imageAlt: 'remote-models',
+                    disabled: false,
+                    onClick: () => {
+                        const hasRegisteredEngines = store.getState().aimodels.models.length > 0;
+                        store.dispatch(updateActivePopupType(hasRegisteredEngines ? PopupWindowType.MANAGE_AI_MODELS : PopupWindowType.MODEL_ENGINE));
+                    }
                 },
             ]
         }
@@ -76,4 +76,3 @@ export const getDropDownMenuData = (language: Language): DropDownMenuNode[] => {
 
 // 保持向后兼容性，默认使用英文
 export const DropDownMenuData: DropDownMenuNode[] = getDropDownMenuData(Language.ENGLISH);
-
