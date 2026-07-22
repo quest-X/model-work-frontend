@@ -1,17 +1,25 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {connect} from 'react-redux';
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
 import {PopupActions} from '../../../logic/actions/PopupActions';
+import {QueueActions} from '../../../logic/actions/QueueActions';
+import {ImageRepository} from '../../../logic/imageRepository/ImageRepository';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {updateActivePopupType} from '../../../store/general/actionCreators';
+import {updateQueueItem} from '../../../store/queue/actionCreators';
 import {AppState} from '../../../store';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
+import {ImageData, LabelName} from '../../../store/labels/types';
+import {QueueDataSyncStatus, QueueItem, QueueItemType} from '../../../store/queue/types';
 import {getEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
+import {DataBatchSyncService} from '../../../services/DataBatchSyncService';
+import {TrainingDatasetSelection} from '../../../services/TrainingDatasetSelection';
 import './DataCenterPopup.scss';
 
 interface DatasetSummary {
     id: string;
     name: string;
+    project_name?: string | null;
     created_at: string;
     image_count: number;
     classes: string[];
@@ -21,6 +29,10 @@ interface DatasetSummary {
     revision?: number;
     status?: string;
     updated_at?: string | null;
+    storage_version?: number;
+    unique_asset_count?: number | null;
+    logical_bytes?: number | null;
+    deduplicated_bytes?: number;
 }
 
 interface DatasetStats {
@@ -30,25 +42,71 @@ interface DatasetStats {
     annotation_coverage: number;
 }
 
+type DataTier = 'temporary' | 'persistent';
+
 interface IProps {
     language: Language;
+    projectName: string;
+    queueItems: QueueItem[];
+    activeQueueItemId: string | null;
+    imagesData: ImageData[];
+    labels: LabelName[];
     updateActivePopupTypeAction: (activePopupType: PopupWindowType) => void;
+    updateQueueItemAction: (itemId: string, updates: Partial<QueueItem>) => void;
 }
 
-const DataCenterPopup: React.FC<IProps> = ({language, updateActivePopupTypeAction}) => {
+const itemCount = (item: QueueItem): number => {
+    if (item.type === QueueItemType.FOLDER) return item.files?.length || 0;
+    if (item.type === QueueItemType.VIDEO) {
+        return item.extractionMetadata?.totalFrames || item.extractedFrames?.length || 0;
+    }
+    return item.file ? 1 : 0;
+};
+
+export const DataCenterPopup: React.FC<IProps> = ({
+    language,
+    projectName,
+    queueItems,
+    activeQueueItemId,
+    imagesData,
+    labels,
+    updateActivePopupTypeAction,
+    updateQueueItemAction,
+}) => {
     const zh = language === Language.CHINESE;
     const currentTexts = LanguageConfig[language];
     const baseUrl = getEngineBaseUrl();
 
+    const [activeTier, setActiveTier] = useState<DataTier>('temporary');
     const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
+    const [datasetsLoading, setDatasetsLoading] = useState(true);
+    const [datasetsError, setDatasetsError] = useState<string | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [stats, setStats] = useState<DatasetStats | null>(null);
+    const [statsLoading, setStatsLoading] = useState(false);
+    const [statsError, setStatsError] = useState<string | null>(null);
+
+    const queueItemById = useMemo(
+        () => new Map(queueItems.map(item => [item.id, item])),
+        [queueItems],
+    );
 
     const refreshDatasets = useCallback(() => {
-        fetch(`${baseUrl}/datasets`).then(r => r.json()).then(data => {
-            if (Array.isArray(data.datasets)) setDatasets(data.datasets);
-        }).catch(() => undefined);
-    }, [baseUrl]);
+        setDatasetsLoading(true);
+        setDatasetsError(null);
+        fetch(`${baseUrl}/datasets`).then(async response => {
+            if (!response.ok) throw new Error(`${response.status}`);
+            return response.json();
+        }).then(data => {
+            const nextDatasets = Array.isArray(data.datasets) ? data.datasets : [];
+            setDatasets(nextDatasets);
+            setSelectedId(current => current && nextDatasets.some((dataset: DatasetSummary) => dataset.id === current)
+                ? current
+                : null);
+        }).catch(() => {
+            setDatasetsError(zh ? '无法读取服务器数据集' : 'Unable to load server datasets');
+        }).finally(() => setDatasetsLoading(false));
+    }, [baseUrl, zh]);
 
     useEffect(() => {
         refreshDatasets();
@@ -57,72 +115,290 @@ const DataCenterPopup: React.FC<IProps> = ({language, updateActivePopupTypeActio
     }, [refreshDatasets]);
 
     useEffect(() => {
+        const controller = new AbortController();
+        setStats(null);
+        setStatsError(null);
         if (!selectedId) {
-            setStats(null);
+            setStatsLoading(false);
+            return undefined;
+        }
+        setStatsLoading(true);
+        fetch(`${baseUrl}/datasets/${selectedId}/stats`, {signal: controller.signal})
+            .then(async response => {
+                if (!response.ok) throw new Error(`${response.status}`);
+                return response.json();
+            })
+            .then(value => {
+                if (!controller.signal.aborted) setStats(value);
+            })
+            .catch(cause => {
+                if (cause instanceof Error && cause.name === 'AbortError') return;
+                if (!controller.signal.aborted) {
+                    setStatsError(zh ? '数据统计加载失败' : 'Failed to load dataset statistics');
+                }
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) setStatsLoading(false);
+            });
+        return () => controller.abort();
+    }, [selectedId, baseUrl, zh]);
+
+    const datasetDisplayName = (dataset: DatasetSummary): string => {
+        const localSource = dataset.source_id ? queueItemById.get(dataset.source_id) : null;
+        const inferredLegacyProject = !dataset.project_name && localSource ? projectName.trim() : '';
+        return inferredLegacyProject || dataset.name;
+    };
+
+    const syncStatus = (item: QueueItem): {className: string; label: string} => {
+        const status = item.dataSyncStatus || QueueDataSyncStatus.LOCAL;
+        const labelsByStatus: Record<QueueDataSyncStatus, string> = {
+            [QueueDataSyncStatus.LOCAL]: zh ? '仅本地' : 'Local only',
+            [QueueDataSyncStatus.SYNCING]: zh ? '正在同步' : 'Syncing',
+            [QueueDataSyncStatus.SYNCED]: `${zh ? '服务器快照' : 'Server snapshot'} · v${item.datasetRevision || 1}`,
+            [QueueDataSyncStatus.DIRTY]: zh ? '有本地修改' : 'Local changes',
+            [QueueDataSyncStatus.ERROR]: zh ? '同步失败' : 'Sync failed',
+        };
+        return {className: status.toLowerCase(), label: labelsByStatus[status]};
+    };
+
+    const openLocalItem = (item: QueueItem) => {
+        if (item.id === activeQueueItemId) {
+            PopupActions.close();
             return;
         }
-        fetch(`${baseUrl}/datasets/${selectedId}/stats`).then(r => r.json()).then(setStats).catch(() => undefined);
-    }, [selectedId, baseUrl]);
+        void QueueActions.switchToQueueItem(item, imagesData).then(() => PopupActions.close());
+    };
+
+    const syncLocalItem = (item: QueueItem) => {
+        const cachedAnnotations = item.id === activeQueueItemId
+            ? imagesData
+            : ImageRepository.getFileCacheSnapshot(item.id);
+        if (!cachedAnnotations) return;
+        const annotations = cachedAnnotations;
+        void DataBatchSyncService.syncQueueItem(item, annotations, labels).catch(() => undefined);
+    };
 
     const openInferenceSettings = () => updateActivePopupTypeAction(PopupWindowType.CALL_MODEL);
 
-    const openTrainingSettings = () => updateActivePopupTypeAction(PopupWindowType.TRAINING_TASK);
+    const openTrainingSettings = (datasetId: string) => {
+        TrainingDatasetSelection.set(datasetId);
+        updateActivePopupTypeAction(PopupWindowType.TRAINING_TASK);
+    };
 
-    const onDelete = (id: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        fetch(`${baseUrl}/datasets/${id}`, {method: 'DELETE'}).then(() => {
-            if (selectedId === id) setSelectedId(null);
+    const deleteDataset = (dataset: DatasetSummary, event: React.MouseEvent) => {
+        event.stopPropagation();
+        const datasetName = datasetDisplayName(dataset);
+        const prompt = zh
+            ? `确定永久删除服务器数据集“${datasetName}”吗？此操作不可撤销。`
+            : `Permanently delete server dataset “${datasetName}”? This cannot be undone.`;
+        if (!window.confirm(prompt)) return;
+        fetch(`${baseUrl}/datasets/${dataset.id}`, {method: 'DELETE'}).then(response => {
+            if (!response.ok) throw new Error(`${response.status}`);
+            if (selectedId === dataset.id) setSelectedId(null);
+            const localSource = dataset.source_id ? queueItemById.get(dataset.source_id) : null;
+            if (localSource) {
+                updateQueueItemAction(localSource.id, {
+                    dataSyncStatus: QueueDataSyncStatus.LOCAL,
+                    datasetId: undefined,
+                    datasetRevision: undefined,
+                    syncedAt: undefined,
+                });
+            }
             refreshDatasets();
         }).catch(() => undefined);
     };
 
+    const localItemUnit = (item: QueueItem): string => item.type === QueueItemType.VIDEO
+        ? (zh ? '帧' : 'frames')
+        : (zh ? '张图片' : 'images');
+
+    const syncActionLabel = (item: QueueItem, hasReliableSnapshot: boolean): string => {
+        if (item.dataSyncStatus === QueueDataSyncStatus.SYNCING) return zh ? '同步中…' : 'Syncing…';
+        if (!hasReliableSnapshot) return zh ? '先打开后同步' : 'Open before syncing';
+        if (item.datasetId) return zh ? '更新服务器' : 'Update server';
+        return zh ? '同步到服务器' : 'Sync to server';
+    };
+
+    const renderLocalDataCard = (item: QueueItem) => {
+        const status = syncStatus(item);
+        const isActive = item.id === activeQueueItemId;
+        const supportsSync = item.type !== QueueItemType.VIDEO;
+        const syncing = item.dataSyncStatus === QueueDataSyncStatus.SYNCING;
+        const hasReliableSnapshot = isActive || ImageRepository.hasFileCache(item.id);
+        return <article className={`LocalDataCard${isActive ? ' active' : ''}`} key={item.id}>
+            <div className='DataCardIdentity'>
+                <div className='DataCardTitleRow'>
+                    <strong title={item.name}>{item.name}</strong>
+                    {isActive && <span className='CurrentBadge'>{zh ? '当前打开' : 'Open'}</span>}
+                </div>
+                <span>{itemCount(item)} {localItemUnit(item)} · {zh ? '前端临时数据' : 'temporary frontend data'}</span>
+                <span className={`SyncState ${status.className}`}>{status.label}</span>
+                {item.dataSyncError && <span className='InlineError'>{item.dataSyncError}</span>}
+            </div>
+            <div className='DataCardActions'>
+                <button type='button' onClick={() => openLocalItem(item)}>
+                    {zh ? '查看 / 标注' : 'View / annotate'}
+                </button>
+                {supportsSync && <button
+                    type='button'
+                    className='PrimaryAction'
+                    disabled={syncing || !hasReliableSnapshot}
+                    onClick={() => syncLocalItem(item)}
+                >{syncActionLabel(item, hasReliableSnapshot)}</button>}
+                {!supportsSync && <span className='UnsupportedHint'>{zh ? '视频暂不支持持久化' : 'Video persistence is not supported yet'}</span>}
+            </div>
+        </article>;
+    };
+
+    const renderDatasetDetails = (dataset: DatasetSummary, detailsId: string) => (
+        <div className='DatasetDetails' id={detailsId}>
+            {statsLoading && <div className='StatsState'>{zh ? '正在加载数据统计…' : 'Loading dataset statistics…'}</div>}
+            {statsError && <div className='StatsState error'>{statsError}</div>}
+            {stats && <div className='StatsPanel'>
+                <div className='StatsRow'><span>{zh ? '标注覆盖率' : 'Annotation coverage'}</span><span>{(stats.annotation_coverage * 100).toFixed(0)}%</span></div>
+                <div className='StatsRow'><span>{zh ? '已标注' : 'Annotated'}</span><span>{stats.annotated_count} / {stats.image_count}</span></div>
+                {Object.entries(stats.class_distribution).map(([className, count]) => (
+                    <div className='StatsRow' key={className}><span>{className}</span><span>{count}</span></div>
+                ))}
+            </div>}
+            <div className='TaskLinksSection'>
+                <div className='SectionHeader'>{zh ? '下游任务' : 'Downstream tasks'}</div>
+                <div className='TaskLinks'>
+                    <button type='button' className='TaskLink' onClick={openInferenceSettings}>
+                        {currentTexts.modelManagement.callModels}{zh ? '（共享）' : ' (shared)'}
+                    </button>
+                    <button type='button' className='TaskLink' onClick={() => openTrainingSettings(dataset.id)}>
+                        {currentTexts.modelManagement.trainingTask}
+                    </button>
+                    <a className='TaskLink' href={`${baseUrl}/datasets/${dataset.id}/export`}>
+                        {zh ? '导出数据集' : 'Export dataset'}
+                    </a>
+                </div>
+                <p className='TaskCapabilityHint'>
+                    {zh
+                        ? '原图按内容去重保存；训练直接引用当前快照，导出时才生成可下载的标准数据集压缩包。'
+                        : 'Images are content-deduplicated. Training references this snapshot; a standard archive is generated only on export.'}
+                </p>
+            </div>
+        </div>
+    );
+
+    const datasetSourceLabel = (dataset: DatasetSummary, hasLocalSource: boolean): string => {
+        const linkedProject = dataset.project_name || (hasLocalSource ? projectName.trim() : '');
+        const projectLabel = linkedProject
+            ? `${zh ? '项目' : 'Project'} ${linkedProject}`
+            : (zh ? '未关联项目' : 'Unassigned project');
+        const serverLabel = zh ? '服务器数据集' : 'Server dataset';
+        const localCopyLabel = hasLocalSource
+            ? ` · ${zh ? '关联本地工作副本' : 'linked local copy'}`
+            : '';
+        return `${projectLabel} · ${serverLabel} · v${dataset.revision || 1} · ${dataset.id.slice(0, 8)}${localCopyLabel}`;
+    };
+
+    const renderDatasetItem = (dataset: DatasetSummary) => {
+        const expanded = selectedId === dataset.id;
+        const datasetName = datasetDisplayName(dataset);
+        const detailsId = `dataset-details-${dataset.id}`;
+        const localSource = dataset.source_id ? queueItemById.get(dataset.source_id) : null;
+        const sourceLabel = datasetSourceLabel(dataset, !!localSource);
+        return <article key={dataset.id} className={`DatasetItem${expanded ? ' selected' : ''}`}>
+            <div className='DatasetRow'>
+                <button
+                    type='button'
+                    className='DatasetToggle'
+                    aria-expanded={expanded}
+                    aria-controls={detailsId}
+                    onClick={() => setSelectedId(expanded ? null : dataset.id)}
+                >
+                    <span className='DatasetRowMain'>
+                        <span className='DatasetName'>{datasetName}</span>
+                        <span className='DatasetMeta'>{dataset.image_count} {zh ? '张图片' : 'images'} · {dataset.classes.length} {zh ? '类' : 'classes'}</span>
+                        <span className='DatasetSource'>{sourceLabel}</span>
+                    </span>
+                    <span className={`DatasetChevron${expanded ? ' expanded' : ''}`} aria-hidden='true'>⌄</span>
+                </button>
+                <button
+                    type='button'
+                    className='DeleteButton'
+                    aria-label={`${zh ? '删除' : 'Delete'} ${datasetName}`}
+                    onClick={(event) => deleteDataset(dataset, event)}
+                >×</button>
+            </div>
+            {expanded && renderDatasetDetails(dataset, detailsId)}
+        </article>;
+    };
+
+    const renderTemporaryData = () => <section className='DataTierPanel' aria-label={zh ? '临时数据' : 'Temporary data'}>
+        <div className='TierExplanation'>
+            <div>
+                <strong>{zh ? '浏览器工作副本' : 'Browser work copies'}</strong>
+                <span>{zh ? '仅用于当前前端查看与标注；同步后才可交给服务器任务。' : 'Used for viewing and annotation in this frontend; sync before server-side tasks.'}</span>
+            </div>
+        </div>
+        <div className='LocalDataList'>
+            {queueItems.length === 0 && <div className='EmptyState'>
+                <strong>{zh ? '暂无临时数据' : 'No temporary data'}</strong>
+                <span>{zh ? '从“操作 → 上传文件”加入图片或数据批次。' : 'Add images or a batch from Actions → Upload files.'}</span>
+            </div>}
+            {queueItems.map(renderLocalDataCard)}
+        </div>
+    </section>;
+
+    const renderPersistentData = () => <section className='DataTierPanel' aria-label={zh ? '持久化数据' : 'Persistent data'}>
+        <div className='TierExplanation persistent'>
+            <div>
+                <strong>{zh ? '服务器数据快照' : 'Server data snapshots'}</strong>
+                <span>{zh ? '已持久化到核心引擎，并保留项目归属；展开具体数据集后配置下游任务。' : 'Persisted in the core engine with project ownership; expand a dataset to configure downstream tasks.'}</span>
+            </div>
+            <button type='button' onClick={refreshDatasets} disabled={datasetsLoading}>
+                {datasetsLoading ? (zh ? '刷新中…' : 'Refreshing…') : (zh ? '刷新' : 'Refresh')}
+            </button>
+        </div>
+        {datasetsError && <div className='EmptyState error'>
+            <strong>{datasetsError}</strong>
+            <span>{zh ? '请确认核心引擎的数据服务可用。' : 'Check that the core-engine data service is available.'}</span>
+        </div>}
+        {!datasetsError && !datasetsLoading && datasets.length === 0 && <div className='EmptyState'>
+            <strong>{zh ? '暂无持久化数据' : 'No persistent data'}</strong>
+            <span>{zh ? '在“临时数据”中选择一个批次并同步到服务器。' : 'Choose a temporary batch and sync it to the server.'}</span>
+        </div>}
+        <div className='DatasetList'>
+            {datasets.map(renderDatasetItem)}
+        </div>
+    </section>;
+
     const renderContent = () => (
         <div className='DataCenterPopupContent'>
-            <div className='DatasetListSection'>
-                <div className='SectionHeader'>{zh ? '数据批次' : 'Data Batches'}</div>
-                <div className='DatasetList'>
-                    {datasets.length === 0 && <div className='EmptyHint'>{zh ? '暂无数据批次' : 'No data batches yet'}</div>}
-                    {datasets.map(ds => (
-                        <div
-                            key={ds.id}
-                            className={`DatasetRow${selectedId === ds.id ? ' selected' : ''}`}
-                            onClick={() => setSelectedId(selectedId === ds.id ? null : ds.id)}
-                        >
-                            <div className='DatasetRowMain'>
-                                <span className='DatasetName'>{ds.name}</span>
-                                <span className='DatasetMeta'>{ds.image_count} {zh ? '张图片' : 'images'} · {ds.classes.length} {zh ? '类' : 'classes'}</span>
-                                <span className='DatasetSource'>
-                                    {ds.source_type === 'file_queue'
-                                        ? (zh ? '文件队列批次' : 'File Queue batch')
-                                        : (zh ? '数据集导入' : 'Dataset upload')}
-                                    {' · '}v{ds.revision || 1}
-                                </span>
-                            </div>
-                            <button className='DeleteButton' onClick={(e) => onDelete(ds.id, e)}>×</button>
-                        </div>
-                    ))}
+            <div className='ProjectDataSummary'>
+                <div>
+                    <span>{zh ? '当前项目' : 'Current project'}</span>
+                    <strong>{projectName || (zh ? '未命名项目' : 'Untitled project')}</strong>
                 </div>
-                {selectedId && stats && (
-                    <div className='StatsPanel'>
-                        <div className='StatsRow'><span>{zh ? '标注覆盖率' : 'Annotation coverage'}</span><span>{(stats.annotation_coverage * 100).toFixed(0)}%</span></div>
-                        <div className='StatsRow'><span>{zh ? '已标注' : 'Annotated'}</span><span>{stats.annotated_count} / {stats.image_count}</span></div>
-                        {Object.entries(stats.class_distribution).map(([cls, count]) => (
-                            <div className='StatsRow' key={cls}><span>{cls}</span><span>{count}</span></div>
-                        ))}
-                    </div>
-                )}
+                <p>{zh ? '本地工作副本与服务器快照分层管理' : 'Local work copies and server snapshots are managed separately'}</p>
             </div>
-            <div className='TaskLinksSection'>
-                <div className='SectionHeader'>{zh ? '相关任务' : 'Related Tasks'}</div>
-                <div className='TaskLinks'>
-                    <div className='TaskLink' onClick={openInferenceSettings}>
-                        {currentTexts.modelManagement.callModels}
-                    </div>
-                    <div className='TaskLink' onClick={openTrainingSettings}>
-                        {currentTexts.modelManagement.trainingTask}
-                    </div>
-                </div>
+            <div className='DataTierTabs' role='tablist' aria-label={zh ? '数据存储层级' : 'Data storage tier'}>
+                <button
+                    type='button'
+                    role='tab'
+                    aria-selected={activeTier === 'temporary'}
+                    className={activeTier === 'temporary' ? 'active temporary' : ''}
+                    onClick={() => setActiveTier('temporary')}
+                >
+                    <span>{zh ? '临时数据' : 'Temporary data'}</span>
+                    <strong>{queueItems.length}</strong>
+                </button>
+                <button
+                    type='button'
+                    role='tab'
+                    aria-selected={activeTier === 'persistent'}
+                    className={activeTier === 'persistent' ? 'active persistent' : ''}
+                    onClick={() => setActiveTier('persistent')}
+                >
+                    <span>{zh ? '持久化数据' : 'Persistent data'}</span>
+                    <strong>{datasets.length}</strong>
+                </button>
             </div>
+            {activeTier === 'temporary' ? renderTemporaryData() : renderPersistentData()}
         </div>
     );
 
@@ -139,10 +415,16 @@ const DataCenterPopup: React.FC<IProps> = ({language, updateActivePopupTypeActio
 
 const mapDispatchToProps = {
     updateActivePopupTypeAction: updateActivePopupType,
+    updateQueueItemAction: updateQueueItem,
 };
 
 const mapStateToProps = (state: AppState) => ({
     language: state.general.language,
+    projectName: state.general.projectData.name,
+    queueItems: state.queue.items,
+    activeQueueItemId: state.queue.activeQueueItemId,
+    imagesData: state.labels.imagesData,
+    labels: state.labels.labels,
 });
 
 export default connect(mapStateToProps, mapDispatchToProps)(DataCenterPopup);

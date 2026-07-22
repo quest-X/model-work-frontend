@@ -139,7 +139,9 @@ export class DataBatchSyncService {
 
         try {
             const form = new FormData();
-            form.append('name', item.name);
+            const projectName = store.getState().general.projectData.name.trim();
+            form.append('name', projectName || item.name);
+            if (projectName) form.append('project_name', projectName);
             form.append('source_id', item.id);
             form.append('metadata', JSON.stringify(this.buildMetadata(files, imagesData, labels)));
             files.forEach(file => form.append('files', file, file.name));

@@ -209,6 +209,11 @@ export class ImageRepository {
         const cache = ImageRepository.fileCache[fileId];
         return cache ? cache.imagesData.map(data => ({...data})) : null;
     }
+
+    /** Check whether a queue item has a trustworthy in-memory annotation snapshot. */
+    public static hasFileCache(fileId: string): boolean {
+        return !!ImageRepository.fileCache[fileId];
+    }
     
     /**
      * 清空当前显示的图像（但不清除文件缓存）

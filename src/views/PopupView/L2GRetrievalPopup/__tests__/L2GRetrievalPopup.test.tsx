@@ -14,6 +14,7 @@ jest.mock('../../../../logic/actions/PopupActions', () => ({
 }));
 
 jest.mock('../../../../utils/DefaultBackendUrl', () => ({
+    getEngineBaseUrl: () => 'https://core.test/core_service',
     getExtensionEngineBaseUrl: () => 'https://extension.test/extension_service',
 }));
 
@@ -66,9 +67,23 @@ describe('VisualRetrievalPopup', () => {
                     config_file: '/tmp/l2g.yaml', defaults: {top_k: 10, max_database_size: 1000},
                 }));
             }
+            if (url === 'https://core.test/core_service/datasets') {
+                return Promise.resolve(jsonResponse({
+                    datasets: [{
+                        id: 'dataset-1', name: '导入标注', project_name: 'gbyw',
+                        image_count: 465, revision: 1, status: 'ready',
+                    }],
+                }));
+            }
             if (url.endsWith('/vector_db/search') && init?.method === 'POST') {
                 return Promise.resolve(jsonResponse({
                     results: [{score: 0.973, filename: 'frame_006483.jpg', class_name: '', thumbnail: 'data:image/jpeg;base64,AA=='}],
+                }));
+            }
+            if (url.endsWith('/l2g_retrieval/search') && init?.method === 'POST') {
+                return Promise.resolve(jsonResponse({
+                    elapsed_s: 1.2,
+                    results: [{score: 0.991, path: 'frame_006483', thumbnail: 'data:image/jpeg;base64,AA=='}],
                 }));
             }
             return Promise.resolve(jsonResponse({status: 'ok'}));
@@ -79,14 +94,15 @@ describe('VisualRetrievalPopup', () => {
         render(<L2GRetrievalPopup language={Language.CHINESE}/>);
 
         expect(screen.getByRole('heading', {name: '视觉检索'})).toBeInTheDocument();
-        expect(screen.getByRole('tab', {name: /DINO 系列/})).toBeInTheDocument();
-        expect(screen.getByRole('tab', {name: /L2G 系统/})).toBeInTheDocument();
+        expect(screen.getByRole('tab', {name: /快速模式/})).toBeInTheDocument();
+        expect(screen.getByRole('tab', {name: /精细模式/})).toBeInTheDocument();
         expect(await screen.findByText('特征配置')).toBeInTheDocument();
         expect(screen.getByText('fp_fcc2c772628f1317')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('tab', {name: /L2G 系统/}));
-        expect(screen.getByText('服务器图库目录')).toBeInTheDocument();
-        expect(screen.getByText(/FIRe 局部特征/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('tab', {name: /精细模式/}));
+        expect(screen.getByText('数据中心数据集')).toBeInTheDocument();
+        expect(await screen.findByRole('option', {name: /gbyw \/ 导入标注/})).toBeInTheDocument();
+        expect(screen.getByText(/复用数据中心的唯一原图/)).toBeInTheDocument();
     });
 
     it('binds DINO search to the selected physical vector version', async () => {
@@ -107,5 +123,26 @@ describe('VisualRetrievalPopup', () => {
         const body = searchCall?.[1]?.body as FormData;
         expect(body.get('collection')).toBe('gangye_v1');
         expect(body.get('file')).toBeInstanceOf(File);
+    });
+
+    it('binds precision search to a structured data-center dataset', async () => {
+        const {container} = render(<L2GRetrievalPopup language={Language.CHINESE}/>);
+        fireEvent.click(screen.getByRole('tab', {name: /精细模式/}));
+        await screen.findByRole('option', {name: /gbyw \/ 导入标注/});
+
+        const input = container.querySelector('.QueryDropzone input[type="file"]') as HTMLInputElement;
+        fireEvent.change(input, {target: {files: [new File(['image'], 'query.png', {type: 'image/png'})]}});
+        const button = screen.getByRole('button', {name: '开始视觉检索'});
+        await waitFor(() => expect(button).toBeEnabled());
+        await act(async () => {
+            fireEvent.click(button);
+        });
+
+        await screen.findByText('99.1%');
+        const searchCall = (global.fetch as jest.Mock).mock.calls.find(([url, init]) =>
+            String(url).endsWith('/l2g_retrieval/search') && init?.method === 'POST');
+        const body = searchCall?.[1]?.body as FormData;
+        expect(body.get('dataset_id')).toBe('dataset-1');
+        expect(body.get('database_dir')).toBeNull();
     });
 });

@@ -5,7 +5,7 @@ import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
 import {PopupActions} from '../../../logic/actions/PopupActions';
 import {AppState} from '../../../store';
 import {Language} from '../../../data/LanguageConfig';
-import {getExtensionEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
+import {getEngineBaseUrl, getExtensionEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
 import './L2GRetrievalPopup.scss';
 
 type RetrievalEngine = 'dino' | 'l2g';
@@ -20,6 +20,12 @@ interface L2GStatus {
     status: string;
     version: string;
     pipeline: PipelineStatus;
+    vector_store?: {
+        state: string;
+        collection: string | null;
+        count: number;
+        error?: string | null;
+    };
     config_file: string;
     defaults: {top_k: number; max_database_size: number};
 }
@@ -64,6 +70,15 @@ interface L2GResult {
     thumbnail: string | null;
 }
 
+interface DatasetSummary {
+    id: string;
+    name: string;
+    project_name?: string | null;
+    image_count: number;
+    revision: number;
+    status: string;
+}
+
 interface IProps {
     language: Language;
 }
@@ -84,6 +99,7 @@ export const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
         [zh],
     );
     const extensionBaseUrl = getExtensionEngineBaseUrl();
+    const coreBaseUrl = getEngineBaseUrl();
     const dinoBaseUrl = `${extensionBaseUrl}/vector_db`;
     const l2gBaseUrl = `${extensionBaseUrl}/l2g_retrieval`;
 
@@ -99,7 +115,10 @@ export const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
     const [l2gStatus, setL2GStatus] = useState<L2GStatus | null>(null);
     const [l2gDown, setL2GDown] = useState(false);
     const [warmingL2G, setWarmingL2G] = useState(false);
-    const [databaseDir, setDatabaseDir] = useState('');
+    const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
+    const [datasetsLoading, setDatasetsLoading] = useState(true);
+    const [datasetsError, setDatasetsError] = useState<string | null>(null);
+    const [selectedDatasetId, setSelectedDatasetId] = useState('');
 
     const [queryFile, setQueryFile] = useState<File | null>(null);
     const [queryPreview, setQueryPreview] = useState<string | null>(null);
@@ -159,16 +178,38 @@ export const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
         }
     }, [dinoBaseUrl, t]);
 
+    const fetchDatasets = useCallback(async () => {
+        setDatasetsLoading(true);
+        setDatasetsError(null);
+        try {
+            const response = await fetch(`${coreBaseUrl}/datasets`);
+            const body = await readResponse<{datasets?: DatasetSummary[]}>(response);
+            const nextDatasets = Array.isArray(body.datasets)
+                ? body.datasets.filter(dataset => dataset.status === 'ready' && dataset.image_count > 0)
+                : [];
+            setDatasets(nextDatasets);
+            setSelectedDatasetId(current => {
+                if (current && nextDatasets.some(dataset => dataset.id === current)) return current;
+                return nextDatasets[0]?.id || '';
+            });
+        } catch (cause) {
+            setDatasetsError(cause instanceof Error ? cause.message : t('数据集加载失败', 'Failed to load datasets'));
+        } finally {
+            setDatasetsLoading(false);
+        }
+    }, [coreBaseUrl, t]);
+
     useEffect(() => {
         fetchDinoStatus();
         fetchL2GStatus();
         fetchCollections();
+        fetchDatasets();
         const timer = window.setInterval(() => {
             fetchDinoStatus();
             fetchL2GStatus();
         }, 5000);
         return () => window.clearInterval(timer);
-    }, [fetchCollections, fetchDinoStatus, fetchL2GStatus]);
+    }, [fetchCollections, fetchDatasets, fetchDinoStatus, fetchL2GStatus]);
 
     useEffect(() => () => {
         if (queryPreviewRef.current) URL.revokeObjectURL(queryPreviewRef.current);
@@ -247,10 +288,10 @@ export const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
     };
 
     const searchL2G = async () => {
-        if (!queryFile || !databaseDir.trim()) return;
+        if (!queryFile || !selectedDatasetId) return;
         const form = new FormData();
         form.append('query', queryFile);
-        form.append('database_dir', databaseDir.trim());
+        form.append('dataset_id', selectedDatasetId);
         form.append('top_k', String(topK));
         const response = await fetch(`${l2gBaseUrl}/search`, {method: 'POST', body: form});
         const body = await readResponse<{results?: L2GResult[]; elapsed_s?: number}>(response);
@@ -306,8 +347,13 @@ export const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
         if (pipelineState === 'error' || pipelineState === 'missing_dep') {
             return <div className='Banner error'>{t('L2G 管道异常：', 'L2G pipeline error: ')}{l2gStatus?.pipeline?.error ?? pipelineState}</div>;
         }
+        if (l2gStatus?.vector_store?.state === 'error') {
+            return <div className='Banner error'>{t('L2G Milvus 异常：', 'L2G Milvus error: ')}{l2gStatus.vector_store.error}</div>;
+        }
         if (pipelineState === 'loading') return <div className='Banner info'>{t('L2G 管道加载中…', 'Loading L2G pipeline…')}</div>;
-        if (l2gReady) return <div className='Banner ok'>{t('L2G 检索就绪', 'L2G retrieval ready')} · v{l2gStatus?.version}</div>;
+        if (l2gReady) return <div className='Banner ok'>
+            {t('L2G 检索就绪', 'L2G retrieval ready')} · v{l2gStatus?.version} · Milvus {l2gStatus?.vector_store?.count || 0}
+        </div>;
         return <div className='Banner info'>
             {t('L2G 管道尚未加载。', 'The L2G pipeline is not loaded. ')}
             <button className='InlineButton' disabled={warmingL2G} onClick={warmupL2G}>
@@ -357,21 +403,33 @@ export const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
     );
 
     const renderL2GFields = () => (
-        <label>
-            {t('服务器图库目录', 'Server database directory')}
-            <input
-                type='text'
-                value={databaseDir}
-                placeholder={t('推理后端上的图片目录绝对路径', 'Absolute image directory on the inference host')}
-                onChange={event => setDatabaseDir(event.target.value)}
-            />
-        </label>
+        <>
+            <label>
+                {t('数据中心数据集', 'Data-center dataset')}
+                <select
+                    value={selectedDatasetId}
+                    disabled={datasetsLoading || !!datasetsError}
+                    onChange={event => setSelectedDatasetId(event.target.value)}
+                >
+                    {datasets.length === 0 && <option value=''>
+                        {datasetsLoading ? t('正在读取…', 'Loading…') : t('暂无可用数据集', 'No datasets available')}
+                    </option>}
+                    {datasets.map(dataset => <option key={dataset.id} value={dataset.id}>
+                        {dataset.project_name ? `${dataset.project_name} / ` : ''}{dataset.name} · v{dataset.revision || 1} · {dataset.image_count} {t('张', 'images')}
+                    </option>)}
+                </select>
+            </label>
+            {datasetsError && <div className='FieldError'>
+                <span>{datasetsError}</span>
+                <button type='button' onClick={fetchDatasets}>{t('重试', 'Retry')}</button>
+            </div>}
+        </>
     );
 
     const currentResults = engine === 'dino' ? dinoResults : l2gResults;
     const canSearch = engine === 'dino'
         ? !!queryFile && !!selectedCollection && selectedCollection.compatible && selectedCollection.count > 0 && dinoReady
-        : !!queryFile && !!databaseDir.trim() && l2gReady;
+        : !!queryFile && !!selectedDatasetId && l2gReady;
 
     const renderResults = () => {
         if (!searchAttempted || searchError) return null;
@@ -403,8 +461,8 @@ export const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
         {engine === 'dino'
             ? t('选择向量数据库中的场景、目标和版本进行毫秒级相似检索。查询会绑定该版本的特征配置，不会跨模型混检。',
                 'Run millisecond similarity search against a scene, target and version from Vector Database. Queries bind to that version profile and never mix model spaces.')
-            : t('L2G 使用 FIRe 局部特征、ASMK 聚合与全局重排，适合更重视精度的秒到分钟级检索。',
-                'L2G uses FIRe local features, ASMK aggregation, and global re-ranking for precision-focused searches taking seconds to minutes.')}
+            : t('精细模式复用数据中心的唯一原图，由 L2G 局部特征与全局重排处理困难样本，无需填写服务器路径。',
+                'Precision mode reuses canonical data-center images and applies L2G local-to-global reranking without server paths.')}
     </div>;
 
     const renderSearchForm = () => <div className='SearchForm'>
@@ -437,13 +495,13 @@ export const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
         <div className='L2GRetrievalPopupContent VisualRetrievalPopupContent'>
             <div className='EngineTabs' role='tablist' aria-label={t('视觉检索引擎', 'Visual retrieval engine')}>
                 <button type='button' role='tab' aria-selected={engine === 'dino'} className={engine === 'dino' ? 'active' : ''} onClick={() => changeEngine('dino')}>
-                    <strong>{t('DINO 系列', 'DINO Series')}</strong>
-                    <span>{t('快速向量检索', 'Fast vector search')}</span>
+                    <strong>{t('快速模式', 'Fast Mode')}</strong>
+                    <span>{t('DINO 向量检索', 'DINO vector search')}</span>
                     <i className={dinoReady ? 'ready' : 'pending'}/>
                 </button>
                 <button type='button' role='tab' aria-selected={engine === 'l2g'} className={engine === 'l2g' ? 'active' : ''} onClick={() => changeEngine('l2g')}>
-                    <strong>{t('L2G 系统', 'L2G System')}</strong>
-                    <span>{t('局部到全局高精度检索', 'Local-to-global precision search')}</span>
+                    <strong>{t('精细模式', 'Precision Mode')}</strong>
+                    <span>{t('L2G 局部到全局重排', 'L2G local-to-global reranking')}</span>
                     <i className={l2gReady ? 'ready' : 'pending'}/>
                 </button>
             </div>

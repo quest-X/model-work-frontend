@@ -5,6 +5,7 @@ import {PopupActions} from '../../../logic/actions/PopupActions';
 import {AppState} from '../../../store';
 import {Language} from '../../../data/LanguageConfig';
 import {getEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
+import {TrainingDatasetSelection} from '../../../services/TrainingDatasetSelection';
 import './TrainingTaskPopup.scss';
 
 interface DatasetSummary {
@@ -36,12 +37,23 @@ interface IProps {
 
 const POLL_INTERVAL_MS = 3000;
 
-const TrainingTaskPopup: React.FC<IProps> = ({language}) => {
+const getJobDatasetLabel = (
+    datasets: DatasetSummary[],
+    datasetId: string | undefined,
+    zh: boolean,
+): string => {
+    if (!datasetId) return zh ? '未记录' : 'Not recorded';
+    return datasets.find(dataset => dataset.id === datasetId)?.name || datasetId;
+};
+
+export const TrainingTaskPopup: React.FC<IProps> = ({language}) => {
     const zh = language === Language.CHINESE;
     const baseUrl = getEngineBaseUrl();
 
     const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
-    const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
+    const [selectedDatasetId, setSelectedDatasetId] = useState<string>(
+        () => TrainingDatasetSelection.get() || '',
+    );
     const [epochs, setEpochs] = useState(100);
     const [imgsz, setImgsz] = useState(640);
     const [batch, setBatch] = useState(16);
@@ -52,7 +64,16 @@ const TrainingTaskPopup: React.FC<IProps> = ({language}) => {
         fetch(`${baseUrl}/datasets`).then(r => r.json()).then(data => {
             if (Array.isArray(data.datasets)) {
                 setDatasets(data.datasets);
-                if (data.datasets.length > 0) setSelectedDatasetId((prev) => prev || data.datasets[0].id);
+                setSelectedDatasetId((previous) => {
+                    const preferred = TrainingDatasetSelection.get();
+                    const next = data.datasets.some((dataset: DatasetSummary) => dataset.id === preferred)
+                        ? preferred as string
+                        : data.datasets.some((dataset: DatasetSummary) => dataset.id === previous)
+                            ? previous
+                            : data.datasets[0]?.id || '';
+                    TrainingDatasetSelection.set(next || null);
+                    return next;
+                });
             }
         }).catch(() => undefined);
     }, [baseUrl]);
@@ -126,7 +147,10 @@ const TrainingTaskPopup: React.FC<IProps> = ({language}) => {
                 <div className='SectionHeader'>{zh ? '新建训练任务' : 'New Training Job'}</div>
                 <div className='FormRow'>
                     <label>{zh ? '数据集' : 'Dataset'}</label>
-                    <select value={selectedDatasetId} onChange={(e) => setSelectedDatasetId(e.target.value)}>
+                    <select value={selectedDatasetId} onChange={(e) => {
+                        setSelectedDatasetId(e.target.value);
+                        TrainingDatasetSelection.set(e.target.value || null);
+                    }}>
                         {datasets.length === 0 && <option value=''>{zh ? '暂无数据集' : 'No datasets'}</option>}
                         {datasets.map(ds => (
                             <option key={ds.id} value={ds.id}>{ds.name} ({ds.image_count})</option>
@@ -157,11 +181,16 @@ const TrainingTaskPopup: React.FC<IProps> = ({language}) => {
                     const pct = job.progress.total_epochs > 0
                         ? Math.round((job.progress.epoch / job.progress.total_epochs) * 100)
                         : 0;
+                    const datasetLabel = getJobDatasetLabel(datasets, job.dataset_id, zh);
                     return (
                         <div className='JobRow' key={job.job_id}>
                             <div className='JobRowHeader'>
                                 <span className='JobName'>{job.name || job.job_id}</span>
                                 <span className={`JobState state-${job.state}`}>{stateLabel(job.state)}</span>
+                            </div>
+                            <div className='JobDataset'>
+                                <span>{zh ? '数据集' : 'Dataset'}</span>
+                                <strong title={datasetLabel}>{datasetLabel}</strong>
                             </div>
                             {job.state === 'running' && (
                                 <div className='ProgressBar'>

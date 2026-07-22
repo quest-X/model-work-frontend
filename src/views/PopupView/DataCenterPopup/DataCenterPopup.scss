@@ -1,7 +1,7 @@
 @import '../../../settings/Settings';
 
 .GenericYesNoPopup:has(.DataCenterPopupContent) {
-  width: min(680px, calc(100vw - 32px));
+  width: min(760px, calc(100vw - 32px));
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
   box-sizing: border-box;
@@ -14,160 +14,536 @@
   .Footer {
     height: 64px;
     flex: 0 0 64px;
-    padding: 0 32px;
+    padding: 0 28px;
   }
 }
 
 .DataCenterPopupContent {
   display: flex;
   flex-direction: column;
+  gap: 14px;
   width: 100%;
   min-width: 0;
-  padding: 24px 32px 20px;
+  padding: 20px 28px 18px;
   box-sizing: border-box;
 
-  .SectionHeader {
-    color: white;
-    font-size: 13px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding-bottom: 6px;
-    margin-bottom: 6px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-    opacity: 0.7;
+  button {
+    font: inherit;
   }
 
-  .DatasetListSection {
-    margin-top: 4px;
-  }
-
-  .DatasetList {
-    max-height: min(260px, 30vh);
-    overflow-y: auto;
-  }
-
-  .EmptyHint {
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 13px;
-    padding: 8px 0;
-  }
-
-  .DatasetRow {
+  .ProjectDataSummary {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
-    padding: 8px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    color: white;
+    gap: 18px;
 
-    &:hover {
-      background: rgba(255, 255, 255, 0.06);
-    }
-
-    &.selected {
-      background: rgba(77, 166, 255, 0.15);
-    }
-
-    .DatasetRowMain {
+    > div {
       display: flex;
+      min-width: 0;
       flex-direction: column;
+      gap: 3px;
+
+      span {
+        color: rgba(255, 255, 255, 0.48);
+        font-size: 11px;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+      }
+
+      strong {
+        overflow: hidden;
+        font-size: 17px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
     }
 
-    .DatasetName {
-      font-weight: 600;
-      font-size: 14px;
-    }
-
-    .DatasetMeta {
-      font-size: 12px;
-      opacity: 0.7;
-    }
-
-    .DatasetSource {
-      margin-top: 2px;
+    p {
+      margin: 0 0 2px;
+      color: rgba(255, 255, 255, 0.48);
       font-size: 11px;
-      color: #66bb6a;
+      text-align: right;
     }
+  }
 
-    .DeleteButton {
-      background: none;
-      border: none;
-      color: rgba(255, 255, 255, 0.6);
-      font-size: 18px;
+  .DataTierTabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+
+    > button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 44px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.025);
+      padding: 0 14px;
+      color: rgba(255, 255, 255, 0.68);
       cursor: pointer;
-      padding: 0 6px;
+      transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
 
       &:hover {
-        color: #ff6b6b;
+        border-color: rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      strong {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 24px;
+        height: 22px;
+        border-radius: 11px;
+        background: rgba(255, 255, 255, 0.08);
+        font-size: 11px;
+      }
+
+      &.active {
+        color: white;
+
+        &.temporary {
+          border-color: rgba(92, 168, 255, 0.55);
+          background: rgba(62, 129, 207, 0.15);
+        }
+
+        &.persistent {
+          border-color: rgba(91, 201, 126, 0.5);
+          background: rgba(58, 143, 87, 0.14);
+        }
       }
     }
   }
 
-  .StatsPanel {
-    margin-top: 10px;
-    padding: 10px;
+  .DataTierPanel {
+    display: flex;
+    min-height: 220px;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .TierExplanation {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    border-left: 3px solid #5ca8ff;
+    border-radius: 0 5px 5px 0;
+    background: rgba(92, 168, 255, 0.06);
+    padding: 9px 11px;
+
+    &.persistent {
+      border-left-color: #5bc97e;
+      background: rgba(91, 201, 126, 0.055);
+    }
+
+    > div {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 2px;
+
+      strong {
+        font-size: 12px;
+      }
+
+      span {
+        color: rgba(255, 255, 255, 0.48);
+        font-size: 10px;
+        line-height: 1.45;
+      }
+    }
+
+    > button {
+      flex: 0 0 auto;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 4px;
+      background: transparent;
+      padding: 6px 10px;
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 11px;
+      cursor: pointer;
+
+      &:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.06);
+        color: white;
+      }
+
+      &:disabled {
+        cursor: default;
+        opacity: 0.45;
+      }
+    }
+  }
+
+  .LocalDataList,
+  .DatasetList {
+    display: flex;
+    max-height: min(400px, 48vh);
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    padding-right: 3px;
+  }
+
+  .EmptyState {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 150px;
+    border: 1px dashed rgba(255, 255, 255, 0.13);
+    border-radius: 6px;
+    flex-direction: column;
+    gap: 5px;
+    text-align: center;
+
+    strong {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    span {
+      color: rgba(255, 255, 255, 0.42);
+      font-size: 11px;
+    }
+
+    &.error {
+      border-color: rgba(255, 105, 105, 0.28);
+
+      strong {
+        color: #ffaaaa;
+      }
+    }
+  }
+
+  .LocalDataCard {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.025);
+    padding: 11px 12px;
+
+    &.active {
+      border-color: rgba(92, 168, 255, 0.42);
+      background: rgba(92, 168, 255, 0.075);
+    }
+  }
+
+  .DataCardIdentity {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+
+    > span:not(.SyncState):not(.InlineError) {
+      color: rgba(255, 255, 255, 0.48);
+      font-size: 10px;
+    }
+  }
+
+  .DataCardTitleRow {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 7px;
+
+    strong {
+      overflow: hidden;
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .CurrentBadge {
+    flex: 0 0 auto;
+    border-radius: 8px;
+    background: rgba(92, 168, 255, 0.18);
+    padding: 2px 6px;
+    color: #8dc4ff;
+    font-size: 9px;
+  }
+
+  .SyncState {
+    width: fit-content;
+    font-size: 10px;
+
+    &.local,
+    &.dirty {
+      color: #f0bd69;
+    }
+
+    &.syncing {
+      color: #8dc4ff;
+    }
+
+    &.synced {
+      color: #68d18b;
+    }
+
+    &.error {
+      color: #ff9090;
+    }
+  }
+
+  .InlineError {
+    color: #ffaaaa;
+    font-size: 10px;
+  }
+
+  .DataCardActions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+
+    button {
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      background: transparent;
+      padding: 7px 10px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 10px;
+      cursor: pointer;
+
+      &:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.06);
+        color: white;
+      }
+
+      &.PrimaryAction {
+        border-color: rgba(91, 201, 126, 0.42);
+        color: #74d894;
+      }
+
+      &:disabled {
+        cursor: default;
+        opacity: 0.45;
+      }
+    }
+  }
+
+  .UnsupportedHint {
+    max-width: 110px;
+    color: rgba(255, 255, 255, 0.36);
+    font-size: 9px;
+    text-align: right;
+  }
+
+  .DatasetItem {
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.025);
+
+    &.selected {
+      border-color: rgba(91, 201, 126, 0.38);
+      background: rgba(91, 201, 126, 0.045);
+    }
+  }
+
+  .DatasetRow {
+    display: flex;
+    align-items: stretch;
+    min-height: 66px;
+  }
+
+  .DatasetToggle {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 0;
+    background: transparent;
+    padding: 9px 8px 9px 12px;
+    color: white;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.035);
+    }
+  }
+
+  .DatasetRowMain {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .DatasetName {
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .DatasetMeta {
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 10px;
+  }
+
+  .DatasetSource {
+    overflow: hidden;
+    color: #68d18b;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .DatasetChevron {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 15px;
+    transition: transform 0.18s ease;
+
+    &.expanded {
+      transform: rotate(180deg);
+    }
+  }
+
+  .DeleteButton {
+    width: 38px;
+    flex: 0 0 38px;
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 17px;
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(255, 107, 107, 0.06);
+      color: #ff8585;
+    }
+  }
+
+  .DatasetDetails {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 10px 12px 12px;
+  }
+
+  .StatsState {
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.035);
+    padding: 9px 10px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 10px;
+
+    &.error {
+      color: #ffaaaa;
+    }
+  }
+
+  .StatsPanel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px 18px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.035);
+    padding: 9px 10px;
   }
 
   .StatsRow {
     display: flex;
     justify-content: space-between;
-    color: white;
-    font-size: 13px;
-    padding: 3px 0;
+    gap: 12px;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 10px;
   }
 
   .TaskLinksSection {
-    margin-top: 18px;
+    margin-top: 11px;
+  }
+
+  .SectionHeader {
+    margin-bottom: 7px;
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 9px;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
   }
 
   .TaskLinks {
-    display: flex;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .TaskLink {
-    flex: 1;
-    text-align: center;
-    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: white;
-    font-size: 13px;
+    background: transparent;
+    padding: 8px 10px;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 11px;
     font-weight: 600;
+    text-align: center;
+    text-decoration: none;
     cursor: pointer;
-    transition: background-color 0.2s ease;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(91, 201, 126, 0.34);
+      background: rgba(91, 201, 126, 0.06);
+      color: white;
     }
+  }
+
+  .TaskCapabilityHint {
+    margin: 7px 1px 0;
+    color: rgba(255, 255, 255, 0.38);
+    font-size: 9px;
+    line-height: 1.45;
   }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 620px) {
   .GenericYesNoPopup:has(.DataCenterPopupContent) {
     width: calc(100vw - 20px);
     max-width: calc(100vw - 20px);
     max-height: calc(100vh - 20px);
 
     .Footer {
-      height: 64px;
-      padding: 0 20px;
+      height: 60px;
+      padding: 0 18px;
     }
   }
 
   .DataCenterPopupContent {
-    padding: 18px 20px 16px;
+    padding: 16px 18px 14px;
 
-    .DatasetList {
-      max-height: 34vh;
+    .ProjectDataSummary {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 5px;
+
+      p {
+        text-align: left;
+      }
     }
 
+    .LocalDataCard {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .DataCardActions {
+      justify-content: stretch;
+
+      button {
+        flex: 1;
+      }
+    }
+
+    .StatsPanel,
     .TaskLinks {
-      flex-direction: column;
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 }
