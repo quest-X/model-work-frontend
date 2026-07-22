@@ -235,8 +235,10 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     const [results, setResults] = useState<SearchResult[] | null>(null);
     const [searchError, setSearchError] = useState<string | null>(null);
     const queryPreviewRef = useRef<string | null>(null);
+    const previousTargetIdRef = useRef<string | null>(null);
 
     const selected = collections.find(collection => collection.name === selectedName) || null;
+    const selectedTargetId = selected ? collectionTargetId(selected) : null;
     const hierarchy = useMemo<SceneGroup[]>(() => {
         const sceneMap = new Map<string, {
             sceneId: string;
@@ -393,23 +395,27 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     }, [baseUrl, job, refreshCollections, t]);
 
     useEffect(() => {
+        const targetChanged = previousTargetIdRef.current !== selectedTargetId;
         setDatasetId('');
         setPendingFiles([]);
         setIngestSource('dataset');
         setIngestError(null);
         setDeleteConfirm(false);
         setDeleteError(null);
-        setQueryFile(null);
         setResults(null);
         setSearchError(null);
         setClassFilter('');
         setQueryBbox('');
-        if (queryPreviewRef.current) {
-            URL.revokeObjectURL(queryPreviewRef.current);
-            queryPreviewRef.current = null;
-            setQueryPreview(null);
+        if (targetChanged) {
+            setQueryFile(null);
+            if (queryPreviewRef.current) {
+                URL.revokeObjectURL(queryPreviewRef.current);
+                queryPreviewRef.current = null;
+                setQueryPreview(null);
+            }
         }
-    }, [selectedName]);
+        previousTargetIdRef.current = selectedTargetId;
+    }, [selectedName, selectedTargetId]);
 
     useEffect(() => () => {
         if (queryPreviewRef.current) URL.revokeObjectURL(queryPreviewRef.current);
@@ -615,7 +621,9 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
 
     const queryDropzone = useDropzone({
         accept: {'image/*': ['.jpg', '.jpeg', '.png', '.bmp', '.webp']},
-        disabled: !embedderReady || !storeReady || !selected?.compatible || searching,
+        // File selection is local and remains useful before the user switches
+        // from an incompatible historical version to a compatible one.
+        disabled: searching,
         multiple: false,
         onDrop: onQueryDrop,
     });

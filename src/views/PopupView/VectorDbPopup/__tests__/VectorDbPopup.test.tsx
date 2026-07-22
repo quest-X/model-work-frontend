@@ -68,6 +68,14 @@ describe('VectorDbPopup', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        Object.defineProperty(URL, 'createObjectURL', {
+            configurable: true,
+            value: jest.fn(() => 'blob:query-preview'),
+        });
+        Object.defineProperty(URL, 'revokeObjectURL', {
+            configurable: true,
+            value: jest.fn(),
+        });
         statusBody = readyStatus;
         collectionList = [collection];
         global.fetch = jest.fn((input: RequestInfo, init?: RequestInit) => {
@@ -208,5 +216,25 @@ describe('VectorDbPopup', () => {
         expect(screen.getByText('v2 · 历史')).toBeInTheDocument();
         expect((global.fetch as jest.Mock).mock.calls.some(([url, init]) =>
             String(url).endsWith('/versions') && init?.method === 'POST')).toBe(false);
+    });
+
+    it('selects a query image on an incompatible version and keeps it when switching versions', async () => {
+        collectionList = [
+            {...collection, compatible: false, compatibility_reason: '旧模型不兼容'},
+            {...collection, name: 'frame_index_v2', version: 2, active: false},
+        ];
+        const {container} = render(<VectorDbPopup language={Language.CHINESE}/>);
+
+        await screen.findByRole('button', {name: '切换到兼容的 v2'});
+        fireEvent.click(screen.getByRole('tab', {name: '快速向量检索'}));
+        const queryInput = container.querySelector('.QueryDropzone input[type="file"]') as HTMLInputElement;
+        expect(queryInput).not.toBeDisabled();
+        const queryImage = new File(['image'], 'query.png', {type: 'image/png'});
+        fireEvent.change(queryInput, {target: {files: [queryImage]}});
+
+        expect(await screen.findByAltText('query.png')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '切换到兼容的 v2'}));
+        expect(screen.getByText('v2 · 历史')).toBeInTheDocument();
+        expect(screen.getByAltText('query.png')).toBeInTheDocument();
     });
 });
