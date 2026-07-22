@@ -32,6 +32,11 @@ const collection = {
     profile_id: 'fp_test_image',
     profile: {profile_id: 'fp_test_image', model: 'dinov2:base', dimension: 768, granularity: 'image', metric: 'COSINE'},
     library_id: 'library_test',
+    target_id: 'target_test',
+    target_name: '产线帧库',
+    scene_id: 'scene_line_1',
+    scene_name: '一号产线',
+    world_id: null,
     version: 1,
     active: true,
     index_type: 'IVF_FLAT',
@@ -71,12 +76,14 @@ describe('VectorDbPopup', () => {
             if (url.endsWith('/versions') && init?.method === 'POST') {
                 return Promise.resolve(jsonResponse({...collection, name: 'frame_index_v2', version: 2}));
             }
-            if (url.endsWith('/collections') && init?.method === 'POST') {
+            if (url.endsWith('/targets') && init?.method === 'POST') {
                 const request = JSON.parse(String(init.body));
                 return Promise.resolve(jsonResponse({
                     ...collection,
-                    name: request.name,
-                    display_name: request.name,
+                    name: request.target_name,
+                    display_name: request.target_name,
+                    target_name: request.target_name,
+                    scene_name: request.scene_name,
                     granularity: request.granularity,
                 }, 201));
             }
@@ -102,6 +109,19 @@ describe('VectorDbPopup', () => {
         expect(screen.getByText(/高精度检索保持为独立功能/)).toBeInTheDocument();
     });
 
+    it('groups physical indexes as scene, target and version nodes', async () => {
+        collectionList = [
+            collection,
+            {...collection, name: 'frame_index_v2', version: 2, active: false, count: 0},
+        ];
+        render(<VectorDbPopup language={Language.CHINESE}/>);
+
+        expect((await screen.findAllByText('一号产线')).length).toBeGreaterThan(0);
+        expect(screen.getByText('v1')).toBeInTheDocument();
+        expect(screen.getByText('v2')).toBeInTheDocument();
+        expect(document.querySelectorAll('.TargetGroup')).toHaveLength(1);
+    });
+
     it('does not warm up implicitly and exposes an explicit model load action', async () => {
         statusBody = {...readyStatus, embedder: {...readyStatus.embedder, state: 'not_loaded', progress: 0}};
         render(<VectorDbPopup language={Language.CHINESE}/>);
@@ -117,21 +137,26 @@ describe('VectorDbPopup', () => {
             String(url).endsWith('/warmup') && init?.method === 'POST')).toBe(true));
     });
 
-    it('creates a collection with the explicitly selected immutable vector unit', async () => {
+    it('creates a target in a scene with the explicitly selected immutable vector unit', async () => {
         render(<VectorDbPopup language={Language.CHINESE}/>);
         await screen.findAllByText('产线帧库');
 
-        fireEvent.click(screen.getByRole('button', {name: /新建集合/}));
+        fireEvent.click(screen.getByRole('button', {name: /新建目标/}));
         fireEvent.click(screen.getByRole('radio', {name: /整张图片/}));
-        fireEvent.change(screen.getByPlaceholderText('例如：产线缺陷'), {target: {value: '缺陷整图库'}});
+        fireEvent.change(screen.getByPlaceholderText('例如：钢板产线'), {target: {value: '二号产线'}});
+        fireEvent.change(screen.getByPlaceholderText('例如：划痕'), {target: {value: '缺陷整图库'}});
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', {name: '创建集合'}));
+            fireEvent.click(screen.getByRole('button', {name: '创建目标及 v1'}));
         });
 
         await waitFor(() => {
             const createCall = (global.fetch as jest.Mock).mock.calls.find(([url, init]) =>
-                String(url).endsWith('/collections') && init?.method === 'POST');
-            expect(JSON.parse(String(createCall?.[1]?.body))).toEqual({name: '缺陷整图库', granularity: 'image'});
+                String(url).endsWith('/targets') && init?.method === 'POST');
+            expect(JSON.parse(String(createCall?.[1]?.body))).toEqual({
+                scene_name: '二号产线',
+                target_name: '缺陷整图库',
+                granularity: 'image',
+            });
         });
     });
 
@@ -169,5 +194,19 @@ describe('VectorDbPopup', () => {
 
         await waitFor(() => expect((global.fetch as jest.Mock).mock.calls.some(([url, init]) =>
             String(url).endsWith('/versions') && init?.method === 'POST')).toBe(true));
+    });
+
+    it('offers an existing compatible target version instead of duplicating its profile', async () => {
+        collectionList = [
+            {...collection, compatible: false, compatibility_reason: '旧模型不兼容'},
+            {...collection, name: 'frame_index_v2', version: 2, active: false},
+        ];
+        render(<VectorDbPopup language={Language.CHINESE}/>);
+
+        const switchButton = await screen.findByRole('button', {name: '切换到兼容的 v2'});
+        fireEvent.click(switchButton);
+        expect(screen.getByText('v2 · 历史')).toBeInTheDocument();
+        expect((global.fetch as jest.Mock).mock.calls.some(([url, init]) =>
+            String(url).endsWith('/versions') && init?.method === 'POST')).toBe(false);
     });
 });

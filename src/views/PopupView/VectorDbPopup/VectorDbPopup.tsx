@@ -58,6 +58,11 @@ interface CollectionInfo {
     profile_id: string;
     profile: FeatureProfile;
     library_id: string;
+    target_id?: string;
+    target_name?: string;
+    scene_id?: string;
+    scene_name?: string;
+    world_id?: string | null;
     version: number;
     active: boolean;
     index_type: string;
@@ -73,6 +78,20 @@ interface CollectionInfo {
         failed_images?: number;
         skipped_images?: number;
     };
+}
+
+interface TargetGroup {
+    targetId: string;
+    targetName: string;
+    vectorCount: number;
+    versions: CollectionInfo[];
+}
+
+interface SceneGroup {
+    sceneId: string;
+    sceneName: string;
+    vectorCount: number;
+    targets: TargetGroup[];
 }
 
 interface IngestJob {
@@ -129,17 +148,35 @@ const JOB_STATE_LABELS: Record<string, [string, string]> = {
     queued: ['等待入库', 'Queued'],
 };
 
-const normalizeCollection = (collection: CollectionInfo): CollectionInfo => ({
-    ...collection,
-    granularity: collection.granularity || (collection.mode === 'images' ? 'image' : 'bbox'),
-    schema_version: collection.schema_version || 1,
-    version: collection.version || 1,
-    active: collection.active ?? true,
-    compatible: collection.compatible ?? true,
-    quality: collection.quality || {},
-    index_type: collection.index_type || 'FLAT',
-    index_params: collection.index_params || {},
-});
+const collectionTargetId = (collection: CollectionInfo) =>
+    collection.target_id || collection.library_id || `target_${collection.name}`;
+
+const collectionTargetName = (collection: CollectionInfo) =>
+    collection.target_name || collection.display_name || collection.name;
+
+const collectionGranularity = (collection: CollectionInfo): Granularity =>
+    collection.granularity || (collection.mode === 'images' ? 'image' : 'bbox');
+
+const normalizeCollection = (collection: CollectionInfo): CollectionInfo => {
+    const targetId = collectionTargetId(collection);
+    const targetName = collectionTargetName(collection);
+    return {
+        ...collection,
+        display_name: targetName,
+        target_id: targetId,
+        target_name: targetName,
+        scene_id: collection.scene_id || 'scene_default',
+        scene_name: collection.scene_name || '默认场景',
+        granularity: collectionGranularity(collection),
+        schema_version: collection.schema_version || 1,
+        version: collection.version || 1,
+        active: collection.active ?? true,
+        compatible: collection.compatible ?? true,
+        quality: collection.quality || {},
+        index_type: collection.index_type || 'FLAT',
+        index_params: collection.index_params || {},
+    };
+};
 
 const readResponse = async <T,>(response: Response): Promise<T> => {
     const body = await response.json().catch(() => ({}));
@@ -168,7 +205,8 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     const [collectionsError, setCollectionsError] = useState<string | null>(null);
     const [selectedName, setSelectedName] = useState<string | null>(null);
     const [showCreate, setShowCreate] = useState(false);
-    const [newName, setNewName] = useState('');
+    const [newSceneName, setNewSceneName] = useState('默认场景');
+    const [newTargetName, setNewTargetName] = useState('');
     const [createGranularity, setCreateGranularity] = useState<Granularity>('bbox');
     const [creating, setCreating] = useState(false);
     const [createError, setCreateError] = useState<string | null>(null);
@@ -199,6 +237,58 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     const queryPreviewRef = useRef<string | null>(null);
 
     const selected = collections.find(collection => collection.name === selectedName) || null;
+    const hierarchy = useMemo<SceneGroup[]>(() => {
+        const sceneMap = new Map<string, {
+            sceneId: string;
+            sceneName: string;
+            vectorCount: number;
+            targets: Map<string, TargetGroup>;
+        }>();
+        collections.forEach(collection => {
+            const sceneId = collection.scene_id || 'scene_default';
+            const targetId = collection.target_id || collection.library_id;
+            let scene = sceneMap.get(sceneId);
+            if (!scene) {
+                scene = {
+                    sceneId,
+                    sceneName: collection.scene_name || '默认场景',
+                    vectorCount: 0,
+                    targets: new Map<string, TargetGroup>(),
+                };
+                sceneMap.set(sceneId, scene);
+            }
+            let target = scene.targets.get(targetId);
+            if (!target) {
+                target = {
+                    targetId,
+                    targetName: collection.target_name || collection.display_name,
+                    vectorCount: 0,
+                    versions: [],
+                };
+                scene.targets.set(targetId, target);
+            }
+            target.versions.push(collection);
+            target.vectorCount += collection.count;
+            scene.vectorCount += collection.count;
+        });
+        return Array.from(sceneMap.values())
+            .sort((left, right) => left.sceneName.localeCompare(right.sceneName))
+            .map(scene => ({
+                sceneId: scene.sceneId,
+                sceneName: scene.sceneName,
+                vectorCount: scene.vectorCount,
+                targets: Array.from(scene.targets.values())
+                    .sort((left, right) => left.targetName.localeCompare(right.targetName))
+                    .map(target => ({
+                        ...target,
+                        versions: target.versions.sort((left, right) => left.version - right.version),
+                    })),
+            }));
+    }, [collections]);
+    const totalTargets = useMemo(
+        () => hierarchy.reduce((total, scene) => total + scene.targets.length, 0),
+        [hierarchy],
+    );
     const totalVectors = useMemo(
         () => collections.reduce((total, collection) => total + collection.count, 0),
         [collections],
@@ -338,19 +428,26 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         }
     };
 
-    const createCollection = async () => {
-        const name = newName.trim();
-        if (!name || creating) return;
+    const createTarget = async () => {
+        const sceneName = newSceneName.trim();
+        const targetName = newTargetName.trim();
+        if (!sceneName || !targetName || creating) return;
         setCreating(true);
         setCreateError(null);
         try {
-            const response = await fetch(`${baseUrl}/collections`, {
+            const existingScene = hierarchy.find(scene => scene.sceneName === sceneName);
+            const response = await fetch(`${baseUrl}/targets`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({name, granularity: createGranularity}),
+                body: JSON.stringify({
+                    scene_id: existingScene?.sceneId,
+                    scene_name: sceneName,
+                    target_name: targetName,
+                    granularity: createGranularity,
+                }),
             });
             const created = await readResponse<CollectionInfo>(response);
-            setNewName('');
+            setNewTargetName('');
             setShowCreate(false);
             await refreshCollections();
             setSelectedName(created.name);
@@ -385,8 +482,12 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         setIngestError(null);
         try {
             const response = await fetch(
-                `${baseUrl}/collections/${encodeURIComponent(selected.name)}/versions`,
-                {method: 'POST'},
+                `${baseUrl}/targets/${encodeURIComponent(selected.target_id || selected.library_id)}/versions`,
+                {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({}),
+                },
             );
             const created = await readResponse<CollectionInfo>(response);
             await refreshCollections();
@@ -571,14 +672,24 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
 
     const renderProfileWarning = (collection: CollectionInfo) => {
         if (collection.compatible) return null;
+        const compatibleSibling = collections.find(candidate =>
+            collectionTargetId(candidate) === collectionTargetId(collection)
+            && candidate.compatible,
+        );
         return <div className='ProfileWarning' role='alert'>
             <div>
                 <strong>{t('当前特征模型与这个版本不兼容', 'Current feature model is incompatible with this version')}</strong>
                 <span>{collection.compatibility_reason}</span>
             </div>
-            <button type='button' className='PrimaryButton' disabled={versioning} onClick={createCurrentVersion}>
-                {versioning ? t('创建中…', 'Creating…') : t('新建当前模型版本', 'Create current-model version')}
-            </button>
+            {compatibleSibling
+                ? <button
+                    type='button'
+                    className='PrimaryButton'
+                    onClick={() => setSelectedName(compatibleSibling.name)}
+                >{t(`切换到兼容的 v${compatibleSibling.version}`, `Open compatible v${compatibleSibling.version}`)}</button>
+                : <button type='button' className='PrimaryButton' disabled={versioning} onClick={createCurrentVersion}>
+                    {versioning ? t('创建中…', 'Creating…') : t('新建当前模型版本', 'Create current-model version')}
+                </button>}
         </div>;
     };
 
@@ -617,16 +728,28 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         return null;
     };
 
-    const renderCreateCollection = () => (
+    const renderCreateTarget = () => (
         <div className='CreateCollectionCard'>
             <label className='FieldStack'>
-                <span>{t('集合名称', 'Collection name')}</span>
+                <span>{t('场景名称', 'Scene name')}</span>
                 <input
                     autoFocus
-                    value={newName}
-                    placeholder={t('例如：产线缺陷', 'e.g. line-defects')}
-                    onChange={event => setNewName(event.target.value)}
-                    onKeyDown={event => { if (event.key === 'Enter') createCollection(); }}
+                    list='vector-db-scenes'
+                    value={newSceneName}
+                    placeholder={t('例如：钢板产线', 'e.g. steel line')}
+                    onChange={event => setNewSceneName(event.target.value)}
+                />
+                <datalist id='vector-db-scenes'>
+                    {hierarchy.map(scene => <option key={scene.sceneId} value={scene.sceneName}/>) }
+                </datalist>
+            </label>
+            <label className='FieldStack'>
+                <span>{t('目标名称', 'Target name')}</span>
+                <input
+                    value={newTargetName}
+                    placeholder={t('例如：划痕', 'e.g. scratch')}
+                    onChange={event => setNewTargetName(event.target.value)}
+                    onKeyDown={event => { if (event.key === 'Enter') createTarget(); }}
                 />
             </label>
             <fieldset className='ModePicker'>
@@ -658,10 +781,10 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 <button
                     type='button'
                     className='PrimaryButton'
-                    disabled={!newName.trim() || creating || !storeReady || storeBad || backendDown}
-                    onClick={createCollection}
+                    disabled={!newSceneName.trim() || !newTargetName.trim() || creating || !storeReady || storeBad || backendDown}
+                    onClick={createTarget}
                 >
-                    {creating ? t('创建中…', 'Creating…') : t('创建集合', 'Create collection')}
+                    {creating ? t('创建中…', 'Creating…') : t('创建目标及 v1', 'Create target and v1')}
                 </button>
             </div>
         </div>
@@ -672,9 +795,9 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             <div className='PanelHeading'>
                 <div>
                     <span className='Eyebrow'>{t('资源', 'Resources')}</span>
-                    <strong>{t('向量集合', 'Collections')}</strong>
+                    <strong>{t('场景 / 目标', 'Scenes / targets')}</strong>
                 </div>
-                <span className='CountBadge'>{collections.length}</span>
+                <span className='CountBadge'>{totalTargets}</span>
             </div>
             <button
                 type='button'
@@ -682,10 +805,10 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 disabled={!storeReady || storeBad || backendDown}
                 onClick={() => { setShowCreate(value => !value); setCreateError(null); }}
             >
-                <span aria-hidden='true'>＋</span>{t('新建集合', 'New collection')}
+                <span aria-hidden='true'>＋</span>{t('新建目标', 'New target')}
             </button>
-            {showCreate && renderCreateCollection()}
-            {collectionsLoading && <div className='CollectionState' role='status'>{t('正在读取集合…', 'Loading collections…')}</div>}
+            {showCreate && renderCreateTarget()}
+            {collectionsLoading && <div className='CollectionState' role='status'>{t('正在读取目录…', 'Loading catalog…')}</div>}
             {!collectionsLoading && collectionsError && (
                 <div className='CollectionState error' role='alert'>
                     <span>{collectionsError}</span>
@@ -694,31 +817,45 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             )}
             {!collectionsLoading && !collectionsError && collections.length === 0 && (
                 <div className='CollectionState empty'>
-                    <strong>{t('还没有向量集合', 'No collections yet')}</strong>
-                    <span>{t('新建集合后即可导入图片并生成向量。', 'Create a collection, then add images to generate vectors.')}</span>
+                    <strong>{t('还没有目标', 'No targets yet')}</strong>
+                    <span>{t('新建场景下的目标后，即可生成第一个向量版本。', 'Create a target in a scene to generate its first vector version.')}</span>
                 </div>
             )}
-            <div className='CollectionList' role='listbox' aria-label={t('向量集合', 'Vector collections')}>
-                {collections.map(collection => (
-                    <button
-                        type='button'
-                        role='option'
-                        key={collection.name}
-                        className={selectedName === collection.name ? 'CollectionRow selected' : 'CollectionRow'}
-                        aria-selected={selectedName === collection.name}
-                        onClick={() => setSelectedName(collection.name)}
-                    >
-                        <span className='CollectionRowTop'>
-                            <strong title={collection.display_name}>{collection.display_name}</strong>
-                            <span>{collection.count.toLocaleString()}</span>
-                        </span>
-                        <span className='CollectionRowMeta'>
-                            <span className={`ModeBadge ${collection.granularity}`}>
-                                {granularityLabel(collection.granularity)} · v{collection.version}
-                            </span>
-                            <span>{collection.active ? t('当前', 'active') : collection.dim + t(' 维', 'd')}</span>
-                        </span>
-                    </button>
+            <div className='HierarchyList' role='tree' aria-label={t('向量目录', 'Vector catalog')}>
+                {hierarchy.map(scene => (
+                    <section className='SceneGroup' role='treeitem' aria-expanded='true' key={scene.sceneId}>
+                        <div className='SceneHeading'>
+                            <span aria-hidden='true'>▾</span>
+                            <strong title={scene.sceneName}>{scene.sceneName}</strong>
+                            <small>{scene.targets.length} {t('个目标', 'targets')}</small>
+                        </div>
+                        <div className='TargetList' role='group'>
+                            {scene.targets.map(target => (
+                                <div className='TargetGroup' key={target.targetId}>
+                                    <div className='TargetHeading'>
+                                        <strong title={target.targetName}>{target.targetName}</strong>
+                                        <span>{target.vectorCount.toLocaleString()}</span>
+                                    </div>
+                                    <div className='VersionList'>
+                                        {target.versions.map(collection => (
+                                            <button
+                                                type='button'
+                                                key={collection.name}
+                                                className={selectedName === collection.name ? 'VersionRow selected' : 'VersionRow'}
+                                                aria-current={selectedName === collection.name}
+                                                onClick={() => setSelectedName(collection.name)}
+                                            >
+                                                <span className={`VersionDot ${collection.active ? 'active' : ''}`}/>
+                                                <strong>v{collection.version}</strong>
+                                                <span>{granularityLabel(collection.granularity)}</span>
+                                                <small>{collection.count.toLocaleString()}</small>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
                 ))}
             </div>
         </aside>
@@ -771,7 +908,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             || activeJob || submittingIngest || noSource;
         return <div className='WorkspaceBody'>
             <div className='ImmutableModeNotice'>
-                <span>{t('本集合向量单位', 'Collection vector unit')}</span>
+                <span>{t('本版本向量单位', 'Version vector unit')}</span>
                 <strong>{granularityLabel(selected.granularity)}</strong>
                 <small>{t('创建时已固定，后续入库将始终使用该粒度。', 'Fixed at creation; every ingest uses this granularity.')}</small>
             </div>
@@ -891,8 +1028,8 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         if (!deleteConfirm) return null;
         return <div className='DeleteConfirm' role='alert'>
             <div>
-                <strong>{t('永久删除这个集合？', 'Permanently delete this collection?')}</strong>
-                <span>{t('集合内向量与插件保存的上传副本会被删除；数据任务中的源数据不受影响。',
+                <strong>{t('永久删除这个版本？', 'Permanently delete this version?')}</strong>
+                <span>{t('该版本的向量与插件保存的上传副本会被删除；同一目标的其他版本和源数据不受影响。',
                     'Vectors and plugin-managed upload copies will be removed; Data Task source data is unchanged.')}</span>
                 {deleteError && <span className='InlineError'>{deleteError}</span>}
             </div>
@@ -911,16 +1048,19 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         if (!selected) {
             return <div className='WorkspaceEmpty'>
                 <span className='EmptyGlyph' aria-hidden='true'>◇</span>
-                <strong>{t('选择或新建一个向量集合', 'Select or create a vector collection')}</strong>
-                <span>{t('集合用于隔离不同业务、向量粒度与特征模型。', 'Collections isolate business domains, vector units and feature models.')}</span>
+                <strong>{t('选择或新建一个目标', 'Select or create a target')}</strong>
+                <span>{t('场景管理业务上下文，目标管理检索对象，版本锁定特征模型配方。',
+                    'Scenes hold business context, targets hold retrieval subjects, and versions lock feature recipes.')}</span>
             </div>;
         }
         return <section className='CollectionWorkspace'>
             <header className='CollectionHeader'>
                 <div className='CollectionTitle'>
                     <div>
-                        <span className='Eyebrow'>{t('当前集合', 'Current collection')}</span>
-                        <h3>{selected.display_name}</h3>
+                        <span className='Eyebrow'>
+                            {selected.scene_name || t('默认场景', 'Default scene')} / {t('目标', 'Target')}
+                        </span>
+                        <h3>{selected.target_name || selected.display_name}</h3>
                     </div>
                     <span className={`ModeBadge ${selected.granularity}`}>
                         {granularityLabel(selected.granularity)} · v{selected.version}
@@ -933,10 +1073,12 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                         className='DangerButton'
                         disabled={selectedJobActive}
                         onClick={() => { setDeleteConfirm(true); setDeleteError(null); }}
-                    >{t('删除集合', 'Delete collection')}</button>
+                    >{t('删除版本', 'Delete version')}</button>
                 </div>
             </header>
             <div className='MetadataGrid'>
+                <div><span>{t('场景', 'Scene')}</span><strong>{selected.scene_name || t('默认场景', 'Default scene')}</strong></div>
+                <div><span>{t('目标', 'Target')}</span><strong>{selected.target_name || selected.display_name}</strong></div>
                 <div><span>{t('向量数量', 'Vectors')}</span><strong>{selected.count.toLocaleString()}</strong></div>
                 <div><span>{t('向量维度', 'Dimensions')}</span><strong>{selected.dim}</strong></div>
                 <div><span>{t('特征模型', 'Embedder')}</span><strong title={selected.embedder}>{selected.embedder}</strong></div>
@@ -952,7 +1094,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             </div>
             {renderProfileWarning(selected)}
             {renderDeleteConfirmation()}
-            <div className='WorkspaceTabs' role='tablist' aria-label={t('集合操作', 'Collection actions')}>
+            <div className='WorkspaceTabs' role='tablist' aria-label={t('版本操作', 'Version actions')}>
                 <button
                     type='button'
                     role='tab'
@@ -1015,8 +1157,8 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             <div className='VectorDbIntro'>
                 <div>
                     <span className='Eyebrow'>{t('拓展服务', 'Extension service')}</span>
-                    <p>{t('管理视觉向量集合、导入业务数据，并用快速向量检索验证索引。高精度检索保持为独立功能。',
-                        'Manage visual-vector collections, ingest business data and validate indexes with quick vector queries. High-precision retrieval remains separate.')}</p>
+                    <p>{t('按场景、目标和版本管理 DINO 向量，导入业务数据，并用快速向量检索验证索引。高精度检索保持为独立功能。',
+                        'Manage DINO vectors by scene, target and version, ingest business data and validate indexes with quick queries. High-precision retrieval remains separate.')}</p>
                 </div>
                 <div className='ServiceChips' aria-label={t('服务概况', 'Service overview')}>
                     <span className={`ServiceChip ${storeReady ? 'ready' : 'pending'}`}>
@@ -1031,7 +1173,8 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             </div>
             {renderServiceNotice()}
             <div className='OverviewStats'>
-                <div><span>{t('集合', 'Collections')}</span><strong>{collections.length}</strong></div>
+                <div><span>{t('场景', 'Scenes')}</span><strong>{hierarchy.length}</strong></div>
+                <div><span>{t('目标', 'Targets')}</span><strong>{totalTargets}</strong></div>
                 <div><span>{t('向量总数', 'Total vectors')}</span><strong>{totalVectors.toLocaleString()}</strong></div>
                 <div><span>{t('活动任务', 'Active jobs')}</span><strong>{activeJob ? 1 : 0}</strong></div>
             </div>

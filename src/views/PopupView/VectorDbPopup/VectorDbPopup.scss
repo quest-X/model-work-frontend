@@ -152,7 +152,7 @@
 
   .OverviewStats {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
     margin-bottom: 12px;
 
@@ -180,7 +180,7 @@
 
   .VectorWorkspace {
     display: grid;
-    grid-template-columns: 282px minmax(0, 1fr);
+    grid-template-columns: 300px minmax(0, 1fr);
     min-height: 420px;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -373,6 +373,151 @@
     gap: 4px;
     min-height: 0;
     overflow-y: auto;
+  }
+
+  .HierarchyList {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .SceneGroup {
+    padding: 7px 0 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+
+    &:first-child {
+      padding-top: 0;
+    }
+
+    &:last-child {
+      border-bottom: 0;
+    }
+  }
+
+  .SceneHeading {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    min-height: 26px;
+    padding: 0 4px;
+
+    > span {
+      color: rgba(255, 255, 255, 0.36);
+      font-size: 9px;
+    }
+
+    strong {
+      overflow: hidden;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    small {
+      color: rgba(255, 255, 255, 0.36);
+      font-size: 9px;
+      white-space: nowrap;
+    }
+  }
+
+  .TargetList {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-left: 13px;
+  }
+
+  .TargetGroup {
+    min-width: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.09);
+    padding-left: 8px;
+  }
+
+  .TargetHeading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 24px;
+    padding: 0 5px;
+
+    strong {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span {
+      color: rgba(255, 255, 255, 0.42);
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  .VersionList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .VersionRow {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    padding: 6px 7px;
+    color: rgba(255, 255, 255, 0.55);
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.045);
+    }
+
+    &.selected {
+      border-color: rgba(0, 158, 253, 0.3);
+      background: rgba(0, 158, 253, 0.11);
+      color: white;
+    }
+
+    strong {
+      font-size: 11px;
+    }
+
+    > span:not(.VersionDot) {
+      overflow: hidden;
+      font-size: 9px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    small {
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 9px;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  .VersionDot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+
+    &.active {
+      background: #5cc980;
+      box-shadow: 0 0 5px rgba(92, 201, 128, 0.45);
+    }
   }
 
   .CollectionRow {
@@ -1006,7 +1151,7 @@
     }
 
     .OverviewStats {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .VectorWorkspace {
