@@ -5,7 +5,6 @@ import {AppState} from '../../../store';
 import {Language} from '../../../data/LanguageConfig';
 import {ImageData} from '../../../store/labels/types';
 import {ImageRepository} from '../../../logic/imageRepository/ImageRepository';
-import {ImageActions} from '../../../logic/actions/ImageActions';
 import {PopupActions} from '../../../logic/actions/PopupActions';
 import {
     CatalogDetail,
@@ -19,6 +18,7 @@ import {
     ModelInspectorAPI,
     SlotCapability,
 } from './ModelInspectorAPI';
+import {navigateInspectorImage} from './ModelInspectorNavigation';
 import './ModelInspectorPopup.scss';
 
 export const MODEL_INSPECTOR_ESCAPE_EVENT = 'opensight:model-inspector-escape';
@@ -36,6 +36,8 @@ const MAP_KINDS: Array<{value: Exclude<HeatmapKind, 'channel' | 'gradcam'>; zh: 
 ];
 
 const PALETTES: HeatmapPalette[] = ['turbo', 'magma', 'viridis', 'inferno', 'jet', 'gray'];
+const WHEEL_CAPTURE_IDLE_MS = 300;
+const WHEEL_NAVIGATION_THROTTLE_MS = 60;
 
 const stateLabel = (state: SlotCapability['state'], zh: boolean): string => {
     const values: Record<SlotCapability['state'], [string, string]> = {
@@ -131,6 +133,9 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
     const sessionIdRef = useRef<string | null>(null);
     const autoCaptureKeyRef = useRef<string | null>(null);
     const autoCapturePendingRef = useRef(false);
+    const wheelCaptureTimerRef = useRef<number | null>(null);
+    const wheelNavigationTimerRef = useRef<number | null>(null);
+    const [wheelCaptureRevision, setWheelCaptureRevision] = useState(0);
 
     const discardSession = useCallback((updateState: boolean = true) => {
         const sessionId = sessionIdRef.current;
@@ -178,6 +183,7 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
         } else {
             setPreviewUrl(null);
         }
+        autoCaptureKeyRef.current = null;
         discardSession();
         return () => {
             if (ownedUrl) URL.revokeObjectURL(ownedUrl);
@@ -185,18 +191,37 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
     }, [activeImage?.id, discardSession]);
 
     useEffect(() => () => {
+        if (wheelCaptureTimerRef.current !== null) {
+            window.clearTimeout(wheelCaptureTimerRef.current);
+        }
+        if (wheelNavigationTimerRef.current !== null) {
+            window.clearTimeout(wheelNavigationTimerRef.current);
+        }
         requestRef.current?.abort();
         discardSession(false);
     }, [discardSession]);
 
     const handleImageWheel = useCallback((event: React.WheelEvent<HTMLElement>) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-        if (Math.abs(event.deltaY) < 4 || Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+        if (Math.abs(event.deltaY) < Math.abs(event.deltaX) || event.deltaY === 0) return;
         event.preventDefault();
+
         requestRef.current?.abort();
-        autoCapturePendingRef.current = true;
-        if (event.deltaY > 0) ImageActions.goToNextImage();
-        else ImageActions.goToPreviousImage();
+        autoCapturePendingRef.current = false;
+        if (wheelCaptureTimerRef.current !== null) {
+            window.clearTimeout(wheelCaptureTimerRef.current);
+        }
+        wheelCaptureTimerRef.current = window.setTimeout(() => {
+            wheelCaptureTimerRef.current = null;
+            autoCapturePendingRef.current = true;
+            setWheelCaptureRevision(value => value + 1);
+        }, WHEEL_CAPTURE_IDLE_MS);
+
+        if (wheelNavigationTimerRef.current !== null) return;
+        wheelNavigationTimerRef.current = window.setTimeout(() => {
+            wheelNavigationTimerRef.current = null;
+        }, WHEEL_NAVIGATION_THROTTLE_MS);
+        navigateInspectorImage(event.deltaY > 0 ? 1 : -1);
     }, []);
 
     const capability = useMemo(
@@ -360,7 +385,7 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
         autoCapturePendingRef.current = false;
         autoCaptureKeyRef.current = autoCaptureKey;
         void createSession();
-    }, [activeImage, capability?.model, capability?.state, catalogLoading, createSession, detail, selectedIds.size, slot]);
+    }, [activeImage, capability?.model, capability?.state, catalogLoading, createSession, detail, selectedIds.size, slot, wheelCaptureRevision]);
 
     const activeLayer = useMemo(
         () => session?.layers.find(layer => layer.id === activeLayerId) || null,

@@ -42,6 +42,7 @@ import { submitNewNotification, deleteNotificationById } from '../../../store/no
 import { getTimelineRange, FrameRange } from '../VideoTimeline/VideoTimeline';
 import { NotificationUtil } from '../../../utils/NotificationUtil';
 import { inferModelTaskFromName } from '../../../utils/ModelTaskUtil';
+import {ModelInspectorTrigger} from './ModelInspectorTrigger';
 const BUTTON_SIZE: ISize = { width: 30, height: 30 };
 const BUTTON_PADDING: number = 10;
 
@@ -158,6 +159,8 @@ interface IProps {
     activeImageIndex: number;
     imagesData: ImageData[];
     hasDetectionModel: boolean;
+    hasExtensionEngine: boolean;
+    modelInspectorBackendKey: string;
     updateActiveLabelType: (activeLabelType: LabelType) => any;
     updateActiveLabelViewType: (activeLabelViewType: LabelType) => any;
 }
@@ -191,6 +194,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         activeImageIndex,
         imagesData,
         hasDetectionModel,
+        hasExtensionEngine,
+        modelInspectorBackendKey,
         updateActiveLabelType,
         updateActiveLabelViewType,
     }) => {
@@ -909,18 +914,14 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                 </div>;
             }, [imagesData, activeImageIndex, isSAMLoaded, smartAnnotationActive, samNegativeMode, smartAnnotationOnClick, smartAnnotationOnDoubleClick, isTrackingModelLoaded, trackingOnClick, trackingMode, trackingInProgress, currentTexts, eraserMode, eraserFineMode, eraserOnClick, language])}
             <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 6, height: '100%' }}>
-                <button
-                    className='model-inspector-trigger'
-                    data-testid='open-model-inspector'
+                <ModelInspectorTrigger
+                    key={modelInspectorBackendKey}
+                    backendKey={modelInspectorBackendKey}
                     disabled={imagesData.length === 0}
-                    onClick={() => updateActivePopupTypeAction(PopupWindowType.MODEL_INSPECTOR)}
-                    title={language === 'zh'
-                        ? '查看当前图片在已加载模型各语义阶段的激活热图'
-                        : 'Inspect activation heatmaps across the loaded model stages'}
-                >
-                    <span className='model-inspector-trigger-icon' aria-hidden='true'><i/><i/><i/></span>
-                    {language === 'zh' ? '透视' : 'Inspect'}
-                </button>
+                    hasExtensionEngine={hasExtensionEngine}
+                    language={language}
+                    onOpen={() => updateActivePopupTypeAction(PopupWindowType.MODEL_INSPECTOR)}
+                />
                 <div ref={inferenceMenuRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <button
                         disabled={isFullImageInferenceInProgress || loadedModels.length === 0}
@@ -1089,6 +1090,13 @@ const mapStateToProps = (state: AppState) => ({
     activeImageIndex: state.labels.activeImageIndex,
     imagesData: state.labels.imagesData,
     hasDetectionModel: AIModelsSelector.hasModelsOfType(state, 'core') || DetectionAPIDetector.isEnabled(),
+    hasExtensionEngine: AIModelsSelector.hasModelsOfType(state, 'extension'),
+    modelInspectorBackendKey: [
+        state.aimodels.activeModelId || '',
+        ...state.aimodels.models
+            .filter(model => model.modelType === 'core' || model.modelType === 'extension')
+            .map(model => `${model.id}:${model.url}:${model.isActive}`),
+    ].join('|'),
 });
 
 export default connect(

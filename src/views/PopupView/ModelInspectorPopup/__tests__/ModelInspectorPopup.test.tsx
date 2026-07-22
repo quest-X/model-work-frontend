@@ -10,11 +10,8 @@ jest.mock('../../../../logic/actions/PopupActions', () => ({
     PopupActions: {close: jest.fn()},
 }));
 
-jest.mock('../../../../logic/actions/ImageActions', () => ({
-    ImageActions: {
-        goToNextImage: jest.fn(),
-        goToPreviousImage: jest.fn(),
-    },
+jest.mock('../ModelInspectorNavigation', () => ({
+    navigateInspectorImage: jest.fn(() => true),
 }));
 
 jest.mock('../ModelInspectorAPI', () => {
@@ -145,21 +142,48 @@ describe('ModelInspectorPopup', () => {
         await waitFor(() => expect(ModelInspectorAPI.deleteSession).toHaveBeenCalledWith('session-1'));
     });
 
-    it('switches one image for every vertical wheel event over the preview', async () => {
-        const {ImageActions} = jest.requireMock('../../../../logic/actions/ImageActions');
+    it('switches images with the wheel without regenerating every intermediate image', async () => {
+        const {navigateInspectorImage} = jest.requireMock('../ModelInspectorNavigation');
+        const image2 = {...activeImage, id: 'image-2', fileData: new File(['two'], 'two.jpg', {type: 'image/jpeg'})};
+        const image3 = {...activeImage, id: 'image-3', fileData: new File(['three'], 'three.jpg', {type: 'image/jpeg'})};
+        const view = render(<ModelInspectorPopup language={Language.CHINESE} activeImage={activeImage} activeModelTask='detect'/>);
+
+        await screen.findByTestId('inspector-view-a');
+        fireEvent.wheel(screen.getByTestId('inspector-image-wheel-area'), {deltaY: 1});
+        view.rerender(<ModelInspectorPopup language={Language.CHINESE} activeImage={image2} activeModelTask='detect'/>);
+        await act(async () => {
+            await new Promise(resolve => window.setTimeout(resolve, 70));
+        });
+        fireEvent.wheel(screen.getByTestId('inspector-image-wheel-area'), {deltaY: 1});
+        view.rerender(<ModelInspectorPopup language={Language.CHINESE} activeImage={image3} activeModelTask='detect'/>);
+
+        expect(navigateInspectorImage).toHaveBeenCalledTimes(2);
+        expect(navigateInspectorImage).toHaveBeenCalledWith(1);
+        expect(ModelInspectorAPI.createSession).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            await new Promise(resolve => window.setTimeout(resolve, 350));
+        });
+        await waitFor(() => expect(ModelInspectorAPI.createSession).toHaveBeenCalledTimes(2));
+        expect(ModelInspectorAPI.createSession).toHaveBeenLastCalledWith(
+            image3.fileData,
+            'detection',
+            ['layer-a', 'layer-b'],
+            expect.any(Object),
+            expect.any(AbortSignal),
+        );
+    });
+
+    it('ignores horizontal, modified, and zero wheel input', async () => {
+        const {navigateInspectorImage} = jest.requireMock('../ModelInspectorNavigation');
         render(<ModelInspectorPopup language={Language.CHINESE} activeImage={activeImage} activeModelTask='detect'/>);
 
         const wheelArea = await screen.findByTestId('inspector-image-wheel-area');
-        fireEvent.wheel(wheelArea, {deltaY: 100});
-        fireEvent.wheel(wheelArea, {deltaY: 100});
-        expect(ImageActions.goToNextImage).toHaveBeenCalledTimes(2);
-
-        fireEvent.wheel(wheelArea, {deltaY: -100});
-        expect(ImageActions.goToPreviousImage).toHaveBeenCalledTimes(1);
-
+        fireEvent.wheel(wheelArea, {deltaY: 0});
         fireEvent.wheel(wheelArea, {deltaX: 120, deltaY: 5});
         fireEvent.wheel(wheelArea, {deltaY: 100, ctrlKey: true});
-        expect(ImageActions.goToNextImage).toHaveBeenCalledTimes(2);
+
+        expect(navigateInspectorImage).not.toHaveBeenCalled();
     });
 
     it('only exposes the model slot that matches the current inference task', async () => {
