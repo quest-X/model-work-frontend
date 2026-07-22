@@ -36,7 +36,6 @@ const MAP_KINDS: Array<{value: Exclude<HeatmapKind, 'channel' | 'gradcam'>; zh: 
 ];
 
 const PALETTES: HeatmapPalette[] = ['turbo', 'magma', 'viridis', 'inferno', 'jet', 'gray'];
-const WHEEL_CAPTURE_IDLE_MS = 300;
 const WHEEL_NAVIGATION_THROTTLE_MS = 60;
 
 const stateLabel = (state: SlotCapability['state'], zh: boolean): string => {
@@ -131,11 +130,7 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const requestRef = useRef<AbortController | null>(null);
     const sessionIdRef = useRef<string | null>(null);
-    const autoCaptureKeyRef = useRef<string | null>(null);
-    const autoCapturePendingRef = useRef(false);
-    const wheelCaptureTimerRef = useRef<number | null>(null);
     const wheelNavigationTimerRef = useRef<number | null>(null);
-    const [wheelCaptureRevision, setWheelCaptureRevision] = useState(0);
 
     const discardSession = useCallback((updateState: boolean = true) => {
         const sessionId = sessionIdRef.current;
@@ -183,7 +178,6 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
         } else {
             setPreviewUrl(null);
         }
-        autoCaptureKeyRef.current = null;
         discardSession();
         return () => {
             if (ownedUrl) URL.revokeObjectURL(ownedUrl);
@@ -191,9 +185,6 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
     }, [activeImage?.id, discardSession]);
 
     useEffect(() => () => {
-        if (wheelCaptureTimerRef.current !== null) {
-            window.clearTimeout(wheelCaptureTimerRef.current);
-        }
         if (wheelNavigationTimerRef.current !== null) {
             window.clearTimeout(wheelNavigationTimerRef.current);
         }
@@ -206,22 +197,13 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
         if (Math.abs(event.deltaY) < Math.abs(event.deltaX) || event.deltaY === 0) return;
         event.preventDefault();
 
-        requestRef.current?.abort();
-        autoCapturePendingRef.current = false;
-        if (wheelCaptureTimerRef.current !== null) {
-            window.clearTimeout(wheelCaptureTimerRef.current);
-        }
-        wheelCaptureTimerRef.current = window.setTimeout(() => {
-            wheelCaptureTimerRef.current = null;
-            autoCapturePendingRef.current = true;
-            setWheelCaptureRevision(value => value + 1);
-        }, WHEEL_CAPTURE_IDLE_MS);
-
         if (wheelNavigationTimerRef.current !== null) return;
+        if (!navigateInspectorImage(event.deltaY > 0 ? 1 : -1)) return;
+
+        requestRef.current?.abort();
         wheelNavigationTimerRef.current = window.setTimeout(() => {
             wheelNavigationTimerRef.current = null;
         }, WHEEL_NAVIGATION_THROTTLE_MS);
-        navigateInspectorImage(event.deltaY > 0 ? 1 : -1);
     }, []);
 
     const capability = useMemo(
@@ -236,13 +218,11 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
             return undefined;
         }
         const controller = new AbortController();
-        autoCapturePendingRef.current = false;
         setCatalogLoading(true);
         setError(null);
         ModelInspectorAPI.layers(slot, detail, controller.signal).then(value => {
             setCatalog(value.layers);
             setSelectedIds(new Set(value.default_layer_ids));
-            autoCapturePendingRef.current = detail === 'stages' && value.default_layer_ids.length > 0;
             setCatalogLoading(false);
         }).catch((cause: unknown) => {
             if (isAbortError(cause)) return;
@@ -370,22 +350,6 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
             }
         }
     }, [activeImage, capability?.state, discardSession, selectedIds, slot, status?.limits, t]);
-
-    useEffect(() => {
-        if (
-            detail !== 'stages'
-            || catalogLoading
-            || !autoCapturePendingRef.current
-            || !activeImage
-            || capability?.state !== 'ready'
-            || selectedIds.size === 0
-        ) return;
-        const autoCaptureKey = `${activeImage.id}:${slot}:${capability.model}`;
-        if (autoCaptureKeyRef.current === autoCaptureKey) return;
-        autoCapturePendingRef.current = false;
-        autoCaptureKeyRef.current = autoCaptureKey;
-        void createSession();
-    }, [activeImage, capability?.model, capability?.state, catalogLoading, createSession, detail, selectedIds.size, slot, wheelCaptureRevision]);
 
     const activeLayer = useMemo(
         () => session?.layers.find(layer => layer.id === activeLayerId) || null,
@@ -665,11 +629,11 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
                             >
                                 <div className='mi-empty-orbit'><span/><span/><span/></div>
                                 <h3>{busy
-                                    ? t('正在自动生成语义阶段透视', 'Generating semantic stage views')
+                                    ? t('正在生成语义阶段透视', 'Generating semantic stage views')
                                     : activeImage
-                                        ? t('正在准备当前模型的阶段透视', 'Preparing the current model stages')
+                                        ? t('当前图片尚未生成阶段透视', 'This image has not been inspected yet')
                                         : t('请先在 openSight 中打开一张图片', 'Open an image in openSight first')}</h3>
-                                <p>{t('首次打开会自动生成；临时钩子在捕获结束后立即移除，不影响正常推理。', 'Views are generated automatically on open; temporary hooks are removed immediately after capture.')}</p>
+                                <p>{t('滚轮仅切换图片；点击左侧按钮后才会生成当前图片的透视。', 'The wheel only changes images; use the button on the left to inspect the current image.')}</p>
                             </div> : <>
                                 <div
                                     className={`mi-viewports ${compareEnabled && compareLayer ? 'compare' : ''}`}

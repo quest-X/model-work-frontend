@@ -114,13 +114,16 @@ describe('ModelInspectorPopup', () => {
         Object.defineProperty(URL, 'revokeObjectURL', {configurable: true, value: jest.fn()});
     });
 
-    it('automatically captures semantic stages, exposes comparison, and cleans the session on unmount', async () => {
+    it('captures semantic stages only after explicit confirmation, exposes comparison, and cleans the session on unmount', async () => {
         const view = render(<ModelInspectorPopup language={Language.CHINESE} activeImage={activeImage} activeModelTask='detect'/>);
 
         const capture = await screen.findByTestId('inspector-capture');
         expect(screen.getByText('当前推理模型')).toBeInTheDocument();
         expect(screen.getByText('yolo11n.pt')).toBeInTheDocument();
+        await waitFor(() => expect(capture).toHaveTextContent('生成 2 层透视'));
+        expect(ModelInspectorAPI.createSession).not.toHaveBeenCalled();
 
+        await act(async () => fireEvent.click(capture));
         expect(await screen.findByTestId('inspector-view-a')).toBeInTheDocument();
         expect(capture).toHaveTextContent('重新生成 2 层透视');
         expect(screen.getAllByText('model.0').length).toBeGreaterThan(0);
@@ -142,12 +145,15 @@ describe('ModelInspectorPopup', () => {
         await waitFor(() => expect(ModelInspectorAPI.deleteSession).toHaveBeenCalledWith('session-1'));
     });
 
-    it('switches images with the wheel without regenerating every intermediate image', async () => {
+    it('switches images with the wheel without regenerating the inspection', async () => {
         const {navigateInspectorImage} = jest.requireMock('../ModelInspectorNavigation');
         const image2 = {...activeImage, id: 'image-2', fileData: new File(['two'], 'two.jpg', {type: 'image/jpeg'})};
         const image3 = {...activeImage, id: 'image-3', fileData: new File(['three'], 'three.jpg', {type: 'image/jpeg'})};
         const view = render(<ModelInspectorPopup language={Language.CHINESE} activeImage={activeImage} activeModelTask='detect'/>);
 
+        const capture = await screen.findByTestId('inspector-capture');
+        await waitFor(() => expect(capture).toHaveTextContent('生成 2 层透视'));
+        await act(async () => fireEvent.click(capture));
         await screen.findByTestId('inspector-view-a');
         fireEvent.wheel(screen.getByTestId('inspector-image-wheel-area'), {deltaY: 1});
         view.rerender(<ModelInspectorPopup language={Language.CHINESE} activeImage={image2} activeModelTask='detect'/>);
@@ -157,6 +163,7 @@ describe('ModelInspectorPopup', () => {
         fireEvent.wheel(screen.getByTestId('inspector-image-wheel-area'), {deltaY: 1});
         view.rerender(<ModelInspectorPopup language={Language.CHINESE} activeImage={image3} activeModelTask='detect'/>);
 
+        await waitFor(() => expect(screen.getByTestId('inspector-capture')).toHaveTextContent('生成 2 层透视'));
         expect(navigateInspectorImage).toHaveBeenCalledTimes(2);
         expect(navigateInspectorImage).toHaveBeenCalledWith(1);
         expect(ModelInspectorAPI.createSession).toHaveBeenCalledTimes(1);
@@ -164,14 +171,7 @@ describe('ModelInspectorPopup', () => {
         await act(async () => {
             await new Promise(resolve => window.setTimeout(resolve, 350));
         });
-        await waitFor(() => expect(ModelInspectorAPI.createSession).toHaveBeenCalledTimes(2));
-        expect(ModelInspectorAPI.createSession).toHaveBeenLastCalledWith(
-            image3.fileData,
-            'detection',
-            ['layer-a', 'layer-b'],
-            expect.any(Object),
-            expect.any(AbortSignal),
-        );
+        expect(ModelInspectorAPI.createSession).toHaveBeenCalledTimes(1);
     });
 
     it('ignores horizontal, modified, and zero wheel input', async () => {
@@ -217,6 +217,9 @@ describe('ModelInspectorPopup', () => {
         expect(screen.getByText('分割模型')).toBeInTheDocument();
         expect(screen.getByText('FastSAM-s.pt')).toBeInTheDocument();
         expect(screen.queryByText('yolo11n.pt')).not.toBeInTheDocument();
+        await waitFor(() => expect(capture).toHaveTextContent('生成 2 层透视'));
+        expect(ModelInspectorAPI.createSession).not.toHaveBeenCalled();
+        await act(async () => fireEvent.click(capture));
         expect(await screen.findByTestId('inspector-view-a')).toBeInTheDocument();
         expect(capture).toHaveTextContent('重新生成 2 层透视');
 
