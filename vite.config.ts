@@ -10,6 +10,13 @@ import react from '@vitejs/plugin-react';
 export default ({ mode }: UserConfig): UserConfigExport => {
   process.env = { ...process.env, ...loadEnv(mode || 'development', process.cwd()) };
   const base = '/';
+  const backendTarget = process.env.VITE_OPENSIGHT_BACKEND_TARGET
+    || 'https://127.0.0.1:58600';
+  const serviceProxy = {
+    target: backendTarget,
+    changeOrigin: true,
+    secure: false,
+  };
   return defineConfig({
     base,
     plugins: [react()],
@@ -17,6 +24,18 @@ export default ({ mode }: UserConfig): UserConfigExport => {
       __OPENSIGHT_HOST_SYSTEM__: JSON.stringify(
         process.env.VITE_OPENSIGHT_HOST_SYSTEM || '',
       ),
+    },
+    server: {
+      proxy: {
+        '/core_service': serviceProxy,
+        '/extension_service': serviceProxy,
+      },
+    },
+    preview: {
+      proxy: {
+        '/core_service': serviceProxy,
+        '/extension_service': serviceProxy,
+      },
     },
     build: {
       minify: 'terser',

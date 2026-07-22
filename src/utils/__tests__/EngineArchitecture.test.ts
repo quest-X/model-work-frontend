@@ -1,7 +1,11 @@
 import {AIModelsStorageManager} from '../AIModelsStorageManager';
-import {normalizeEngineBaseUrl} from '../DefaultBackendUrl';
+import {getDefaultCoreServiceBase, normalizeEngineBaseUrl} from '../DefaultBackendUrl';
 
 describe('engine service URL normalization', () => {
+    it('uses the browser origin as the default same-origin gateway', () => {
+        expect(getDefaultCoreServiceBase()).toBe('http://localhost/core_service');
+    });
+
     it('adds the core service boundary to legacy server and capability URLs', () => {
         expect(normalizeEngineBaseUrl('https://localhost:58600', 'core'))
             .toBe('https://localhost:58600/core_service');
