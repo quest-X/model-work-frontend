@@ -1,8 +1,8 @@
 @import '../../../settings/Settings';
 
 .GenericYesNoPopup:has(.VectorDbPopupContent) {
-  width: min(920px, calc(100vw - 48px));
-  max-width: 920px;
+  width: min(1000px, calc(100vw - 48px));
+  max-width: 1000px;
   max-height: calc(100vh - 48px);
 
   .Content {
@@ -11,476 +11,1030 @@
   }
 
   .Footer {
-    height: 64px;
-    flex: 0 0 64px;
+    height: 60px;
+    flex: 0 0 60px;
     padding: 0 24px;
   }
 }
 
 .VectorDbPopupContent {
-  display: flex;
-  flex-direction: column;
   width: 100%;
-  padding: 16px 24px 20px;
-  box-sizing: border-box;
-  flex: 0 1 auto;
   min-width: 0;
+  max-height: calc(100vh - 148px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 18px 22px 20px;
   color: white;
 
-  .StatusBanner {
-    font-size: 12px;
-    padding: 6px 10px;
-    border-radius: 4px;
+  button,
+  input,
+  select {
+    font: inherit;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid $primaryColor;
+    outline-offset: 2px;
+  }
+
+  button {
+    color: white;
+  }
+
+  .Eyebrow {
+    display: block;
+    margin-bottom: 4px;
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .VectorDbIntro {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
     margin-bottom: 12px;
 
-    &.ready {
-      background: rgba(76, 175, 80, 0.12);
-      color: #9ccc9c;
+    p {
+      max-width: 580px;
+      margin: 0;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+  }
+
+  .ServiceChips {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    min-width: 220px;
+  }
+
+  .ServiceChip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 300px;
+    gap: 7px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    padding: 5px 10px;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 11px;
+    white-space: nowrap;
+
+    i {
+      width: 7px;
+      height: 7px;
+      flex: 0 0 7px;
+      border-radius: 50%;
+      background: #e2b85b;
+      box-shadow: 0 0 8px rgba(226, 184, 91, 0.4);
     }
 
-    &.loading {
-      background: rgba(255, 193, 7, 0.12);
-      color: #e6c66e;
+    &.ready {
+      border-color: rgba(92, 201, 128, 0.28);
+      color: #a9ddb9;
+
+      i {
+        background: #5cc980;
+        box-shadow: 0 0 8px rgba(92, 201, 128, 0.5);
+      }
     }
+  }
+
+  .ServiceNotice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    min-height: 34px;
+    margin-bottom: 12px;
+    box-sizing: border-box;
+    border: 1px solid rgba(82, 170, 255, 0.25);
+    border-radius: 6px;
+    background: rgba(82, 170, 255, 0.08);
+    padding: 7px 10px;
+    color: #b8d9f8;
+    font-size: 12px;
+    line-height: 1.4;
 
     &.error {
-      background: rgba(255, 107, 107, 0.12);
-      color: #ff9b9b;
+      border-color: rgba(255, 106, 106, 0.28);
+      background: rgba(255, 106, 106, 0.08);
+      color: #ffb0b0;
+    }
+
+    button {
+      flex: 0 0 auto;
+      border: 1px solid currentColor;
+      border-radius: 4px;
+      background: transparent;
+      padding: 4px 9px;
+      color: inherit;
+      cursor: pointer;
+
+      &:disabled {
+        cursor: default;
+        opacity: 0.5;
+      }
     }
   }
 
-  .Columns {
+  .OverviewStats {
     display: grid;
-    grid-template-columns: minmax(220px, 30%) minmax(0, 1fr);
-    align-items: start;
-    gap: 24px;
-    min-height: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+
+    > div {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.025);
+      padding: 8px 11px;
+
+      span {
+        color: rgba(255, 255, 255, 0.52);
+        font-size: 11px;
+      }
+
+      strong {
+        font-size: 18px;
+        font-variant-numeric: tabular-nums;
+      }
+    }
   }
 
-  .SectionHeader {
-    color: white;
-    font-size: 13px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding-bottom: 6px;
-    margin-bottom: 6px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-    opacity: 0.7;
+  .VectorWorkspace {
+    display: grid;
+    grid-template-columns: 282px minmax(0, 1fr);
+    min-height: 420px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 7px;
+    background: rgba(0, 0, 0, 0.08);
   }
 
-  .errorMessage {
-    color: #ff6b6b;
-    font-size: 12px;
-    margin: 6px 0;
+  .CollectionsPanel {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.12);
+    padding: 14px;
   }
 
-  .EmptyHint {
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 13px;
-    padding: 8px 0;
+  .PanelHeading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
 
-    &.tall {
-      padding: clamp(32px, 6vh, 56px) 16px;
+    strong {
+      font-size: 14px;
+    }
+
+    .CountBadge {
+      min-width: 24px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 3px 7px;
+      box-sizing: border-box;
+      color: rgba(255, 255, 255, 0.68);
+      font-size: 11px;
       text-align: center;
     }
   }
 
-  // ── 左栏：集合 ──
-  .CollectionsPanel {
-    width: auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-
-    .CreateRow {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 8px;
-
-      .CreateInput {
-        flex: 1;
-        min-width: 0;
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 4px;
-        color: white;
-        padding: 6px 8px;
-        font-size: 13px;
-        outline: none;
-
-        &:focus {
-          border-color: $primaryColor;
-        }
-      }
-
-      .CreateButton {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.25);
-        border-radius: 4px;
-        color: white;
-        padding: 6px 12px;
-        cursor: pointer;
-        font-size: 13px;
-
-        &:hover:not(:disabled) {
-          background: rgba(255, 255, 255, 0.18);
-        }
-
-        &:disabled {
-          opacity: 0.4;
-          cursor: default;
-        }
-      }
-    }
-
-    .CollectionList {
-      overflow-y: auto;
-      max-height: min(280px, 34vh);
-    }
-  }
-
-  .DatasetRow {
+  .NewCollectionButton {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 8px 10px;
-    border-radius: 4px;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    margin-bottom: 10px;
+    border: 1px dashed rgba(0, 158, 253, 0.5);
+    border-radius: 5px;
+    background: rgba(0, 158, 253, 0.07);
+    padding: 7px 10px;
+    color: #bce3fb;
     cursor: pointer;
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.06);
-    }
-
-    &.selected {
-      background: rgba(77, 166, 255, 0.15);
-    }
-
-    .DatasetRowMain {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-    }
-
-    .DatasetName {
-      font-weight: 600;
-      font-size: 14px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .DatasetMeta {
-      font-size: 11px;
-      opacity: 0.7;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .DeleteButton {
-      background: none;
-      border: none;
-      color: rgba(255, 255, 255, 0.6);
-      font-size: 18px;
-      cursor: pointer;
-      padding: 0 6px;
-
-      &:hover {
-        color: #ff6b6b;
-      }
-    }
-  }
-
-  // ── 右栏：工作区 ──
-  .WorkPanel {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-
-    .TabBar {
-      display: flex;
-      gap: 4px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-      margin-bottom: 12px;
-
-      .TabButton {
-        background: none;
-        border: none;
-        border-bottom: 2px solid transparent;
-        color: rgba(255, 255, 255, 0.6);
-        padding: 8px 14px;
-        font-size: 13px;
-        cursor: pointer;
-
-        &.active {
-          color: white;
-          border-bottom-color: $primaryColor;
-        }
-
-        &:hover {
-          color: white;
-        }
-      }
-    }
-  }
-
-  .TabBody {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .FieldLabel {
     font-size: 12px;
-    opacity: 0.7;
-    width: 64px;
-    flex-shrink: 0;
-  }
-
-  .ModeRow,
-  .SourceRow {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 13px;
-
-    label {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      cursor: pointer;
-    }
-
-    select {
-      flex: 1;
-      background: #2f2f2f;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 4px;
-      color: white;
-      padding: 6px 8px;
-      font-size: 13px;
-      outline: none;
-    }
-  }
-
-  .DropZone {
-    border: 1px dashed rgba(255, 255, 255, 0.3);
-    border-radius: 6px;
-    padding: 14px;
-    text-align: center;
-    cursor: pointer;
-
-    p {
-      margin: 2px 0;
-      font-size: 13px;
-    }
-
-    &.query {
-      width: 180px;
-      height: 140px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      flex-shrink: 0;
-
-      .QueryPreview {
-        max-width: 100%;
-        max-height: 100%;
-        object-fit: contain;
-      }
-    }
-  }
-
-  .PrimaryButton {
-    align-self: flex-start;
-    background: rgba(0, 158, 253, 0.2);
-    border: 1px solid $primaryColor;
-    border-radius: 4px;
-    color: white;
-    padding: 7px 18px;
-    font-size: 13px;
-    cursor: pointer;
 
     &:hover:not(:disabled) {
-      background: rgba(0, 158, 253, 0.35);
+      background: rgba(0, 158, 253, 0.14);
     }
 
     &:disabled {
-      opacity: 0.4;
+      border-color: rgba(255, 255, 255, 0.12);
+      color: rgba(255, 255, 255, 0.3);
       cursor: default;
     }
   }
 
-  .JobPanel {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 4px;
-    padding: 10px;
-
-    .JobHeader {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 13px;
-
-      .CancelButton {
-        background: none;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 4px;
-        color: rgba(255, 255, 255, 0.8);
-        padding: 2px 10px;
-        font-size: 12px;
-        cursor: pointer;
-
-        &:hover {
-          border-color: #ff6b6b;
-          color: #ff6b6b;
-        }
-      }
-    }
-
-    .JobStats {
-      font-size: 12px;
-      opacity: 0.75;
-      margin-top: 6px;
-    }
-  }
-
-  .ProgressBar {
-    height: 6px;
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.15);
-    overflow: hidden;
-    margin-top: 8px;
-  }
-
-  .ProgressBarFill {
-    height: 100%;
-    background: #4caf50;
-    transition: width 0.2s ease;
-  }
-
-  .SearchControls {
+  .CreateCollectionCard {
     display: flex;
-    gap: 16px;
+    flex-direction: column;
+    gap: 9px;
+    margin-bottom: 10px;
+    border: 1px solid rgba(0, 158, 253, 0.22);
+    border-radius: 6px;
+    background: rgba(0, 158, 253, 0.05);
+    padding: 10px;
+  }
+
+  .FieldStack {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    gap: 5px;
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 11px;
+
+    input,
+    select {
+      width: 100%;
+      min-width: 0;
+      height: 32px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 4px;
+      background: #222;
+      padding: 0 9px;
+      box-sizing: border-box;
+      color: white;
+      font-size: 12px;
+
+      &:focus {
+        border-color: $primaryColor;
+      }
+
+      &:disabled {
+        opacity: 0.45;
+      }
+    }
+
+    &.compact {
+      flex: 0 0 90px;
+    }
+  }
+
+  .ModePicker {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0;
+    border: 0;
+    padding: 0;
+
+    legend {
+      grid-column: 1 / -1;
+      margin-bottom: 5px;
+      color: rgba(255, 255, 255, 0.58);
+      font-size: 10px;
+    }
+  }
+
+  .ModeOption {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 8px;
+    text-align: left;
+    cursor: pointer;
+
+    strong {
+      font-size: 11px;
+    }
+
+    span {
+      color: rgba(255, 255, 255, 0.48);
+      font-size: 9px;
+      line-height: 1.35;
+    }
+
+    &.selected {
+      border-color: rgba(0, 158, 253, 0.65);
+      background: rgba(0, 158, 253, 0.1);
+    }
+  }
+
+  .CollectionState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 90px;
+    padding: 14px;
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 11px;
+    line-height: 1.45;
+    text-align: center;
+
+    strong {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 12px;
+    }
+
+    &.error {
+      color: #ffaaaa;
+    }
+
+    button {
+      border: 0;
+      background: transparent;
+      color: $primaryColor;
+      cursor: pointer;
+    }
+  }
+
+  .CollectionList {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .CollectionRow {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    padding: 9px 10px;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.045);
+    }
+
+    &.selected {
+      border-color: rgba(0, 158, 253, 0.3);
+      background: rgba(0, 158, 253, 0.1);
+    }
+  }
+
+  .CollectionRowTop,
+  .CollectionRowMeta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .CollectionRowTop {
+    strong {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    > span {
+      color: rgba(255, 255, 255, 0.58);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  .CollectionRowMeta {
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 10px;
+  }
+
+  .ModeBadge {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    border: 1px solid rgba(107, 203, 255, 0.24);
+    border-radius: 999px;
+    background: rgba(107, 203, 255, 0.08);
+    padding: 2px 7px;
+    color: #a9daf3;
+    font-size: 9px;
+    font-weight: 600;
+    white-space: nowrap;
+
+    &.images {
+      border-color: rgba(176, 145, 255, 0.28);
+      background: rgba(176, 145, 255, 0.09);
+      color: #cbbaff;
+    }
+  }
+
+  .CollectionWorkspace {
+    min-width: 0;
+    padding: 16px 18px 18px;
+  }
+
+  .WorkspaceEmpty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 420px;
+    padding: 24px;
+    box-sizing: border-box;
+    color: rgba(255, 255, 255, 0.46);
+    text-align: center;
+
+    .EmptyGlyph {
+      margin-bottom: 8px;
+      color: rgba(0, 158, 253, 0.4);
+      font-size: 42px;
+    }
+
+    strong {
+      margin-bottom: 5px;
+      color: rgba(255, 255, 255, 0.74);
+      font-size: 14px;
+    }
+
+    span:last-child {
+      max-width: 360px;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+  }
+
+  .CollectionHeader,
+  .CollectionTitle {
+    display: flex;
     align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
 
-    .SearchParams {
+  .CollectionHeader {
+    margin-bottom: 12px;
+  }
+
+  .CollectionTitle {
+    flex: 1;
+    justify-content: flex-start;
+    align-items: center;
+
+    h3 {
+      max-width: 360px;
+      margin: 0;
+      overflow: hidden;
+      font-size: 18px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .MetadataGrid {
+    display: grid;
+    grid-template-columns: 0.75fr 0.75fr 1.4fr 1.5fr;
+    gap: 8px;
+    margin-bottom: 14px;
+
+    > div {
       display: flex;
-      align-items: center;
-      gap: 8px;
+      flex-direction: column;
+      min-width: 0;
+      gap: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.025);
+      padding: 8px;
 
-      input[type='number'] {
-        width: 64px;
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 4px;
-        color: white;
-        padding: 6px 8px;
-        font-size: 13px;
-        outline: none;
+      span {
+        color: rgba(255, 255, 255, 0.45);
+        font-size: 9px;
+        text-transform: uppercase;
+      }
+
+      strong {
+        min-width: 0;
+        overflow: hidden;
+        font-size: 11px;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
     }
   }
 
-  .ResultGrid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 10px;
-    max-height: min(260px, 32vh);
-    overflow-y: auto;
-    padding-right: 4px;
+  .WorkspaceTabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+
+    button {
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      padding: 8px 12px;
+      color: rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      font-size: 12px;
+
+      &:hover,
+      &.active {
+        color: white;
+      }
+
+      &.active {
+        border-bottom-color: $primaryColor;
+      }
+    }
   }
 
-  .ResultCard {
-    position: relative;
-    background: rgba(255, 255, 255, 0.05);
+  .WorkspaceBody {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    padding-top: 13px;
+  }
+
+  .ImmutableModeNotice,
+  .QueryBoundaryNote {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    gap: 8px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.035);
+    padding: 8px 10px;
+    font-size: 11px;
+
+    > span:first-child {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    small,
+    > span:last-child {
+      color: rgba(255, 255, 255, 0.48);
+      font-size: 10px;
+    }
+  }
+
+  .QueryBoundaryNote {
+    grid-template-columns: auto 1fr;
+
+    strong {
+      color: #bce3fb;
+    }
+  }
+
+  .FormSection {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .FormLabel {
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 11px;
+  }
+
+  .SegmentedControl {
+    display: inline-flex;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 5px;
+    background: rgba(0, 0, 0, 0.12);
+    padding: 2px;
+
+    button {
+      border: 0;
+      border-radius: 3px;
+      background: transparent;
+      padding: 5px 11px;
+      color: rgba(255, 255, 255, 0.52);
+      cursor: pointer;
+      font-size: 11px;
+
+      &.active {
+        background: rgba(0, 158, 253, 0.18);
+        color: white;
+      }
+    }
+  }
+
+  .SourceCard {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.02);
+    padding: 11px;
+  }
+
+  .UploadZone,
+  .QueryDropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 92px;
+    border: 1px dashed rgba(255, 255, 255, 0.22);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.018);
+    padding: 12px;
+    box-sizing: border-box;
+    color: rgba(255, 255, 255, 0.5);
+    text-align: center;
+    cursor: pointer;
+
+    &:hover,
+    &.active {
+      border-color: rgba(0, 158, 253, 0.65);
+      background: rgba(0, 158, 253, 0.06);
+    }
+
+    strong {
+      margin: 3px 0;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 12px;
+    }
+
+    span {
+      font-size: 10px;
+    }
+
+    .UploadIcon {
+      color: $primaryColor;
+      font-size: 22px;
+      line-height: 1;
+    }
+  }
+
+  .PrimaryButton,
+  .SecondaryButton,
+  .DangerButton {
+    width: fit-content;
     border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 11px;
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.38;
+    }
+  }
+
+  .PrimaryButton {
+    border: 1px solid $primaryColor;
+    background: rgba(0, 158, 253, 0.18);
+
+    &:hover:not(:disabled) {
+      background: rgba(0, 158, 253, 0.3);
+    }
+  }
+
+  .SecondaryButton {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: transparent;
+
+    &:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.07);
+    }
+  }
+
+  .DangerButton {
+    border: 1px solid rgba(255, 105, 105, 0.45);
+    background: transparent;
+    color: #ff9c9c;
+
+    &:hover:not(:disabled),
+    &.solid {
+      background: rgba(255, 84, 84, 0.15);
+    }
+  }
+
+  .InlineActions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .InlineError {
+    color: #ff9c9c;
+    font-size: 10px;
+    line-height: 1.4;
+
+    button {
+      margin-left: 6px;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+  }
+
+  .MutedText,
+  .ResultEmpty {
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  .DeleteConfirm {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(255, 93, 93, 0.28);
+    border-radius: 6px;
+    background: rgba(255, 93, 93, 0.07);
+    padding: 9px 10px;
+
+    > div:first-child {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: 3px;
+
+      strong {
+        font-size: 11px;
+      }
+
+      span {
+        color: rgba(255, 255, 255, 0.55);
+        font-size: 9px;
+        line-height: 1.4;
+      }
+    }
+  }
+
+  .QueryComposer {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .QueryDropzone {
+    height: 138px;
     overflow: hidden;
 
     img {
       width: 100%;
-      height: 90px;
-      object-fit: cover;
-      display: block;
+      height: 100%;
+      object-fit: contain;
     }
+  }
 
+  .QueryFields {
+    display: flex;
+    align-items: flex-end;
+    align-content: flex-start;
+    flex-wrap: wrap;
+    gap: 9px;
+  }
+
+  .ResultGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 8px;
+    max-height: 190px;
+    overflow-y: auto;
+    padding-right: 3px;
+  }
+
+  .ResultCard {
+    position: relative;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.03);
+
+    > img,
     .ThumbPlaceholder {
-      width: 100%;
-      height: 90px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.4);
-      background: rgba(255, 255, 255, 0.04);
+      width: 100%;
+      height: 76px;
+      background: rgba(255, 255, 255, 0.025);
+      object-fit: cover;
+    }
+
+    .ThumbPlaceholder {
+      color: rgba(255, 255, 255, 0.35);
+      font-size: 9px;
     }
 
     .ScoreBadge {
       position: absolute;
       top: 4px;
       right: 4px;
-      background: rgba(0, 0, 0, 0.65);
-      color: #7fd67f;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 1px 6px;
       border-radius: 3px;
+      background: rgba(0, 0, 0, 0.68);
+      padding: 2px 5px;
+      color: #9ee3b1;
+      font-size: 9px;
+      font-weight: 700;
     }
 
     .ResultMeta {
       display: flex;
       flex-direction: column;
-      padding: 4px 6px;
+      min-width: 0;
+      gap: 2px;
+      padding: 5px 6px;
+      font-size: 9px;
+
+      > span:last-child {
+        overflow: hidden;
+        color: rgba(255, 255, 255, 0.5);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
 
       .ClassTag {
-        font-size: 11px;
         color: $primaryColor;
       }
+    }
+  }
 
-      .FileName {
-        font-size: 10px;
-        opacity: 0.6;
-        white-space: nowrap;
+  .ActivityStrip {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 190px auto;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(0, 158, 253, 0.2);
+    border-radius: 6px;
+    background: rgba(0, 158, 253, 0.055);
+    padding: 9px 10px;
+
+    &.completed {
+      border-color: rgba(92, 201, 128, 0.24);
+      background: rgba(92, 201, 128, 0.055);
+    }
+
+    &.failed,
+    &.cancelled {
+      border-color: rgba(255, 105, 105, 0.22);
+      background: rgba(255, 105, 105, 0.05);
+    }
+  }
+
+  .ActivityMain {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 9px;
+
+    .ActivityDot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 8px;
+      border-radius: 50%;
+      background: $primaryColor;
+      box-shadow: 0 0 8px rgba(0, 158, 253, 0.55);
+    }
+
+    > div {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      gap: 2px;
+
+      strong {
         overflow: hidden;
+        font-size: 11px;
         text-overflow: ellipsis;
+        white-space: nowrap;
       }
+
+      span {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 9px;
+      }
+    }
+  }
+
+  .ActivityProgress {
+    height: 5px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+
+    span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: $primaryColor;
+      transition: width 0.2s ease;
     }
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 780px) {
   .GenericYesNoPopup:has(.VectorDbPopupContent) {
     width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);
   }
 
   .VectorDbPopupContent {
-    padding: 14px 16px 18px;
+    max-height: calc(100vh - 124px);
+    padding: 14px;
 
-    .Columns {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 16px;
-    }
-
-    .CollectionsPanel .CollectionList {
-      max-height: 140px;
-    }
-
-    .ModeRow,
-    .SourceRow {
-      flex-wrap: wrap;
-    }
-
-    .SearchControls {
+    .VectorDbIntro {
       flex-direction: column;
+    }
 
-      .DropZone.query {
-        width: 100%;
-        height: 120px;
-        box-sizing: border-box;
+    .ServiceChips {
+      align-items: flex-start;
+      min-width: 0;
+    }
+
+    .OverviewStats {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .VectorWorkspace {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .CollectionsPanel {
+      max-height: 300px;
+      border-right: 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .CollectionWorkspace {
+      padding: 14px;
+    }
+
+    .MetadataGrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .QueryComposer {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .QueryDropzone {
+      width: 100%;
+      height: 130px;
+    }
+
+    .ActivityStrip {
+      grid-template-columns: minmax(0, 1fr) auto;
+
+      .ActivityProgress {
+        grid-column: 1 / -1;
+        grid-row: 2;
       }
+    }
+  }
+}
+
+@media (max-width: 520px) {
+  .VectorDbPopupContent {
+    .OverviewStats {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .CollectionHeader,
+    .DeleteConfirm,
+    .FormSection {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .ImmutableModeNotice,
+    .QueryBoundaryNote {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .MetadataGrid,
+    .ModePicker {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 }
