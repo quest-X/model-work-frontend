@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {useDropzone} from 'react-dropzone';
 import {connect} from 'react-redux';
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
@@ -9,7 +9,7 @@ import {getEngineBaseUrl, getExtensionEngineBaseUrl} from '../../../utils/Defaul
 import './VectorDbPopup.scss';
 
 type Granularity = 'image' | 'bbox';
-type WorkspaceTab = 'ingest' | 'query';
+type WorkspaceTab = 'ingest' | 'history';
 type IngestSource = 'dataset' | 'upload';
 
 interface EmbedderStatus {
@@ -101,6 +101,7 @@ interface IngestJob {
     granularity: Granularity;
     mode?: 'objects' | 'images';
     source: string;
+    dataset_id?: string | null;
     total_images: number;
     processed_images: number;
     inserted_objects: number;
@@ -113,18 +114,8 @@ interface IngestJob {
     resumable: boolean;
     error: string | null;
     started_at?: string | null;
+    updated_at?: string | null;
     finished_at?: string | null;
-}
-
-interface SearchResult {
-    score: number;
-    dataset_id: string;
-    filename: string;
-    image_path: string;
-    class_name: string;
-    conf: number;
-    bbox: number[];
-    thumbnail: string | null;
 }
 
 interface DatasetSummary {
@@ -224,21 +215,12 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     const [pendingFiles, setPendingFiles] = useState<File[]>([]);
     const [submittingIngest, setSubmittingIngest] = useState(false);
     const [job, setJob] = useState<IngestJob | null>(null);
+    const [jobs, setJobs] = useState<IngestJob[]>([]);
+    const [jobsLoading, setJobsLoading] = useState(true);
+    const [jobsError, setJobsError] = useState<string | null>(null);
     const [ingestError, setIngestError] = useState<string | null>(null);
 
-    const [queryFile, setQueryFile] = useState<File | null>(null);
-    const [queryPreview, setQueryPreview] = useState<string | null>(null);
-    const [topK, setTopK] = useState(12);
-    const [classFilter, setClassFilter] = useState('');
-    const [queryBbox, setQueryBbox] = useState('');
-    const [searching, setSearching] = useState(false);
-    const [results, setResults] = useState<SearchResult[] | null>(null);
-    const [searchError, setSearchError] = useState<string | null>(null);
-    const queryPreviewRef = useRef<string | null>(null);
-    const previousTargetIdRef = useRef<string | null>(null);
-
     const selected = collections.find(collection => collection.name === selectedName) || null;
-    const selectedTargetId = selected ? collectionTargetId(selected) : null;
     const hierarchy = useMemo<SceneGroup[]>(() => {
         const sceneMap = new Map<string, {
             sceneId: string;
@@ -301,6 +283,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     const storeReady = status?.vector_store.state === 'ready';
     const activeJob = !!job && !TERMINAL_JOB_STATES.has(job.state);
     const selectedJobActive = activeJob && job?.collection === selected?.name;
+    const activeJobsCount = jobs.filter(item => !TERMINAL_JOB_STATES.has(item.state)).length;
 
     const refreshStatus = useCallback(async () => {
         try {
@@ -349,17 +332,22 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     }, [coreBaseUrl, t]);
 
     const recoverJob = useCallback(async () => {
+        setJobsLoading(true);
+        setJobsError(null);
         try {
             const response = await fetch(`${baseUrl}/jobs`);
             const data = await readResponse<{jobs?: IngestJob[]}>(response);
-            const jobs = Array.isArray(data.jobs) ? data.jobs : [];
-            const visible = jobs.find(item => !TERMINAL_JOB_STATES.has(item.state))
-                || jobs.find(item => item.resumable);
+            const nextJobs = Array.isArray(data.jobs) ? data.jobs : [];
+            setJobs(nextJobs);
+            const visible = nextJobs.find(item => !TERMINAL_JOB_STATES.has(item.state))
+                || nextJobs.find(item => item.resumable);
             setJob(visible || null);
-        } catch {
-            // Job recovery is best-effort; collection management remains usable.
+        } catch (cause) {
+            setJobsError(cause instanceof Error ? cause.message : t('入库记录加载失败', 'Failed to load ingest history'));
+        } finally {
+            setJobsLoading(false);
         }
-    }, [baseUrl]);
+    }, [baseUrl, t]);
 
     useEffect(() => {
         refreshStatus();
@@ -385,6 +373,12 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 }
                 const nextJob = await readResponse<IngestJob>(response);
                 setJob(nextJob);
+                setJobs(current => {
+                    const exists = current.some(item => item.job_id === nextJob.job_id);
+                    return exists
+                        ? current.map(item => item.job_id === nextJob.job_id ? nextJob : item)
+                        : [nextJob, ...current];
+                });
                 if (nextJob.state === 'completed') refreshCollections();
             } catch {
                 // The status/collection banners report connectivity; keep the last job progress visible.
@@ -395,31 +389,13 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     }, [baseUrl, job, refreshCollections, t]);
 
     useEffect(() => {
-        const targetChanged = previousTargetIdRef.current !== selectedTargetId;
         setDatasetId('');
         setPendingFiles([]);
         setIngestSource('dataset');
         setIngestError(null);
         setDeleteConfirm(false);
         setDeleteError(null);
-        setResults(null);
-        setSearchError(null);
-        setClassFilter('');
-        setQueryBbox('');
-        if (targetChanged) {
-            setQueryFile(null);
-            if (queryPreviewRef.current) {
-                URL.revokeObjectURL(queryPreviewRef.current);
-                queryPreviewRef.current = null;
-                setQueryPreview(null);
-            }
-        }
-        previousTargetIdRef.current = selectedTargetId;
-    }, [selectedName, selectedTargetId]);
-
-    useEffect(() => () => {
-        if (queryPreviewRef.current) URL.revokeObjectURL(queryPreviewRef.current);
-    }, []);
+    }, [selectedName]);
 
     const warmup = async () => {
         setWarmingUp(true);
@@ -558,7 +534,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             const body = await readResponse<{job_id: string}>(response);
             setPendingFiles([]);
             setDatasetId('');
-            setJob({
+            const queuedJob: IngestJob = {
                 job_id: body.job_id,
                 state: 'queued',
                 collection: selected.name,
@@ -575,7 +551,10 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 eta_seconds: null,
                 resumable: false,
                 error: null,
-            });
+                started_at: new Date().toISOString(),
+            };
+            setJob(queuedJob);
+            setJobs(current => [queuedJob, ...current.filter(item => item.job_id !== queuedJob.job_id)]);
         } catch (cause) {
             setIngestError(cause instanceof Error ? cause.message : t('入库请求失败', 'Ingest request failed'));
         } finally {
@@ -601,56 +580,11 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 {method: 'POST'},
             );
             await readResponse(response);
-            setJob({...job, state: 'queued', error: null});
+            const resumed = {...job, state: 'queued', error: null};
+            setJob(resumed);
+            setJobs(current => current.map(item => item.job_id === resumed.job_id ? resumed : item));
         } catch (cause) {
             setIngestError(cause instanceof Error ? cause.message : t('恢复失败', 'Resume failed'));
-        }
-    };
-
-    const onQueryDrop = useCallback((accepted: File[]) => {
-        const image = accepted[0];
-        if (!image) return;
-        if (queryPreviewRef.current) URL.revokeObjectURL(queryPreviewRef.current);
-        const url = URL.createObjectURL(image);
-        queryPreviewRef.current = url;
-        setQueryFile(image);
-        setQueryPreview(url);
-        setResults(null);
-        setSearchError(null);
-    }, []);
-
-    const queryDropzone = useDropzone({
-        accept: {'image/*': ['.jpg', '.jpeg', '.png', '.bmp', '.webp']},
-        // File selection is local and remains useful before the user switches
-        // from an incompatible historical version to a compatible one.
-        disabled: searching,
-        multiple: false,
-        onDrop: onQueryDrop,
-    });
-
-    const runQuery = async () => {
-        if (!selected || !queryFile || searching) return;
-        setSearching(true);
-        setSearchError(null);
-        setResults(null);
-        const form = new FormData();
-        form.append('file', queryFile);
-        form.append('collection', selected.name);
-        form.append('top_k', String(topK));
-        if (selected.granularity === 'bbox' && classFilter.trim()) {
-            form.append('class_name', classFilter.trim());
-        }
-        if (selected.granularity === 'bbox' && queryBbox.trim()) {
-            form.append('bbox', queryBbox.trim());
-        }
-        try {
-            const response = await fetch(`${baseUrl}/search`, {method: 'POST', body: form});
-            const body = await readResponse<{results?: SearchResult[]}>(response);
-            setResults(Array.isArray(body.results) ? body.results : []);
-        } catch (cause) {
-            setSearchError(cause instanceof Error ? cause.message : t('检索失败', 'Query failed'));
-        } finally {
-            setSearching(false);
         }
     };
 
@@ -658,10 +592,21 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         ? t('目标框', 'Bounding boxes')
         : t('整张图片', 'Whole images');
 
-    const formatDate = (value: string | null) => {
+    const formatDate = (value?: string | null) => {
         if (!value) return t('尚未入库', 'Never ingested');
         const parsed = new Date(value);
         return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString(zh ? 'zh-CN' : 'en-US');
+    };
+
+    const formatDuration = (item: IngestJob) => {
+        if (!item.started_at) return '—';
+        const started = new Date(item.started_at).getTime();
+        const ended = new Date(item.finished_at || item.updated_at || Date.now()).getTime();
+        if (Number.isNaN(started) || Number.isNaN(ended)) return '—';
+        const seconds = Math.max(0, Math.round((ended - started) / 1000));
+        if (seconds < 60) return `${seconds}s`;
+        const minutes = Math.floor(seconds / 60);
+        return `${minutes}m ${seconds % 60}s`;
     };
 
     const formatVectorNorm = (collection: CollectionInfo) => collection.quality.norm_mean != null
@@ -721,8 +666,8 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         }
         if (status?.embedder.state === 'not_loaded') {
             return <div className='ServiceNotice info'>
-                <span>{t('特征模型尚未加载。浏览集合不受影响；入库和快速向量检索需要先加载模型。',
-                    'The feature model is not loaded. Collection browsing remains available; ingest and quick vector query require it.')}</span>
+                <span>{t('特征模型尚未加载。浏览集合和入库记录不受影响；生成向量需要先加载模型。',
+                    'The feature model is not loaded. Browsing collections and ingest history remain available; vector ingest requires it.')}</span>
                 <button type='button' disabled={warmingUp} onClick={warmup}>
                     {warmingUp ? t('正在启动…', 'Starting…') : t('加载特征模型', 'Load feature model')}
                 </button>
@@ -947,88 +892,58 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         </div>;
     };
 
-    const renderBboxQueryFields = (collection: CollectionInfo) => {
-        if (collection.granularity !== 'bbox') return null;
-        return <>
-            <label className='FieldStack'>
-                <span>{t('类别过滤（可选）', 'Class filter (optional)')}</span>
-                <input
-                    value={classFilter}
-                    placeholder={t('例如：person', 'e.g. person')}
-                    onChange={event => setClassFilter(event.target.value)}
-                />
-            </label>
-            <label className='FieldStack'>
-                <span>{t('查询框（可选）', 'Query bbox (optional)')}</span>
-                <input
-                    value={queryBbox}
-                    placeholder='x1,y1,x2,y2'
-                    onChange={event => setQueryBbox(event.target.value)}
-                />
-            </label>
-        </>;
-    };
-
-    const renderSearchResults = () => {
-        if (results === null) return null;
-        if (results.length === 0) {
-            return <div className='ResultEmpty'>{t('没有找到相似向量', 'No similar vectors found')}</div>;
-        }
-        return <div className='ResultGrid' aria-live='polite'>
-            {results.map((result, index) => (
-                <div className='ResultCard' key={`${result.filename}-${index}`}>
-                    {result.thumbnail
-                        ? <img src={result.thumbnail} alt={result.filename}/>
-                        : <div className='ThumbPlaceholder'>{t('无缩略图', 'No preview')}</div>}
-                    <span className='ScoreBadge'>{(result.score * 100).toFixed(1)}%</span>
-                    <div className='ResultMeta'>
-                        {result.class_name && <span className='ClassTag'>{result.class_name}</span>}
-                        <span title={result.filename}>{result.filename}</span>
-                    </div>
-                </div>
-            ))}
-        </div>;
-    };
-
-    const renderQuery = () => {
+    const renderHistory = () => {
         if (!selected) return null;
-        return <div className='WorkspaceBody'>
-            <div className='QueryBoundaryNote'>
-                <strong>{t('快速向量检索', 'Quick vector query')}</strong>
-                <span>{t('用于验证当前集合中的向量相似度；高精度检索是独立功能。',
-                    'Use this to validate vector similarity in this collection. High-precision retrieval is a separate feature.')}</span>
-            </div>
-            <div className='QueryComposer'>
-                <div {...queryDropzone.getRootProps({className: `QueryDropzone${queryDropzone.isDragActive ? ' active' : ''}`})}>
-                    <input {...queryDropzone.getInputProps()} />
-                    {queryPreview
-                        ? <img src={queryPreview} alt={queryFile?.name || t('查询图片', 'Query image')}/>
-                        : <span>{t('拖入或点击选择查询图片', 'Drop or click to choose a query image')}</span>}
+        const selectedJobs = jobs.filter(item => item.collection === selected.name);
+        return <div className='WorkspaceBody IngestHistory'>
+            <div className='HistoryHeading'>
+                <div>
+                    <strong>{t('入库记录', 'Ingest history')}</strong>
+                    <span>{t('记录持久保存在拓展引擎中，页面刷新后仍可追溯。',
+                        'Records are persisted by the extension engine and remain available after refresh.')}</span>
                 </div>
-                <div className='QueryFields'>
-                    <label className='FieldStack compact'>
-                        <span>Top-K</span>
-                        <input
-                            type='number'
-                            min={1}
-                            max={100}
-                            value={topK}
-                            onChange={event => setTopK(Math.max(1, Math.min(100, Number(event.target.value) || 12)))}
-                        />
-                    </label>
-                    {renderBboxQueryFields(selected)}
-                    <button
-                        type='button'
-                        className='PrimaryButton'
-                        disabled={!embedderReady || !storeReady || !selected.compatible || !queryFile || searching}
-                        onClick={runQuery}
-                    >
-                        {searching ? t('检索中…', 'Querying…') : t('执行快速检索', 'Run quick query')}
-                    </button>
-                </div>
+                <button type='button' className='SecondaryButton' disabled={jobsLoading} onClick={recoverJob}>
+                    {jobsLoading ? t('刷新中…', 'Refreshing…') : t('刷新记录', 'Refresh')}
+                </button>
             </div>
-            {searchError && <div className='InlineError' role='alert'>{searchError}</div>}
-            {renderSearchResults()}
+            {jobsError && <div className='InlineError' role='alert'>{jobsError}</div>}
+            {!jobsLoading && !jobsError && selectedJobs.length === 0 && (
+                <div className='HistoryEmpty'>{t('这个版本还没有入库记录。', 'This version has no ingest history yet.')}</div>
+            )}
+            <div className='HistoryList'>
+                {selectedJobs.map(item => {
+                    const label = JOB_STATE_LABELS[item.state] || JOB_STATE_LABELS.queued;
+                    const source = item.source === 'dataset'
+                        ? item.dataset_id || t('数据管理', 'Data Management')
+                        : t('本地上传', 'Local upload');
+                    return <article className={`HistoryRow ${item.state}`} key={item.job_id}>
+                        <div className='HistoryState'>
+                            <span className='HistoryDot'/>
+                            <div>
+                                <strong>{t(label[0], label[1])}</strong>
+                                <small title={item.job_id}>{item.job_id.slice(0, 12)}</small>
+                            </div>
+                        </div>
+                        <div className='HistoryMetric'>
+                            <span>{t('数据来源', 'Source')}</span>
+                            <strong title={source}>{source}</strong>
+                        </div>
+                        <div className='HistoryMetric'>
+                            <span>{t('处理结果', 'Processed')}</span>
+                            <strong>{item.processed_images}/{item.total_images} · {item.inserted_vectors ?? item.inserted_objects} {t('向量', 'vectors')}</strong>
+                        </div>
+                        <div className='HistoryMetric'>
+                            <span>{t('开始时间 / 耗时', 'Started / duration')}</span>
+                            <strong>{formatDate(item.started_at)} · {formatDuration(item)}</strong>
+                        </div>
+                        <div className='HistoryMetric anomalies'>
+                            <span>{t('异常', 'Anomalies')}</span>
+                            <strong>{item.failed_images} {t('失败', 'failed')} · {item.skipped_images} {t('跳过', 'skipped')} · {item.invalid_vectors} {t('无效', 'invalid')}</strong>
+                        </div>
+                        {item.error && <div className='HistoryError'>{item.error}</div>}
+                    </article>;
+                })}
+            </div>
         </div>;
     };
 
@@ -1050,7 +965,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         </div>;
     };
 
-    const renderActiveWorkspace = () => activeTab === 'ingest' ? renderIngest() : renderQuery();
+    const renderActiveWorkspace = () => activeTab === 'ingest' ? renderIngest() : renderHistory();
 
     const renderSelectedCollection = () => {
         if (!selected) {
@@ -1090,7 +1005,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 <div><span>{t('向量数量', 'Vectors')}</span><strong>{selected.count.toLocaleString()}</strong></div>
                 <div><span>{t('向量维度', 'Dimensions')}</span><strong>{selected.dim}</strong></div>
                 <div><span>{t('特征模型', 'Embedder')}</span><strong title={selected.embedder}>{selected.embedder}</strong></div>
-                <div><span>Feature Profile</span><strong title={selected.profile_id}>{selected.profile_id}</strong></div>
+                <div><span>{t('特征配置', 'Feature Profile')}</span><strong title={selected.profile_id}>{selected.profile_id}</strong></div>
                 <div><span>{t('物理版本', 'Physical version')}</span><strong>v{selected.version} · {selected.active ? t('当前', 'active') : t('历史', 'inactive')}</strong></div>
                 <div><span>{t('向量索引', 'Vector index')}</span><strong>{selected.index_type}</strong></div>
                 <div><span>{t('最近入库', 'Last ingest')}</span><strong>{formatDate(selected.last_ingest_at)}</strong></div>
@@ -1113,10 +1028,10 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 <button
                     type='button'
                     role='tab'
-                    aria-selected={activeTab === 'query'}
-                    className={activeTab === 'query' ? 'active' : ''}
-                    onClick={() => setActiveTab('query')}
-                >{t('快速向量检索', 'Quick vector query')}</button>
+                    aria-selected={activeTab === 'history'}
+                    className={activeTab === 'history' ? 'active' : ''}
+                    onClick={() => setActiveTab('history')}
+                >{t('入库记录', 'Ingest history')}</button>
             </div>
             {renderActiveWorkspace()}
         </section>;
@@ -1165,8 +1080,8 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             <div className='VectorDbIntro'>
                 <div>
                     <span className='Eyebrow'>{t('拓展服务', 'Extension service')}</span>
-                    <p>{t('按场景、目标和版本管理 DINO 向量，导入业务数据，并用快速向量检索验证索引。高精度检索保持为独立功能。',
-                        'Manage DINO vectors by scene, target and version, ingest business data and validate indexes with quick queries. High-precision retrieval remains separate.')}</p>
+                    <p>{t('按场景、目标和版本管理 DINO 向量，导入业务数据，并追踪每一次入库任务与质量结果。检索功能统一放在「视觉检索」。',
+                        'Manage DINO vectors by scene, target and version, ingest business data, and track every ingest run and quality result. Retrieval is unified under Visual Retrieval.')}</p>
                 </div>
                 <div className='ServiceChips' aria-label={t('服务概况', 'Service overview')}>
                     <span className={`ServiceChip ${storeReady ? 'ready' : 'pending'}`}>
@@ -1184,7 +1099,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 <div><span>{t('场景', 'Scenes')}</span><strong>{hierarchy.length}</strong></div>
                 <div><span>{t('目标', 'Targets')}</span><strong>{totalTargets}</strong></div>
                 <div><span>{t('向量总数', 'Total vectors')}</span><strong>{totalVectors.toLocaleString()}</strong></div>
-                <div><span>{t('活动任务', 'Active jobs')}</span><strong>{activeJob ? 1 : 0}</strong></div>
+                <div><span>{t('活动任务', 'Active jobs')}</span><strong>{activeJobsCount}</strong></div>
             </div>
             <div className='VectorWorkspace'>
                 {renderCollections()}

@@ -1054,6 +1054,145 @@
     }
   }
 
+  .IngestHistory {
+    min-height: 190px;
+  }
+
+  .HistoryHeading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    > div {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+
+      strong {
+        font-size: 12px;
+      }
+
+      span {
+        color: rgba(255, 255, 255, 0.48);
+        font-size: 10px;
+      }
+    }
+  }
+
+  .HistoryList {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 3px;
+  }
+
+  .HistoryEmpty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 11px;
+  }
+
+  .HistoryRow {
+    display: grid;
+    grid-template-columns: 115px minmax(90px, 0.8fr) minmax(130px, 1fr) minmax(160px, 1.25fr);
+    align-items: center;
+    gap: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.025);
+    padding: 9px 10px;
+
+    &.completed {
+      border-color: rgba(92, 201, 128, 0.2);
+    }
+
+    &.failed,
+    &.cancelled,
+    &.interrupted {
+      border-color: rgba(255, 105, 105, 0.2);
+
+      .HistoryDot {
+        background: #ff7979;
+      }
+    }
+  }
+
+  .HistoryState {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 7px;
+
+    .HistoryDot {
+      width: 7px;
+      height: 7px;
+      flex: 0 0 7px;
+      border-radius: 50%;
+      background: #5cc980;
+    }
+
+    > div {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    strong {
+      font-size: 10px;
+    }
+
+    small {
+      overflow: hidden;
+      color: rgba(255, 255, 255, 0.35);
+      font-size: 8px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .HistoryMetric {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+
+    span {
+      color: rgba(255, 255, 255, 0.38);
+      font-size: 8px;
+      text-transform: uppercase;
+    }
+
+    strong {
+      overflow: hidden;
+      font-size: 9px;
+      font-weight: 500;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    &.anomalies {
+      grid-column: 2 / -1;
+    }
+  }
+
+  .HistoryError {
+    grid-column: 1 / -1;
+    border-radius: 4px;
+    background: rgba(255, 105, 105, 0.07);
+    padding: 5px 7px;
+    color: #ffaaaa;
+    font-size: 9px;
+  }
+
   .ActivityStrip {
     position: relative;
     display: grid;
@@ -1189,6 +1328,15 @@
         grid-row: 2;
       }
     }
+
+    .HistoryRow {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+
+      .HistoryMetric.anomalies,
+      .HistoryError {
+        grid-column: 1 / -1;
+      }
+    }
   }
 }
 
@@ -1213,6 +1361,20 @@
     .MetadataGrid,
     .ModePicker {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    .HistoryHeading {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .HistoryRow {
+      grid-template-columns: minmax(0, 1fr);
+
+      .HistoryMetric.anomalies,
+      .HistoryError {
+        grid-column: auto;
+      }
     }
   }
 }

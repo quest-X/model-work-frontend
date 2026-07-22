@@ -65,6 +65,7 @@ const jsonResponse = (body: unknown, status = 200): Response => ({
 describe('VectorDbPopup', () => {
     let statusBody: typeof readyStatus;
     let collectionList: Array<typeof collection>;
+    let jobList: Array<Record<string, unknown>>;
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -78,6 +79,7 @@ describe('VectorDbPopup', () => {
         });
         statusBody = readyStatus;
         collectionList = [collection];
+        jobList = [];
         global.fetch = jest.fn((input: RequestInfo, init?: RequestInit) => {
             const url = String(input);
             if (url.endsWith('/status')) return Promise.resolve(jsonResponse(statusBody));
@@ -101,20 +103,21 @@ describe('VectorDbPopup', () => {
             if (url.endsWith('/datasets')) {
                 return Promise.resolve(jsonResponse({datasets: [{id: 'dataset-1', name: '一号产线', image_count: 24}]}));
             }
-            if (url.endsWith('/jobs')) return Promise.resolve(jsonResponse({status: 'success', jobs: []}));
+            if (url.endsWith('/jobs')) return Promise.resolve(jsonResponse({status: 'success', jobs: jobList}));
             if (url.endsWith('/warmup')) return Promise.resolve(jsonResponse({status: 'accepted'}));
             if (url.includes('/ingest')) return Promise.resolve(jsonResponse({status: 'accepted', job_id: 'job-1'}));
             return Promise.resolve(jsonResponse({status: 'success'}));
         }) as jest.Mock;
     });
 
-    it('keeps vector management and quick query separate from the L2G workflow', async () => {
+    it('keeps vector management focused on ingest and persistent history', async () => {
         render(<VectorDbPopup language={Language.CHINESE}/>);
 
         expect((await screen.findAllByText('产线帧库')).length).toBeGreaterThan(0);
-        expect(screen.getByRole('tab', {name: '快速向量检索'})).toBeInTheDocument();
-        expect(screen.queryByRole('tab', {name: '高精度检索'})).not.toBeInTheDocument();
-        expect(screen.getByText(/高精度检索保持为独立功能/)).toBeInTheDocument();
+        expect(screen.getByRole('tab', {name: '入库记录'})).toBeInTheDocument();
+        expect(screen.queryByRole('tab', {name: '快速向量检索'})).not.toBeInTheDocument();
+        expect(screen.getByText(/检索功能统一放在「视觉检索」/)).toBeInTheDocument();
+        expect(screen.getByText('特征配置')).toBeInTheDocument();
     });
 
     it('groups physical indexes as scene, target and version nodes', async () => {
@@ -218,23 +221,37 @@ describe('VectorDbPopup', () => {
             String(url).endsWith('/versions') && init?.method === 'POST')).toBe(false);
     });
 
-    it('selects a query image on an incompatible version and keeps it when switching versions', async () => {
-        collectionList = [
-            {...collection, compatible: false, compatibility_reason: '旧模型不兼容'},
-            {...collection, name: 'frame_index_v2', version: 2, active: false},
-        ];
-        const {container} = render(<VectorDbPopup language={Language.CHINESE}/>);
+    it('shows persisted ingest records for the selected physical version', async () => {
+        jobList = [{
+            job_id: 'job-history-1',
+            state: 'completed',
+            collection: 'frame_index',
+            granularity: 'image',
+            source: 'dataset',
+            dataset_id: 'dataset-1',
+            total_images: 24,
+            processed_images: 24,
+            inserted_objects: 0,
+            inserted_vectors: 24,
+            skipped_images: 1,
+            failed_images: 0,
+            invalid_vectors: 0,
+            throughput_images_per_sec: 12,
+            eta_seconds: null,
+            resumable: false,
+            error: null,
+            started_at: '2026-07-22T15:00:00',
+            updated_at: '2026-07-22T15:00:02',
+            finished_at: '2026-07-22T15:00:02',
+        }];
+        render(<VectorDbPopup language={Language.CHINESE}/>);
 
-        await screen.findByRole('button', {name: '切换到兼容的 v2'});
-        fireEvent.click(screen.getByRole('tab', {name: '快速向量检索'}));
-        const queryInput = container.querySelector('.QueryDropzone input[type="file"]') as HTMLInputElement;
-        expect(queryInput).not.toBeDisabled();
-        const queryImage = new File(['image'], 'query.png', {type: 'image/png'});
-        fireEvent.change(queryInput, {target: {files: [queryImage]}});
+        await screen.findAllByText('产线帧库');
+        fireEvent.click(screen.getByRole('tab', {name: '入库记录'}));
 
-        expect(await screen.findByAltText('query.png')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', {name: '切换到兼容的 v2'}));
-        expect(screen.getByText('v2 · 历史')).toBeInTheDocument();
-        expect(screen.getByAltText('query.png')).toBeInTheDocument();
+        expect(await screen.findByText('入库完成')).toBeInTheDocument();
+        expect(screen.getByText('dataset-1')).toBeInTheDocument();
+        expect(screen.getByText(/24\/24 · 24 向量/)).toBeInTheDocument();
+        expect(screen.getByText(/1 跳过/)).toBeInTheDocument();
     });
 });

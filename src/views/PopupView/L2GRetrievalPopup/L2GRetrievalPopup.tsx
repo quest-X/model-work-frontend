@@ -8,8 +8,11 @@ import {Language} from '../../../data/LanguageConfig';
 import {getExtensionEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
 import './L2GRetrievalPopup.scss';
 
+type RetrievalEngine = 'dino' | 'l2g';
+type Granularity = 'image' | 'bbox';
+
 interface PipelineStatus {
-    state: string;           // not_loaded | loading | ready | missing_dep | error
+    state: string;
     error: string | null;
 }
 
@@ -19,6 +22,40 @@ interface L2GStatus {
     pipeline: PipelineStatus;
     config_file: string;
     defaults: {top_k: number; max_database_size: number};
+}
+
+interface DinoStatus {
+    status: string;
+    vector_store: {state: string; error: string | null};
+    embedder: {
+        state: string;
+        progress: number;
+        model: string;
+        dim: number | null;
+        device: string | null;
+        error: string | null;
+    };
+}
+
+interface DinoCollection {
+    name: string;
+    display_name: string;
+    target_name?: string;
+    scene_name?: string;
+    version: number;
+    granularity: Granularity;
+    count: number;
+    embedder: string;
+    profile_id: string;
+    compatible: boolean;
+    compatibility_reason: string | null;
+}
+
+interface DinoResult {
+    score: number;
+    filename: string;
+    class_name: string;
+    thumbnail: string | null;
 }
 
 interface L2GResult {
@@ -31,206 +68,401 @@ interface IProps {
     language: Language;
 }
 
-const EP = '/l2g_retrieval';
+const readResponse = async <T,>(response: Response): Promise<T> => {
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const detail = (body as {detail?: unknown}).detail;
+        throw new Error(typeof detail === 'string' ? detail : String(response.status));
+    }
+    return body as T;
+};
 
-const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
+export const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
     const zh = language === Language.CHINESE;
     const t = useCallback(
         (zhText: string, enText: string) => (zh ? zhText : enText),
         [zh],
     );
-    const baseUrl = getExtensionEngineBaseUrl();
+    const extensionBaseUrl = getExtensionEngineBaseUrl();
+    const dinoBaseUrl = `${extensionBaseUrl}/vector_db`;
+    const l2gBaseUrl = `${extensionBaseUrl}/l2g_retrieval`;
 
-    const [status, setStatus] = useState<L2GStatus | null>(null);
-    const [backendDown, setBackendDown] = useState(false);
+    const [engine, setEngine] = useState<RetrievalEngine>('dino');
+    const [dinoStatus, setDinoStatus] = useState<DinoStatus | null>(null);
+    const [dinoDown, setDinoDown] = useState(false);
+    const [dinoCollections, setDinoCollections] = useState<DinoCollection[]>([]);
+    const [collectionsLoading, setCollectionsLoading] = useState(true);
+    const [collectionsError, setCollectionsError] = useState<string | null>(null);
+    const [selectedCollectionName, setSelectedCollectionName] = useState('');
+    const [warmingDino, setWarmingDino] = useState(false);
+
+    const [l2gStatus, setL2GStatus] = useState<L2GStatus | null>(null);
+    const [l2gDown, setL2GDown] = useState(false);
+    const [warmingL2G, setWarmingL2G] = useState(false);
+    const [databaseDir, setDatabaseDir] = useState('');
+
     const [queryFile, setQueryFile] = useState<File | null>(null);
     const [queryPreview, setQueryPreview] = useState<string | null>(null);
-    const [databaseDir, setDatabaseDir] = useState('');
-    const [topK, setTopK] = useState(10);
+    const queryPreviewRef = useRef<string | null>(null);
+    const [topK, setTopK] = useState(12);
+    const [classFilter, setClassFilter] = useState('');
+    const [queryBbox, setQueryBbox] = useState('');
     const [searching, setSearching] = useState(false);
-    const [elapsed, setElapsed] = useState<number | null>(null);
-    const [results, setResults] = useState<L2GResult[]>([]);
-    const [searchError, setSearchError] = useState<string | null>(null);
     const searchingRef = useRef(false);
+    const [elapsed, setElapsed] = useState<number | null>(null);
+    const [dinoResults, setDinoResults] = useState<DinoResult[]>([]);
+    const [l2gResults, setL2GResults] = useState<L2GResult[]>([]);
+    const [searchAttempted, setSearchAttempted] = useState(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
 
-    const fetchStatus = useCallback(async () => {
+    const selectedCollection = dinoCollections.find(item => item.name === selectedCollectionName) || null;
+    const dinoReady = dinoStatus?.vector_store.state === 'ready' && dinoStatus?.embedder.state === 'ready';
+    const l2gReady = l2gStatus?.pipeline?.state === 'ready';
+
+    const fetchDinoStatus = useCallback(async () => {
         try {
-            const resp = await fetch(`${baseUrl}${EP}/status`);
-            if (!resp.ok) throw new Error(String(resp.status));
-            setStatus(await resp.json());
-            setBackendDown(false);
+            const response = await fetch(`${dinoBaseUrl}/status`);
+            setDinoStatus(await readResponse<DinoStatus>(response));
+            setDinoDown(false);
         } catch {
-            setBackendDown(true);
+            setDinoDown(true);
         }
-    }, [baseUrl]);
+    }, [dinoBaseUrl]);
+
+    const fetchL2GStatus = useCallback(async () => {
+        try {
+            const response = await fetch(`${l2gBaseUrl}/status`);
+            setL2GStatus(await readResponse<L2GStatus>(response));
+            setL2GDown(false);
+        } catch {
+            setL2GDown(true);
+        }
+    }, [l2gBaseUrl]);
+
+    const fetchCollections = useCallback(async () => {
+        setCollectionsLoading(true);
+        setCollectionsError(null);
+        try {
+            const response = await fetch(`${dinoBaseUrl}/collections`);
+            const body = await readResponse<{collections?: DinoCollection[]}>(response);
+            const collections = Array.isArray(body.collections) ? body.collections : [];
+            setDinoCollections(collections);
+            setSelectedCollectionName(current => {
+                if (current && collections.some(item => item.name === current)) return current;
+                const preferred = collections.find(item => item.compatible && item.count > 0);
+                return preferred?.name || collections[0]?.name || '';
+            });
+        } catch (cause) {
+            setCollectionsError(cause instanceof Error ? cause.message : t('DINO 向量版本加载失败', 'Failed to load DINO vector versions'));
+        } finally {
+            setCollectionsLoading(false);
+        }
+    }, [dinoBaseUrl, t]);
 
     useEffect(() => {
-        fetchStatus();
-        const timer = window.setInterval(fetchStatus, 5000);
+        fetchDinoStatus();
+        fetchL2GStatus();
+        fetchCollections();
+        const timer = window.setInterval(() => {
+            fetchDinoStatus();
+            fetchL2GStatus();
+        }, 5000);
         return () => window.clearInterval(timer);
-    }, [fetchStatus]);
+    }, [fetchCollections, fetchDinoStatus, fetchL2GStatus]);
 
-    const doWarmup = async () => {
+    useEffect(() => () => {
+        if (queryPreviewRef.current) URL.revokeObjectURL(queryPreviewRef.current);
+    }, []);
+
+    const warmupDino = async () => {
+        setWarmingDino(true);
         try {
-            await fetch(`${baseUrl}${EP}/warmup`, {method: 'POST'});
-        } catch { /* status 轮询会反映结果 */ }
-        fetchStatus();
+            await readResponse(await fetch(`${dinoBaseUrl}/warmup`, {method: 'POST'}));
+        } catch {
+            // The status banner will expose any warmup failure.
+        } finally {
+            await fetchDinoStatus();
+            setWarmingDino(false);
+        }
+    };
+
+    const warmupL2G = async () => {
+        setWarmingL2G(true);
+        try {
+            await readResponse(await fetch(`${l2gBaseUrl}/warmup`, {method: 'POST'}));
+        } catch {
+            // The status banner will expose any warmup failure.
+        } finally {
+            await fetchL2GStatus();
+            setWarmingL2G(false);
+        }
     };
 
     const onDrop = useCallback((accepted: File[]) => {
-        if (accepted.length === 0) return;
         const file = accepted[0];
+        if (!file) return;
+        if (queryPreviewRef.current) URL.revokeObjectURL(queryPreviewRef.current);
+        const preview = URL.createObjectURL(file);
+        queryPreviewRef.current = preview;
         setQueryFile(file);
-        setQueryPreview(URL.createObjectURL(file));
-        setResults([]);
+        setQueryPreview(preview);
+        setDinoResults([]);
+        setL2GResults([]);
+        setElapsed(null);
+        setSearchAttempted(false);
         setSearchError(null);
     }, []);
 
-    const {getRootProps, getInputProps, isDragActive} = useDropzone({
+    const queryDropzone = useDropzone({
         onDrop,
-        accept: {'image/*': ['.jpg', '.jpeg', '.png']},
+        accept: {'image/*': ['.jpg', '.jpeg', '.png', '.bmp', '.webp']},
         multiple: false,
+        disabled: searching,
     });
 
-    const doSearch = async () => {
-        if (!queryFile || !databaseDir.trim() || searchingRef.current) return;
+    const changeEngine = (nextEngine: RetrievalEngine) => {
+        setEngine(nextEngine);
+        setElapsed(null);
+        setSearchAttempted(false);
+        setSearchError(null);
+    };
+
+    const searchDino = async () => {
+        if (!queryFile || !selectedCollection) return;
+        const form = new FormData();
+        form.append('file', queryFile);
+        form.append('collection', selectedCollection.name);
+        form.append('top_k', String(topK));
+        if (selectedCollection.granularity === 'bbox' && classFilter.trim()) {
+            form.append('class_name', classFilter.trim());
+        }
+        if (selectedCollection.granularity === 'bbox' && queryBbox.trim()) {
+            form.append('bbox', queryBbox.trim());
+        }
+        const startedAt = performance.now();
+        const response = await fetch(`${dinoBaseUrl}/search`, {method: 'POST', body: form});
+        const body = await readResponse<{results?: DinoResult[]}>(response);
+        setDinoResults(Array.isArray(body.results) ? body.results : []);
+        setElapsed(Number(((performance.now() - startedAt) / 1000).toFixed(3)));
+    };
+
+    const searchL2G = async () => {
+        if (!queryFile || !databaseDir.trim()) return;
+        const form = new FormData();
+        form.append('query', queryFile);
+        form.append('database_dir', databaseDir.trim());
+        form.append('top_k', String(topK));
+        const response = await fetch(`${l2gBaseUrl}/search`, {method: 'POST', body: form});
+        const body = await readResponse<{results?: L2GResult[]; elapsed_s?: number}>(response);
+        setL2GResults(Array.isArray(body.results) ? body.results : []);
+        setElapsed(body.elapsed_s ?? null);
+    };
+
+    const runSearch = async () => {
+        if (searchingRef.current) return;
         searchingRef.current = true;
         setSearching(true);
+        setSearchAttempted(true);
         setSearchError(null);
-        setResults([]);
         setElapsed(null);
+        if (engine === 'dino') setDinoResults([]);
+        else setL2GResults([]);
         try {
-            const form = new FormData();
-            form.append('query', queryFile);
-            form.append('database_dir', databaseDir.trim());
-            form.append('top_k', String(topK));
-            const resp = await fetch(`${baseUrl}${EP}/search`, {method: 'POST', body: form});
-            const data = await resp.json();
-            if (!resp.ok) {
-                setSearchError(String(data.detail ?? resp.status));
-            } else {
-                setResults(data.results ?? []);
-                setElapsed(data.elapsed_s ?? null);
-            }
-        } catch (e) {
-            setSearchError(String(e));
+            if (engine === 'dino') await searchDino();
+            else await searchL2G();
+        } catch (cause) {
+            setSearchError(cause instanceof Error ? cause.message : t('视觉检索失败，请检查引擎状态与输入。', 'Visual search failed. Check the engine status and input.'));
         } finally {
             searchingRef.current = false;
             setSearching(false);
         }
     };
 
-    const pipelineState = status?.pipeline?.state ?? 'unknown';
-    const ready = pipelineState === 'ready';
-
-    const renderBanner = () => {
-        if (backendDown) {
-            return <div className='Banner error'>{t('推理后端不可达，或 L2G 插件未启用', 'Backend unreachable or L2G plugin disabled')}</div>;
+    const renderDinoBanner = () => {
+        if (dinoDown) return <div className='Banner error'>{t('DINO 向量服务不可达', 'DINO vector service is unreachable')}</div>;
+        const storeError = dinoStatus?.vector_store?.error;
+        const embedderError = dinoStatus?.embedder?.error;
+        if (storeError || embedderError) {
+            return <div className='Banner error'>{t('DINO 服务异常：', 'DINO service error: ')}{storeError || embedderError}</div>;
         }
-        if (pipelineState === 'error' || pipelineState === 'missing_dep') {
-            return (
-                <div className='Banner error'>
-                    {t('管道异常：', 'Pipeline error: ')}{status?.pipeline?.error ?? pipelineState}
-                </div>
-            );
+        if (dinoReady) {
+            return <div className='Banner ok'>
+                {t('DINO 检索就绪', 'DINO retrieval ready')} · {dinoStatus?.embedder.model} · {dinoStatus?.embedder.dim || '—'}d · {dinoStatus?.embedder.device || '—'}
+            </div>;
         }
-        if (pipelineState === 'loading') {
-            return <div className='Banner info'>{t('管道加载中…（首次含权重加载）', 'Pipeline loading… (first run loads weights)')}</div>;
-        }
-        if (!ready) {
-            return (
-                <div className='Banner info'>
-                    {t('管道未加载。', 'Pipeline not loaded. ')}
-                    <button className='InlineButton' onClick={doWarmup}>{t('立即加载（Warmup）', 'Warm up now')}</button>
-                </div>
-            );
-        }
-        return <div className='Banner ok'>{t('管道就绪', 'Pipeline ready')} · v{status?.version}</div>;
+        return <div className='Banner info'>
+            {dinoStatus?.embedder.state === 'loading'
+                ? t(`DINO 模型加载中 · ${Math.round(dinoStatus.embedder.progress || 0)}%`, `Loading DINO model · ${Math.round(dinoStatus.embedder.progress || 0)}%`)
+                : t('DINO 特征模型尚未加载。', 'The DINO feature model is not loaded. ')}
+            {dinoStatus?.embedder.state !== 'loading' && <button className='InlineButton' disabled={warmingDino} onClick={warmupDino}>
+                {warmingDino ? t('加载中…', 'Loading…') : t('加载 DINO 模型', 'Load DINO model')}
+            </button>}
+        </div>;
     };
 
-    const renderContent = () => (
-        <div className='L2GRetrievalPopupContent'>
-            {renderBanner()}
-            <div className='Hint'>
-                {t('L2G 局部到全局高精度检索：FIRe 局部特征 + ASMK 聚合 + 全局重排。秒~分钟级，适合高精度场景；毫秒级交互检索请用「向量数据库」。',
-                   'L2G local-to-global high-precision retrieval: FIRe local features + ASMK aggregation + global re-ranking. Seconds to minutes per query; for millisecond interactive search use Vector Database.')}
-            </div>
-            <div className='SearchForm'>
-                <div className='QueryPanel'>
-                    <div {...getRootProps({className: `QueryDropzone${isDragActive ? ' active' : ''}`})}>
-                        <input {...getInputProps()} />
-                        {queryPreview
-                            ? <img className='QueryPreview' src={queryPreview} alt='query'/>
-                            : <span>{t('拖入或点击选择查询图', 'Drop or click to pick a query image')}</span>}
-                    </div>
-                    {queryFile && <div className='QueryFileName' title={queryFile.name}>{queryFile.name}</div>}
-                </div>
-                <div className='Fields'>
-                    <label>
-                        {t('服务器图库目录', 'Server database dir')}
-                        <input
-                            type='text'
-                            value={databaseDir}
-                            placeholder={t('推理后端上的图片目录绝对路径', 'Absolute image dir path on the backend host')}
-                            onChange={e => setDatabaseDir(e.target.value)}
-                        />
-                    </label>
-                    <label>
-                        Top-K
-                        <input
-                            type='number'
-                            min={1}
-                            max={100}
-                            value={topK}
-                            onChange={e => setTopK(Number(e.target.value) || 10)}
-                        />
-                    </label>
-                    <button
-                        className='SearchButton'
-                        disabled={!ready || !queryFile || !databaseDir.trim() || searching}
-                        onClick={doSearch}
-                    >
-                        {searching ? t('检索中…', 'Searching…') : t('检索', 'Search')}
-                    </button>
-                </div>
-            </div>
-            {searchError && <div className='Banner error'>{searchError}</div>}
-            {elapsed !== null && (
-                <div className='ResultSummary'>
-                    {t('耗时', 'Elapsed')} {elapsed}s · {results.length} {t('个结果', 'results')}
-                </div>
-            )}
-            {elapsed !== null && results.length === 0 && (
-                <div className='EmptyHint'>{t('无相似结果', 'No similar results')}</div>
-            )}
-            {results.length > 0 && (
-                <div className='ResultGrid'>
-                    {results.map((r, i) => (
-                        <div className='ResultCard' key={r.path}>
-                            {r.thumbnail
-                                ? <img src={r.thumbnail} alt={r.path}/>
-                                : <div className='ThumbPlaceholder'>{t('源图缺失', 'missing')}</div>}
-                            <div className='RankBadge'>{i + 1}</div>
-                            <div className='ScoreBadge'>{(r.score * 100).toFixed(1)}%</div>
-                            <div className='ResultMeta'>
-                                <span className='FileName' title={r.path}>{r.path}</span>
-                            </div>
-                        </div>
+    const renderL2GBanner = () => {
+        const pipelineState = l2gStatus?.pipeline?.state ?? 'unknown';
+        if (l2gDown) return <div className='Banner error'>{t('L2G 服务不可达或插件未启用', 'L2G service is unreachable or disabled')}</div>;
+        if (pipelineState === 'error' || pipelineState === 'missing_dep') {
+            return <div className='Banner error'>{t('L2G 管道异常：', 'L2G pipeline error: ')}{l2gStatus?.pipeline?.error ?? pipelineState}</div>;
+        }
+        if (pipelineState === 'loading') return <div className='Banner info'>{t('L2G 管道加载中…', 'Loading L2G pipeline…')}</div>;
+        if (l2gReady) return <div className='Banner ok'>{t('L2G 检索就绪', 'L2G retrieval ready')} · v{l2gStatus?.version}</div>;
+        return <div className='Banner info'>
+            {t('L2G 管道尚未加载。', 'The L2G pipeline is not loaded. ')}
+            <button className='InlineButton' disabled={warmingL2G} onClick={warmupL2G}>
+                {warmingL2G ? t('加载中…', 'Loading…') : t('加载 L2G 管道', 'Load L2G pipeline')}
+            </button>
+        </div>;
+    };
+
+    const renderDinoFields = () => (
+        <>
+            <label>
+                {t('向量版本', 'Vector version')}
+                <select
+                    value={selectedCollectionName}
+                    disabled={collectionsLoading || !!collectionsError}
+                    onChange={event => setSelectedCollectionName(event.target.value)}
+                >
+                    {dinoCollections.length === 0 && <option value=''>{collectionsLoading ? t('正在读取…', 'Loading…') : t('暂无可用版本', 'No versions available')}</option>}
+                    {dinoCollections.map(item => (
+                        <option key={item.name} value={item.name} disabled={!item.compatible || item.count === 0}>
+                            {item.scene_name || t('默认场景', 'Default scene')} / {item.target_name || item.display_name} / v{item.version} · {item.granularity === 'bbox' ? t('目标框', 'bbox') : t('整图', 'image')} · {item.count}
+                            {!item.compatible ? ` · ${t('不兼容', 'incompatible')}` : ''}
+                        </option>
                     ))}
-                </div>
-            )}
+                </select>
+            </label>
+            {selectedCollection && <div className='ProfileBinding'>
+                <span>{t('特征配置', 'Feature Profile')}</span>
+                <strong title={selectedCollection.profile_id}>{selectedCollection.profile_id}</strong>
+                <small>{selectedCollection.embedder}</small>
+            </div>}
+            {collectionsError && <div className='FieldError'>
+                <span>{collectionsError}</span>
+                <button type='button' onClick={fetchCollections}>{t('重试', 'Retry')}</button>
+            </div>}
+            {selectedCollection?.granularity === 'bbox' && <div className='InlineFields'>
+                <label>
+                    {t('类别过滤（可选）', 'Class filter (optional)')}
+                    <input value={classFilter} onChange={event => setClassFilter(event.target.value)} />
+                </label>
+                <label>
+                    {t('查询框（可选）', 'Query bbox (optional)')}
+                    <input placeholder='x1,y1,x2,y2' value={queryBbox} onChange={event => setQueryBbox(event.target.value)} />
+                </label>
+            </div>}
+        </>
+    );
+
+    const renderL2GFields = () => (
+        <label>
+            {t('服务器图库目录', 'Server database directory')}
+            <input
+                type='text'
+                value={databaseDir}
+                placeholder={t('推理后端上的图片目录绝对路径', 'Absolute image directory on the inference host')}
+                onChange={event => setDatabaseDir(event.target.value)}
+            />
+        </label>
+    );
+
+    const currentResults = engine === 'dino' ? dinoResults : l2gResults;
+    const canSearch = engine === 'dino'
+        ? !!queryFile && !!selectedCollection && selectedCollection.compatible && selectedCollection.count > 0 && dinoReady
+        : !!queryFile && !!databaseDir.trim() && l2gReady;
+
+    const renderResults = () => {
+        if (!searchAttempted || searchError) return null;
+        if (!searching && currentResults.length === 0) {
+            return <div className='EmptyHint'>{t('没有找到相似结果', 'No similar results found')}</div>;
+        }
+        if (currentResults.length === 0) return null;
+        return <div className='ResultGrid' aria-live='polite'>
+            {currentResults.map((item, index) => {
+                const dinoItem = engine === 'dino' ? item as DinoResult : null;
+                const l2gItem = engine === 'l2g' ? item as L2GResult : null;
+                const label = dinoItem?.filename || l2gItem?.path || '';
+                return <div className='ResultCard' key={`${label}-${index}`}>
+                    {item.thumbnail
+                        ? <img src={item.thumbnail} alt={label}/>
+                        : <div className='ThumbPlaceholder'>{t('无缩略图', 'No preview')}</div>}
+                    <div className='RankBadge'>{index + 1}</div>
+                    <div className='ScoreBadge'>{(item.score * 100).toFixed(1)}%</div>
+                    <div className='ResultMeta'>
+                        {dinoItem?.class_name && <span className='ClassTag'>{dinoItem.class_name}</span>}
+                        <span className='FileName' title={label}>{label}</span>
+                    </div>
+                </div>;
+            })}
+        </div>;
+    };
+
+    const renderEngineHint = () => <div className='Hint'>
+        {engine === 'dino'
+            ? t('选择向量数据库中的场景、目标和版本进行毫秒级相似检索。查询会绑定该版本的特征配置，不会跨模型混检。',
+                'Run millisecond similarity search against a scene, target and version from Vector Database. Queries bind to that version profile and never mix model spaces.')
+            : t('L2G 使用 FIRe 局部特征、ASMK 聚合与全局重排，适合更重视精度的秒到分钟级检索。',
+                'L2G uses FIRe local features, ASMK aggregation, and global re-ranking for precision-focused searches taking seconds to minutes.')}
+    </div>;
+
+    const renderSearchForm = () => <div className='SearchForm'>
+        <div className='QueryPanel'>
+            <div {...queryDropzone.getRootProps({className: `QueryDropzone${queryDropzone.isDragActive ? ' active' : ''}`})}>
+                <input {...queryDropzone.getInputProps()} />
+                {queryPreview
+                    ? <img className='QueryPreview' src={queryPreview} alt={queryFile?.name || t('查询图片', 'Query image')}/>
+                    : <span>{t('拖入或点击选择查询图', 'Drop or click to choose a query image')}</span>}
+            </div>
+            {queryFile && <div className='QueryFileName' title={queryFile.name}>{queryFile.name}</div>}
+        </div>
+        <div className='Fields'>
+            {engine === 'dino' ? renderDinoFields() : renderL2GFields()}
+            <label className='TopKField'>
+                Top-K
+                <input type='number' min={1} max={100} value={topK} onChange={event => setTopK(Math.max(1, Math.min(100, Number(event.target.value) || 12)))}/>
+            </label>
+            <button type='button' className='SearchButton' disabled={!canSearch || searching} onClick={runSearch}>
+                {searching ? t('检索中…', 'Searching…') : t('开始视觉检索', 'Run visual search')}
+            </button>
+        </div>
+    </div>;
+
+    const renderResultSummary = () => elapsed !== null && <div className='ResultSummary'>
+        {t('检索引擎', 'Engine')}：{engine === 'dino' ? 'DINO' : 'L2G'} · {t('耗时', 'Elapsed')} {elapsed}s · {currentResults.length} {t('个结果', 'results')}
+    </div>;
+
+    const renderContent = () => (
+        <div className='L2GRetrievalPopupContent VisualRetrievalPopupContent'>
+            <div className='EngineTabs' role='tablist' aria-label={t('视觉检索引擎', 'Visual retrieval engine')}>
+                <button type='button' role='tab' aria-selected={engine === 'dino'} className={engine === 'dino' ? 'active' : ''} onClick={() => changeEngine('dino')}>
+                    <strong>{t('DINO 系列', 'DINO Series')}</strong>
+                    <span>{t('快速向量检索', 'Fast vector search')}</span>
+                    <i className={dinoReady ? 'ready' : 'pending'}/>
+                </button>
+                <button type='button' role='tab' aria-selected={engine === 'l2g'} className={engine === 'l2g' ? 'active' : ''} onClick={() => changeEngine('l2g')}>
+                    <strong>{t('L2G 系统', 'L2G System')}</strong>
+                    <span>{t('局部到全局高精度检索', 'Local-to-global precision search')}</span>
+                    <i className={l2gReady ? 'ready' : 'pending'}/>
+                </button>
+            </div>
+            {engine === 'dino' ? renderDinoBanner() : renderL2GBanner()}
+            {renderEngineHint()}
+            {renderSearchForm()}
+            {searchError && <div className='Banner error' role='alert'>{searchError}</div>}
+            {renderResultSummary()}
+            {renderResults()}
         </div>
     );
 
-    return (
-        <GenericYesNoPopup
-            title={t('高精度检索（L2G）', 'L2G Retrieval')}
-            renderContent={renderContent}
-            skipAcceptButton
-            rejectLabel={t('关闭', 'Close')}
-            onReject={() => PopupActions.close()}
-        />
-    );
+    return <GenericYesNoPopup
+        title={t('视觉检索', 'Visual Retrieval')}
+        renderContent={renderContent}
+        skipAcceptButton
+        rejectLabel={t('关闭', 'Close')}
+        onReject={() => PopupActions.close()}
+    />;
 };
 
 const mapStateToProps = (state: AppState) => ({
