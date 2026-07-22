@@ -1,0 +1,127 @@
+@import '../../../settings/Settings';
+
+.GenericYesNoPopup:has(.DatasetInferencePopupContent) {
+  width: min(700px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+
+  .Content { min-height: 0; }
+}
+
+.DatasetInferencePopupContent {
+  width: 100%;
+  padding: 22px 30px;
+  box-sizing: border-box;
+  color: white;
+
+  .SectionHeader {
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.13);
+    padding-bottom: 7px;
+    color: rgba(255, 255, 255, 0.66);
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .FormRow {
+    display: grid;
+    grid-template-columns: 92px minmax(180px, 300px);
+    align-items: center;
+    gap: 16px;
+    padding: 5px 0;
+    font-size: 12px;
+
+    select, input {
+      width: 100%;
+      height: 34px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 4px 8px;
+      box-sizing: border-box;
+      color: white;
+    }
+  }
+
+  .OverwriteOption {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0 0 108px;
+    color: rgba(255, 255, 255, 0.66);
+    font-size: 11px;
+  }
+
+  .PublishButton {
+    margin: 12px 0 0 108px;
+    border: 0;
+    border-radius: 4px;
+    background: #4caf70;
+    padding: 7px 16px;
+    color: white;
+    cursor: pointer;
+
+    &:disabled { opacity: 0.4; cursor: default; }
+  }
+
+  .InferenceJobsSection {
+    max-height: min(290px, 34vh);
+    margin-top: 18px;
+    overflow-y: auto;
+  }
+
+  .EmptyHint, .JobMeta, small {
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 10px;
+  }
+
+  .InferenceJobRow {
+    margin-bottom: 7px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.045);
+    padding: 9px 10px;
+  }
+
+  .JobHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+  }
+
+  .JobState {
+    border-radius: 8px;
+    padding: 2px 7px;
+    font-size: 9px;
+
+    &.state-running { color: #72b7ff; background: rgba(77, 166, 255, 0.14); }
+    &.state-completed { color: #72d993; background: rgba(91, 201, 126, 0.14); }
+    &.state-failed { color: #ff8d8d; background: rgba(255, 107, 107, 0.14); }
+    &.state-queued { color: rgba(255,255,255,.6); background: rgba(255,255,255,.08); }
+  }
+
+  .JobMeta { margin-top: 4px; }
+
+  .ProgressBar {
+    height: 5px;
+    margin-top: 7px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.12);
+
+    > div { height: 100%; background: #4da6ff; }
+  }
+
+  .JobResult { margin-top: 5px; color: #72d993; font-size: 10px; }
+  .errorMessage { color: #ff8d8d; font-size: 10px; }
+}
+
+@media (max-width: 560px) {
+  .DatasetInferencePopupContent {
+    padding: 18px;
+
+    .FormRow { grid-template-columns: 1fr; gap: 4px; }
+    .OverwriteOption, .PublishButton { margin-left: 0; }
+  }
+}

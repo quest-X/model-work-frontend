@@ -143,6 +143,8 @@ export class DataBatchSyncService {
             form.append('name', projectName || item.name);
             if (projectName) form.append('project_name', projectName);
             form.append('source_id', item.id);
+            if (item.datasetId) form.append('dataset_id', item.datasetId);
+            form.append('operation_type', item.datasetId ? 'annotation_edit' : 'raw');
             form.append('metadata', JSON.stringify(this.buildMetadata(files, imagesData, labels)));
             files.forEach(file => form.append('files', file, file.name));
             const response = await fetch(`${getEngineBaseUrl()}/datasets/batches`, {

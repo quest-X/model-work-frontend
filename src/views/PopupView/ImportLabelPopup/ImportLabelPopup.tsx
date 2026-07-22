@@ -8,8 +8,8 @@ import { connect } from 'react-redux';
 import { useDropzone } from 'react-dropzone';
 import { ImageData, LabelName } from '../../../store/labels/types';
 import { updateActiveLabelType, updateImageData, updateLabelNames } from '../../../store/labels/actionCreators';
-import { QueueItem, QueueItemType, QueueItemStatus } from '../../../store/queue/types';
-import { addQueueItems } from '../../../store/queue/actionCreators';
+import { QueueDataSyncStatus, QueueItem, QueueItemType, QueueItemStatus } from '../../../store/queue/types';
+import { addQueueItems, updateQueueItem } from '../../../store/queue/actionCreators';
 import { ImporterSpecData } from '../../../data/ImporterSpecData';
 import { ImageDataUtil } from '../../../utils/ImageDataUtil';
 import { YOLOUtils } from '../../../logic/import/yolo/YOLOUtils';
@@ -33,6 +33,7 @@ import { PendingImportFiles } from '../../../utils/PendingImportFiles';
 import {DataBatchSyncService} from '../../../services/DataBatchSyncService';
 import {ImageRepository} from '../../../logic/imageRepository/ImageRepository';
 import {QueueActions} from '../../../logic/actions/QueueActions';
+import {DatasetEditSelection} from '../../../services/DatasetActionSelection';
 
 interface IProps {
     activeLabelType: LabelType;
@@ -40,6 +41,8 @@ interface IProps {
     updateLabelNamesAction: (labels: LabelName[]) => any;
     updateActiveLabelTypeAction: (activeLabelType: LabelType) => any;
     addQueueItemsAction: (items: QueueItem[]) => any;
+    updateQueueItemAction: (itemId: string, updates: Partial<QueueItem>) => any;
+    queueItems: QueueItem[];
     language: Language;
 }
 
@@ -49,6 +52,8 @@ const ImportLabelPopup: React.FC<IProps> = ({
     updateLabelNamesAction,
     updateActiveLabelTypeAction,
     addQueueItemsAction,
+    updateQueueItemAction,
+    queueItems,
     language
 }) => {
     const currentTexts = LanguageConfig[language];
@@ -59,6 +64,8 @@ const ImportLabelPopup: React.FC<IProps> = ({
     const [annotationsLoadedError, setAnnotationsLoadedError] = useState<Error | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [sourceInfo, setSourceInfo] = useState<{zipCount: number; looseCount: number}>({zipCount: 0, looseCount: 0});
+    const [editTarget] = useState(() => DatasetEditSelection.get());
+    const hasImportPayload = loadedImageData.length !== 0 && (loadedLabelNames.length !== 0 || !!editTarget);
 
     const resolveNotification = (error: Error): Notification => {
         if (error instanceof DocumentParsingError) return Notification.ANNOTATION_FILE_PARSE_ERROR;
@@ -116,7 +123,9 @@ const ImportLabelPopup: React.FC<IProps> = ({
                 if (obj.shapes !== undefined && obj.imagePath !== undefined) {
                     return AnnotationFormatType.LABELME;
                 }
-            } catch {}
+            } catch {
+                // Fall back to COCO when the JSON payload cannot be inspected.
+            }
             return AnnotationFormatType.COCO;
         });
     };
@@ -386,16 +395,14 @@ const ImportLabelPopup: React.FC<IProps> = ({
                     doImport(accepted, format);
                 }
             }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [labelType]);
 
     useEffect(() => {
         const files = PendingImportFiles.take();
         if (files && files.length > 0) handleFiles(files);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const { acceptedFiles, getRootProps, getInputProps } = useDropzone({
+    const { getRootProps, getInputProps } = useDropzone({
         accept: {
             'application/json': ['.json'],
             'text/plain': ['.txt'],
@@ -440,9 +447,10 @@ const ImportLabelPopup: React.FC<IProps> = ({
         });
     };
 
+    // eslint-disable-next-line complexity
     const onAccept = async () => {
         EditorModel.lastBatchInferenceImageCount = 0;
-        if (loadedLabelNames.length !== 0 && loadedImageData.length !== 0) {
+        if (hasImportPayload) {
             // If loaded images have fileData (from full import), add them; otherwise update existing
             const existingIds = new Set(LabelsSelector.getImagesData().map(e => e.id));
             const newImages = loadedImageData.filter(d => d.fileData && d.id && !existingIds.has(d.id));
@@ -450,30 +458,72 @@ const ImportLabelPopup: React.FC<IProps> = ({
             if (hasNewImages) {
                 // 完整标注包形成独立批次；标注缓存与文件队列项使用同一个 id。
                 const thumbnail = await generateThumbnail(newImages[0].fileData);
+                const existingItem = editTarget
+                    ? queueItems.find(item => item.datasetId === editTarget.id || (
+                        !!editTarget.sourceId && item.id === editTarget.sourceId
+                    ))
+                    : undefined;
+                const itemId = existingItem?.id || editTarget?.sourceId || uuidv4();
                 const importItem: QueueItem = newImages.length === 1
                     ? {
-                        id: uuidv4(),
-                        name: newImages[0].fileData.name,
+                        id: itemId,
+                        name: editTarget?.name || newImages[0].fileData.name,
                         type: QueueItemType.IMAGE,
                         file: newImages[0].fileData,
                         status: QueueItemStatus.COMPLETED,
                         uploadedAt: Date.now(),
                         thumbnail,
+                        ...(editTarget ? {
+                            dataSyncStatus: QueueDataSyncStatus.SYNCING,
+                            datasetId: editTarget.id,
+                            datasetRevision: editTarget.revision,
+                            syncedAt: Date.now(),
+                        } : {}),
                     }
                     : {
-                        id: uuidv4(),
-                        name: currentTexts.popups.importAnnotations.title,
+                        id: itemId,
+                        name: editTarget?.name || currentTexts.popups.importAnnotations.title,
                         type: QueueItemType.FOLDER,
                         files: newImages.map(d => d.fileData),
                         status: QueueItemStatus.COMPLETED,
                         uploadedAt: Date.now(),
                         thumbnail,
+                        ...(editTarget ? {
+                            dataSyncStatus: QueueDataSyncStatus.SYNCING,
+                            datasetId: editTarget.id,
+                            datasetRevision: editTarget.revision,
+                            syncedAt: Date.now(),
+                        } : {}),
                     };
+                // Re-opening the same active server dataset intentionally replaces
+                // its stale workspace snapshot. Prevent QueueActions from saving the
+                // old active data back over the freshly imported cache first.
+                if (ImageRepository.getActiveFileId() === importItem.id) {
+                    ImageRepository.setActiveFileId(null);
+                }
                 ImageRepository.saveFileCache(importItem.id, newImages);
-                addQueueItemsAction([importItem]);
+                if (existingItem) {
+                    updateQueueItemAction(existingItem.id, importItem);
+                } else {
+                    addQueueItemsAction([importItem]);
+                }
                 await QueueActions.switchToQueueItem(importItem, LabelsSelector.getImagesData());
-                DataBatchSyncService.syncQueueItem(importItem, newImages, loadedLabelNames)
-                    .catch(() => undefined);
+                if (editTarget) {
+                    await new Promise<void>(resolve => {
+                        if (typeof requestAnimationFrame === 'function') {
+                            requestAnimationFrame(() => resolve());
+                        } else {
+                            setTimeout(resolve, 0);
+                        }
+                    });
+                    updateQueueItemAction(importItem.id, {
+                        dataSyncStatus: QueueDataSyncStatus.SYNCED,
+                    });
+                    DatasetEditSelection.set(null);
+                } else {
+                    DataBatchSyncService.syncQueueItem(importItem, newImages, loadedLabelNames)
+                        .catch(() => undefined);
+                }
             } else {
                 updateImageDataAction(loadedImageData);
             }
@@ -498,9 +548,11 @@ const ImportLabelPopup: React.FC<IProps> = ({
 
     const onReject = () => {
         EditorModel.lastBatchInferenceImageCount = 0;
+        DatasetEditSelection.set(null);
         PopupActions.close();
     };
 
+    // eslint-disable-next-line complexity
     const getDropZoneContent = () => {
         if (isProcessing) {
             return <>
@@ -515,7 +567,7 @@ const ImportLabelPopup: React.FC<IProps> = ({
                 <p className='errorMessage'>{annotationsLoadedError.message}</p>
                 <p className='extraBold'>{currentTexts.popups.importAnnotations.tryAgain}</p>
             </>;
-        } else if (loadedImageData.length !== 0 && loadedLabelNames.length !== 0) {
+        } else if (hasImportPayload) {
             const totalRects = loadedImageData.reduce((s, d) => s + d.labelRects.length, 0);
             const totalPolygons = loadedImageData.reduce((s, d) => s + d.labelPolygons.length, 0);
             const newImages = loadedImageData.filter(d => d.fileData).length;
@@ -578,12 +630,16 @@ const ImportLabelPopup: React.FC<IProps> = ({
 
     return (
         <GenericYesNoPopup
-            title={loadedImageData.length > 0 && loadedLabelNames.length > 0
-                ? currentTexts.popups.importAnnotations.importReady
-                : currentTexts.popups.importAnnotations.title}
+            title={editTarget
+                ? `${language === Language.CHINESE ? '编辑数据集' : 'Edit Dataset'} · ${editTarget.name}`
+                : hasImportPayload
+                    ? currentTexts.popups.importAnnotations.importReady
+                    : currentTexts.popups.importAnnotations.title}
             renderContent={renderContent}
-            acceptLabel={currentTexts.popups.importAnnotations.acceptButton}
-            disableAcceptButton={loadedImageData.length === 0 || loadedLabelNames.length === 0 || !!annotationsLoadedError || isProcessing}
+            acceptLabel={editTarget
+                ? (language === Language.CHINESE ? '打开数据集' : 'Open Dataset')
+                : currentTexts.popups.importAnnotations.acceptButton}
+            disableAcceptButton={!hasImportPayload || !!annotationsLoadedError || isProcessing}
             onAccept={onAccept}
             rejectLabel={currentTexts.popups.importAnnotations.rejectButton}
             onReject={onReject}
@@ -595,12 +651,14 @@ const mapDispatchToProps = {
     updateImageDataAction: updateImageData,
     updateLabelNamesAction: updateLabelNames,
     updateActiveLabelTypeAction: updateActiveLabelType,
-    addQueueItemsAction: addQueueItems
+    addQueueItemsAction: addQueueItems,
+    updateQueueItemAction: updateQueueItem,
 };
 
 const mapStateToProps = (state: AppState) => ({
     activeLabelType: state.labels.activeLabelType,
-    language: state.general.language
+    language: state.general.language,
+    queueItems: state.queue.items,
 });
 
 export default connect(

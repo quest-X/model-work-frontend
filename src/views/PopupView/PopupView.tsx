@@ -24,6 +24,8 @@ import PipelinePreprocessPopup from './PipelinePopup/PipelinePreprocessPopup';
 import PipelineInferencePopup from './PipelinePopup/PipelineInferencePopup';
 import PipelinePostprocessPopup from './PipelinePopup/PipelinePostprocessPopup';
 import DataCenterPopup from './DataCenterPopup/DataCenterPopup';
+import DatasetExportPopup from './DatasetExportPopup/DatasetExportPopup';
+import DatasetInferencePopup from './DatasetInferencePopup/DatasetInferencePopup';
 import TrainingTaskPopup from './TrainingTaskPopup/TrainingTaskPopup';
 import VectorDbPopup from './VectorDbPopup/VectorDbPopup';
 import L2GRetrievalPopup from './L2GRetrievalPopup/L2GRetrievalPopup';
@@ -87,6 +89,8 @@ const PopupView: React.FC<IProps> = ({ activePopupType }) => {
         [PopupWindowType.PIPELINE_INFERENCE]: () => <PipelineInferencePopup />,
         [PopupWindowType.PIPELINE_POSTPROCESS]: () => <PipelinePostprocessPopup />,
         [PopupWindowType.DATA_CENTER]: () => <DataCenterPopup />,
+        [PopupWindowType.DATASET_EXPORT]: () => <DatasetExportPopup />,
+        [PopupWindowType.DATASET_INFERENCE]: () => <DatasetInferencePopup />,
         [PopupWindowType.TRAINING_TASK]: () => <TrainingTaskPopup />,
         [PopupWindowType.VECTOR_DB]: () => <VectorDbPopup />,
         [PopupWindowType.L2G_RETRIEVAL]: () => <L2GRetrievalPopup />,

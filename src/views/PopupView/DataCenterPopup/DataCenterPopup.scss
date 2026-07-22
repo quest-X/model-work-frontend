@@ -1,14 +1,16 @@
 @import '../../../settings/Settings';
 
 .GenericYesNoPopup:has(.DataCenterPopupContent) {
-  width: min(760px, calc(100vw - 32px));
+  width: min(980px, calc(100vw - 32px));
+  height: min(680px, calc(100vh - 32px));
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
   box-sizing: border-box;
 
   .Content {
     min-height: 0;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
+    overflow: hidden;
   }
 
   .Footer {
@@ -21,9 +23,11 @@
 .DataCenterPopupContent {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   width: 100%;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
   padding: 20px 28px 18px;
   box-sizing: border-box;
 
@@ -31,71 +35,76 @@
     font: inherit;
   }
 
-  .ProjectDataSummary {
+  .DataWorkspace {
+    display: grid;
+    grid-template-columns: 184px minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 7px;
+    background: rgba(0, 0, 0, 0.08);
+  }
+
+  .DataTierSidebar {
     display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 18px;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    border-right: 1px solid rgba(255, 255, 255, 0.09);
+    background: rgba(0, 0, 0, 0.16);
+    padding: 14px 10px 12px;
+  }
 
-    > div {
-      display: flex;
-      min-width: 0;
-      flex-direction: column;
-      gap: 3px;
-
-      span {
-        color: rgba(255, 255, 255, 0.48);
-        font-size: 11px;
-        letter-spacing: 0.6px;
-        text-transform: uppercase;
-      }
-
-      strong {
-        overflow: hidden;
-        font-size: 17px;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-    }
-
-    p {
-      margin: 0 0 2px;
-      color: rgba(255, 255, 255, 0.48);
-      font-size: 11px;
-      text-align: right;
-    }
+  .DataTierNavTitle {
+    padding: 0 8px 9px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
   }
 
   .DataTierTabs {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 
     > button {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      min-height: 44px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      gap: 9px;
+      width: 100%;
+      min-height: 62px;
+      border: 1px solid transparent;
       border-radius: 6px;
-      background: rgba(255, 255, 255, 0.025);
-      padding: 0 14px;
+      background: transparent;
+      padding: 10px 9px 10px 11px;
       color: rgba(255, 255, 255, 0.68);
+      text-align: left;
       cursor: pointer;
       transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
 
       &:hover {
-        border-color: rgba(255, 255, 255, 0.2);
-        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.04);
       }
 
-      strong {
+      &:focus-visible {
+        outline: 2px solid #5ca8ff;
+        outline-offset: -2px;
+      }
+
+      > strong {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 24px;
-        height: 22px;
-        border-radius: 11px;
+        min-width: 26px;
+        height: 24px;
+        flex: 0 0 auto;
+        border-radius: 12px;
         background: rgba(255, 255, 255, 0.08);
         font-size: 11px;
       }
@@ -105,20 +114,70 @@
 
         &.temporary {
           border-color: rgba(92, 168, 255, 0.55);
-          background: rgba(62, 129, 207, 0.15);
+          background: rgba(62, 129, 207, 0.17);
+
+          > strong {
+            background: rgba(92, 168, 255, 0.22);
+            color: #9acbff;
+          }
         }
 
         &.persistent {
           border-color: rgba(91, 201, 126, 0.5);
-          background: rgba(58, 143, 87, 0.14);
+          background: rgba(58, 143, 87, 0.16);
+
+          > strong {
+            background: rgba(91, 201, 126, 0.2);
+            color: #7ddc9b;
+          }
         }
       }
     }
   }
 
+  .DataTierTabCopy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+
+    > span {
+      overflow: hidden;
+      font-size: 12px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    small {
+      color: rgba(255, 255, 255, 0.38);
+      font-size: 9px;
+    }
+  }
+
+  .DataTierSidebarHint {
+    margin: auto 8px 0;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 9px;
+    line-height: 1.55;
+  }
+
+  .DataTierMain {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    padding: 14px;
+
+    &:focus {
+      outline: none;
+    }
+  }
+
   .DataTierPanel {
     display: flex;
-    min-height: 220px;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
     flex-direction: column;
     gap: 10px;
   }
@@ -180,7 +239,8 @@
   .LocalDataList,
   .DatasetList {
     display: flex;
-    max-height: min(400px, 48vh);
+    min-height: 0;
+    flex: 1;
     flex-direction: column;
     gap: 8px;
     overflow-y: auto;
@@ -335,6 +395,7 @@
   }
 
   .DatasetItem {
+    flex: 0 0 auto;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.09);
     border-radius: 6px;
@@ -378,12 +439,45 @@
     gap: 2px;
   }
 
+  .DatasetTitleRow {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 7px;
+  }
+
   .DatasetName {
+    min-width: 0;
     overflow: hidden;
     font-size: 13px;
     font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .DatasetState {
+    flex: 0 0 auto;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 2px 6px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 9px;
+
+    &.ready {
+      background: rgba(91, 201, 126, 0.16);
+      color: #72d993;
+    }
+
+    &.syncing,
+    &.processing {
+      background: rgba(92, 168, 255, 0.16);
+      color: #8dc4ff;
+    }
+
+    &.error {
+      background: rgba(255, 107, 107, 0.14);
+      color: #ff9b9b;
+    }
   }
 
   .DatasetMeta {
@@ -429,7 +523,122 @@
     padding: 10px 12px 12px;
   }
 
+  .DatasetTimeGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .DatasetTimeField {
+    display: flex;
+    min-width: 0;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.035);
+    padding: 8px 9px;
+    flex-direction: column;
+    gap: 3px;
+
+    > span {
+      color: rgba(255, 255, 255, 0.42);
+      font-size: 9px;
+    }
+
+    time {
+      overflow: hidden;
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 10px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .VersionHistorySection {
+    margin-top: 11px;
+  }
+
+  .VersionTimeline {
+    display: flex;
+    margin: 0;
+    overflow-x: auto;
+    padding: 0 2px 4px;
+    list-style: none;
+  }
+
+  .VersionCommit {
+    position: relative;
+    min-width: 138px;
+    flex: 1 0 138px;
+    padding: 18px 12px 7px 0;
+
+    &::before {
+      position: absolute;
+      z-index: 1;
+      top: 3px;
+      left: 1px;
+      width: 9px;
+      height: 9px;
+      border: 2px solid #777;
+      border-radius: 50%;
+      background: #2b2b2b;
+      box-sizing: border-box;
+      content: '';
+    }
+
+    &:not(:last-child)::after {
+      position: absolute;
+      top: 7px;
+      left: 9px;
+      width: calc(100% - 4px);
+      height: 1px;
+      background: rgba(255, 255, 255, 0.16);
+      content: '';
+    }
+
+    &.current::before {
+      border-color: #5bc97e;
+      background: #5bc97e;
+      box-shadow: 0 0 0 3px rgba(91, 201, 126, 0.12);
+    }
+
+    > time,
+    > small {
+      display: block;
+      overflow: hidden;
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 9px;
+      line-height: 1.5;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .VersionCommitHeader {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 6px;
+    margin-bottom: 2px;
+
+    strong {
+      overflow: hidden;
+      font-size: 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span {
+      flex: 0 0 auto;
+      border-radius: 7px;
+      background: rgba(91, 201, 126, 0.13);
+      padding: 1px 5px;
+      color: #72d993;
+      font-size: 8px;
+    }
+  }
+
   .StatsState {
+    margin-top: 11px;
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.035);
     padding: 9px 10px;
@@ -445,6 +654,7 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 5px 18px;
+    margin-top: 11px;
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.035);
     padding: 9px 10px;
@@ -472,7 +682,7 @@
 
   .TaskLinks {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
   }
 
@@ -493,6 +703,17 @@
       background: rgba(91, 201, 126, 0.06);
       color: white;
     }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.48;
+    }
+  }
+
+  .TaskActionError {
+    margin: 7px 1px 0;
+    color: #ff8d8d;
+    font-size: 9px;
   }
 
   .TaskCapabilityHint {
@@ -503,9 +724,10 @@
   }
 }
 
-@media (max-width: 620px) {
+@media (max-width: 720px) {
   .GenericYesNoPopup:has(.DataCenterPopupContent) {
     width: calc(100vw - 20px);
+    height: calc(100vh - 20px);
     max-width: calc(100vw - 20px);
     max-height: calc(100vh - 20px);
 
@@ -518,14 +740,26 @@
   .DataCenterPopupContent {
     padding: 16px 18px 14px;
 
-    .ProjectDataSummary {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 5px;
+    .DataWorkspace {
+      grid-template-columns: 132px minmax(0, 1fr);
+    }
 
-      p {
-        text-align: left;
-      }
+    .DataTierSidebar {
+      padding: 10px 7px;
+    }
+
+    .DataTierTabs > button {
+      min-height: 58px;
+      padding: 9px 7px;
+    }
+
+    .DataTierSidebarHint {
+      margin-right: 4px;
+      margin-left: 4px;
+    }
+
+    .DataTierMain {
+      padding: 10px;
     }
 
     .LocalDataCard {
@@ -541,9 +775,40 @@
       }
     }
 
+    .DatasetTimeGrid,
     .StatsPanel,
     .TaskLinks {
       grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}
+
+@media (max-width: 500px) {
+  .DataCenterPopupContent {
+    padding-right: 12px;
+    padding-left: 12px;
+
+    .DataWorkspace {
+      grid-template-columns: 108px minmax(0, 1fr);
+    }
+
+    .DataTierNavTitle,
+    .DataTierSidebarHint,
+    .DataTierTabCopy small {
+      display: none;
+    }
+
+    .DataTierSidebar {
+      padding-top: 8px;
+    }
+
+    .DataTierTabs > button {
+      min-height: 50px;
+    }
+
+    .TierExplanation {
+      align-items: flex-start;
+      flex-direction: column;
     }
   }
 }
