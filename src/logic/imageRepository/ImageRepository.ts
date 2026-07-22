@@ -35,7 +35,18 @@ export class ImageRepository {
     // 新增：当前活动的文件ID
     private static activeFileId: string | null = null;
 
+    private static isUsableImage(image: HTMLImageElement | undefined): image is HTMLImageElement {
+        // `image.src = ''` resolves back to the document URL when read through
+        // the DOM property. The raw attribute preserves the empty eviction marker.
+        return Boolean(image?.getAttribute('src'));
+    }
+
     public static storeImage(id: string, image: HTMLImageElement) {
+        if (!ImageRepository.isUsableImage(image)) {
+            delete ImageRepository.repository[id];
+            ImageRepository.lru.delete(id);
+            return;
+        }
         ImageRepository.repository[id] = image;
         // Touch in LRU: delete then set so this id moves to the newest slot.
         ImageRepository.lru.delete(id);
@@ -51,13 +62,18 @@ export class ImageRepository {
 
     public static getById(uuid: string): HTMLImageElement {
         const image = ImageRepository.repository[uuid];
-        if (image) {
+        if (ImageRepository.isUsableImage(image)) {
             // Mark as recently used so active editing doesn't get evicted
             // out from under the user.
             ImageRepository.lru.delete(uuid);
             ImageRepository.lru.set(uuid, true);
+            return image;
         }
-        return image;
+        // LRU eviction clears src on the shared HTMLImageElement. Treat such
+        // file-cache references as misses so callers regenerate the thumbnail.
+        delete ImageRepository.repository[uuid];
+        ImageRepository.lru.delete(uuid);
+        return undefined;
     }
 
     /**
@@ -141,7 +157,7 @@ export class ImageRepository {
         const imageMap: ImageMap = {};
         imagesData.forEach(imgData => {
             const image = ImageRepository.repository[imgData.id];
-            if (image) {
+            if (ImageRepository.isUsableImage(image)) {
                 imageMap[imgData.id] = image;
             }
         });
@@ -172,6 +188,10 @@ export class ImageRepository {
         // 恢复 ImageRepository 中的缩略图，并把它们登记到 LRU（最新位）；
         // 超出 cap 的旧条目会被 evictIfOverCap 释放。
         Object.entries(cache.imageMap).forEach(([id, image]) => {
+            if (!ImageRepository.isUsableImage(image)) {
+                delete cache.imageMap[id];
+                return;
+            }
             ImageRepository.repository[id] = image;
             ImageRepository.lru.delete(id);
             ImageRepository.lru.set(id, true);

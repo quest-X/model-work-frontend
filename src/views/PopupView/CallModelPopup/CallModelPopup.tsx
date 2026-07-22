@@ -10,6 +10,7 @@ import {GeneralActionTypes} from '../../../store/general/types';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {AIModel} from '../../../store/aimodels/types';
 import {getDefaultCoreServiceBase, normalizeEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
+import {getHostSystem, showsTensorRTPlaceholder, supportsCoreML} from '../../../utils/HostSystem';
 import PipelineCanvas from './PipelineCanvas';
 
 export interface YOLOModelFamily {
@@ -87,7 +88,7 @@ const CallModelPopup: React.FC<IProps> = ({
             .then(data => {
                 if (data.loaded_models) setLoadedModels(data.loaded_models);
             })
-            .catch(() => {});
+            .catch(() => { /* Optional health refresh; engine may be offline. */ });
     };
 
     useEffect(() => {
@@ -100,7 +101,7 @@ const CallModelPopup: React.FC<IProps> = ({
                 );
                 setAvailableModels(names);
             })
-            .catch(() => {});
+            .catch(() => { /* Optional catalog refresh; engine may be offline. */ });
         refreshHealth();
         const onModelLoaded = () => refreshHealth();
         window.addEventListener('opensight:model-loaded', onModelLoaded);
@@ -172,6 +173,16 @@ const CallModelPopup: React.FC<IProps> = ({
     const hasCoreEngine = coreEngines.length > 0;
 
     const zhTexts = language === Language.CHINESE;
+    const hostSystem = getHostSystem();
+    const canUseCoreML = supportsCoreML(hostSystem);
+    const showTensorRT = showsTensorRTPlaceholder(hostSystem);
+    const hostSystemLabel = hostSystem === 'macos'
+        ? 'macOS'
+        : hostSystem === 'windows'
+            ? 'Windows'
+            : hostSystem === 'linux'
+                ? 'Linux'
+                : (zhTexts ? '未知系统' : 'Unknown system');
 
     // 从 loadedModels 中找出所有自定义模型（不属于任何内置 family）
     const allBuiltinVariants = [
@@ -204,6 +215,17 @@ const CallModelPopup: React.FC<IProps> = ({
         </div>
     );
 
+    const renderPlatformSpecificCustomRow = () => {
+        if (canUseCoreML) return renderMlpackageRow();
+        if (!showTensorRT) return null;
+        return (
+            <div className='OptionsItem disabled'>
+                <img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />
+                {zhTexts ? '模型 .engine / .trt 文件（即将推出）' : '.engine / .trt model file (coming soon)'}
+            </div>
+        );
+    };
+
     const renderContent = () => {
         return <div className='CallModelPopupContent'>
             <div className='ModelSection'>
@@ -211,7 +233,10 @@ const CallModelPopup: React.FC<IProps> = ({
                 <PipelineCanvas zh={zhTexts} onOpenPopup={updateActivePopupType} />
             </div>
             <div className='ModelSection'>
-                <div className='SectionHeader'>{zhTexts ? '自定义' : 'Custom'}</div>
+                <div className='SectionHeader CustomSectionHeader'>
+                    <span>{zhTexts ? '自定义' : 'Custom'}</span>
+                    <span className='HostSystemBadge'>{hostSystemLabel}</span>
+                </div>
                 <div className='Options'>
                     <div
                         className={`OptionsItem${customPtModels.length > 0 ? ' has-models active-model' : ''}`}
@@ -237,11 +262,7 @@ const CallModelPopup: React.FC<IProps> = ({
                         {zhTexts ? '模型 .onnx 文件' : '.onnx model file'}
                         {customOnnxModels.map(n => <span key={n} className='active-badge'>✓ {n}</span>)}
                     </div>
-                    {renderMlpackageRow()}
-                    <div className='OptionsItem disabled'>
-                        <img draggable={false} src={'ico/checkbox-unchecked.png'} alt={'unchecked'} />
-                        {zhTexts ? '模型 .engine / .trt 文件（即将推出）' : '.engine / .trt model file (coming soon)'}
-                    </div>
+                    {renderPlatformSpecificCustomRow()}
                 </div>
             </div>
             {hasCoreEngine && (

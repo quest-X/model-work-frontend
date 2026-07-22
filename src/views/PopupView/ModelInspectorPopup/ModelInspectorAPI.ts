@@ -24,8 +24,11 @@ export interface InspectorStatus {
     limits: {
         max_upload_mb: number;
         max_layers: number;
+        max_total_layers?: number;
         max_top_channels: number;
         max_map_side: number;
+        batch_top_channels?: number;
+        batch_map_side?: number;
         session_ttl_seconds: number;
         max_cache_mb: number;
     };

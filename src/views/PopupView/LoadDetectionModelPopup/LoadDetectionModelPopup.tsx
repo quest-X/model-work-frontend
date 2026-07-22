@@ -24,6 +24,7 @@ import {LabelsSelector} from '../../../store/selectors/LabelsSelector';
 import {EditorModel} from '../../../staticModels/EditorModel';
 import {getSelectedCustomExt, getSelectedModelFamily, getServerUrl, SEG_MODEL_FAMILIES} from '../CallModelPopup/CallModelPopup';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
+import {inferModelTaskFromName} from '../../../utils/ModelTaskUtil';
 
 enum ModelSource {
     UPLOAD = 'UPLOAD',
@@ -175,7 +176,10 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
             setLoadProgress(100);
             const data = await res.json().catch(() => ({}));
             const baseUrl = serverUrl.replace(/\/+$/, '');
-            if ((data.service || 'segmentation') === 'segmentation') {
+            const uploadedService = data.service || (
+                inferModelTaskFromName(mlpkgName) === 'segment' ? 'segmentation' : 'detection'
+            );
+            if (uploadedService === 'segmentation') {
                 SegmentationAPIDetector.setConfig({ url: baseUrl + '/segment', enabled: true });
                 EditorModel.lastLoadedModelService = 'segmentation';
             } else {
@@ -237,9 +241,11 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
                 throw new Error(data.detail || res.statusText);
             }
             setLoadProgress(100);
-            // 根据文件名自动识别模型类型：seg_/SAM/sam → 分割，其他 → 检测
+            // 新后端返回权威 service；旧后端按统一文件名 token 规则兜底。
             const data = await res.json().catch(() => ({}));
-            const uploadedService = data.service || 'detection';
+            const uploadedService = data.service || (
+                inferModelTaskFromName(modelFile.name) === 'segment' ? 'segmentation' : 'detection'
+            );
             const baseUrl = serverUrl.replace(/\/+$/, '');
             if (uploadedService === 'segmentation') {
                 SegmentationAPIDetector.setConfig({ url: baseUrl + '/segment', enabled: true });
@@ -248,6 +254,7 @@ const LoadDetectionModelPopup: React.FC<IProps> = ({ updateActivePopupTypeAction
                 DetectionAPIDetector.setConfig({ url: baseUrl + '/detect', enabled: true });
                 EditorModel.lastLoadedModelService = 'detection';
             }
+            window.dispatchEvent(new CustomEvent('opensight:model-loaded'));
             PopupActions.close();
         } catch (e) {
             setIsLoading(false);

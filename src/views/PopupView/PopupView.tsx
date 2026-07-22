@@ -27,7 +27,7 @@ import DataCenterPopup from './DataCenterPopup/DataCenterPopup';
 import TrainingTaskPopup from './TrainingTaskPopup/TrainingTaskPopup';
 import VectorDbPopup from './VectorDbPopup/VectorDbPopup';
 import L2GRetrievalPopup from './L2GRetrievalPopup/L2GRetrievalPopup';
-import ModelInspectorPopup from './ModelInspectorPopup/ModelInspectorPopup';
+import ModelInspectorPopup, {MODEL_INSPECTOR_ESCAPE_EVENT} from './ModelInspectorPopup/ModelInspectorPopup';
 
 
 interface IProps {
@@ -39,6 +39,14 @@ const PopupView: React.FC<IProps> = ({ activePopupType }) => {
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape' && activePopupType) {
+                if (activePopupType === PopupWindowType.MODEL_INSPECTOR) {
+                    const inspectorEscape = new Event(MODEL_INSPECTOR_ESCAPE_EVENT, {cancelable: true});
+                    window.dispatchEvent(inspectorEscape);
+                    if (inspectorEscape.defaultPrevented) {
+                        event.preventDefault();
+                        return;
+                    }
+                }
                 // Only handle if no other element has already handled the event
                 if (!event.defaultPrevented) {
                     event.preventDefault();

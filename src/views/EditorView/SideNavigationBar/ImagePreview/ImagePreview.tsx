@@ -36,8 +36,12 @@ interface IState {
     image: HTMLImageElement;
 }
 
-class ImagePreview extends React.Component<IProps, IState> {
+export class ImagePreview extends React.Component<IProps, IState> {
     private isLoading: boolean = false;
+    private loadingImageId: string | null = null;
+    private loadingGeneration: number = 0;
+    private requestGeneration: number = 0;
+    private mounted: boolean = false;
 
     constructor(props) {
         super(props);
@@ -48,7 +52,15 @@ class ImagePreview extends React.Component<IProps, IState> {
     }
 
     public componentDidMount(): void {
+        this.mounted = true;
         ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, this.props.isScrolling));
+    }
+
+    public componentWillUnmount(): void {
+        this.mounted = false;
+        this.requestGeneration++;
+        this.isLoading = false;
+        this.loadingImageId = null;
     }
 
     public componentDidUpdate(prevProps: Readonly<IProps>): void {
@@ -62,7 +74,11 @@ class ImagePreview extends React.Component<IProps, IState> {
         // Evicted-detection: when LRU drops this image (src cleared) we still
         // hold the stale HTMLImageElement reference; on the NEXT re-render the
         // <img src=""> would render as broken. Drop our reference + reload.
-        else if (this.state.image && !this.state.image.src && !this.isLoading) {
+        else if (
+            this.state.image &&
+            !this.state.image.getAttribute('src') &&
+            this.loadingImageId !== this.props.imageData.id
+        ) {
             this.setState({ image: null });
             ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, this.props.isScrolling));
         }
@@ -88,57 +104,62 @@ class ImagePreview extends React.Component<IProps, IState> {
     }
 
     private loadImage = async (imageData: ImageData, isScrolling: boolean) => {
+        if (isScrolling && this.isLoading && this.loadingImageId === imageData.id) return;
+        const generation = ++this.requestGeneration;
         if (imageData.loadStatus) {
             const image = ImageRepository.getById(imageData.id);
             if (image && this.state.image !== image) {
                 this.setState({ image });
-            }
-            // 如果 loadStatus 为 true 但 image 不在 repository（缓存丢失），尝试重新加载
-            if (!image && imageData.fileData && !imageData.fileData.type.startsWith('video/')) {
-                this.isLoading = true;
-                FileUtil.loadImage(imageData.fileData)
-                    .then((img: HTMLImageElement) => this.saveLoadedImage(img, imageData))
-                    .catch(() => this.handleLoadImageError());
-            }
-        }
-        else if (!isScrolling || !this.isLoading) {
-            // 视频文件无法通过 FileUtil.loadImage 加载，跳过
-            // 同时检查 MIME 类型和扩展名（IndexedDB 恢复后 type 可能丢失）
-            if (imageData.fileData && (
-                imageData.fileData.type.startsWith('video/') ||
-                /\.(mp4|webm|mov|avi|mkv|m4v|ogg)$/i.test(imageData.fileData.name)
-            )) {
                 return;
             }
-            // 0字节占位文件 = on-demand 视频帧 → 从后端按需拉取缩略图
-            if (imageData.fileData && imageData.fileData.size === 0) {
-                this.loadVideoFrameThumbnail(imageData);
-                return;
-            }
-            this.isLoading = true;
-            const saveLoadedImagePartial = (image: HTMLImageElement) => this.saveLoadedImage(image, imageData);
-            FileUtil.loadImage(imageData.fileData)
-                .then((image: HTMLImageElement) => saveLoadedImagePartial(image))
-                .catch((error) => this.handleLoadImageError(imageData, error))
+            if (!image) this.loadMissingImage(imageData, generation);
+            return;
         }
+        this.loadMissingImage(imageData, generation);
     };
 
-    private loadVideoFrameThumbnail = async (imageData: ImageData) => {
+    private loadMissingImage = (imageData: ImageData, generation: number) => {
+        const file = imageData.fileData;
+        if (!file) return;
+        // 0字节占位文件 = on-demand 视频帧；即使 Redux 仍标记 loadStatus=true，
+        // LRU 淘汰后也必须从后端重新生成缩略图。
+        if (file.size === 0) {
+            this.loadVideoFrameThumbnail(imageData, generation);
+            return;
+        }
+        // 视频文件无法通过 FileUtil.loadImage 加载；同时检查扩展名以兼容
+        // IndexedDB 恢复后 MIME type 丢失的情况。
+        if (file.type.startsWith('video/') || /\.(mp4|webm|mov|avi|mkv|m4v|ogg)$/i.test(file.name)) return;
+        this.startLoading(imageData.id, generation);
+        FileUtil.loadImage(file)
+            .then((image: HTMLImageElement) => this.saveLoadedImage(image, imageData, generation))
+            .catch((error) => this.handleLoadImageError(imageData, generation, error));
+    };
+
+    private loadVideoFrameThumbnail = async (imageData: ImageData, generation: number) => {
         const sessionId = EditorModel.videoSessionId;
-        if (!sessionId || this.isLoading) return;
+        if (
+            !sessionId ||
+            this.loadingImageId === imageData.id && this.loadingGeneration === generation
+        ) return;
 
         const match = imageData.fileData?.name?.match(/frame_(\d+)/);
         if (!match) return;
         const frameIdx = parseInt(match[1], 10);
 
-        this.isLoading = true;
+        this.startLoading(imageData.id, generation);
         try {
             const frames = await FrameExtractorService.fetchFrameRange(sessionId, frameIdx, 1);
-            if (!frames || frames.length === 0) { this.isLoading = false; return; }
+            if (!this.isCurrentRequest(imageData.id, generation)) return;
+            if (!frames || frames.length === 0) { this.finishLoading(imageData.id, generation); return; }
             const blob = frames[0] as Blob;
             const fullUrl = URL.createObjectURL(blob);
             const fullImg = new Image();
             fullImg.onload = () => {
+                if (!this.isCurrentRequest(imageData.id, generation)) {
+                    URL.revokeObjectURL(fullUrl);
+                    return;
+                }
                 // Downscale to thumbnail size (~200px) to save memory.
                 // Full-size frames (e.g. 2560×1440 ≈ 15MB decoded) are wasteful
                 // for sidebar thumbnails displayed at ~150×84px.
@@ -157,36 +178,62 @@ class ImagePreview extends React.Component<IProps, IState> {
 
                 // Async toBlob instead of sync toDataURL to avoid blocking main thread
                 thumbCanvas.toBlob((thumbBlob) => {
-                    if (!thumbBlob) { this.handleLoadImageError(); return; }
+                    if (!this.isCurrentRequest(imageData.id, generation)) return;
+                    if (!thumbBlob) { this.handleLoadImageError(imageData, generation); return; }
                     const blobUrl = URL.createObjectURL(thumbBlob);
                     const thumbImg = new Image();
                     // 不撤销 blobUrl：<img src={image.src}> 渲染仍指向它，撤销会变破图
-                    thumbImg.onload = () => this.saveLoadedImage(thumbImg, imageData);
+                    thumbImg.onload = () => this.saveLoadedImage(thumbImg, imageData, generation);
                     thumbImg.onerror = () => {
                         URL.revokeObjectURL(blobUrl);
-                        this.handleLoadImageError();
+                        this.handleLoadImageError(imageData, generation);
                     };
                     thumbImg.src = blobUrl;
                 }, 'image/jpeg', 0.6);
             };
             fullImg.onerror = () => {
                 URL.revokeObjectURL(fullUrl);
-                this.handleLoadImageError();
+                this.handleLoadImageError(imageData, generation);
             };
             fullImg.src = fullUrl;
-        } catch {
-            this.isLoading = false;
+        } catch (error) {
+            this.handleLoadImageError(imageData, generation, error);
         }
     };
 
-    private saveLoadedImage = (image: HTMLImageElement, imageData: ImageData) => {
+    private startLoading = (imageId: string, generation: number) => {
+        this.isLoading = true;
+        this.loadingImageId = imageId;
+        this.loadingGeneration = generation;
+    };
+
+    private finishLoading = (imageId: string, generation: number) => {
+        if (this.loadingImageId !== imageId || this.loadingGeneration !== generation) return;
+        this.isLoading = false;
+        this.loadingImageId = null;
+    };
+
+    private isCurrentRequest = (imageId: string, generation: number): boolean =>
+        this.mounted && generation === this.requestGeneration && imageId === this.props.imageData.id;
+
+    private discardLoadedImage = (image: HTMLImageElement) => {
+        const source = image.getAttribute('src');
+        if (source?.startsWith('blob:')) URL.revokeObjectURL(source);
+        image.src = '';
+    };
+
+    private saveLoadedImage = (image: HTMLImageElement, imageData: ImageData, generation: number) => {
+        if (!this.isCurrentRequest(imageData.id, generation)) {
+            this.discardLoadedImage(image);
+            return;
+        }
         const updated = { ...imageData, loadStatus: true };
         this.props.updateImageDataById(updated.id, updated);
         ImageRepository.storeImage(imageData.id, image);
         if (imageData.id === this.props.imageData.id) {
             this.setState({ image });
-            this.isLoading = false;
         }
+        this.finishLoading(imageData.id, generation);
     };
 
     private getStyle = () => {
@@ -217,8 +264,12 @@ class ImagePreview extends React.Component<IProps, IState> {
         }
     };
 
-    private handleLoadImageError = (imageData?: ImageData, error?: any) => {
-        this.isLoading = false;
+    private handleLoadImageError = (imageData?: ImageData, generation?: number, error?: any) => {
+        if (imageData && generation !== undefined) this.finishLoading(imageData.id, generation);
+        else {
+            this.isLoading = false;
+            this.loadingImageId = null;
+        }
         if (imageData) {
             console.error(`[ImagePreview] 图像加载失败: ${imageData.fileData?.name} (size=${imageData.fileData?.size})`, error);
         }
@@ -268,6 +319,11 @@ class ImagePreview extends React.Component<IProps, IState> {
             style,
             onClick
         } = this.props;
+        const imageReady = Boolean(
+            this.state.image?.getAttribute('src') &&
+            this.state.image.width > 0 &&
+            this.state.image.height > 0
+        );
 
         return (
             <div
@@ -275,7 +331,7 @@ class ImagePreview extends React.Component<IProps, IState> {
                 style={style}
                 onClick={onClick ? onClick : undefined}
             >
-                {(!!this.state.image) ?
+                {imageReady ?
                     [
                         <div
                             className="Foreground"

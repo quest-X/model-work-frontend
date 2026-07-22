@@ -145,7 +145,7 @@
 
 .mi-slot-list {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 7px;
   padding: 10px;
 }
@@ -162,7 +162,7 @@
   border: 1px solid var(--mi-border);
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.04);
-  cursor: pointer;
+  cursor: default;
 
   .mi-slot-dot { width: 7px; height: 7px; margin-top: 4px; border-radius: 50%; background: rgba(255, 255, 255, 0.3); }
   > span:nth-child(2) { min-width: 0; }
@@ -206,7 +206,31 @@
     font-size: 10px;
     &:focus { border-color: var(--mi-accent); }
   }
-  > span { display: block; margin-top: 5px; color: rgba(255, 255, 255, 0.5); font-size: 9px; text-align: right; }
+}
+
+.mi-layer-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 9px;
+
+  > span { white-space: nowrap; }
+  > div { display: flex; gap: 3px; }
+  button {
+    padding: 2px 4px;
+    border: 0;
+    border-radius: 3px;
+    color: rgba(255, 255, 255, 0.65);
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    font-size: 9px;
+    &:hover { color: white; background: rgba(255, 255, 255, 0.12); }
+    &:disabled { opacity: 0.35; cursor: default; }
+  }
+  kbd { margin-left: 2px; color: rgba(255, 255, 255, 0.35); font: inherit; }
 }
 
 .mi-segmented {

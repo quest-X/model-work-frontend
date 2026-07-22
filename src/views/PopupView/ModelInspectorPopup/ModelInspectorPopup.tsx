@@ -5,6 +5,7 @@ import {AppState} from '../../../store';
 import {Language} from '../../../data/LanguageConfig';
 import {ImageData} from '../../../store/labels/types';
 import {ImageRepository} from '../../../logic/imageRepository/ImageRepository';
+import {ImageActions} from '../../../logic/actions/ImageActions';
 import {PopupActions} from '../../../logic/actions/PopupActions';
 import {
     CatalogDetail,
@@ -20,9 +21,12 @@ import {
 } from './ModelInspectorAPI';
 import './ModelInspectorPopup.scss';
 
+export const MODEL_INSPECTOR_ESCAPE_EVENT = 'opensight:model-inspector-escape';
+
 interface IProps {
     language: Language;
     activeImage: ImageData | null;
+    activeModelTask: string | null;
 }
 
 const MAP_KINDS: Array<{value: Exclude<HeatmapKind, 'channel' | 'gradcam'>; zh: string; en: string}> = [
@@ -67,6 +71,18 @@ const isAbortError = (cause: unknown): boolean =>
 const errorMessage = (cause: unknown, fallback: string): string =>
     cause instanceof Error && cause.message ? cause.message : fallback;
 
+const sessionCaptureOptions = (
+    selectedCount: number,
+    limits: InspectorStatus['limits'] | undefined,
+): {imgsz: number; topK: number; maxSide: number} => {
+    const batched = selectedCount > (limits?.max_layers || 32);
+    return {
+        imgsz: 640,
+        topK: batched ? limits?.batch_top_channels || 4 : 8,
+        maxSide: batched ? limits?.batch_map_side || 160 : limits?.max_map_side || 256,
+    };
+};
+
 const canvasFileFromRepository = async (imageData: ImageData): Promise<File> => {
     if (imageData.fileData && imageData.fileData.size > 0) return imageData.fileData;
     const image = ImageRepository.getById(imageData.id);
@@ -86,12 +102,12 @@ const canvasFileFromRepository = async (imageData: ImageData): Promise<File> => 
 // The workbench intentionally coordinates status, capture, comparison and export
 // in one popup so its short-lived session can be disposed from a single boundary.
 // eslint-disable-next-line complexity
-export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) => {
+export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, activeModelTask}) => {
     const zh = language === Language.CHINESE;
     const t = useCallback((zhText: string, enText: string) => zh ? zhText : enText, [zh]);
+    const slot: InspectorSlot = activeModelTask === 'segment' ? 'segmentation' : 'detection';
     const [status, setStatus] = useState<InspectorStatus | null>(null);
     const [statusLoading, setStatusLoading] = useState(true);
-    const [slot, setSlot] = useState<InspectorSlot>('detection');
     const [detail, setDetail] = useState<CatalogDetail>('stages');
     const [catalog, setCatalog] = useState<InspectorLayer[]>([]);
     const [catalogLoading, setCatalogLoading] = useState(false);
@@ -113,6 +129,8 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const requestRef = useRef<AbortController | null>(null);
     const sessionIdRef = useRef<string | null>(null);
+    const autoCaptureKeyRef = useRef<string | null>(null);
+    const autoCapturePendingRef = useRef(false);
 
     const discardSession = useCallback((updateState: boolean = true) => {
         const sessionId = sessionIdRef.current;
@@ -126,13 +144,18 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
         }
     }, []);
 
+    const previousSlotRef = useRef<InspectorSlot>(slot);
+    useEffect(() => {
+        if (previousSlotRef.current === slot) return;
+        previousSlotRef.current = slot;
+        discardSession();
+    }, [discardSession, slot]);
+
     useEffect(() => {
         const controller = new AbortController();
         setStatusLoading(true);
         ModelInspectorAPI.status(controller.signal).then(value => {
             setStatus(value);
-            const ready = value.slots.find(item => item.state === 'ready');
-            if (ready) setSlot(ready.slot);
             setStatusLoading(false);
         }).catch((cause: unknown) => {
             if (isAbortError(cause)) return;
@@ -166,6 +189,16 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
         discardSession(false);
     }, [discardSession]);
 
+    const handleImageWheel = useCallback((event: React.WheelEvent<HTMLElement>) => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        if (Math.abs(event.deltaY) < 4 || Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+        event.preventDefault();
+        requestRef.current?.abort();
+        autoCapturePendingRef.current = true;
+        if (event.deltaY > 0) ImageActions.goToNextImage();
+        else ImageActions.goToPreviousImage();
+    }, []);
+
     const capability = useMemo(
         () => status?.slots.find(item => item.slot === slot) || null,
         [slot, status],
@@ -178,11 +211,13 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
             return undefined;
         }
         const controller = new AbortController();
+        autoCapturePendingRef.current = false;
         setCatalogLoading(true);
         setError(null);
         ModelInspectorAPI.layers(slot, detail, controller.signal).then(value => {
             setCatalog(value.layers);
             setSelectedIds(new Set(value.default_layer_ids));
+            autoCapturePendingRef.current = detail === 'stages' && value.default_layer_ids.length > 0;
             setCatalogLoading(false);
         }).catch((cause: unknown) => {
             if (isAbortError(cause)) return;
@@ -216,17 +251,64 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
     }, [visibleCatalog]);
 
     const maxLayers = status?.limits.max_layers || 32;
+    const maxTotalLayers = status?.limits.max_total_layers || 512;
+    const batchCount = selectedIds.size === 0 ? 0 : Math.ceil(selectedIds.size / maxLayers);
+    const selectVisibleLayers = useCallback(() => {
+        const limitedLayers = visibleCatalog.slice(0, maxTotalLayers);
+        setSelectedIds(new Set(limitedLayers.map(layer => layer.id)));
+        if (visibleCatalog.length > maxTotalLayers) {
+            setError(t(
+                `当前筛选共有 ${visibleCatalog.length} 层；单次批量任务最多处理 ${maxTotalLayers} 层，已选择前 ${maxTotalLayers} 层。`,
+                `${visibleCatalog.length} layers match; one batch task supports ${maxTotalLayers}. The first ${maxTotalLayers} are selected.`,
+            ));
+        } else {
+            setError(null);
+        }
+    }, [maxTotalLayers, t, visibleCatalog]);
+
+    const clearSelectedLayers = useCallback(() => {
+        setSelectedIds(new Set());
+        setError(null);
+    }, []);
+
+    useEffect(() => {
+        const handleSelectAllShortcut = (event: KeyboardEvent) => {
+            const target = event.target;
+            const isTextEntry = target instanceof HTMLTextAreaElement
+                || target instanceof HTMLInputElement && !['button', 'checkbox', 'radio'].includes(target.type)
+                || target instanceof HTMLElement && target.isContentEditable;
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+                if (isTextEntry) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                selectVisibleLayers();
+            }
+        };
+        window.addEventListener('keydown', handleSelectAllShortcut, true);
+        return () => window.removeEventListener('keydown', handleSelectAllShortcut, true);
+    }, [selectVisibleLayers]);
+
+    useEffect(() => {
+        const handleEscape = (event: Event) => {
+            if (selectedIds.size === 0) return;
+            event.preventDefault();
+            clearSelectedLayers();
+        };
+        window.addEventListener(MODEL_INSPECTOR_ESCAPE_EVENT, handleEscape);
+        return () => window.removeEventListener(MODEL_INSPECTOR_ESCAPE_EVENT, handleEscape);
+    }, [clearSelectedLayers, selectedIds.size]);
+
     const toggleLayer = (identifier: string) => {
         setSelectedIds(previous => {
             const next = new Set(previous);
             if (next.has(identifier)) next.delete(identifier);
-            else if (next.size < maxLayers) next.add(identifier);
-            else setError(t(`一次最多捕获 ${maxLayers} 层`, `Capture is limited to ${maxLayers} layers`));
+            else if (next.size < maxTotalLayers) next.add(identifier);
+            else setError(t(`一次批量任务最多处理 ${maxTotalLayers} 层`, `A batch task is limited to ${maxTotalLayers} layers`));
             return next;
         });
     };
 
-    const createSession = async () => {
+    const createSession = useCallback(async () => {
         if (!activeImage || capability?.state !== 'ready' || selectedIds.size === 0) return;
         setBusy(true);
         setError(null);
@@ -240,7 +322,7 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
                 file,
                 slot,
                 Array.from(selectedIds),
-                {imgsz: 640, topK: 8, maxSide: status?.limits.max_map_side || 256},
+                sessionCaptureOptions(selectedIds.size, status?.limits),
                 controller.signal,
             );
             sessionIdRef.current = value.id;
@@ -257,10 +339,28 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
                 setError(errorMessage(cause, t('生成热图失败', 'Heatmap capture failed')));
             }
         } finally {
-            if (requestRef.current === controller) requestRef.current = null;
-            setBusy(false);
+            if (requestRef.current === controller) {
+                requestRef.current = null;
+                setBusy(false);
+            }
         }
-    };
+    }, [activeImage, capability?.state, discardSession, selectedIds, slot, status?.limits, t]);
+
+    useEffect(() => {
+        if (
+            detail !== 'stages'
+            || catalogLoading
+            || !autoCapturePendingRef.current
+            || !activeImage
+            || capability?.state !== 'ready'
+            || selectedIds.size === 0
+        ) return;
+        const autoCaptureKey = `${activeImage.id}:${slot}:${capability.model}`;
+        if (autoCaptureKeyRef.current === autoCaptureKey) return;
+        autoCapturePendingRef.current = false;
+        autoCaptureKeyRef.current = autoCaptureKey;
+        void createSession();
+    }, [activeImage, capability?.model, capability?.state, catalogLoading, createSession, detail, selectedIds.size, slot]);
 
     const activeLayer = useMemo(
         () => session?.layers.find(layer => layer.id === activeLayerId) || null,
@@ -432,8 +532,8 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
     };
 
     const slotName = (value: InspectorSlot) => value === 'detection'
-        ? t('检测视图', 'Detection slot')
-        : t('分割视图', 'Segmentation slot');
+        ? t('检测模型', 'Detection model')
+        : t('分割模型', 'Segmentation model');
 
     return <div className='model-inspector-backdrop'>
         <section className='model-inspector-shell' aria-label={t('模型透视', 'Model Inspector')}>
@@ -462,19 +562,15 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
                     : <div className='mi-workbench'>
                         <aside className='mi-left-panel'>
                             <div className='mi-panel-heading'>
-                                <span>{t('模型运行位', 'Runtime slots')}</span>
+                                <span>{t('当前推理模型', 'Current inference model')}</span>
                                 <small>v{status.version}</small>
                             </div>
                             <div className='mi-slot-list'>
-                                {status.slots.map(item => <button
-                                    key={item.slot}
-                                    className={`mi-slot-card ${slot === item.slot ? 'active' : ''} state-${item.state}`}
-                                    onClick={() => {setSlot(item.slot); discardSession();}}
-                                >
+                                <div className={`mi-slot-card active state-${capability?.state || 'unavailable'}`}>
                                     <span className='mi-slot-dot'/>
-                                    <span><strong>{slotName(item.slot)}</strong><small>{item.model || t('暂无模型', 'No model')}</small></span>
-                                    <em>{stateLabel(item.state, zh)}</em>
-                                </button>)}
+                                    <span><strong>{slotName(slot)}</strong><small>{capability?.model || t('暂无模型', 'No model')}</small></span>
+                                    <em>{capability ? stateLabel(capability.state, zh) : t('不可用', 'Unavailable')}</em>
+                                </div>
                             </div>
                             {capability && capability.state !== 'ready' && <div className='mi-capability-note'>
                                 <strong>{stateLabel(capability.state, zh)}</strong>
@@ -488,7 +584,13 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
                                     <button className={detail === 'all' ? 'active' : ''} onClick={() => setDetail('all')}>{t('全部算子', 'Operators')}</button>
                                 </div>
                                 <input value={search} onChange={event => setSearch(event.target.value)} placeholder={t('搜索层路径 / 类型', 'Search path / type')} />
-                                <span>{selectedIds.size}/{maxLayers} {t('层待捕获', 'selected')}</span>
+                                <div className='mi-layer-selection'>
+                                    <span>{selectedIds.size} {t('层待捕获', 'selected')}{batchCount > 1 && t(` · 自动分 ${batchCount} 批`, ` · ${batchCount} automatic batches`)}</span>
+                                    <div>
+                                        <button type='button' onClick={selectVisibleLayers} title={t('选择当前筛选结果（Ctrl/⌘+A）', 'Select filtered layers (Ctrl/⌘+A)')}>{t('全选', 'Select')} <kbd>Ctrl/⌘ A</kbd></button>
+                                        <button type='button' onClick={clearSelectedLayers} disabled={selectedIds.size === 0} title={t('清空选择（Esc）', 'Clear selection (Esc)')}>{t('清空', 'Clear')} <kbd>Esc</kbd></button>
+                                    </div>
+                                </div>
                             </div>
                             <div className='mi-layer-list'>
                                 {catalogLoading && <div className='mi-list-loading'>{t('读取结构…', 'Reading graph…')}</div>}
@@ -513,8 +615,12 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
                                 disabled={busy || !activeImage || capability?.state !== 'ready' || selectedIds.size === 0}
                                 onClick={createSession}
                             >
-                                {busy ? <><span className='mi-button-spinner'/>{t('正在沿模型前向传播…', 'Tracing model forward…')}</>
-                                    : t(`生成 ${selectedIds.size} 层透视`, `Inspect ${selectedIds.size} layers`)}
+                                {busy ? <><span className='mi-button-spinner'/>{batchCount > 1
+                                    ? t(`正在自动分 ${batchCount} 批处理…`, `Processing ${batchCount} batches…`)
+                                    : t('正在沿模型前向传播…', 'Tracing model forward…')}</>
+                                    : session
+                                        ? t(`重新生成 ${selectedIds.size} 层透视${batchCount > 1 ? ` · ${batchCount} 批` : ''}`, `Refresh ${selectedIds.size} layers${batchCount > 1 ? ` · ${batchCount} batches` : ''}`)
+                                        : t(`生成 ${selectedIds.size} 层透视${batchCount > 1 ? ` · ${batchCount} 批` : ''}`, `Inspect ${selectedIds.size} layers${batchCount > 1 ? ` · ${batchCount} batches` : ''}`)}
                             </button>
                         </aside>
 
@@ -527,12 +633,24 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
                                 <label className='mi-opacity'>{t('叠加强度', 'Overlay')}<input type='range' min='0' max='100' value={opacity} onChange={event => setOpacity(Number(event.target.value))}/><span>{opacity}%</span></label>
                                 <button className={compareEnabled ? 'active' : ''} disabled={readyLayers.length < 2} onClick={() => setCompareEnabled(value => !value)}>A/B</button>
                             </div>
-                            {!session || !activeLayer ? <div className='mi-empty-canvas'>
+                            {!session || !activeLayer ? <div
+                                className='mi-empty-canvas'
+                                data-testid='inspector-image-wheel-area'
+                                onWheel={handleImageWheel}
+                            >
                                 <div className='mi-empty-orbit'><span/><span/><span/></div>
-                                <h3>{activeImage ? t('选择模型运行位并生成阶段透视', 'Choose a model slot and inspect its stages') : t('请先在 openSight 中打开一张图片', 'Open an image in openSight first')}</h3>
-                                <p>{t('插件只在你点击生成时挂载临时钩子；关闭后不影响正常推理。', 'Temporary hooks are attached only on capture and never affect normal inference.')}</p>
+                                <h3>{busy
+                                    ? t('正在自动生成语义阶段透视', 'Generating semantic stage views')
+                                    : activeImage
+                                        ? t('正在准备当前模型的阶段透视', 'Preparing the current model stages')
+                                        : t('请先在 openSight 中打开一张图片', 'Open an image in openSight first')}</h3>
+                                <p>{t('首次打开会自动生成；临时钩子在捕获结束后立即移除，不影响正常推理。', 'Views are generated automatically on open; temporary hooks are removed immediately after capture.')}</p>
                             </div> : <>
-                                <div className={`mi-viewports ${compareEnabled && compareLayer ? 'compare' : ''}`}>
+                                <div
+                                    className={`mi-viewports ${compareEnabled && compareLayer ? 'compare' : ''}`}
+                                    data-testid='inspector-image-wheel-area'
+                                    onWheel={handleImageWheel}
+                                >
                                     {renderViewport(activeLayer, 'A')}
                                     {compareEnabled && compareLayer && renderViewport(compareLayer, 'B', true)}
                                 </div>
@@ -549,7 +667,7 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage}) =
                                             className={activeLayerId === layer.id ? 'active' : ''}
                                             onClick={() => setActiveLayerId(layer.id)}
                                         >
-                                            <img loading='lazy' src={ModelInspectorAPI.mapUrl(session.id, layer.id, {kind: 'mean_abs', palette: 'gray'})} alt='' />
+                                            <img loading='lazy' src={ModelInspectorAPI.mapUrl(session.id, layer.id, {kind: 'mean_abs', palette})} alt='' />
                                             <span>{String(index + 1).padStart(2, '0')}</span>
                                             <small>{layer.path.split('.').slice(-2).join('.')}</small>
                                         </button>)}
@@ -627,6 +745,7 @@ const mapStateToProps = (state: AppState): IProps => {
     return {
         language: state.general.language,
         activeImage: index === null ? null : state.labels.imagesData[index] || null,
+        activeModelTask: state.aimodels.selectedModelTask,
     };
 };
 

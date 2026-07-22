@@ -2,12 +2,19 @@ import React from 'react';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {Language} from '../../../../data/LanguageConfig';
 import {ImageData} from '../../../../store/labels/types';
-import {ModelInspectorPopup} from '../ModelInspectorPopup';
+import {MODEL_INSPECTOR_ESCAPE_EVENT, ModelInspectorPopup} from '../ModelInspectorPopup';
 import {InspectionSession, InspectorStatus, ModelInspectorAPI} from '../ModelInspectorAPI';
 
 
 jest.mock('../../../../logic/actions/PopupActions', () => ({
     PopupActions: {close: jest.fn()},
+}));
+
+jest.mock('../../../../logic/actions/ImageActions', () => ({
+    ImageActions: {
+        goToNextImage: jest.fn(),
+        goToPreviousImage: jest.fn(),
+    },
 }));
 
 jest.mock('../ModelInspectorAPI', () => {
@@ -33,8 +40,11 @@ const status: InspectorStatus = {
     limits: {
         max_upload_mb: 25,
         max_layers: 32,
+        max_total_layers: 512,
         max_top_channels: 16,
         max_map_side: 256,
+        batch_top_channels: 4,
+        batch_map_side: 160,
         session_ttl_seconds: 120,
         max_cache_mb: 128,
     },
@@ -107,14 +117,15 @@ describe('ModelInspectorPopup', () => {
         Object.defineProperty(URL, 'revokeObjectURL', {configurable: true, value: jest.fn()});
     });
 
-    it('captures semantic stages, exposes comparison, and cleans the session on unmount', async () => {
-        const view = render(<ModelInspectorPopup language={Language.CHINESE} activeImage={activeImage}/>);
+    it('automatically captures semantic stages, exposes comparison, and cleans the session on unmount', async () => {
+        const view = render(<ModelInspectorPopup language={Language.CHINESE} activeImage={activeImage} activeModelTask='detect'/>);
 
         const capture = await screen.findByTestId('inspector-capture');
-        await waitFor(() => expect(capture).toHaveTextContent('生成 2 层透视'));
-        await act(async () => fireEvent.click(capture));
+        expect(screen.getByText('当前推理模型')).toBeInTheDocument();
+        expect(screen.getByText('yolo11n.pt')).toBeInTheDocument();
 
         expect(await screen.findByTestId('inspector-view-a')).toBeInTheDocument();
+        expect(capture).toHaveTextContent('重新生成 2 层透视');
         expect(screen.getAllByText('model.0').length).toBeGreaterThan(0);
         expect(ModelInspectorAPI.createSession).toHaveBeenCalledWith(
             activeImage.fileData,
@@ -123,6 +134,7 @@ describe('ModelInspectorPopup', () => {
             expect.objectContaining({imgsz: 640, topK: 8, maxSide: 256}),
             expect.any(AbortSignal),
         );
+        expect(ModelInspectorAPI.createSession).toHaveBeenCalledTimes(1);
 
         fireEvent.click(screen.getByText('A/B'));
         expect(await screen.findByTestId('inspector-compare-b')).toBeInTheDocument();
@@ -133,10 +145,115 @@ describe('ModelInspectorPopup', () => {
         await waitFor(() => expect(ModelInspectorAPI.deleteSession).toHaveBeenCalledWith('session-1'));
     });
 
+    it('switches one image for every vertical wheel event over the preview', async () => {
+        const {ImageActions} = jest.requireMock('../../../../logic/actions/ImageActions');
+        render(<ModelInspectorPopup language={Language.CHINESE} activeImage={activeImage} activeModelTask='detect'/>);
+
+        const wheelArea = await screen.findByTestId('inspector-image-wheel-area');
+        fireEvent.wheel(wheelArea, {deltaY: 100});
+        fireEvent.wheel(wheelArea, {deltaY: 100});
+        expect(ImageActions.goToNextImage).toHaveBeenCalledTimes(2);
+
+        fireEvent.wheel(wheelArea, {deltaY: -100});
+        expect(ImageActions.goToPreviousImage).toHaveBeenCalledTimes(1);
+
+        fireEvent.wheel(wheelArea, {deltaX: 120, deltaY: 5});
+        fireEvent.wheel(wheelArea, {deltaY: 100, ctrlKey: true});
+        expect(ImageActions.goToNextImage).toHaveBeenCalledTimes(2);
+    });
+
+    it('only exposes the model slot that matches the current inference task', async () => {
+        const segmentationStatus: InspectorStatus = {
+            ...status,
+            slots: [
+                status.slots[0],
+                {
+                    slot: 'segmentation', state: 'ready', model: 'FastSAM-s.pt', runtime: 'pytorch',
+                    family: 'fastsam', supports_activations: true, supports_attribution: true, reason: null,
+                },
+            ],
+        };
+        (ModelInspectorAPI.status as jest.Mock).mockResolvedValue(segmentationStatus);
+        (ModelInspectorAPI.layers as jest.Mock).mockResolvedValue({
+            ...catalog,
+            slot: 'segmentation',
+            model: 'FastSAM-s.pt',
+            family: 'fastsam',
+        });
+        (ModelInspectorAPI.createSession as jest.Mock).mockResolvedValue({
+            ...session,
+            slot: 'segmentation',
+            model: 'FastSAM-s.pt',
+            family: 'fastsam',
+        });
+
+        render(<ModelInspectorPopup language={Language.CHINESE} activeImage={activeImage} activeModelTask='segment'/>);
+
+        const capture = await screen.findByTestId('inspector-capture');
+        expect(screen.getByText('分割模型')).toBeInTheDocument();
+        expect(screen.getByText('FastSAM-s.pt')).toBeInTheDocument();
+        expect(screen.queryByText('yolo11n.pt')).not.toBeInTheDocument();
+        expect(await screen.findByTestId('inspector-view-a')).toBeInTheDocument();
+        expect(capture).toHaveTextContent('重新生成 2 层透视');
+
+        expect(ModelInspectorAPI.createSession).toHaveBeenCalledWith(
+            activeImage.fileData,
+            'segmentation',
+            ['layer-a', 'layer-b'],
+            expect.objectContaining({imgsz: 640, topK: 8, maxSide: 256}),
+            expect.any(AbortSignal),
+        );
+    });
+
+    it('selects all filtered layers and prepares automatic batches', async () => {
+        const manyLayers = Array.from({length: 34}, (_, index) => ({
+            id: `layer-${index}`,
+            path: `model.${index}`,
+            type: 'Conv',
+            group: 'Backbone',
+            depth: 2,
+            parameters: 0,
+            default_selected: false,
+        }));
+        (ModelInspectorAPI.layers as jest.Mock).mockResolvedValue({
+            ...catalog,
+            layers: manyLayers,
+            default_layer_ids: [],
+        });
+
+        render(<ModelInspectorPopup language={Language.CHINESE} activeImage={activeImage} activeModelTask='detect'/>);
+
+        const capture = await screen.findByTestId('inspector-capture');
+        await waitFor(() => expect(capture).toHaveTextContent('生成 0 层透视'));
+        await screen.findByText('model.33');
+        fireEvent.keyDown(screen.getByText('全部算子'), {key: 'a', ctrlKey: true});
+
+        await waitFor(() => expect(capture).toHaveTextContent('生成 34 层透视 · 2 批'));
+        expect(screen.getByText('34 层待捕获 · 自动分 2 批')).toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        await act(async () => fireEvent.click(capture));
+        expect(ModelInspectorAPI.createSession).toHaveBeenCalledWith(
+            activeImage.fileData,
+            'detection',
+            manyLayers.map(layer => layer.id),
+            {imgsz: 640, topK: 4, maxSide: 160},
+            expect.any(AbortSignal),
+        );
+
+        const escapeEvent = new Event(MODEL_INSPECTOR_ESCAPE_EVENT, {cancelable: true});
+        act(() => window.dispatchEvent(escapeEvent));
+        expect(escapeEvent.defaultPrevented).toBe(true);
+        await waitFor(() => expect(capture).toHaveTextContent('生成 0 层透视'));
+
+        const emptyEscapeEvent = new Event(MODEL_INSPECTOR_ESCAPE_EVENT, {cancelable: true});
+        act(() => window.dispatchEvent(emptyEscapeEvent));
+        expect(emptyEscapeEvent.defaultPrevented).toBe(false);
+    });
+
     it('explains how to enable the plugin when status cannot be reached', async () => {
         (ModelInspectorAPI.status as jest.Mock).mockRejectedValue(new Error('offline'));
 
-        render(<ModelInspectorPopup language={Language.ENGLISH} activeImage={activeImage}/>);
+        render(<ModelInspectorPopup language={Language.ENGLISH} activeImage={activeImage} activeModelTask='detect'/>);
 
         expect(await screen.findByText('Plugin unavailable')).toBeInTheDocument();
         expect(screen.getByText('OPENSIGHT_PLUGIN_MODEL_INSPECTOR_ENABLED=true')).toBeInTheDocument();

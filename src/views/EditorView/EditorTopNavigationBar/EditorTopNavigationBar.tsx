@@ -41,6 +41,7 @@ import { ObjectTrackingActions } from '../../../logic/actions/ObjectTrackingActi
 import { submitNewNotification, deleteNotificationById } from '../../../store/notifications/actionCreators';
 import { getTimelineRange, FrameRange } from '../VideoTimeline/VideoTimeline';
 import { NotificationUtil } from '../../../utils/NotificationUtil';
+import { inferModelTaskFromName } from '../../../utils/ModelTaskUtil';
 const BUTTON_SIZE: ISize = { width: 30, height: 30 };
 const BUTTON_PADDING: number = 10;
 
@@ -584,12 +585,12 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
 
     // 判断当前活跃模型是否为分割类型:
     // 1. 优先使用后端 model_tasks（精确，通过 model.task 属性获取）
-    // 2. 回退到名称正则（SAM 家族 / *-seg 模型）
+    // 2. 回退到统一文件名 token 规则（含日期_SEG_项目_... 模型）
     const isSegModel = useMemo(
         () => {
             const task = modelTasks[activeModelName];
             if (task) return task === 'segment';
-            return /^(sam2|sam3|sam_|mobile_sam|FastSAM)/i.test(activeModelName) || /-seg/i.test(activeModelName);
+            return inferModelTaskFromName(activeModelName) === 'segment';
         },
         [activeModelName, modelTasks]
     );
@@ -600,9 +601,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         const resolvedTask: string | null = task
             ? task
             : activeModelName
-                ? ((/^(sam2|sam3|sam_|mobile_sam|FastSAM)/i.test(activeModelName) || /-seg/i.test(activeModelName))
-                    ? 'segment'
-                    : 'detect')
+                ? inferModelTaskFromName(activeModelName)
                 : null;
         store.dispatch({ type: 'SET_SELECTED_MODEL_TASK', payload: resolvedTask });
     }, [activeModelName, modelTasks]);

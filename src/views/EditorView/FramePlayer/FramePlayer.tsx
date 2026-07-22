@@ -106,6 +106,7 @@ const FramePlayer: React.FC<IProps> = ({
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const focusableElementRef = useRef<HTMLDivElement>(null);
+    const mountedRef = useRef(true);
     const [isLoaded, setIsLoaded] = useState(false);
     const [loadingProgress, setLoadingProgress] = useState(0); // initLoad 进度 0-100
     // 后台分批加载状态：init 完成后，滑动窗口持续补帧时显示
@@ -268,6 +269,7 @@ const FramePlayer: React.FC<IProps> = ({
         ensureCanvasSize(canvas);
         try {
             const img = await loadFrameImage(frameIdx);
+            if (!mountedRef.current || canvas !== canvasRef.current) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             EditorModel.videoFrameImage = img;
@@ -285,7 +287,7 @@ const FramePlayer: React.FC<IProps> = ({
 
     const drawFrameSync = useCallback((frameIdx: number): boolean => {
         const canvas = canvasRef.current;
-        if (!canvas) return false;
+        if (!mountedRef.current || !canvas) return false;
         const ctx = canvas.getContext('2d');
         if (!ctx) return false;
 
@@ -696,7 +698,9 @@ const FramePlayer: React.FC<IProps> = ({
 
     // 清理（不主动 revokeObjectURL，避免 Strict Mode 双重挂载间撤销正在加载的 URL）
     useEffect(() => {
+        mountedRef.current = true;
         return () => {
+            mountedRef.current = false;
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             loadGenRef.current++; // 终止 maintainAvailableFrames 循环
             frameCacheRef.current = new Map();

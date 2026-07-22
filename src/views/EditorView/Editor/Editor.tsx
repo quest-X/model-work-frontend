@@ -49,7 +49,10 @@ interface IState {
     lastMiddleMousePosition: IPoint | null;
 }
 
-class Editor extends React.Component<IProps, IState> {
+export class Editor extends React.Component<IProps, IState> {
+
+    private requestGeneration: number = 0;
+    private mounted: boolean = false;
 
     constructor(props) {
         super(props);
@@ -68,6 +71,7 @@ class Editor extends React.Component<IProps, IState> {
     // =================================================================================================================
 
     public componentDidMount(): void {
+        this.mounted = true;
         this.mountEventListeners();
 
         const {imageData, activeLabelType} = this.props;
@@ -86,13 +90,17 @@ class Editor extends React.Component<IProps, IState> {
     }
 
     public componentWillUnmount(): void {
+        this.mounted = false;
+        this.requestGeneration++;
+        EditorActions.setLoadingStatus(false);
         this.unmountEventListeners();
     }
 
     public componentDidUpdate(prevProps: Readonly<IProps>, prevState: Readonly<{}>, snapshot?: any): void {
         const {imageData, activeLabelType} = this.props;
+        const imageChanged = prevProps.imageData.id !== imageData.id;
 
-        if (prevProps.imageData.id !== imageData.id) {
+        if (imageChanged) {
             // 视频播放中：画布已由 VideoEditor.handleVideoTimeUpdate 中的
             // EditorActions.fullRender() 直接重绘，无需再次渲染。
             // 跳过 loadImage 和 updateModelAndRender 以避免冗余开销。
@@ -109,7 +117,10 @@ class Editor extends React.Component<IProps, IState> {
             AIActions.detect(imageData.id, ImageRepository.getById(imageData.id));
         }
 
-        this.updateModelAndRender();
+        // loadImage renders only after it has a valid full-resolution image.
+        // Rendering here during a cache miss clears the base layer while label
+        // engines still draw the new image's raw coordinates.
+        if (!imageChanged) this.updateModelAndRender();
     }
 
     // =================================================================================================================
@@ -154,34 +165,58 @@ class Editor extends React.Component<IProps, IState> {
     // =================================================================================================================
 
     private loadImage = async (imageData: ImageData): Promise<any> => {
+        const generation = ++this.requestGeneration;
         if (imageData.loadStatus) {
             // 视频模式：复用缓存的 videoFrameImage（尺寸与视频一致），同步设置，零延迟
-            if (VideoSelector.isVideoMode() && EditorModel.videoFrameImage) {
-                EditorActions.setActiveImage(EditorModel.videoFrameImage);
+            if (VideoSelector.isVideoMode()) {
+                if (EditorModel.videoFrameImage) {
+                    EditorActions.setActiveImage(EditorModel.videoFrameImage);
+                    this.updateModelAndRender();
+                }
+                // Sidebar repository entries are downscaled thumbnails. Using
+                // one as the editor image corrupts the full-resolution label
+                // coordinate system; FramePlayer will publish the real frame.
+                return;
+            }
+            const cachedImage = ImageRepository.getById(imageData.id);
+            if (cachedImage) {
+                EditorActions.setActiveImage(cachedImage);
+                AIActions.detect(imageData.id, cachedImage);
                 this.updateModelAndRender();
             } else {
-                EditorActions.setActiveImage(ImageRepository.getById(imageData.id));
-                AIActions.detect(imageData.id, ImageRepository.getById(imageData.id));
-                this.updateModelAndRender();
+                this.loadMissingImage(imageData, generation);
             }
+            return;
         }
-        else {
-            // 0-byte placeholder = on-demand video frame; skip FileUtil.loadImage
-            // (it will be drawn by FramePlayer via backend fetch instead)
-            if (imageData.fileData && imageData.fileData.size === 0) return;
-            if (!EditorModel.isLoading) {
-                EditorActions.setLoadingStatus(true);
-                const saveLoadedImagePartial = (image: HTMLImageElement) => this.saveLoadedImage(image, imageData);
-                FileUtil.loadImage(imageData.fileData)
-                    .then((image:HTMLImageElement) => saveLoadedImagePartial(image))
-                    .catch((error) => this.handleLoadImageError(error))
-            }
-        }
+        this.loadMissingImage(imageData, generation);
     };
 
-    private saveLoadedImage = (image: HTMLImageElement, imageData: ImageData) => {
-        imageData.loadStatus = true;
-        this.props.updateImageDataById(imageData.id, imageData);
+    private loadMissingImage = (imageData: ImageData, generation: number) => {
+        // On-demand video placeholders are rendered by FramePlayer after its
+        // backend fetch. They cannot be decoded with FileUtil.
+        if (!imageData.fileData || imageData.fileData.size === 0) return;
+        EditorActions.setLoadingStatus(true);
+        FileUtil.loadImage(imageData.fileData)
+            .then((image: HTMLImageElement) => this.saveLoadedImage(image, imageData, generation))
+            .catch((error) => this.handleLoadImageError(imageData, generation, error));
+    };
+
+    private isCurrentRequest = (imageId: string, generation: number): boolean =>
+        this.mounted && generation === this.requestGeneration && imageId === this.props.imageData.id;
+
+    private discardLoadedImage = (image: HTMLImageElement) => {
+        const source = image.getAttribute('src');
+        if (source?.startsWith('blob:')) URL.revokeObjectURL(source);
+        image.src = '';
+    };
+
+    private saveLoadedImage = (image: HTMLImageElement, imageData: ImageData, generation: number) => {
+        if (!this.isCurrentRequest(imageData.id, generation)) {
+            this.discardLoadedImage(image);
+            return;
+        }
+        const updatedImageData = {...imageData, loadStatus: true};
+        this.props.updateImageDataById(imageData.id, updatedImageData);
         ImageRepository.storeImage(imageData.id, image);
         EditorActions.setActiveImage(image);
         AIActions.detect(imageData.id, image);
@@ -189,9 +224,10 @@ class Editor extends React.Component<IProps, IState> {
         this.updateModelAndRender()
     };
 
-    private handleLoadImageError = (error?: any) => {
+    private handleLoadImageError = (imageData: ImageData, generation: number, error?: any) => {
+        if (!this.isCurrentRequest(imageData.id, generation)) return;
         EditorActions.setLoadingStatus(false);
-        console.error(`[Editor] 图像加载失败: ${this.props.imageData?.fileData?.name} (size=${this.props.imageData?.fileData?.size})`, error);
+        console.error(`[Editor] 图像加载失败: ${imageData.fileData?.name} (size=${imageData.fileData?.size})`, error);
     };
 
     // =================================================================================================================

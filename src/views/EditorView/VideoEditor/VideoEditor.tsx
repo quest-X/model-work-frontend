@@ -157,20 +157,15 @@ const VideoEditor: React.FC<IProps> = ({
                 lastIsPlayingRef.current = isPlaying;
 
                 // 视频模式：始终使用缓存的 videoFrameImage，避免用 150x150 缩略图
-                if (EditorModel.videoFrameImage) {
+                const fullResolutionFrameReady = Boolean(EditorModel.videoFrameImage);
+                if (fullResolutionFrameReady) {
                     EditorActions.setActiveImage(EditorModel.videoFrameImage);
-                } else {
-                    const currentImageData = imagesData[activeVideo.currentFrame];
-                    if (currentImageData && currentImageData.id) {
-                        const image = ImageRepository.getById(currentImageData.id);
-                        if (image) {
-                            EditorActions.setActiveImage(image);
-                        }
-                    }
                 }
 
-                // canvas 可能还未挂载，仅在已挂载时刷新
-                if (EditorModel.canvas) {
+                // Repository only contains sidebar thumbnails. Wait for
+                // FramePlayer's full-resolution frame before rendering labels,
+                // otherwise their coordinates are projected against ~200px.
+                if (fullResolutionFrameReady && EditorModel.canvas) {
                     EditorActions.fullRender();
                 }
             }
@@ -730,4 +725,3 @@ const mapDispatchToProps = {
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(VideoEditor);
-

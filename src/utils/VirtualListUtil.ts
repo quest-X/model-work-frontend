@@ -3,7 +3,10 @@ import {IPoint} from "../interfaces/IPoint";
 
 export class VirtualListUtil {
     public static calculateGridSize(listSize: ISize, childSize: ISize, childCount: number): ISize {
-        const columnCount: number = Math.floor(listSize.width / childSize.width);
+        // During sidebar/file switches the container can briefly be narrower
+        // than one cell. A zero column count produces Infinity rows and NaN
+        // anchors, which React then forwards as invalid CSS dimensions.
+        const columnCount: number = Math.max(1, Math.floor(listSize.width / childSize.width));
         const rowCount: number = Math.ceil(childCount / columnCount);
         return {width: columnCount, height: rowCount};
     }

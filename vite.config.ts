@@ -13,6 +13,11 @@ export default ({ mode }: UserConfig): UserConfigExport => {
   return defineConfig({
     base,
     plugins: [react()],
+    define: {
+      __OPENSIGHT_HOST_SYSTEM__: JSON.stringify(
+        process.env.VITE_OPENSIGHT_HOST_SYSTEM || '',
+      ),
+    },
     build: {
       minify: 'terser',
       sourcemap: mode === 'development',
