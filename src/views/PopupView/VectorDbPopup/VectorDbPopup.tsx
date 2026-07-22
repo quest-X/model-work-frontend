@@ -283,7 +283,6 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     const storeReady = status?.vector_store.state === 'ready';
     const activeJob = !!job && !TERMINAL_JOB_STATES.has(job.state);
     const selectedJobActive = activeJob && job?.collection === selected?.name;
-    const activeJobsCount = jobs.filter(item => !TERMINAL_JOB_STATES.has(item.state)).length;
 
     const refreshStatus = useCallback(async () => {
         try {
@@ -1098,8 +1097,8 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             <div className='OverviewStats'>
                 <div><span>{t('场景', 'Scenes')}</span><strong>{hierarchy.length}</strong></div>
                 <div><span>{t('目标', 'Targets')}</span><strong>{totalTargets}</strong></div>
+                <div><span>{t('版本', 'Versions')}</span><strong>{collections.length}</strong></div>
                 <div><span>{t('向量总数', 'Total vectors')}</span><strong>{totalVectors.toLocaleString()}</strong></div>
-                <div><span>{t('活动任务', 'Active jobs')}</span><strong>{activeJobsCount}</strong></div>
             </div>
             <div className='VectorWorkspace'>
                 {renderCollections()}
