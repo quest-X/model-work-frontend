@@ -52,6 +52,7 @@ interface CollectionInfo {
     granularity: Granularity;
     mode?: 'objects' | 'images';
     count: number;
+    search_count?: number;
     created_at: string;
     last_ingest_at: string | null;
     schema_version: number;
@@ -161,6 +162,9 @@ const normalizeCollection = (collection: CollectionInfo): CollectionInfo => {
         granularity: collectionGranularity(collection),
         schema_version: collection.schema_version || 1,
         version: collection.version || 1,
+        search_count: typeof collection.search_count === 'number' && Number.isFinite(collection.search_count)
+            ? Math.max(0, collection.search_count)
+            : 0,
         active: collection.active ?? true,
         compatible: collection.compatible ?? true,
         quality: collection.quality || {},
@@ -1012,6 +1016,9 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 <div><span>{t('异常统计', 'Anomalies')}</span><strong>
                     {selected.quality.invalid_vectors || 0} {t('无效向量', 'invalid vectors')} ·{' '}
                     {selected.quality.failed_images || 0} {t('失败图片', 'failed images')}
+                </strong></div>
+                <div><span>{t('检索次数', 'Search count')}</span><strong>
+                    {(selected.search_count ?? 0).toLocaleString()}
                 </strong></div>
             </div>
             {renderProfileWarning(selected)}

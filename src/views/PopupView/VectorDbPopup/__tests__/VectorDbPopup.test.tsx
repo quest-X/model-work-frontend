@@ -26,6 +26,7 @@ const collection = {
     granularity: 'image',
     mode: 'images',
     count: 12,
+    search_count: 37,
     created_at: '2026-07-20T10:00:00',
     last_ingest_at: '2026-07-20T11:00:00',
     schema_version: 2,
@@ -118,6 +119,18 @@ describe('VectorDbPopup', () => {
         expect(screen.queryByRole('tab', {name: '快速向量检索'})).not.toBeInTheDocument();
         expect(screen.getByText(/检索功能统一放在「视觉检索」/)).toBeInTheDocument();
         expect(screen.getByText('特征配置')).toBeInTheDocument();
+        expect(screen.getByText('检索次数').closest('div')).toHaveTextContent('37');
+    });
+
+    it('defaults legacy collection search count to zero', async () => {
+        const legacyCollection: Partial<typeof collection> = {...collection};
+        delete legacyCollection.search_count;
+        collectionList = [legacyCollection as typeof collection];
+
+        render(<VectorDbPopup language={Language.CHINESE}/>);
+
+        await screen.findAllByText('产线帧库');
+        expect(screen.getByText('检索次数').closest('div')).toHaveTextContent('0');
     });
 
     it('groups physical indexes as scene, target and version nodes', async () => {
