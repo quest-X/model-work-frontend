@@ -8,7 +8,7 @@ import {Language} from '../../../data/LanguageConfig';
 import {getEngineBaseUrl, getExtensionEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
 import './VectorDbPopup.scss';
 
-type CollectionMode = 'objects' | 'images';
+type Granularity = 'image' | 'bbox';
 type WorkspaceTab = 'ingest' | 'query';
 type IngestSource = 'dataset' | 'upload';
 
@@ -33,6 +33,15 @@ interface ExtStatus {
     vector_store: StoreStatus;
     embedder: EmbedderStatus;
     collections_count: number;
+    profiles?: Record<Granularity, FeatureProfile>;
+}
+
+interface FeatureProfile {
+    profile_id: string;
+    model: string;
+    dimension: number;
+    granularity: Granularity;
+    metric: string;
 }
 
 interface CollectionInfo {
@@ -40,22 +49,49 @@ interface CollectionInfo {
     display_name: string;
     dim: number;
     embedder: string;
-    mode: CollectionMode;
+    granularity: Granularity;
+    mode?: 'objects' | 'images';
     count: number;
     created_at: string;
     last_ingest_at: string | null;
+    schema_version: number;
+    profile_id: string;
+    profile: FeatureProfile;
+    library_id: string;
+    version: number;
+    active: boolean;
+    index_type: string;
+    index_params: Record<string, unknown>;
+    compatible: boolean;
+    compatibility_reason: string | null;
+    quality: {
+        valid_vectors?: number;
+        invalid_vectors?: number;
+        norm_min?: number;
+        norm_max?: number;
+        norm_mean?: number;
+        failed_images?: number;
+        skipped_images?: number;
+    };
 }
 
 interface IngestJob {
     job_id: string;
     state: string;
     collection: string;
-    mode: CollectionMode;
+    granularity: Granularity;
+    mode?: 'objects' | 'images';
     source: string;
     total_images: number;
     processed_images: number;
     inserted_objects: number;
+    inserted_vectors: number;
     skipped_images: number;
+    failed_images: number;
+    invalid_vectors: number;
+    throughput_images_per_sec: number;
+    eta_seconds: number | null;
+    resumable: boolean;
     error: string | null;
     started_at?: string | null;
     finished_at?: string | null;
@@ -82,15 +118,28 @@ interface IProps {
     language: Language;
 }
 
-const TERMINAL_JOB_STATES = new Set(['completed', 'failed', 'cancelled']);
+const TERMINAL_JOB_STATES = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
 
 const JOB_STATE_LABELS: Record<string, [string, string]> = {
     completed: ['入库完成', 'Ingest completed'],
     failed: ['入库失败', 'Ingest failed'],
     cancelled: ['已取消', 'Cancelled'],
+    interrupted: ['任务已中断', 'Ingest interrupted'],
     running: ['正在入库', 'Ingesting'],
     queued: ['等待入库', 'Queued'],
 };
+
+const normalizeCollection = (collection: CollectionInfo): CollectionInfo => ({
+    ...collection,
+    granularity: collection.granularity || (collection.mode === 'images' ? 'image' : 'bbox'),
+    schema_version: collection.schema_version || 1,
+    version: collection.version || 1,
+    active: collection.active ?? true,
+    compatible: collection.compatible ?? true,
+    quality: collection.quality || {},
+    index_type: collection.index_type || 'FLAT',
+    index_params: collection.index_params || {},
+});
 
 const readResponse = async <T,>(response: Response): Promise<T> => {
     const body = await response.json().catch(() => ({}));
@@ -120,12 +169,13 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     const [selectedName, setSelectedName] = useState<string | null>(null);
     const [showCreate, setShowCreate] = useState(false);
     const [newName, setNewName] = useState('');
-    const [createMode, setCreateMode] = useState<CollectionMode>('objects');
+    const [createGranularity, setCreateGranularity] = useState<Granularity>('bbox');
     const [creating, setCreating] = useState(false);
     const [createError, setCreateError] = useState<string | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [deleteError, setDeleteError] = useState<string | null>(null);
+    const [versioning, setVersioning] = useState(false);
 
     const [activeTab, setActiveTab] = useState<WorkspaceTab>('ingest');
     const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
@@ -142,6 +192,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     const [queryPreview, setQueryPreview] = useState<string | null>(null);
     const [topK, setTopK] = useState(12);
     const [classFilter, setClassFilter] = useState('');
+    const [queryBbox, setQueryBbox] = useState('');
     const [searching, setSearching] = useState(false);
     const [results, setResults] = useState<SearchResult[] | null>(null);
     const [searchError, setSearchError] = useState<string | null>(null);
@@ -176,7 +227,9 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         try {
             const response = await fetch(`${baseUrl}/collections`);
             const data = await readResponse<{collections?: CollectionInfo[]}>(response);
-            const nextCollections = Array.isArray(data.collections) ? data.collections : [];
+            const nextCollections = Array.isArray(data.collections)
+                ? data.collections.map(normalizeCollection)
+                : [];
             setCollections(nextCollections);
             setSelectedName(current => {
                 if (current && nextCollections.some(collection => collection.name === current)) return current;
@@ -208,8 +261,9 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             const response = await fetch(`${baseUrl}/jobs`);
             const data = await readResponse<{jobs?: IngestJob[]}>(response);
             const jobs = Array.isArray(data.jobs) ? data.jobs : [];
-            const running = jobs.find(item => !TERMINAL_JOB_STATES.has(item.state));
-            setJob(running || null);
+            const visible = jobs.find(item => !TERMINAL_JOB_STATES.has(item.state))
+                || jobs.find(item => item.resumable);
+            setJob(visible || null);
         } catch {
             // Job recovery is best-effort; collection management remains usable.
         }
@@ -259,6 +313,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         setResults(null);
         setSearchError(null);
         setClassFilter('');
+        setQueryBbox('');
         if (queryPreviewRef.current) {
             URL.revokeObjectURL(queryPreviewRef.current);
             queryPreviewRef.current = null;
@@ -292,7 +347,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             const response = await fetch(`${baseUrl}/collections`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({name, mode: createMode}),
+                body: JSON.stringify({name, granularity: createGranularity}),
             });
             const created = await readResponse<CollectionInfo>(response);
             setNewName('');
@@ -324,6 +379,42 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         }
     };
 
+    const createCurrentVersion = async () => {
+        if (!selected || versioning) return;
+        setVersioning(true);
+        setIngestError(null);
+        try {
+            const response = await fetch(
+                `${baseUrl}/collections/${encodeURIComponent(selected.name)}/versions`,
+                {method: 'POST'},
+            );
+            const created = await readResponse<CollectionInfo>(response);
+            await refreshCollections();
+            setSelectedName(created.name);
+        } catch (cause) {
+            setIngestError(cause instanceof Error ? cause.message : t('创建版本失败', 'Failed to create version'));
+        } finally {
+            setVersioning(false);
+        }
+    };
+
+    const activateVersion = async () => {
+        if (!selected || selected.active || versioning) return;
+        setVersioning(true);
+        try {
+            const response = await fetch(
+                `${baseUrl}/collections/${encodeURIComponent(selected.name)}/activate`,
+                {method: 'POST'},
+            );
+            await readResponse(response);
+            await refreshCollections();
+        } catch (cause) {
+            setIngestError(cause instanceof Error ? cause.message : t('切换版本失败', 'Failed to activate version'));
+        } finally {
+            setVersioning(false);
+        }
+    };
+
     const onIngestDrop = useCallback((accepted: File[]) => {
         setPendingFiles(accepted);
         setDatasetId('');
@@ -336,7 +427,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             'application/zip': ['.zip'],
             'application/x-zip-compressed': ['.zip'],
         },
-        disabled: !embedderReady || !storeReady || activeJob || submittingIngest,
+        disabled: !embedderReady || !storeReady || !selected?.compatible || activeJob || submittingIngest,
         multiple: true,
         onDrop: onIngestDrop,
     });
@@ -346,7 +437,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         setSubmittingIngest(true);
         setIngestError(null);
         const form = new FormData();
-        form.append('mode', selected.mode);
+        form.append('granularity', selected.granularity);
         if (ingestSource === 'dataset') {
             form.append('dataset_id', datasetId);
         } else {
@@ -364,12 +455,18 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 job_id: body.job_id,
                 state: 'queued',
                 collection: selected.name,
-                mode: selected.mode,
+                granularity: selected.granularity,
                 source: ingestSource,
                 total_images: 0,
                 processed_images: 0,
+                inserted_vectors: 0,
                 inserted_objects: 0,
                 skipped_images: 0,
+                failed_images: 0,
+                invalid_vectors: 0,
+                throughput_images_per_sec: 0,
+                eta_seconds: null,
+                resumable: false,
                 error: null,
             });
         } catch (cause) {
@@ -389,6 +486,20 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         }
     };
 
+    const resumeIngest = async () => {
+        if (!job || activeJob || !job.resumable) return;
+        try {
+            const response = await fetch(
+                `${baseUrl}/jobs/${encodeURIComponent(job.job_id)}/resume`,
+                {method: 'POST'},
+            );
+            await readResponse(response);
+            setJob({...job, state: 'queued', error: null});
+        } catch (cause) {
+            setIngestError(cause instanceof Error ? cause.message : t('恢复失败', 'Resume failed'));
+        }
+    };
+
     const onQueryDrop = useCallback((accepted: File[]) => {
         const image = accepted[0];
         if (!image) return;
@@ -403,7 +514,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
 
     const queryDropzone = useDropzone({
         accept: {'image/*': ['.jpg', '.jpeg', '.png', '.bmp', '.webp']},
-        disabled: !embedderReady || !storeReady || searching,
+        disabled: !embedderReady || !storeReady || !selected?.compatible || searching,
         multiple: false,
         onDrop: onQueryDrop,
     });
@@ -417,8 +528,11 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         form.append('file', queryFile);
         form.append('collection', selected.name);
         form.append('top_k', String(topK));
-        if (selected.mode === 'objects' && classFilter.trim()) {
+        if (selected.granularity === 'bbox' && classFilter.trim()) {
             form.append('class_name', classFilter.trim());
+        }
+        if (selected.granularity === 'bbox' && queryBbox.trim()) {
+            form.append('bbox', queryBbox.trim());
         }
         try {
             const response = await fetch(`${baseUrl}/search`, {method: 'POST', body: form});
@@ -431,14 +545,41 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         }
     };
 
-    const modeLabel = (mode: CollectionMode) => mode === 'objects'
-        ? t('目标区域', 'Object regions')
+    const granularityLabel = (granularity: Granularity) => granularity === 'bbox'
+        ? t('目标框', 'Bounding boxes')
         : t('整张图片', 'Whole images');
 
     const formatDate = (value: string | null) => {
         if (!value) return t('尚未入库', 'Never ingested');
         const parsed = new Date(value);
         return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString(zh ? 'zh-CN' : 'en-US');
+    };
+
+    const formatVectorNorm = (collection: CollectionInfo) => collection.quality.norm_mean != null
+        ? `${collection.quality.norm_mean.toFixed(4)} (${collection.quality.norm_min?.toFixed(3)}–${collection.quality.norm_max?.toFixed(3)})`
+        : '—';
+
+    const renderVersionAction = (collection: CollectionInfo) => {
+        if (collection.active || !collection.compatible) return null;
+        return <button
+            type='button'
+            className='SecondaryButton'
+            disabled={versioning}
+            onClick={activateVersion}
+        >{t('设为当前版本', 'Make active')}</button>;
+    };
+
+    const renderProfileWarning = (collection: CollectionInfo) => {
+        if (collection.compatible) return null;
+        return <div className='ProfileWarning' role='alert'>
+            <div>
+                <strong>{t('当前特征模型与这个版本不兼容', 'Current feature model is incompatible with this version')}</strong>
+                <span>{collection.compatibility_reason}</span>
+            </div>
+            <button type='button' className='PrimaryButton' disabled={versioning} onClick={createCurrentVersion}>
+                {versioning ? t('创建中…', 'Creating…') : t('新建当前模型版本', 'Create current-model version')}
+            </button>
+        </div>;
     };
 
     const renderServiceNotice = () => {
@@ -492,20 +633,20 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 <legend>{t('向量单位（创建后不可修改）', 'Vector unit (immutable after creation)')}</legend>
                 <button
                     type='button'
-                    className={createMode === 'objects' ? 'ModeOption selected' : 'ModeOption'}
+                    className={createGranularity === 'bbox' ? 'ModeOption selected' : 'ModeOption'}
                     role='radio'
-                    aria-checked={createMode === 'objects'}
-                    onClick={() => setCreateMode('objects')}
+                    aria-checked={createGranularity === 'bbox'}
+                    onClick={() => setCreateGranularity('bbox')}
                 >
-                    <strong>{t('目标区域', 'Object regions')}</strong>
-                    <span>{t('先检测目标，每个目标生成一个向量', 'Detect objects first; one vector per object')}</span>
+                    <strong>{t('目标框', 'Bounding boxes')}</strong>
+                    <span>{t('数据任务读取标注框；散图上传自动检测', 'Use task annotations; detect objects for loose uploads')}</span>
                 </button>
                 <button
                     type='button'
-                    className={createMode === 'images' ? 'ModeOption selected' : 'ModeOption'}
+                    className={createGranularity === 'image' ? 'ModeOption selected' : 'ModeOption'}
                     role='radio'
-                    aria-checked={createMode === 'images'}
-                    onClick={() => setCreateMode('images')}
+                    aria-checked={createGranularity === 'image'}
+                    onClick={() => setCreateGranularity('image')}
                 >
                     <strong>{t('整张图片', 'Whole images')}</strong>
                     <span>{t('每张图片生成一个全局向量', 'Create one global vector per image')}</span>
@@ -572,8 +713,10 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                             <span>{collection.count.toLocaleString()}</span>
                         </span>
                         <span className='CollectionRowMeta'>
-                            <span className={`ModeBadge ${collection.mode}`}>{modeLabel(collection.mode)}</span>
-                            <span>{collection.dim}{t(' 维', 'd')}</span>
+                            <span className={`ModeBadge ${collection.granularity}`}>
+                                {granularityLabel(collection.granularity)} · v{collection.version}
+                            </span>
+                            <span>{collection.active ? t('当前', 'active') : collection.dim + t(' 维', 'd')}</span>
                         </span>
                     </button>
                 ))}
@@ -624,11 +767,12 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     const renderIngest = () => {
         if (!selected) return null;
         const noSource = ingestSource === 'dataset' ? !datasetId : pendingFiles.length === 0;
-        const disabled = !embedderReady || !storeReady || activeJob || submittingIngest || noSource;
+        const disabled = !embedderReady || !storeReady || !selected.compatible
+            || activeJob || submittingIngest || noSource;
         return <div className='WorkspaceBody'>
             <div className='ImmutableModeNotice'>
                 <span>{t('本集合向量单位', 'Collection vector unit')}</span>
-                <strong>{modeLabel(selected.mode)}</strong>
+                <strong>{granularityLabel(selected.granularity)}</strong>
                 <small>{t('创建时已固定，后续入库将始终使用该粒度。', 'Fixed at creation; every ingest uses this granularity.')}</small>
             </div>
             <div className='FormSection'>
@@ -658,6 +802,49 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         </div>;
     };
 
+    const renderBboxQueryFields = (collection: CollectionInfo) => {
+        if (collection.granularity !== 'bbox') return null;
+        return <>
+            <label className='FieldStack'>
+                <span>{t('类别过滤（可选）', 'Class filter (optional)')}</span>
+                <input
+                    value={classFilter}
+                    placeholder={t('例如：person', 'e.g. person')}
+                    onChange={event => setClassFilter(event.target.value)}
+                />
+            </label>
+            <label className='FieldStack'>
+                <span>{t('查询框（可选）', 'Query bbox (optional)')}</span>
+                <input
+                    value={queryBbox}
+                    placeholder='x1,y1,x2,y2'
+                    onChange={event => setQueryBbox(event.target.value)}
+                />
+            </label>
+        </>;
+    };
+
+    const renderSearchResults = () => {
+        if (results === null) return null;
+        if (results.length === 0) {
+            return <div className='ResultEmpty'>{t('没有找到相似向量', 'No similar vectors found')}</div>;
+        }
+        return <div className='ResultGrid' aria-live='polite'>
+            {results.map((result, index) => (
+                <div className='ResultCard' key={`${result.filename}-${index}`}>
+                    {result.thumbnail
+                        ? <img src={result.thumbnail} alt={result.filename}/>
+                        : <div className='ThumbPlaceholder'>{t('无缩略图', 'No preview')}</div>}
+                    <span className='ScoreBadge'>{(result.score * 100).toFixed(1)}%</span>
+                    <div className='ResultMeta'>
+                        {result.class_name && <span className='ClassTag'>{result.class_name}</span>}
+                        <span title={result.filename}>{result.filename}</span>
+                    </div>
+                </div>
+            ))}
+        </div>;
+    };
+
     const renderQuery = () => {
         if (!selected) return null;
         return <div className='WorkspaceBody'>
@@ -684,18 +871,11 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                             onChange={event => setTopK(Math.max(1, Math.min(100, Number(event.target.value) || 12)))}
                         />
                     </label>
-                    {selected.mode === 'objects' && <label className='FieldStack'>
-                        <span>{t('类别过滤（可选）', 'Class filter (optional)')}</span>
-                        <input
-                            value={classFilter}
-                            placeholder={t('例如：person', 'e.g. person')}
-                            onChange={event => setClassFilter(event.target.value)}
-                        />
-                    </label>}
+                    {renderBboxQueryFields(selected)}
                     <button
                         type='button'
                         className='PrimaryButton'
-                        disabled={!embedderReady || !storeReady || !queryFile || searching}
+                        disabled={!embedderReady || !storeReady || !selected.compatible || !queryFile || searching}
                         onClick={runQuery}
                     >
                         {searching ? t('检索中…', 'Querying…') : t('执行快速检索', 'Run quick query')}
@@ -703,23 +883,29 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 </div>
             </div>
             {searchError && <div className='InlineError' role='alert'>{searchError}</div>}
-            {results !== null && results.length === 0 && <div className='ResultEmpty'>{t('没有找到相似向量', 'No similar vectors found')}</div>}
-            {results !== null && results.length > 0 && <div className='ResultGrid' aria-live='polite'>
-                {results.map((result, index) => (
-                    <div className='ResultCard' key={`${result.filename}-${index}`}>
-                        {result.thumbnail
-                            ? <img src={result.thumbnail} alt={result.filename}/>
-                            : <div className='ThumbPlaceholder'>{t('无缩略图', 'No preview')}</div>}
-                        <span className='ScoreBadge'>{(result.score * 100).toFixed(1)}%</span>
-                        <div className='ResultMeta'>
-                            {result.class_name && <span className='ClassTag'>{result.class_name}</span>}
-                            <span title={result.filename}>{result.filename}</span>
-                        </div>
-                    </div>
-                ))}
-            </div>}
+            {renderSearchResults()}
         </div>;
     };
+
+    const renderDeleteConfirmation = () => {
+        if (!deleteConfirm) return null;
+        return <div className='DeleteConfirm' role='alert'>
+            <div>
+                <strong>{t('永久删除这个集合？', 'Permanently delete this collection?')}</strong>
+                <span>{t('集合内向量与插件保存的上传副本会被删除；数据任务中的源数据不受影响。',
+                    'Vectors and plugin-managed upload copies will be removed; Data Task source data is unchanged.')}</span>
+                {deleteError && <span className='InlineError'>{deleteError}</span>}
+            </div>
+            <div className='InlineActions'>
+                <button type='button' className='SecondaryButton' onClick={() => setDeleteConfirm(false)}>{t('取消', 'Cancel')}</button>
+                <button type='button' className='DangerButton solid' disabled={deleting} onClick={deleteCollection}>
+                    {deleting ? t('删除中…', 'Deleting…') : t('确认删除', 'Delete')}
+                </button>
+            </div>
+        </div>;
+    };
+
+    const renderActiveWorkspace = () => activeTab === 'ingest' ? renderIngest() : renderQuery();
 
     const renderSelectedCollection = () => {
         if (!selected) {
@@ -736,35 +922,36 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                         <span className='Eyebrow'>{t('当前集合', 'Current collection')}</span>
                         <h3>{selected.display_name}</h3>
                     </div>
-                    <span className={`ModeBadge ${selected.mode}`}>{modeLabel(selected.mode)}</span>
+                    <span className={`ModeBadge ${selected.granularity}`}>
+                        {granularityLabel(selected.granularity)} · v{selected.version}
+                    </span>
                 </div>
-                <button
-                    type='button'
-                    className='DangerButton'
-                    disabled={selectedJobActive}
-                    onClick={() => { setDeleteConfirm(true); setDeleteError(null); }}
-                >{t('删除集合', 'Delete collection')}</button>
+                <div className='InlineActions'>
+                    {renderVersionAction(selected)}
+                    <button
+                        type='button'
+                        className='DangerButton'
+                        disabled={selectedJobActive}
+                        onClick={() => { setDeleteConfirm(true); setDeleteError(null); }}
+                    >{t('删除集合', 'Delete collection')}</button>
+                </div>
             </header>
             <div className='MetadataGrid'>
                 <div><span>{t('向量数量', 'Vectors')}</span><strong>{selected.count.toLocaleString()}</strong></div>
                 <div><span>{t('向量维度', 'Dimensions')}</span><strong>{selected.dim}</strong></div>
                 <div><span>{t('特征模型', 'Embedder')}</span><strong title={selected.embedder}>{selected.embedder}</strong></div>
+                <div><span>Feature Profile</span><strong title={selected.profile_id}>{selected.profile_id}</strong></div>
+                <div><span>{t('物理版本', 'Physical version')}</span><strong>v{selected.version} · {selected.active ? t('当前', 'active') : t('历史', 'inactive')}</strong></div>
+                <div><span>{t('向量索引', 'Vector index')}</span><strong>{selected.index_type}</strong></div>
                 <div><span>{t('最近入库', 'Last ingest')}</span><strong>{formatDate(selected.last_ingest_at)}</strong></div>
+                <div><span>{t('向量范数', 'Vector norm')}</span><strong>{formatVectorNorm(selected)}</strong></div>
+                <div><span>{t('异常统计', 'Anomalies')}</span><strong>
+                    {selected.quality.invalid_vectors || 0} {t('无效向量', 'invalid vectors')} ·{' '}
+                    {selected.quality.failed_images || 0} {t('失败图片', 'failed images')}
+                </strong></div>
             </div>
-            {deleteConfirm && <div className='DeleteConfirm' role='alert'>
-                <div>
-                    <strong>{t('永久删除这个集合？', 'Permanently delete this collection?')}</strong>
-                    <span>{t('集合内向量与插件保存的上传副本会被删除；数据任务中的源数据不受影响。',
-                        'Vectors and plugin-managed upload copies will be removed; Data Task source data is unchanged.')}</span>
-                    {deleteError && <span className='InlineError'>{deleteError}</span>}
-                </div>
-                <div className='InlineActions'>
-                    <button type='button' className='SecondaryButton' onClick={() => setDeleteConfirm(false)}>{t('取消', 'Cancel')}</button>
-                    <button type='button' className='DangerButton solid' disabled={deleting} onClick={deleteCollection}>
-                        {deleting ? t('删除中…', 'Deleting…') : t('确认删除', 'Delete')}
-                    </button>
-                </div>
-            </div>}
+            {renderProfileWarning(selected)}
+            {renderDeleteConfirmation()}
             <div className='WorkspaceTabs' role='tablist' aria-label={t('集合操作', 'Collection actions')}>
                 <button
                     type='button'
@@ -781,7 +968,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                     onClick={() => setActiveTab('query')}
                 >{t('快速向量检索', 'Quick vector query')}</button>
             </div>
-            {activeTab === 'ingest' ? renderIngest() : renderQuery()}
+            {renderActiveWorkspace()}
         </section>;
     };
 
@@ -798,8 +985,11 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                     <strong>{t(label[0], label[1])} · {job.collection}</strong>
                     <span>
                         {job.processed_images}/{job.total_images} {t('张图片', 'images')} ·{' '}
-                        {job.inserted_objects.toLocaleString()} {t('个向量', 'vectors')}
+                        {(job.inserted_vectors ?? job.inserted_objects).toLocaleString()} {t('个向量', 'vectors')}
                         {job.skipped_images > 0 && ` · ${job.skipped_images} ${t('跳过', 'skipped')}`}
+                        {job.failed_images > 0 && ` · ${job.failed_images} ${t('失败', 'failed')}`}
+                        {job.throughput_images_per_sec > 0 && ` · ${job.throughput_images_per_sec.toFixed(1)} img/s`}
+                        {job.eta_seconds != null && job.eta_seconds > 0 && ` · ETA ${Math.ceil(job.eta_seconds)}s`}
                     </span>
                 </div>
             </div>
@@ -814,7 +1004,9 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             {job.error && <div className='InlineError'>{job.error}</div>}
             {activeJob
                 ? <button type='button' className='SecondaryButton' onClick={cancelIngest}>{t('取消任务', 'Cancel job')}</button>
-                : <button type='button' className='SecondaryButton' onClick={() => setJob(null)}>{t('隐藏', 'Dismiss')}</button>}
+                : job.resumable
+                    ? <button type='button' className='SecondaryButton' onClick={resumeIngest}>{t('继续任务', 'Resume job')}</button>
+                    : <button type='button' className='SecondaryButton' onClick={() => setJob(null)}>{t('隐藏', 'Dismiss')}</button>}
         </div>;
     };
 
