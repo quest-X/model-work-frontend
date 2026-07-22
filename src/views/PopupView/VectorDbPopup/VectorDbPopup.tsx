@@ -209,7 +209,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             const data = await readResponse<{jobs?: IngestJob[]}>(response);
             const jobs = Array.isArray(data.jobs) ? data.jobs : [];
             const running = jobs.find(item => !TERMINAL_JOB_STATES.has(item.state));
-            setJob(running || jobs[jobs.length - 1] || null);
+            setJob(running || null);
         } catch {
             // Job recovery is best-effort; collection management remains usable.
         }
@@ -251,6 +251,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     useEffect(() => {
         setDatasetId('');
         setPendingFiles([]);
+        setIngestSource('dataset');
         setIngestError(null);
         setDeleteConfirm(false);
         setDeleteError(null);
@@ -276,7 +277,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             await readResponse(response);
             await refreshStatus();
         } catch {
-            setBackendDown(true);
+            await refreshStatus();
         } finally {
             setWarmingUp(false);
         }
@@ -556,14 +557,14 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                     <span>{t('新建集合后即可导入图片并生成向量。', 'Create a collection, then add images to generate vectors.')}</span>
                 </div>
             )}
-            <div className='CollectionList' role='list'>
+            <div className='CollectionList' role='listbox' aria-label={t('向量集合', 'Vector collections')}>
                 {collections.map(collection => (
                     <button
                         type='button'
-                        role='listitem'
+                        role='option'
                         key={collection.name}
                         className={selectedName === collection.name ? 'CollectionRow selected' : 'CollectionRow'}
-                        aria-current={selectedName === collection.name ? 'true' : undefined}
+                        aria-selected={selectedName === collection.name}
                         onClick={() => setSelectedName(collection.name)}
                     >
                         <span className='CollectionRowTop'>
