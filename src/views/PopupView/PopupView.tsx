@@ -30,6 +30,7 @@ import TrainingTaskPopup from './TrainingTaskPopup/TrainingTaskPopup';
 import VectorDbPopup from './VectorDbPopup/VectorDbPopup';
 import L2GRetrievalPopup from './L2GRetrievalPopup/L2GRetrievalPopup';
 import ModelInspectorPopup, {MODEL_INSPECTOR_ESCAPE_EVENT} from './ModelInspectorPopup/ModelInspectorPopup';
+import {clearDatasetActionSelections} from '../../services/DatasetActionSelection';
 
 
 interface IProps {
@@ -52,6 +53,7 @@ const PopupView: React.FC<IProps> = ({ activePopupType }) => {
                 // Only handle if no other element has already handled the event
                 if (!event.defaultPrevented) {
                     event.preventDefault();
+                    clearDatasetActionSelections();
                     PopupActions.close();
                 }
             }

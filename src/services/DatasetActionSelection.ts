@@ -25,3 +25,9 @@ export const DatasetInferenceSelection = {
     set: (datasetId: string | null) => { inferenceDatasetId = datasetId; },
     get: () => inferenceDatasetId,
 };
+
+export const clearDatasetActionSelections = () => {
+    editTarget = null;
+    exportTarget = null;
+    inferenceDatasetId = null;
+};
