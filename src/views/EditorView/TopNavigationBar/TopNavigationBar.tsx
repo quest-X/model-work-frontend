@@ -70,6 +70,11 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
         props.updateActivePopupTypeAction(PopupWindowType.TRAINING_TASK);
     };
 
+    const openTaskCenter = () => {
+        setActiveServicesDropdown(null);
+        window.dispatchEvent(new Event('opensight:open-task-center'));
+    };
+
     const openVectorDb = () => {
         setActiveServicesDropdown(null);
         props.updateActivePopupTypeAction(PopupWindowType.VECTOR_DB);
@@ -175,6 +180,12 @@ const TopNavigationBar: React.FC<IProps> = (props) => {
                                         <div className='Marker'/>
                                         <img src='ico/ai.png' alt='training-task'/>
                                         {currentTexts.modelManagement.trainingTask}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openTaskCenter}>
+                                        <div className='Marker'/>
+                                        <img src='ico/tasks.png' alt='task-center'/>
+                                        {currentTexts.modelManagement.taskCenter}
                                     </div>
                                 </div>
                             )}

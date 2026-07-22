@@ -6,12 +6,24 @@ import { updateActiveImageIndex, updateActiveLabelType, updateLabelNames, update
 import { updateSegmentationResults } from '../store/ai/actionCreators';
 import { updateVideoMode, addVideoData } from '../store/video/actionCreators';
 import { addQueueItems, setActiveQueueItem } from '../store/queue/actionCreators';
+import {QueueDataSyncStatus, QueueItem} from '../store/queue/types';
 import { VideoData } from '../store/video/types';
 import { ImageData, LabelName } from '../store/labels/types';
 import { ImageRepository } from '../logic/imageRepository/ImageRepository';
 import { LabelType } from '../data/enums/LabelType';
 
 export class ProjectRestoreService {
+    public static normalizeQueueItems(queueItems: QueueItem[]): QueueItem[] {
+        return queueItems.map(item => item.dataSyncStatus === QueueDataSyncStatus.SYNCING
+            ? {
+                ...item,
+                dataSyncStatus: QueueDataSyncStatus.ERROR,
+                dataSyncError: '上次同步被中断，请重试 / Previous sync was interrupted; retry.',
+            }
+            : item
+        );
+    }
+
     
     public static async checkForStoredData(): Promise<{
         hasSettings: boolean;
@@ -84,7 +96,8 @@ export class ProjectRestoreService {
             // 恢复队列数据
             onProgress?.('正在恢复队列数据...');
             if (storedProject.queueItems && storedProject.queueItems.length > 0) {
-                store.dispatch(addQueueItems(storedProject.queueItems));
+                const restoredQueueItems = this.normalizeQueueItems(storedProject.queueItems);
+                store.dispatch(addQueueItems(restoredQueueItems));
                 if (storedProject.activeQueueItemId) {
                     store.dispatch(setActiveQueueItem(storedProject.activeQueueItemId));
                     ImageRepository.setActiveFileId(storedProject.activeQueueItemId);

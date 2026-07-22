@@ -3,13 +3,20 @@ import { connect } from 'react-redux';
 import classNames from 'classnames';
 import { useDropzone } from 'react-dropzone';
 import { AppState } from '../../../../store';
-import { QueueItem, QueueItemType, QueueItemStatus } from '../../../../store/queue/types';
+import {
+    QueueDataSyncStatus,
+    QueueItem,
+    QueueItemType,
+    QueueItemStatus,
+} from '../../../../store/queue/types';
 import { ImageData } from '../../../../store/labels/types';
 import { removeQueueItem } from '../../../../store/queue/actionCreators';
 import { updateImageData } from '../../../../store/labels/actionCreators';
 import { QueueActions } from '../../../../logic/actions/QueueActions';
 import { ImageRepository } from '../../../../logic/imageRepository/ImageRepository';
+import {LabelsSelector} from '../../../../store/selectors/LabelsSelector';
 import {Language, LanguageConfig, LanguageTexts} from '../../../../data/LanguageConfig';
+import {DataBatchSyncService} from '../../../../services/DataBatchSyncService';
 import './QueueList.scss';
 
 // ============ QueueItemCard ============
@@ -20,6 +27,7 @@ interface CardProps {
     language: Language;
     onSelect: (item: QueueItem) => void;
     onDelete: (itemId: string) => void;
+    onSync: (item: QueueItem) => void;
 }
 
 const typeIconMap: Record<QueueItemType, string> = {
@@ -46,7 +54,7 @@ const getDisplayName = (item: QueueItem, texts: LanguageTexts): string => {
     return baseName;
 };
 
-const QueueItemCard: React.FC<CardProps> = ({ item, isActive, language, onSelect, onDelete }) => {
+const QueueItemCard: React.FC<CardProps> = ({ item, isActive, language, onSelect, onDelete, onSync }) => {
     const texts = LanguageConfig[language];
     const displayName = getDisplayName(item, texts);
     const statusLabels: Record<QueueItemStatus, { className: string; label: string }> = {
@@ -56,6 +64,17 @@ const QueueItemCard: React.FC<CardProps> = ({ item, isActive, language, onSelect
         [QueueItemStatus.ERROR]:      { className: 'status-error',      label: texts.queueStatus.error },
     };
     const statusInfo = statusLabels[item.status];
+    const dataSyncStatus = item.dataSyncStatus || QueueDataSyncStatus.LOCAL;
+    const syncLabel = {
+        [QueueDataSyncStatus.LOCAL]: texts.queueDataSync.local,
+        [QueueDataSyncStatus.SYNCING]: texts.queueDataSync.syncing,
+        [QueueDataSyncStatus.SYNCED]: texts.queueDataSync.synced.replace(
+            '{revision}', String(item.datasetRevision || 1)
+        ),
+        [QueueDataSyncStatus.DIRTY]: texts.queueDataSync.dirty,
+        [QueueDataSyncStatus.ERROR]: texts.queueDataSync.error,
+    }[dataSyncStatus];
+    const supportsDataSync = item.type !== QueueItemType.VIDEO;
 
     return (
         <div
@@ -87,7 +106,25 @@ const QueueItemCard: React.FC<CardProps> = ({ item, isActive, language, onSelect
                 <span className={classNames('card-status', statusInfo.className)}>
                     {statusInfo.label}
                 </span>
+                {supportsDataSync && (
+                    <span className={classNames('card-data-sync', `sync-${dataSyncStatus.toLowerCase()}`)}>
+                        {syncLabel}
+                    </span>
+                )}
             </div>
+
+            {supportsDataSync && dataSyncStatus !== QueueDataSyncStatus.SYNCING && (
+                <button
+                    type='button'
+                    className='card-sync-btn'
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onSync(item);
+                    }}
+                    title={item.dataSyncError || texts.queueDataSync.action}
+                    aria-label={texts.queueDataSync.action}
+                >↻</button>
+            )}
 
             <div
                 className='card-delete-btn'
@@ -161,6 +198,14 @@ const QueueList: React.FC<IProps> = ({
         removeQueueItemAction(itemId);
     };
 
+    const handleItemSync = (item: QueueItem) => {
+        const annotations = item.id === activeQueueItemId
+            ? imagesData
+            : ImageRepository.getFileCacheSnapshot(item.id) || [];
+        DataBatchSyncService.syncQueueItem(item, annotations, LabelsSelector.getLabelNames())
+            .catch(() => undefined);
+    };
+
     return (
         <div {...getRootProps({ className: classNames('queue-list', { 'drag-over': isDragActive }) })}>
             {isDragActive && (
@@ -185,6 +230,7 @@ const QueueList: React.FC<IProps> = ({
                             language={language}
                             onSelect={handleItemSelect}
                             onDelete={handleItemDelete}
+                            onSync={handleItemSync}
                         />
                     ))}
                 </div>

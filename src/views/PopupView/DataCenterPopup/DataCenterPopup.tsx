@@ -16,6 +16,11 @@ interface DatasetSummary {
     image_count: number;
     classes: string[];
     format: string;
+    source_type?: string;
+    source_id?: string | null;
+    revision?: number;
+    status?: string;
+    updated_at?: string | null;
 }
 
 interface DatasetStats {
@@ -47,6 +52,8 @@ const DataCenterPopup: React.FC<IProps> = ({language, updateActivePopupTypeActio
 
     useEffect(() => {
         refreshDatasets();
+        window.addEventListener('opensight:data-center-updated', refreshDatasets);
+        return () => window.removeEventListener('opensight:data-center-updated', refreshDatasets);
     }, [refreshDatasets]);
 
     useEffect(() => {
@@ -72,9 +79,9 @@ const DataCenterPopup: React.FC<IProps> = ({language, updateActivePopupTypeActio
     const renderContent = () => (
         <div className='DataCenterPopupContent'>
             <div className='DatasetListSection'>
-                <div className='SectionHeader'>{zh ? '已有数据集' : 'Datasets'}</div>
+                <div className='SectionHeader'>{zh ? '数据批次' : 'Data Batches'}</div>
                 <div className='DatasetList'>
-                    {datasets.length === 0 && <div className='EmptyHint'>{zh ? '暂无数据集' : 'No datasets yet'}</div>}
+                    {datasets.length === 0 && <div className='EmptyHint'>{zh ? '暂无数据批次' : 'No data batches yet'}</div>}
                     {datasets.map(ds => (
                         <div
                             key={ds.id}
@@ -84,6 +91,12 @@ const DataCenterPopup: React.FC<IProps> = ({language, updateActivePopupTypeActio
                             <div className='DatasetRowMain'>
                                 <span className='DatasetName'>{ds.name}</span>
                                 <span className='DatasetMeta'>{ds.image_count} {zh ? '张图片' : 'images'} · {ds.classes.length} {zh ? '类' : 'classes'}</span>
+                                <span className='DatasetSource'>
+                                    {ds.source_type === 'file_queue'
+                                        ? (zh ? '文件队列批次' : 'File Queue batch')
+                                        : (zh ? '数据集导入' : 'Dataset upload')}
+                                    {' · '}v{ds.revision || 1}
+                                </span>
                             </div>
                             <button className='DeleteButton' onClick={(e) => onDelete(ds.id, e)}>×</button>
                         </div>
@@ -115,7 +128,7 @@ const DataCenterPopup: React.FC<IProps> = ({language, updateActivePopupTypeActio
 
     return (
         <GenericYesNoPopup
-            title={zh ? '数据任务' : 'Data Tasks'}
+            title={zh ? '数据管理' : 'Data Management'}
             renderContent={renderContent}
             skipAcceptButton
             rejectLabel={zh ? '关闭' : 'Close'}

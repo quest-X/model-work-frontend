@@ -280,6 +280,14 @@ export interface LanguageTexts {
         completed: string;
         error: string;
     };
+    queueDataSync: {
+        local: string;
+        syncing: string;
+        synced: string;
+        dirty: string;
+        error: string;
+        action: string;
+    };
     queueEmpty: string;
     queueEmptyHint: string;
 
@@ -332,6 +340,7 @@ export interface LanguageTexts {
         modelEngines: string;
         dataCenter: string;
         trainingTask: string;
+        taskCenter: string;
         vectorDb: string;
         l2gRetrieval: string;
         manage: string;
@@ -472,15 +481,16 @@ export interface LanguageTexts {
         statusError: string;
         statusCancelled: string;
         cancel: string;
-        types: {
-            autoSave: string;
-            frameExtraction: string;
-            batchDetect: string;
-            batchSegment: string;
-            tracking: string;
-            export: string;
-            queueLoad: string;
-        };
+            types: {
+                autoSave: string;
+                frameExtraction: string;
+                batchDetect: string;
+                batchSegment: string;
+                tracking: string;
+                export: string;
+                queueLoad: string;
+                dataSync: string;
+            };
         subtitleFrames: string; // "{done}/{total} 帧"
         showCompleted: string; // "显示已完成"
     };
@@ -782,8 +792,16 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         queueStatus: {
             pending: '待处理',
             processing: '加载中',
-            completed: '已上传',
+            completed: '已载入',
             error: '错误',
+        },
+        queueDataSync: {
+            local: '待同步到数据管理',
+            syncing: '正在同步数据批次',
+            synced: '数据管理 · v{revision}',
+            dirty: '标注有更新，待同步',
+            error: '数据同步失败',
+            action: '同步到数据管理',
         },
         queueEmpty: '队列为空',
         queueEmptyHint: '点击上传或拖拽到此处释放',
@@ -835,8 +853,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             callModels: '推理设置',
             providedServices: '提供服务',
             modelEngines: '引擎管理',
-            dataCenter: '数据任务',
+            dataCenter: '数据管理',
             trainingTask: '训练设置',
+            taskCenter: '任务中心',
             vectorDb: '向量数据库',
             l2gRetrieval: '高精度检索',
             manage: '管理',
@@ -961,7 +980,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 batchSegment: '批量分割',
                 tracking: '检索跟踪',
                 export: '导出标注',
-                queueLoad: '加载队列项'
+                queueLoad: '加载队列项',
+                dataSync: '同步数据批次'
             },
             subtitleFrames: '{done}/{total} 帧',
             showCompleted: '显示已完成'
@@ -1262,8 +1282,16 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
         queueStatus: {
             pending: 'Pending',
             processing: 'Loading',
-            completed: 'Uploaded',
+            completed: 'Loaded',
             error: 'Error',
+        },
+        queueDataSync: {
+            local: 'Waiting for Data Management sync',
+            syncing: 'Syncing data batch',
+            synced: 'Data Management · v{revision}',
+            dirty: 'Annotations changed; sync required',
+            error: 'Data sync failed',
+            action: 'Sync to Data Management',
         },
         queueEmpty: 'Queue is empty',
         queueEmptyHint: 'Click to upload or drag here to release',
@@ -1315,8 +1343,9 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
             callModels: 'Inference Settings',
             providedServices: 'Provided Services',
             modelEngines: 'Engine Management',
-            dataCenter: 'Data Tasks',
+            dataCenter: 'Data Management',
             trainingTask: 'Training Settings',
+            taskCenter: 'Task Center',
             vectorDb: 'Vector Database',
             l2gRetrieval: 'L2G Retrieval',
             manage: 'Manage',
@@ -1441,7 +1470,8 @@ export const LanguageConfig: Record<Language, LanguageTexts> = {
                 batchSegment: 'Batch segmentation',
                 tracking: 'Retrieval',
                 export: 'Export annotations',
-                queueLoad: 'Load queue item'
+                queueLoad: 'Load queue item',
+                dataSync: 'Sync data batch'
             },
             subtitleFrames: 'frame {done}/{total}',
             showCompleted: 'Show completed'

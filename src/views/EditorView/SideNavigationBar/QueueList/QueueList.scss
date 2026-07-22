@@ -180,6 +180,35 @@
             &.status-completed  { color: #5f6368; }
             &.status-error      { color: #EF5350; }
         }
+
+        .card-data-sync {
+            font-size: 10px;
+            color: #8a8a8a;
+
+            &.sync-synced { color: #66bb6a; }
+            &.sync-syncing { color: #42a5f5; }
+            &.sync-dirty { color: #ffa726; }
+            &.sync-error { color: #ef5350; }
+        }
+    }
+
+    .card-sync-btn {
+        width: 22px;
+        height: 22px;
+        flex: 0 0 22px;
+        margin-right: 2px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.04);
+        color: #bdbdbd;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+
+        &:hover {
+            color: #42a5f5;
+            border-color: #42a5f5;
+        }
     }
 
     .card-delete-btn {
@@ -205,5 +234,10 @@
         &:hover {
             background-color: #c62828;
         }
+    }
+
+    &:hover .card-sync-btn,
+    &.active .card-sync-btn {
+        opacity: 1;
     }
 }

@@ -25,7 +25,7 @@ import {updateActivePopupType} from '../../../store/general/actionCreators';
 import {addVideoData, updateVideoMode} from '../../../store/video/actionCreators';
 import {addQueueItems, setActiveQueueItem, updateQueueItem} from '../../../store/queue/actionCreators';
 import {QueueActions} from '../../../logic/actions/QueueActions';
-import {QueueItem, QueueItemType, QueueItemStatus} from '../../../store/queue/types';
+import {QueueDataSyncStatus, QueueItem, QueueItemType, QueueItemStatus} from '../../../store/queue/types';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {ImageDataUtil} from '../../../utils/ImageDataUtil';
 import {sortBy} from 'lodash';
@@ -44,6 +44,7 @@ import {store} from '../../../index';
 import {submitNewNotification, updateNotificationById, deleteNotificationById} from '../../../store/notifications/actionCreators';
 import {NotificationUtil} from '../../../utils/NotificationUtil';
 import {PendingImportFiles} from '../../../utils/PendingImportFiles';
+import {DataBatchSyncService} from '../../../services/DataBatchSyncService';
 // import {inferenceEventEmitter, InferenceResultsEvent} from '../../../logic/actions/AISegmentationActions';
 
 interface IProps {
@@ -103,6 +104,8 @@ const EditorContainer: React.FC<IProps> = (
     const [taskPanelPinned, setTaskPanelPinned] = useState(false);
     const taskButtonRef = useRef<HTMLDivElement>(null);
     const taskClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const previousImagesDataRef = useRef<ImageData[]>(imagesData);
+    const previousActiveQueueItemIdRef = useRef<string | null>(activeQueueItemId);
 
     const handleTaskButtonClick = useCallback(() => {
         if (taskClickTimer.current !== null) {
@@ -122,6 +125,26 @@ const EditorContainer: React.FC<IProps> = (
             }, 220);
         }
     }, []);
+
+    useEffect(() => {
+        const openTaskCenter = () => {
+            setTaskPanelOpen(true);
+            setTaskPanelPinned(true);
+        };
+        window.addEventListener('opensight:open-task-center', openTaskCenter);
+        return () => window.removeEventListener('opensight:open-task-center', openTaskCenter);
+    }, []);
+
+    useEffect(() => {
+        const activeItem = queueItems.find(item => item.id === activeQueueItemId);
+        const sameBatch = previousActiveQueueItemIdRef.current === activeQueueItemId;
+        const annotationsChanged = previousImagesDataRef.current !== imagesData;
+        if (sameBatch && annotationsChanged && activeItem?.dataSyncStatus === QueueDataSyncStatus.SYNCED) {
+            updateQueueItemAction(activeItem.id, {dataSyncStatus: QueueDataSyncStatus.DIRTY});
+        }
+        previousImagesDataRef.current = imagesData;
+        previousActiveQueueItemIdRef.current = activeQueueItemId;
+    }, [activeQueueItemId, imagesData, queueItems, updateQueueItemAction]);
 
     // 手动保存
     const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
@@ -500,6 +523,18 @@ const EditorContainer: React.FC<IProps> = (
                 if (newQueueItems.length > 0) {
                     await QueueActions.switchToQueueItem(newQueueItems[0], imagesData);
                 }
+
+                const activeBatchData = store.getState().labels.imagesData;
+                const labelNames = store.getState().labels.labels;
+                newQueueItems
+                    .filter(item => item.type !== QueueItemType.VIDEO)
+                    .forEach((item, index) => {
+                        DataBatchSyncService.syncQueueItem(
+                            item,
+                            index === 0 ? activeBatchData : [],
+                            labelNames,
+                        ).catch(() => undefined);
+                    });
                 
                 // 上传后立即触发保存
                 setTimeout(() => {

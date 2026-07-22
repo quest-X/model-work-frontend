@@ -2,7 +2,6 @@ import React from 'react';
 import './LoadMoreMediaPopup.scss';
 import { AppState } from '../../../store';
 import { connect } from 'react-redux';
-import { addImageData } from '../../../store/labels/actionCreators';
 import { GenericYesNoPopup } from '../GenericYesNoPopup/GenericYesNoPopup';
 import { useDropzone } from 'react-dropzone';
 import { ImageData } from '../../../store/labels/types';
@@ -14,15 +13,16 @@ import { addQueueItems } from '../../../store/queue/actionCreators';
 import { QueueActions } from '../../../logic/actions/QueueActions';
 import { v4 as uuidv4 } from 'uuid';
 import { sortBy } from 'lodash';
+import {DataBatchSyncService} from '../../../services/DataBatchSyncService';
+import {LabelsSelector} from '../../../store/selectors/LabelsSelector';
 
 interface IProps {
-    addImageData: (imageData: ImageData[]) => any;
     addQueueItems: (items: QueueItem[]) => any;
     imagesData: ImageData[];
     language: Language;
 }
 
-const LoadMoreMediaPopup: React.FC<IProps> = ({ addImageData, addQueueItems, imagesData, language }) => {
+const LoadMoreMediaPopup: React.FC<IProps> = ({ addQueueItems, imagesData, language }) => {
     const currentTexts = LanguageConfig[language];
     const { acceptedFiles, getRootProps, getInputProps } = useDropzone({
         accept: {
@@ -95,12 +95,10 @@ const LoadMoreMediaPopup: React.FC<IProps> = ({ addImageData, addQueueItems, ima
 
             // 图像文件直接添加到当前项目
             if (imageFiles.length > 0) {
-                addImageData(imageFiles.map((fileData: File) => ImageDataUtil.createImageDataFromFileData(fileData)));
-
-                // 同时登记一个 COMPLETED 状态的队列项，仅用于让"文件队列"面板 /
-                // autosave-restore 快照如实反映这批已合并进当前项目的图片 —
-                // 否则 imagesData 里有帧但 queue.items 从未记录它们，restore 后
-                // 队列面板显示"队列为空"（图片本身通过 imagesData 快照正常恢复）。
+                const newImageData = imageFiles.map(
+                    (fileData: File) => ImageDataUtil.createImageDataFromFileData(fileData)
+                );
+                // 每次上传形成一个独立批次；切换时旧批次标注进入 ImageRepository 缓存。
                 const loadMoreItem: QueueItem = imageFiles.length === 1
                     ? {
                         id: uuidv4(),
@@ -119,6 +117,12 @@ const LoadMoreMediaPopup: React.FC<IProps> = ({ addImageData, addQueueItems, ima
                         uploadedAt: Date.now(),
                     };
                 addQueueItems([loadMoreItem]);
+                await QueueActions.switchToQueueItem(loadMoreItem, imagesData);
+                DataBatchSyncService.syncQueueItem(
+                    loadMoreItem,
+                    newImageData,
+                    LabelsSelector.getLabelNames(),
+                ).catch(() => undefined);
             }
 
             // 视频文件添加到队列
@@ -209,7 +213,6 @@ const LoadMoreMediaPopup: React.FC<IProps> = ({ addImageData, addQueueItems, ima
 };
 
 const mapDispatchToProps = {
-    addImageData,
     addQueueItems
 };
 

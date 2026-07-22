@@ -8,6 +8,7 @@ import { ImageRepository } from '../logic/imageRepository/ImageRepository';
 import { TaskTracker } from './TaskTracker';
 import { TaskType } from '../store/tasks/types';
 import { LanguageConfig } from '../data/LanguageConfig';
+import {QueueItem} from '../store/queue/types';
 
 export class AutoSaveService {
     private static saveTimer: NodeJS.Timeout | null = null;
@@ -106,9 +107,23 @@ export class AutoSaveService {
      * from "serialize 400 MB to IDB every minute forever" into "no-op".
      */
     private static lastSavedSignature: string = '';
+    public static queueSignature(items: QueueItem[]): string {
+        return JSON.stringify(items.map(item => [
+            item.id,
+            item.name,
+            item.status,
+            item.dataSyncStatus || '',
+            item.datasetId || '',
+            item.datasetRevision || 0,
+            item.syncedAt || 0,
+            item.dataSyncError || '',
+        ]));
+    }
+
     private static computeSignature(): string {
         const state = store.getState();
         const imagesData = state.labels.imagesData;
+        const queueItems = state.queue?.items || [];
         // Aggregate per-image label counts into one string. For 10k images
         // this is ~150 KB string compare per tick — negligible vs. a full
         // ArrayBuffer serialize.
@@ -128,7 +143,8 @@ export class AutoSaveService {
             state.labels.activeImageIndex,
             state.video?.isVideoMode ? 'V' : 'I',
             state.video?.activeVideo?.id || '',
-            (state.queue?.items || []).length,
+            queueItems.length,
+            this.queueSignature(queueItems),
             state.queue?.activeQueueItemId || '',
             (state.ai?.segmentationResults || []).length,
             labelDetail,

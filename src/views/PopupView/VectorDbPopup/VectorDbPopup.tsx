@@ -342,7 +342,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             const data = await readResponse<{datasets?: DatasetSummary[]}>(response);
             setDatasets(Array.isArray(data.datasets) ? data.datasets : []);
         } catch (cause) {
-            setDatasetsError(cause instanceof Error ? cause.message : t('数据任务不可用', 'Data Tasks unavailable'));
+            setDatasetsError(cause instanceof Error ? cause.message : t('数据管理不可用', 'Data Management unavailable'));
         } finally {
             setDatasetsLoading(false);
         }
@@ -770,7 +770,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                     onClick={() => setCreateGranularity('bbox')}
                 >
                     <strong>{t('目标框', 'Bounding boxes')}</strong>
-                    <span>{t('数据任务读取标注框；散图上传自动检测', 'Use task annotations; detect objects for loose uploads')}</span>
+                    <span>{t('数据批次读取标注框；散图上传自动检测', 'Use batch annotations; detect objects for loose uploads')}</span>
                 </button>
                 <button
                     type='button'
@@ -872,7 +872,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     const renderDatasetSource = () => (
         <div className='SourceCard'>
             <label className='FieldStack'>
-                <span>{t('选择数据任务', 'Select a Data Task')}</span>
+                <span>{t('选择数据批次', 'Select a data batch')}</span>
                 <select
                     value={datasetId}
                     disabled={datasetsLoading || !!datasetsError}
@@ -889,11 +889,11 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 </select>
             </label>
             {datasetsError && <div className='InlineError' role='alert'>
-                {t('数据任务不可用；你仍可切换到本地上传。', 'Data Tasks are unavailable; local upload is still available.')}
+                {t('数据管理不可用；你仍可切换到本地上传。', 'Data Management is unavailable; local upload is still available.')}
                 <button type='button' onClick={refreshDatasets}>{t('重试', 'Retry')}</button>
             </div>}
             {!datasetsLoading && !datasetsError && datasets.length === 0 && (
-                <div className='MutedText'>{t('暂无数据任务数据集，可改用本地上传。', 'No Data Task datasets; use local upload instead.')}</div>
+                <div className='MutedText'>{t('暂无数据批次，可从文件队列同步或改用本地上传。', 'No data batches; sync one from File Queue or use local upload.')}</div>
             )}
         </div>
     );
@@ -929,7 +929,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                         aria-selected={ingestSource === 'dataset'}
                         className={ingestSource === 'dataset' ? 'active' : ''}
                         onClick={() => { setIngestSource('dataset'); setPendingFiles([]); }}
-                    >{t('数据任务', 'Data Tasks')}</button>
+                    >{t('数据管理', 'Data Management')}</button>
                     <button
                         type='button'
                         role='tab'
@@ -1038,7 +1038,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             <div>
                 <strong>{t('永久删除这个版本？', 'Permanently delete this version?')}</strong>
                 <span>{t('该版本的向量与插件保存的上传副本会被删除；同一目标的其他版本和源数据不受影响。',
-                    'Vectors and plugin-managed upload copies will be removed; Data Task source data is unchanged.')}</span>
+                    'Vectors and plugin-managed upload copies will be removed; Data Management source data is unchanged.')}</span>
                 {deleteError && <span className='InlineError'>{deleteError}</span>}
             </div>
             <div className='InlineActions'>

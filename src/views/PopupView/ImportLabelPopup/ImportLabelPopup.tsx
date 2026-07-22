@@ -7,7 +7,7 @@ import { AppState } from '../../../store';
 import { connect } from 'react-redux';
 import { useDropzone } from 'react-dropzone';
 import { ImageData, LabelName } from '../../../store/labels/types';
-import { addImageData, updateActiveImageIndex, updateActiveLabelType, updateImageData, updateLabelNames } from '../../../store/labels/actionCreators';
+import { updateActiveLabelType, updateImageData, updateLabelNames } from '../../../store/labels/actionCreators';
 import { QueueItem, QueueItemType, QueueItemStatus } from '../../../store/queue/types';
 import { addQueueItems } from '../../../store/queue/actionCreators';
 import { ImporterSpecData } from '../../../data/ImporterSpecData';
@@ -30,25 +30,24 @@ import { ArrayUtil } from '../../../utils/ArrayUtil';
 import { Settings } from '../../../settings/Settings';
 import { LabelUtil } from '../../../utils/LabelUtil';
 import { PendingImportFiles } from '../../../utils/PendingImportFiles';
+import {DataBatchSyncService} from '../../../services/DataBatchSyncService';
+import {ImageRepository} from '../../../logic/imageRepository/ImageRepository';
+import {QueueActions} from '../../../logic/actions/QueueActions';
 
 interface IProps {
     activeLabelType: LabelType;
-    addImageDataAction: (imageData: ImageData[]) => any;
     updateImageDataAction: (imageData: ImageData[]) => any;
     updateLabelNamesAction: (labels: LabelName[]) => any;
     updateActiveLabelTypeAction: (activeLabelType: LabelType) => any;
-    updateActiveImageIndexAction: (index: number) => any;
     addQueueItemsAction: (items: QueueItem[]) => any;
     language: Language;
 }
 
 const ImportLabelPopup: React.FC<IProps> = ({
     activeLabelType,
-    addImageDataAction,
     updateImageDataAction,
     updateLabelNamesAction,
     updateActiveLabelTypeAction,
-    updateActiveImageIndexAction,
     addQueueItemsAction,
     language
 }) => {
@@ -449,11 +448,7 @@ const ImportLabelPopup: React.FC<IProps> = ({
             const newImages = loadedImageData.filter(d => d.fileData && d.id && !existingIds.has(d.id));
             const hasNewImages = newImages.length > 0;
             if (hasNewImages) {
-                addImageDataAction(loadedImageData);
-                updateActiveImageIndexAction(0);
-
-                // 登记一个 COMPLETED 状态的队列项，与「加载更多媒体」保持一致 —
-                // 否则这批图片只进 imagesData，文件队列面板/autosave 快照都不知道它们存在
+                // 完整标注包形成独立批次；标注缓存与文件队列项使用同一个 id。
                 const thumbnail = await generateThumbnail(newImages[0].fileData);
                 const importItem: QueueItem = newImages.length === 1
                     ? {
@@ -474,7 +469,11 @@ const ImportLabelPopup: React.FC<IProps> = ({
                         uploadedAt: Date.now(),
                         thumbnail,
                     };
+                ImageRepository.saveFileCache(importItem.id, newImages);
                 addQueueItemsAction([importItem]);
+                await QueueActions.switchToQueueItem(importItem, LabelsSelector.getImagesData());
+                DataBatchSyncService.syncQueueItem(importItem, newImages, loadedLabelNames)
+                    .catch(() => undefined);
             } else {
                 updateImageDataAction(loadedImageData);
             }
@@ -593,11 +592,9 @@ const ImportLabelPopup: React.FC<IProps> = ({
 };
 
 const mapDispatchToProps = {
-    addImageDataAction: addImageData,
     updateImageDataAction: updateImageData,
     updateLabelNamesAction: updateLabelNames,
     updateActiveLabelTypeAction: updateActiveLabelType,
-    updateActiveImageIndexAction: updateActiveImageIndex,
     addQueueItemsAction: addQueueItems
 };
 

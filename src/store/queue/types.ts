@@ -13,6 +13,14 @@ export enum QueueItemStatus {
     ERROR = 'ERROR'
 }
 
+export enum QueueDataSyncStatus {
+    LOCAL = 'LOCAL',
+    SYNCING = 'SYNCING',
+    SYNCED = 'SYNCED',
+    DIRTY = 'DIRTY',
+    ERROR = 'ERROR'
+}
+
 export type QueueItem = {
     id: string;
     name: string;
@@ -31,6 +39,11 @@ export type QueueItem = {
     uploadedAt: number; // timestamp
     thumbnail?: string; // Base64 thumbnail for images/videos
     error?: string;
+    dataSyncStatus?: QueueDataSyncStatus;
+    datasetId?: string;
+    datasetRevision?: number;
+    dataSyncError?: string;
+    syncedAt?: number;
 }
 
 export type QueueState = {
@@ -85,4 +98,3 @@ export type QueueActionTypes =
     | UpdateQueueItem
     | SetActiveQueueItem
     | ClearQueue;
-

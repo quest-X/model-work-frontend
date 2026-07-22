@@ -203,6 +203,12 @@ export class ImageRepository {
         // 返回深拷贝，避免外部修改影响缓存
         return cache.imagesData.map(data => ({...data}));
     }
+
+    /** Read a queue item's annotation snapshot without activating it in the editor. */
+    public static getFileCacheSnapshot(fileId: string): ImageData[] | null {
+        const cache = ImageRepository.fileCache[fileId];
+        return cache ? cache.imagesData.map(data => ({...data})) : null;
+    }
     
     /**
      * 清空当前显示的图像（但不清除文件缓存）
