@@ -158,7 +158,7 @@ export const AuthPreview: React.FC<IProps> = ({children}) => {
                         onClick={() => setPasswordVisible(visible => !visible)}
                     >
                         <img
-                            src={passwordVisible ? '/ico/eye-off.png' : '/ico/eye.png'}
+                            src={passwordVisible ? '/ico/eye.png' : '/ico/eye-off.png'}
                             alt=''
                         />
                     </button>

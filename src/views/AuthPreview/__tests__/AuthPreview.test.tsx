@@ -81,12 +81,12 @@ describe('AuthPreview', () => {
         expect(password).toHaveAttribute('type', 'password');
         const showPassword = screen.getByRole('button', {name: '显示密码'});
         expect(showPassword).not.toHaveTextContent('显示');
-        expect(showPassword.querySelector('img')).toHaveAttribute('src', '/ico/eye.png');
+        expect(showPassword.querySelector('img')).toHaveAttribute('src', '/ico/eye-off.png');
         fireEvent.click(showPassword);
         expect(password).toHaveAttribute('type', 'text');
         const hidePassword = screen.getByRole('button', {name: '隐藏密码'});
         expect(hidePassword).not.toHaveTextContent('隐藏');
-        expect(hidePassword.querySelector('img')).toHaveAttribute('src', '/ico/eye-off.png');
+        expect(hidePassword.querySelector('img')).toHaveAttribute('src', '/ico/eye.png');
         fireEvent.click(hidePassword);
         expect(password).toHaveAttribute('type', 'password');
     });
