@@ -153,6 +153,7 @@ describe('StorageAnalysisPanel', () => {
         fireEvent.click(screen.getByRole('button', {name: '授权并扫描'}));
 
         expect(await screen.findByText('model.onnx')).toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('扫描完成');
         await waitFor(() => expect(ComputeClusterService.storageStatus).toHaveBeenCalledWith(
             nodeId, authorizationId, expect.any(AbortSignal),
         ));

@@ -291,8 +291,10 @@ export const StorageAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) => {
     };
 
     const result = success?.result;
-    const status = response?.state === 'cancelled'
-        ? (zh ? '扫描已取消，未生成完整结论' : 'Scan cancelled; no complete conclusion')
+    const status = response?.state === 'succeeded'
+        ? (zh ? '扫描完成' : 'Scan complete')
+        : response?.state === 'cancelled'
+            ? (zh ? '扫描已取消，未生成完整结论' : 'Scan cancelled; no complete conclusion')
         : response?.state === 'failed'
             ? friendlyError(response.error?.code, zh)
             : response?.progress
