@@ -14,6 +14,14 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.1',
+        date: '2026-09-07',
+        changes: [
+            { zh: '【修复】补全编辑器左下角版本水印，修正 v2.9.0 发布后仍显示 v2.8.2', en: '[Fix] Updated the editor watermark that still showed v2.8.2 after the v2.9.0 release' },
+            { zh: '【一致性】同步 package、锁文件、登录页、控制中心与 changelog 至 v2.9.1', en: '[Consistency] Synchronized package metadata, lockfile, login, control center, and changelog to v2.9.1' },
+        ],
+    },
+    {
         version: '2.9.0',
         date: '2026-09-07',
         changes: [
