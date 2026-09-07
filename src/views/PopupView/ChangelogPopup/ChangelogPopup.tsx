@@ -16,6 +16,26 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.8.4',
+        date: '2026-08-02',
+        changes: [
+            { zh: '【功能】新增可持久化的视觉检索工作区', en: '[Feat] Added a persistent visual-search workspace' },
+            { zh: '【可靠性】bbox 结果支持原子验收、数据版本校验与单步撤销', en: '[Reliability] Added atomic bbox acceptance, dataset revision checks, and one-step undo' },
+            { zh: '【功能】统一数据与模型资源管理', en: '[Feat] Unified data and model resource management' },
+            { zh: '【可靠性】可靠恢复视频帧数据、掩码几何、会话与快照', en: '[Reliability] Reliably restores video-frame data, mask geometry, sessions, and snapshots' },
+        ],
+    },
+    {
+        version: '2.8.3',
+        date: '2026-07-22',
+        changes: [
+            { zh: '【功能】完善数据集编辑、推理、导出与版本历史工作流', en: '[Feat] Completed dataset editing, inference, export, and version-history workflows' },
+            { zh: '【功能】新增向量集合、DINO 索引、目标版本与查询生命周期管理', en: '[Feat] Added vector collections, DINO indexing, target versions, and query lifecycle management' },
+            { zh: '【功能】新增 L2G 检索缩略图与结果预览', en: '[Feat] Added L2G retrieval thumbnails and result previews' },
+            { zh: '【体验】统一引擎导航、编辑手势与模型透视界面', en: '[UX] Unified engine navigation, editor gestures, and the model-inspection interface' },
+        ],
+    },
+    {
         version: '2.8.2',
         date: '2026-07-20',
         changes: [
