@@ -16,6 +16,66 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.8.8',
+        date: '2026-08-20',
+        changes: [
+            { zh: '【运维】新增集群终端，明确安全边界并区分 LAN 与 Tailscale 路由', en: '[Operations] Added the cluster terminal, clarified its security boundary, and distinguished LAN from Tailscale routes' },
+            { zh: '【可视化】统一资源图状态、形状、区域分组与本地化', en: '[Visualization] Unified resource-graph status, shapes, regional grouping, and localization' },
+            { zh: '【交互】支持节点卡片固定、可用性汇总与区域排序', en: '[UX] Added node-card pinning, availability summaries, and regional sorting' },
+            { zh: '【资源】支持安全删除入库任务及预览数据集图片', en: '[Resources] Added guarded ingestion-job deletion and dataset image previews' },
+        ],
+    },
+    {
+        version: '2.8.7',
+        date: '2026-08-12',
+        changes: [
+            { zh: '【功能】新增节点、设备与 SSH 就绪状态控制台', en: '[Feat] Added a node, device, and SSH-readiness console' },
+            { zh: '【功能】新增任务控制、容量调度与工作 Agent', en: '[Feat] Added task control, capacity scheduling, and work agents' },
+            { zh: '【功能】新增可调用资源图与 Agent 派发', en: '[Feat] Added a callable-resource graph and agent dispatch' },
+            { zh: '【运维】支持 LAN 发现、自动刷新、最大化及工作区重组', en: '[Operations] Added LAN discovery, automatic refresh, maximization, and workspace organization' },
+        ],
+    },
+    {
+        version: '2.8.6',
+        date: '2026-08-10',
+        changes: [
+            { zh: '【功能】新增相机资源与实时画面', en: '[Feat] Added camera resources and live video' },
+            { zh: '【功能】支持曝光、对焦等独立智能控制与高级参数', en: '[Feat] Added independent smart controls and advanced parameters for exposure and focus' },
+            { zh: '【功能】支持原图对比、试调、谨慎应用与物理参数下发', en: '[Feat] Added before/after comparison, tuning trials, cautious apply, and physical parameter dispatch' },
+            { zh: '【交互】新增矩形标签选择，并恢复已保存的实时工作区', en: '[UX] Added interactive rectangle-label selection and restoration of saved live workspaces' },
+        ],
+    },
+    {
+        version: '2.8.5',
+        date: '2026-08-06',
+        changes: [
+            { zh: '【可靠性】检测、分割与本地服务统一通过同源网关访问', en: '[Reliability] Routed detection, segmentation, and local services through the same-origin gateway' },
+            { zh: '【可靠性】掩码检索增加 SHA、RLE、来源与资源上限校验', en: '[Reliability] Added SHA, RLE, provenance, and resource-limit validation to mask retrieval' },
+            { zh: '【功能】打通图像工作区恢复、seed graph 与多策略入库', en: '[Feat] Connected image-workspace recovery, seed graphs, and multi-strategy ingestion' },
+            { zh: '【功能】新增图像与视频多视图布局，并约束检索帧范围', en: '[Feat] Added image/video multiview layouts and bounded retrieval to selected frames' },
+        ],
+    },
+    {
+        version: '2.8.4',
+        date: '2026-08-02',
+        changes: [
+            { zh: '【功能】新增可持久化的视觉检索工作区', en: '[Feat] Added a persistent visual-search workspace' },
+            { zh: '【可靠性】bbox 结果支持原子验收、数据版本校验与单步撤销', en: '[Reliability] Added atomic bbox acceptance, dataset revision checks, and one-step undo' },
+            { zh: '【功能】统一数据与模型资源管理', en: '[Feat] Unified data and model resource management' },
+            { zh: '【可靠性】可靠恢复视频帧数据、掩码几何、会话与快照', en: '[Reliability] Reliably restores video-frame data, mask geometry, sessions, and snapshots' },
+        ],
+    },
+    {
+        version: '2.8.3',
+        date: '2026-07-22',
+        changes: [
+            { zh: '【功能】完善数据集编辑、推理、导出与版本历史工作流', en: '[Feat] Completed dataset editing, inference, export, and version-history workflows' },
+            { zh: '【功能】新增向量集合、DINO 索引、目标版本与查询生命周期管理', en: '[Feat] Added vector collections, DINO indexing, target versions, and query lifecycle management' },
+            { zh: '【功能】新增 L2G 检索缩略图与结果预览', en: '[Feat] Added L2G retrieval thumbnails and result previews' },
+            { zh: '【体验】统一引擎导航、编辑手势与模型透视界面', en: '[UX] Unified engine navigation, editor gestures, and the model-inspection interface' },
+        ],
+    },
+    {
         version: '2.8.2',
         date: '2026-07-20',
         changes: [
