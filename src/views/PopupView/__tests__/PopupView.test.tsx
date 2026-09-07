@@ -18,14 +18,15 @@ describe('PopupView dismissal', () => {
     beforeEach(() => jest.clearAllMocks());
     afterEach(() => jest.restoreAllMocks());
 
-    it('closes from the outer backdrop or Escape and ignores content clicks', () => {
+    it('hides from the outer backdrop without unmounting and fully closes from Escape', () => {
         const close = jest.spyOn(PopupActions, 'close').mockImplementation(jest.fn());
-        const {container} = render(<PopupView
+        const view = render(<PopupView
             activePopupType={PopupWindowType.LOADER}
             activePopupNodeId={null}
             activePopupNodeName={null}
             activePopupNodeRemote={false}
         />);
+        const {container} = view;
         const backdrop = container.querySelector('.PopupView') as HTMLElement;
         const content = backdrop.firstElementChild as HTMLElement;
 
@@ -33,11 +34,36 @@ describe('PopupView dismissal', () => {
         expect(close).not.toHaveBeenCalled();
         fireEvent.mouseDown(backdrop);
         expect(close).toHaveBeenCalledTimes(1);
+        view.rerender(<PopupView
+            activePopupType={null}
+            activePopupNodeId={null}
+            activePopupNodeName={null}
+            activePopupNodeRemote={false}
+        />);
+        expect(backdrop).toHaveAttribute('hidden');
+        expect(backdrop).toHaveStyle({display: 'none'});
+        expect(backdrop.firstElementChild).toBe(content);
+
+        view.rerender(<PopupView
+            activePopupType={PopupWindowType.LOADER}
+            activePopupNodeId={null}
+            activePopupNodeName={null}
+            activePopupNodeRemote={false}
+        />);
+        expect(backdrop).not.toHaveAttribute('hidden');
+        expect(backdrop.firstElementChild).toBe(content);
         fireEvent.keyDown(window, {key: 'Escape'});
         expect(close).toHaveBeenCalledTimes(2);
+        view.rerender(<PopupView
+            activePopupType={null}
+            activePopupNodeId={null}
+            activePopupNodeName={null}
+            activePopupNodeRemote={false}
+        />);
+        expect(container.querySelector('.PopupView')).toBeNull();
     });
 
-    it('treats marked custom backdrops as outside without closing for portal content', () => {
+    it('treats marked custom backdrops as outside without hiding for portal content', () => {
         const close = jest.spyOn(PopupActions, 'close').mockImplementation(jest.fn());
         const {container} = render(<PopupView
             activePopupType={PopupWindowType.LOADER}

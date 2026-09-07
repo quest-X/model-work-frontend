@@ -42,16 +42,33 @@ import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 interface IProps {
     onBeforeOpenAnnotation?: () => boolean;
     onOpenAnnotation?: () => void;
-    activePopupType: PopupWindowType;
+    activePopupType: PopupWindowType | null;
     activePopupNodeId: string | null;
     activePopupNodeName: string | null;
     activePopupNodeRemote: boolean;
+}
+
+interface RetainedPopup {
+    type: PopupWindowType;
+    nodeId: string | null;
+    nodeName: string | null;
+    nodeRemote: boolean;
 }
 
 export const PopupView: React.FC<IProps> = (
     { activePopupType, activePopupNodeId, activePopupNodeName, activePopupNodeRemote,
         onBeforeOpenAnnotation, onOpenAnnotation },
 ) => {
+
+    const [retainedPopup, setRetainedPopup] = React.useState<RetainedPopup | null>(null);
+    const popupType = activePopupType || retainedPopup?.type || null;
+    const popupNodeId = activePopupType ? activePopupNodeId : retainedPopup?.nodeId || null;
+    const popupNodeName = activePopupType ? activePopupNodeName : retainedPopup?.nodeName || null;
+    const popupNodeRemote = activePopupType ? activePopupNodeRemote : retainedPopup?.nodeRemote || false;
+
+    React.useEffect(() => {
+        if (activePopupType) setRetainedPopup(null);
+    }, [activePopupType]);
 
     useEscapeToClose(() => {
         if (activePopupType === PopupWindowType.MODEL_INSPECTOR) {
@@ -95,31 +112,42 @@ export const PopupView: React.FC<IProps> = (
         [PopupWindowType.VISUAL_SEARCH]: () => <VisualSearchPopup />,
         [PopupWindowType.MODEL_INSPECTOR]: () => <ModelInspectorPopup />,
         [PopupWindowType.CAMERA_CONNECT]: () => <CameraConnectPopup
-            nodeId={activePopupNodeId}
-            nodeName={activePopupNodeName}
-            remote={activePopupNodeRemote}
+            nodeId={popupNodeId}
+            nodeName={popupNodeName}
+            remote={popupNodeRemote}
         />,
         [PopupWindowType.JETSON_CONNECT]: () => <JetsonConnectPopup
-            nodeId={activePopupNodeId}
-            nodeName={activePopupNodeName}
-            remote={activePopupNodeRemote}
+            nodeId={popupNodeId}
+            nodeName={popupNodeName}
+            remote={popupNodeRemote}
         />,
         [PopupWindowType.COMPUTE_CLUSTER]: () => <ComputeClusterPopup />,
         [PopupWindowType.LOADER]: () => <ClipLoader size={50} color={CSSHelper.getLeadingColor()} loading={true} />,
     };
 
     const selectPopup = () => {
-        const render = popupComponents[activePopupType];
+        if (!popupType) return null;
+        const render = popupComponents[popupType];
         return render ? render() : null;
     };
 
     return (
-        activePopupType && <div className='PopupView' onMouseDown={event => {
-            const target = event.target as HTMLElement;
-            if (target !== event.currentTarget && !target.hasAttribute('data-popup-backdrop')) return;
-            clearDatasetActionSelections();
-            PopupActions.close();
-        }}>
+        popupType && <div
+            className='PopupView'
+            hidden={!activePopupType}
+            style={activePopupType ? undefined : {display: 'none'}}
+            onMouseDown={event => {
+                const target = event.target as HTMLElement;
+                if (target !== event.currentTarget && !target.hasAttribute('data-popup-backdrop')) return;
+                if (!activePopupType) return;
+                setRetainedPopup({
+                    type: activePopupType,
+                    nodeId: activePopupNodeId,
+                    nodeName: activePopupNodeName,
+                    nodeRemote: activePopupNodeRemote,
+                });
+                PopupActions.close();
+            }}>
             {selectPopup()}
         </div>
     );

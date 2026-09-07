@@ -10,6 +10,7 @@ import './AccountCenter.scss';
 interface IProps {
     user: AccountUser;
     zh: boolean;
+    open?: boolean;
     onClose: () => void;
     onUserChanged: (user: AccountUser) => void;
 }
@@ -37,7 +38,7 @@ const generateAccountPassword = (): string => {
 
 // This account form keeps bilingual labels and its four mutation handlers together.
 // eslint-disable-next-line complexity
-export const AccountCenter: React.FC<IProps> = ({user, zh, onClose, onUserChanged}) => {
+export const AccountCenter: React.FC<IProps> = ({user, zh, open = true, onClose, onUserChanged}) => {
     const [displayName, setDisplayName] = useState(user.display_name);
     const [savedDisplayName, setSavedDisplayName] = useState(user.display_name);
     const [currentPassword, setCurrentPassword] = useState('');
@@ -51,7 +52,7 @@ export const AccountCenter: React.FC<IProps> = ({user, zh, onClose, onUserChange
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
-    useEscapeToClose(onClose, true, 20);
+    useEscapeToClose(onClose, open, 20);
 
     const reloadActivity = () => Promise.all([accountSessions(), accountAudit()]).then(([active, audit]) => {
         setSessions(active.sessions);
@@ -61,7 +62,8 @@ export const AccountCenter: React.FC<IProps> = ({user, zh, onClose, onUserChange
     useEffect(() => { reloadActivity(); }, []);
     const date = (value: number) => new Date(value * 1000).toLocaleString(zh ? 'zh-CN' : 'en-US');
 
-    return <div className='AccountCenterBackdrop' role='presentation' onMouseDown={event => {
+    return <div className='AccountCenterBackdrop' role='presentation' hidden={!open}
+        style={open ? undefined : {display: 'none'}} onMouseDown={event => {
         if (event.target === event.currentTarget) onClose();
     }}>
         <section className='AccountCenter' role='dialog' aria-modal='true' aria-label={zh ? '个人中心' : 'Account center'}>

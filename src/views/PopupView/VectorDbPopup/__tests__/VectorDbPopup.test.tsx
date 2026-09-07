@@ -499,8 +499,11 @@ describe('VectorDbPopup', () => {
         fireEvent.keyDown(window, {key: 'ArrowLeft'});
         expect(within(preview).getByRole('img', {name: 'frame-001.jpg'})).toBeInTheDocument();
         expect(within(preview).queryByRole('button', {name: '关闭图片预览'})).not.toBeInTheDocument();
-        fireEvent.mouseDown(preview.closest('.HistoryImagePreviewBackdrop') as HTMLElement);
+        const previewBackdrop = preview.closest('.HistoryImagePreviewBackdrop') as HTMLElement;
+        fireEvent.mouseDown(previewBackdrop);
         expect(screen.queryByRole('dialog', {name: '入库图片预览'})).not.toBeInTheDocument();
+        expect(previewBackdrop).toHaveAttribute('hidden');
+        expect(previewBackdrop.querySelector('img')).toHaveAttribute('alt', 'frame-001.jpg');
     });
 
     it('requires the exact scene, target and version identifier before deleting a terminal record', async () => {
@@ -545,8 +548,14 @@ describe('VectorDbPopup', () => {
             String(url).endsWith('/jobs/job-history-1') && init?.method === 'DELETE')).toBe(false);
         fireEvent.change(confirmationInput, {target: {value: '一号产线/产线帧库/v4'}});
         expect(deleteButton).toBeEnabled();
+        const backdrop = dialog.closest('.HistoryDeleteDialogBackdrop') as HTMLElement;
+        fireEvent.mouseDown(backdrop);
+        expect(backdrop).toHaveAttribute('hidden');
+        fireEvent.click(screen.getByRole('button', {name: '删除 v4 版本记录'}));
+        expect(screen.getByRole('textbox', {name: '输入版本标识以确认删除'}))
+            .toHaveValue('一号产线/产线帧库/v4');
         await act(async () => {
-            fireEvent.click(deleteButton);
+            fireEvent.click(screen.getByRole('button', {name: '删除'}));
         });
 
         await waitFor(() => expect((global.fetch as jest.Mock).mock.calls.some(([url, init]) =>

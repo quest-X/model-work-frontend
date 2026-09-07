@@ -706,6 +706,12 @@ describe('DataCenterPopup', () => {
         );
         fireEvent.click(within(dialog).getByRole('button', {name: '下一张'}));
         expect(within(dialog).getByRole('img', {name: 'frame-002.jpg'})).toBeInTheDocument();
+        const backdrop = dialog.closest('.DatasetImagePreviewBackdrop') as HTMLElement;
+        fireEvent.mouseDown(backdrop);
+        expect(backdrop).toHaveAttribute('hidden');
+        expect(backdrop.querySelector('img')).toHaveAttribute('alt', 'frame-002.jpg');
+        fireEvent.click(screen.getByRole('button', {name: '查看图片 frame-001.jpg'}));
+        expect(backdrop).not.toHaveAttribute('hidden');
         fireEvent.keyDown(window, {key: 'Escape'});
         expect(screen.queryByRole('dialog', {name: '数据集图片预览'})).not.toBeInTheDocument();
     });

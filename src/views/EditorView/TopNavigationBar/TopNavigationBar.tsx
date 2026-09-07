@@ -46,8 +46,8 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
     const controlMode = props.platformMode === 'control';
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
-    const [showAccountCenter, setShowAccountCenter] = useState(
-        () => Boolean(currentAccountSession()?.user.password_change_required),
+    const [showAccountCenter, setShowAccountCenter] = useState<boolean | null>(
+        () => currentAccountSession()?.user.password_change_required ? true : null,
     );
     const [account, setAccount] = useState<AccountUser | null>(() => currentAccountSession()?.user || null);
     const [activeServicesDropdown, setActiveServicesDropdown] = useState<ServicesDropdown>(null);
@@ -527,9 +527,10 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                     </div>
                 </div>
             </div>
-            {showAccountCenter && account && <AccountCenter
+            {showAccountCenter !== null && account && <AccountCenter
                 user={account}
                 zh={props.language === Language.CHINESE}
+                open={showAccountCenter}
                 onClose={() => setShowAccountCenter(false)}
                 onUserChanged={setAccount}
             />}

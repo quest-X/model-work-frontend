@@ -316,22 +316,28 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     const [jobsError, setJobsError] = useState<string | null>(null);
     const [ingestError, setIngestError] = useState<string | null>(null);
     const [deleteJobConfirmId, setDeleteJobConfirmId] = useState<string | null>(null);
+    const [deleteJobDialogOpen, setDeleteJobDialogOpen] = useState(false);
     const [deleteJobConfirmationText, setDeleteJobConfirmationText] = useState('');
     const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
     const [jobDeleteError, setJobDeleteError] = useState<string | null>(null);
     const [expandedJobIds, setExpandedJobIds] = useState<Set<string>>(() => new Set());
     const [jobImages, setJobImages] = useState<Record<string, JobImageState>>({});
     const [imagePreview, setImagePreview] = useState<ImagePreview | null>(null);
+    const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
     useEscapeToClose(() => {
         if (!deleting) setDeleteConfirm(false);
     }, deleteConfirm, 40);
     useEscapeToClose(() => {
         if (deletingJobId) return;
         setDeleteJobConfirmId(null);
+        setDeleteJobDialogOpen(false);
         setDeleteJobConfirmationText('');
         setJobDeleteError(null);
-    }, Boolean(deleteJobConfirmId), 40);
-    useEscapeToClose(() => setImagePreview(null), Boolean(imagePreview), 50);
+    }, deleteJobDialogOpen, 40);
+    useEscapeToClose(() => {
+        setImagePreviewOpen(false);
+        setImagePreview(null);
+    }, imagePreviewOpen, 50);
 
     const selected = collections.find(collection => collection.name === selectedName) || null;
     const desiredGranularity = strategyGranularity(ingestStrategy);
@@ -602,6 +608,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         setDeleteConfirm(false);
         setDeleteError(null);
         setDeleteJobConfirmId(null);
+        setDeleteJobDialogOpen(false);
         setDeleteJobConfirmationText('');
         setJobDeleteError(null);
     }, [selected?.granularity, selectedName]);
@@ -613,7 +620,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
     }, [requiresDataset]);
 
     useEffect(() => {
-        if (!imagePreview) return undefined;
+        if (!imagePreviewOpen || !imagePreview) return undefined;
         const closeOnEscape = (event: KeyboardEvent) => {
             if (event.key === 'ArrowLeft') {
                 event.preventDefault();
@@ -626,7 +633,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         };
         window.addEventListener('keydown', closeOnEscape);
         return () => window.removeEventListener('keydown', closeOnEscape);
-    }, [imagePreview, moveImagePreview]);
+    }, [imagePreviewOpen, imagePreview, moveImagePreview]);
 
     const warmup = async () => {
         setWarmingUp(true);
@@ -883,6 +890,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                 return next;
             });
             setDeleteJobConfirmId(null);
+            setDeleteJobDialogOpen(false);
             setDeleteJobConfirmationText('');
         } catch (cause) {
             setJobDeleteError(cause instanceof Error
@@ -1300,8 +1308,18 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
 
     const closeDeleteHistoryDialog = () => {
         setDeleteJobConfirmId(null);
+        setDeleteJobDialogOpen(false);
         setDeleteJobConfirmationText('');
         setJobDeleteError(null);
+    };
+
+    const openDeleteHistoryDialog = (jobId: string) => {
+        if (deleteJobConfirmId !== jobId) {
+            setDeleteJobConfirmationText('');
+            setJobDeleteError(null);
+        }
+        setDeleteJobConfirmId(jobId);
+        setDeleteJobDialogOpen(true);
     };
 
     const renderHistoryDeleteDialog = (
@@ -1315,10 +1333,12 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
         <div
             className='HistoryDeleteDialogBackdrop'
             role='presentation'
+            hidden={!deleteJobDialogOpen}
+            style={deleteJobDialogOpen ? undefined : {display: 'none'}}
             onMouseDown={event => {
                 event.stopPropagation();
                 if (event.target !== event.currentTarget || deletingJobId) return;
-                closeDeleteHistoryDialog();
+                setDeleteJobDialogOpen(false);
             }}
         >
             <section
@@ -1417,11 +1437,14 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                     className='HistoryThumbnail'
                     key={image.index}
                     aria-label={t(`放大 ${image.filename}`, `Enlarge ${image.filename}`)}
-                    onClick={() => setImagePreview({
-                        jobId: item.job_id,
-                        index: image.index,
-                        filename: image.filename,
-                    })}
+                    onClick={() => {
+                        setImagePreview({
+                            jobId: item.job_id,
+                            index: image.index,
+                            filename: image.filename,
+                        });
+                        setImagePreviewOpen(true);
+                    }}
                 >
                     <img
                         src={`${baseUrl}/jobs/${encodedJobId}/images/${image.index}/thumbnail`}
@@ -1508,11 +1531,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                     className='HistoryDeleteButton'
                     aria-label={t(`删除 ${version.name} 版本记录`, `Delete ${version.name} version record`)}
                     title={t('删除版本记录', 'Delete version record')}
-                    onClick={() => {
-                        setDeleteJobConfirmId(item.job_id);
-                        setDeleteJobConfirmationText('');
-                        setJobDeleteError(null);
-                    }}
+                    onClick={() => openDeleteHistoryDialog(item.job_id)}
                 >{t('删除', 'Delete')}</button>}
             </div>
             {deleteJobConfirmId === item.job_id && renderHistoryDeleteDialog(
@@ -1579,9 +1598,11 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
             <div
                 className='HistoryImagePreviewBackdrop'
                 role='presentation'
+                hidden={!imagePreviewOpen}
+                style={imagePreviewOpen ? undefined : {display: 'none'}}
                 onMouseDown={event => {
                     event.stopPropagation();
-                    setImagePreview(null);
+                    setImagePreviewOpen(false);
                 }}
             >
                 <div
@@ -1736,11 +1757,7 @@ export const VectorDbPopup: React.FC<IProps> = ({language}) => {
                         <button
                             type='button'
                             className='DangerButton'
-                            onClick={() => {
-                                setDeleteJobConfirmId(item.job_id);
-                                setDeleteJobConfirmationText('');
-                                setJobDeleteError(null);
-                            }}
+                            onClick={() => openDeleteHistoryDialog(item.job_id)}
                         >{t('删除任务', 'Delete job')}</button>
                     </>}
             </div>

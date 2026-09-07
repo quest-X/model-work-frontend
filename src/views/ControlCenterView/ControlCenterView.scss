@@ -486,6 +486,21 @@ span.ControlMachineIcon {
   width: 100%;
   min-width: 680px;
   padding: 20px 24px 36px;
+
+  &:has(> .ComputeTerminalPanel) {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+
+    > .ComputeTerminalPanel { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+    .ComputeTerminalHeading,
+    .ComputeTerminalToolbar,
+    .ComputeTerminalError,
+    .ComputeTerminalInput,
+    .ComputeTerminalBoundary { flex: 0 0 auto; }
+    .ComputeTerminalScreen { height: auto; min-height: 120px; flex: 1; }
+  }
 }
 
 .ControlNodeContent {

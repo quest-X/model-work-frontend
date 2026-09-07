@@ -385,7 +385,11 @@ export const DataCenterPopup: React.FC<IProps> = ({
     const [datasetPreviewError, setDatasetPreviewError] = useState<string | null>(null);
     const [datasetPreviewFailures, setDatasetPreviewFailures] = useState<Set<number>>(new Set());
     const [datasetImagePreview, setDatasetImagePreview] = useState<DatasetImagePreview | null>(null);
-    useEscapeToClose(() => setDatasetImagePreview(null), Boolean(datasetImagePreview), 50);
+    const [datasetImagePreviewOpen, setDatasetImagePreviewOpen] = useState(false);
+    useEscapeToClose(() => {
+        setDatasetImagePreviewOpen(false);
+        setDatasetImagePreview(null);
+    }, datasetImagePreviewOpen, 50);
     const [datasetActionId, setDatasetActionId] = useState<string | null>(null);
     const [datasetActionError, setDatasetActionError] = useState<string | null>(null);
     const [datasetQuery, setDatasetQuery] = useState('');
@@ -698,6 +702,7 @@ export const DataCenterPopup: React.FC<IProps> = ({
         setDatasetPreviewTotal(0);
         setDatasetPreviewError(null);
         setDatasetPreviewFailures(new Set());
+        setDatasetImagePreviewOpen(false);
         setDatasetImagePreview(null);
         if (!selectedId || selectedDataset?.media_type === 'camera' || !selectedDataset?.image_count) {
             setDatasetPreviewLoading(false);
@@ -745,14 +750,14 @@ export const DataCenterPopup: React.FC<IProps> = ({
     }, [datasetPreviewItems]);
 
     useEffect(() => {
-        if (!datasetImagePreview) return undefined;
+        if (!datasetImagePreviewOpen || !datasetImagePreview) return undefined;
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'ArrowLeft') moveDatasetImagePreview(-1);
             if (event.key === 'ArrowRight') moveDatasetImagePreview(1);
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [datasetImagePreview, moveDatasetImagePreview]);
+    }, [datasetImagePreviewOpen, datasetImagePreview, moveDatasetImagePreview]);
 
     const useModel = async (model: ModelAsset) => {
         const identifier = model.id || model.name;
@@ -1204,7 +1209,10 @@ export const DataCenterPopup: React.FC<IProps> = ({
                             type='button'
                             aria-label={`${zh ? '查看图片' : 'View image'} ${item.name}`}
                             title={item.name}
-                            onClick={() => setDatasetImagePreview({...item, datasetId: dataset.id})}
+                            onClick={() => {
+                                setDatasetImagePreview({...item, datasetId: dataset.id});
+                                setDatasetImagePreviewOpen(true);
+                            }}
                         >
                             {!failed && <img
                                 src={datasetPreviewUrl(dataset, item, 'thumbnail')}
@@ -1907,9 +1915,11 @@ export const DataCenterPopup: React.FC<IProps> = ({
             <div
                 className='DatasetImagePreviewBackdrop'
                 role='presentation'
+                hidden={!datasetImagePreviewOpen}
+                style={datasetImagePreviewOpen ? undefined : {display: 'none'}}
                 onMouseDown={event => {
                     event.stopPropagation();
-                    setDatasetImagePreview(null);
+                    setDatasetImagePreviewOpen(false);
                 }}
             >
                 <div

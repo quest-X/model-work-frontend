@@ -20,19 +20,24 @@ beforeEach(() => {
     (accountAudit as jest.Mock).mockResolvedValue({events: []});
 });
 
-it('closes from the backdrop and Escape without rendering a close button', async () => {
+it('hides from the backdrop without losing form content', async () => {
     const onClose = jest.fn();
     const {container, rerender} = render(
-        <AccountCenter user={user} zh={false} onClose={onClose} onUserChanged={jest.fn()}/>,
+        <AccountCenter user={user} zh={false} open onClose={onClose} onUserChanged={jest.fn()}/>,
     );
     await screen.findByText('Browser');
+    fireEvent.change(screen.getByLabelText('Display name'), {target: {value: 'Unsaved name'}});
 
     fireEvent.mouseDown(screen.getByRole('dialog', {name: 'Account center'}));
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.mouseDown(container.querySelector('.AccountCenterBackdrop') as HTMLElement);
     expect(onClose).toHaveBeenCalledTimes(1);
 
-    rerender(<AccountCenter user={user} zh={false} onClose={onClose} onUserChanged={jest.fn()}/>);
+    rerender(<AccountCenter user={user} zh={false} open={false} onClose={onClose} onUserChanged={jest.fn()}/>);
+    expect(container.querySelector('.AccountCenterBackdrop')).toHaveAttribute('hidden');
+    expect(screen.getByLabelText('Display name')).toHaveValue('Unsaved name');
+
+    rerender(<AccountCenter user={user} zh={false} open onClose={onClose} onUserChanged={jest.fn()}/>);
     fireEvent.keyDown(window, {key: 'Escape'});
     expect(onClose).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('button', {name: 'Close account center'})).not.toBeInTheDocument();
