@@ -1,4 +1,5 @@
 import React, {useEffect, useState} from 'react';
+import {version as appVersion} from '../../../package.json';
 import {loginAccount, logoutAccount, refreshAccountSession} from '../../services/AccountService';
 import {useAccountApprovalIdentity} from '../../services/ApprovalIdentityService';
 import {isDemoMode} from '../../demo/DemoMode';
@@ -103,7 +104,7 @@ export const AuthPreview: React.FC<IProps> = ({children}) => {
                     <span className='AuthPreviewLogo'><img src='/make-sense-ico-transparent.png' alt=''/></span>
                     <span>OpenSight Platform</span>
                 </div>
-                <span className='AuthPreviewEdition'>AgentOS</span>
+                <span className='AuthPreviewEdition'>v{appVersion}</span>
             </header>
             <div className='AuthPreviewIntro'>
                 <div className='AuthPreviewDevice'><span aria-hidden='true'/>本地边缘计算集群后台</div>

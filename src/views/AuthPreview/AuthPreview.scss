@@ -15,6 +15,7 @@
     #111315;
   background-size: 42px 42px;
   color: #f4f6f7;
+  color-scheme: dark;
 
   .AuthPreviewGlow {
     position: absolute;
@@ -73,7 +74,6 @@
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.08em;
-    text-transform: uppercase;
   }
 
   .AuthPreviewIntro {
@@ -123,23 +123,29 @@
       transition: border-color 0.15s ease, box-shadow 0.15s ease;
       &::placeholder { color: rgba(255, 255, 255, 0.24); }
       &:focus { border-color: rgba(0, 158, 253, 0.68); box-shadow: 0 0 0 3px rgba(0, 158, 253, 0.1); }
+      &:-webkit-autofill {
+        -webkit-text-fill-color: #f7f7f7;
+        box-shadow: 0 0 0 1000px #141719 inset;
+      }
+      &:-webkit-autofill:focus {
+        box-shadow: 0 0 0 1000px #141719 inset, 0 0 0 3px rgba(0, 158, 253, 0.1);
+      }
     }
     .AuthPreviewPasswordField {
       position: relative;
       > input { padding-right: 48px; }
       > button {
         position: absolute;
-        top: 1px;
-        right: 1px;
+        top: 6px;
+        right: 7px;
         display: grid;
         place-items: center;
-        width: 41px;
-        height: 41px;
+        width: 31px;
+        height: 31px;
         padding: 0;
         border: 0;
-        border-left: 1px solid rgba(255, 255, 255, 0.11);
-        border-radius: 0 8px 8px 0;
-        background: rgba(255, 255, 255, 0.025);
+        border-radius: 6px;
+        background: transparent;
         cursor: pointer;
         &:hover { background: rgba(255, 255, 255, 0.07); }
         img {
