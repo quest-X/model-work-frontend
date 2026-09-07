@@ -279,6 +279,53 @@ export type ComputeStartupAuthorizationResult = {
     response: ComputeStartupResponse;
 };
 
+export type ComputePerformanceMetric =
+    | 'cpu_percent'
+    | 'memory_used_percent'
+    | 'disk_used_percent'
+    | 'gpu_memory_used_percent'
+    | 'gpu_temperature_celsius';
+
+export type ComputePerformanceSnapshot = {
+    schema_version: 'performance.snapshot-result.v1';
+    captured_at: number;
+    metrics: Record<ComputePerformanceMetric, number | null>;
+};
+
+export type ComputePerformanceEvidence = {
+    metric: ComputePerformanceMetric;
+    unit: 'percent' | 'celsius';
+    sample_count: number;
+    minimum: number | null;
+    maximum: number | null;
+    average: number | null;
+    threshold: number;
+    comparison: 'gte';
+    violating_samples: number;
+    sufficient: boolean;
+    sustained: boolean;
+};
+
+export type ComputePerformanceDiagnosis = {
+    schema_version: 'performance.diagnosis-result.v1';
+    window_seconds: number;
+    observed_seconds: number;
+    sample_count: number;
+    coverage_sufficient: boolean;
+    evidence: ComputePerformanceEvidence[];
+    findings: {
+        code:
+            | 'sustained_high_cpu'
+            | 'sustained_memory_pressure'
+            | 'sustained_disk_pressure'
+            | 'sustained_gpu_memory_pressure'
+            | 'sustained_gpu_temperature';
+        severity: 'warning';
+        metric: ComputePerformanceMetric;
+        evidence_index: number;
+    }[];
+};
+
 export type ComputeRuntimeEvent = {
     cursor: number;
     created_at: number;
@@ -1169,6 +1216,24 @@ export class ComputeClusterService {
 
     public static startupItems(nodeId: string, signal?: AbortSignal): Promise<ComputeStartupList> {
         return request(`/nodes/${encodeURIComponent(nodeId)}/agentos/startup`, signal);
+    }
+
+    public static performanceSnapshot(
+        nodeId: string,
+        signal?: AbortSignal,
+    ): Promise<ComputePerformanceSnapshot> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/agentos/performance/snapshot`, signal);
+    }
+
+    public static performanceDiagnosis(
+        nodeId: string,
+        windowSeconds = 300,
+        signal?: AbortSignal,
+    ): Promise<ComputePerformanceDiagnosis> {
+        return request(
+            `/nodes/${encodeURIComponent(nodeId)}/agentos/performance/diagnose?window_seconds=${windowSeconds}`,
+            signal,
+        );
     }
 
     public static createStartupAuthorization(

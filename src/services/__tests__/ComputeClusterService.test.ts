@@ -169,6 +169,36 @@ describe('ComputeClusterService filesystem authorization', () => {
     });
 });
 
+describe('ComputeClusterService performance evidence', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+        global.fetch = originalFetch;
+        jest.restoreAllMocks();
+    });
+
+    it('uses the node-scoped snapshot and bounded diagnosis routes', async () => {
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({}),
+        } as Response);
+
+        await ComputeClusterService.performanceSnapshot('node/1');
+        await ComputeClusterService.performanceDiagnosis('node/1', 300);
+
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            1,
+            expect.stringMatching(/\/nodes\/node%2F1\/agentos\/performance\/snapshot$/),
+            expect.objectContaining({signal: undefined}),
+        );
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            2,
+            expect.stringMatching(/\/nodes\/node%2F1\/agentos\/performance\/diagnose\?window_seconds=300$/),
+            expect.objectContaining({signal: undefined}),
+        );
+    });
+});
+
 describe('ComputeClusterService remote camera management', () => {
     const originalFetch = global.fetch;
 

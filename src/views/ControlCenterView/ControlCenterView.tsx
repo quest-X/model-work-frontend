@@ -43,6 +43,7 @@ import {ComputeFilePanel} from './ComputeFilePanel';
 import {StorageAnalysisPanel} from './StorageAnalysisPanel';
 import {DuplicateAnalysisPanel} from './DuplicateAnalysisPanel';
 import {StartupItemsPanel} from './StartupItemsPanel';
+import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
@@ -74,7 +75,7 @@ type NodeGrouping = 'none' | 'region' | 'platform';
 type NodeOrdering = 'status' | 'activity' | 'name';
 type NodeVisibility = 'all' | 'normal' | 'fault';
 type OverviewView = 'map' | 'graph';
-type MonitorView = 'performance' | 'processes' | 'startup' | 'tasks' | 'conversations';
+type MonitorView = 'performance' | 'diagnostics' | 'processes' | 'startup' | 'tasks' | 'conversations';
 type ProcessSortKey = 'name' | 'pid' | 'cpu' | 'memory' | 'state';
 type TaskSortKey = 'task' | 'device' | 'state' | 'updated';
 type SortDirection = 'asc' | 'desc';
@@ -2111,6 +2112,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <nav className='ControlMonitorNav' aria-label={zh ? '资源监视器导航' : 'Resource monitor navigation'}>
                         {([
                             ['performance', zh ? '性能' : 'Performance'],
+                            ['diagnostics', zh ? '诊断' : 'Diagnostics'],
                             ['processes', zh ? '进程' : 'Processes'],
                             ['tasks', zh ? '任务' : 'Tasks'],
                             ['conversations', zh ? '对话' : 'Conversations'],
@@ -2176,6 +2178,12 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 </footer>
                             </section>
                         </div>}
+
+                        {monitorView === 'diagnostics' && <PerformanceDiagnosisPanel
+                            node={selectedNode || null}
+                            zh={zh}
+                            visible
+                        />}
 
                         {monitorView === 'processes' && (runtimeInventory?.processes_available ? <section
                             className='ControlMonitorProcesses ControlMonitorInventory'
