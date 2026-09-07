@@ -1,4 +1,9 @@
 import React, {FormEvent, KeyboardEvent, useEffect, useRef, useState} from 'react';
+import {closestCenter, DndContext, DragEndEvent, PointerSensor, useSensor, useSensors} from '@dnd-kit/core';
+import {restrictToFirstScrollableAncestor, restrictToVerticalAxis} from '@dnd-kit/modifiers';
+import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} from '@dnd-kit/sortable';
+import {CSS} from '@dnd-kit/utilities';
+import {AnimatePresence, motion} from 'motion/react';
 import {createPortal} from 'react-dom';
 import {connect} from 'react-redux';
 import {Language} from '../../../data/LanguageConfig';
@@ -29,6 +34,66 @@ type ChatMessage = {
     taskId?: string;
     responseId?: string;
     authorizationId?: string;
+};
+
+type QueuedMessage = {
+    id: number;
+    content: string;
+};
+
+const SortableQueuedMessage: React.FC<{
+    message: QueuedMessage;
+    reorderable: boolean;
+    previousId?: number;
+    nextId?: number;
+    zh: boolean;
+    onMove: (messageId: number, targetId: number) => void;
+    onDelete: (messageId: number) => void;
+}> = ({message, reorderable, previousId, nextId, zh, onMove, onDelete}) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition: sortableTransition,
+        isDragging,
+    } = useSortable({id: message.id, disabled: !reorderable});
+
+    return <motion.li
+        ref={setNodeRef}
+        style={{transform: CSS.Translate.toString(transform), transition: sortableTransition}}
+        initial={{height: 0, opacity: 0}}
+        animate={{height: 'auto', opacity: 1}}
+        exit={{height: 0, opacity: 0}}
+        transition={{duration: 0.18}}
+        className={`${reorderable ? 'reorderable' : ''}${isDragging ? ' dragging' : ''}`}
+        {...listeners}
+    >
+        <button
+            type='button'
+            className='reorder'
+            disabled={!reorderable}
+            title={zh ? '拖动调整顺序' : 'Drag to reorder'}
+            aria-label={zh ? `拖动调整排队任务顺序：${message.content}` : `Drag to reorder queued task: ${message.content}`}
+            {...attributes}
+            onKeyDown={event => {
+                const targetId = event.key === 'ArrowUp' ? previousId : event.key === 'ArrowDown' ? nextId : undefined;
+                if (targetId === undefined) return;
+                event.preventDefault();
+                onMove(message.id, targetId);
+            }}
+        ><svg viewBox='0 0 12 12' aria-hidden='true'><path d='M3 2v4a2 2 0 0 0 2 2h4M1.5 4.5 3 6l1.5-1.5M6 3h3M6 5h3'/></svg></button>
+        <span title={message.content}>{message.content}</span>
+        <div>
+            <button
+                type='button'
+                className='delete'
+                aria-label={zh ? `删除排队任务：${message.content}` : `Delete queued task: ${message.content}`}
+                onPointerDown={event => event.stopPropagation()}
+                onClick={() => onDelete(message.id)}
+            ><svg viewBox='0 0 12 12' aria-hidden='true'><path d='m3 3 6 6m0-6-6 6'/></svg></button>
+        </div>
+    </motion.li>;
 };
 
 type NodeOperation = 'status' | 'probe' | 'filesystem-list-desktop';
@@ -369,7 +434,8 @@ const connectivityReport = (
     const throughput = zh
         ? `当前下载：${bytesPerSecond(target.resources.network_receive_bytes_per_second, true)}\n当前上传：${bytesPerSecond(target.resources.network_send_bytes_per_second, true)}`
         : `Current receive: ${bytesPerSecond(target.resources.network_receive_bytes_per_second, false)}\nCurrent send: ${bytesPerSecond(target.resources.network_send_bytes_per_second, false)}`;
-    if (task.state !== 'succeeded' || task.result?.schema_version !== 'peer-probe.console-result.v1') {
+    if (task.state !== 'succeeded' || !task.result || !('schema_version' in task.result)
+        || task.result.schema_version !== 'peer-probe.console-result.v1') {
         if (zh) return `@${target.name} 连通测试${task.state === 'failed' ? '失败' : '仍在运行'}\n测试路径：${route}\n${throughput}\n${operationTaskIdLine(task.task_id, true)}\n${task.error ? `原因：${task.error}` : `状态：${task.state}`}`;
         return `@${target.name} connectivity test ${task.state === 'failed' ? 'failed' : 'is still running'}\nTest path: ${route}\n${throughput}\n${operationTaskIdLine(task.task_id, false)}\n${task.error ? `Reason: ${task.error}` : `Status: ${task.state}`}`;
     }
@@ -511,10 +577,6 @@ const FilesystemAuthorizationCardView: React.FC<{
             <button type='button' disabled={!pending} onClick={onReject}>{zh ? '拒绝' : 'Reject'}</button>
             <button type='button' disabled={!pending} onClick={onApprove}>{zh ? '批准并执行' : 'Approve and run'}</button>
         </div>}
-        <footer>
-            <span>{zh ? '授权编号' : 'Authorization ID'}: {authorization.authorization_id}</span>
-            <span>{zh ? '追踪编号' : 'Trace ID'}: {card.trace.id}</span>
-        </footer>
     </section>;
 };
 
@@ -542,6 +604,7 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
     const [status, setStatus] = useState<AgentChatStatus>();
     const [statusError, setStatusError] = useState('');
     const [sending, setSending] = useState(false);
+    const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
     const [sendError, setSendError] = useState('');
     const [historyOpen, setHistoryOpen] = useState(false);
     const [history, setHistory] = useState<AgentConversation[]>([]);
@@ -556,13 +619,22 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
     const [nodeOperation, setNodeOperation] = useState<NodeOperation>();
     const [activeNodeIndex, setActiveNodeIndex] = useState(0);
     const conversationIdRef = useRef<string | undefined>(undefined);
-    const queuedMessagesRef = useRef<string[]>([]);
+    const queuedMessagesRef = useRef<QueuedMessage[]>([]);
+    const nextQueuedMessageIdRef = useRef(0);
     const historyRequestRef = useRef(0);
     const authorizationBusyRef = useRef(new Set<string>());
     const authorizationFinalizedRef = useRef(new Set<string>());
     const authorizationTimersRef = useRef(new Map<string, number>());
     const endRef = useRef<HTMLDivElement>(null);
-    const panelRef = useRef<HTMLElement>(null);
+
+    const replaceQueuedMessages = (messagesToQueue: QueuedMessage[]) => {
+        queuedMessagesRef.current = messagesToQueue;
+        setQueuedMessages(messagesToQueue);
+    };
+
+    const queuedMessageSensors = useSensors(useSensor(PointerSensor, {
+        activationConstraint: {distance: 6},
+    }));
 
     useEffect(() => {
         const toggle = () => {
@@ -615,7 +687,7 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
     const reset = () => {
         historyRequestRef.current += 1;
         conversationIdRef.current = undefined;
-        queuedMessagesRef.current = [];
+        replaceQueuedMessages([]);
         setHistoryOpen(false);
         setHistoryQuery('');
         setMessages([]);
@@ -632,19 +704,11 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
         setExpanded(false);
         setMinimized(false);
     };
-    useEscapeToClose(closeWindow, open, 10);
-
-    useEffect(() => {
-        if (!open) return undefined;
-        const closeOutside = (event: MouseEvent) => {
-            const target = event.target as Node;
-            if (panelRef.current?.contains(target)) return;
-            if ((target as Element).closest?.('.AgentChatTrigger')) return;
-            closeWindow();
-        };
-        document.addEventListener('mousedown', closeOutside);
-        return () => document.removeEventListener('mousedown', closeOutside);
-    }, [open]);
+    const minimizeWindow = () => {
+        setExpanded(false);
+        setMinimized(true);
+    };
+    useEscapeToClose(minimizeWindow, open && !minimized, 10);
 
     useEffect(() => {
         if (endRef.current?.scrollIntoView) endRef.current.scrollIntoView({behavior: 'smooth'});
@@ -674,7 +738,7 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
         }).catch(error => setSendError(
             `${zh ? '操作结果已确定，但追踪状态保存失败：' : 'The operation is final, but its trace could not be saved: '}`
             + `${error instanceof Error ? error.message : String(error)}\n`
-            + `${zh ? '授权编号' : 'Authorization ID'}: ${authorizationId}\n${taskIdLine(card.trace.id, zh)}`,
+            + taskIdLine(card.trace.id, zh),
         ));
     };
 
@@ -823,7 +887,7 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
     };
 
     // eslint-disable-next-line complexity
-    const sendMessage = async (message: string, userAlreadyShown = false): Promise<void> => {
+    const sendMessage = async (message: string): Promise<void> => {
         const deviceCommand = parseNodeCommand(message, nodes);
         const allDevicesMessage = targetsAllDevices(message);
         const targetNode = deviceCommand?.node;
@@ -836,7 +900,7 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
                 ? () => runAllDevicesQuickScan(zh)
                 : undefined;
         setSendError('');
-        if (!userAlreadyShown) setMessages(current => [...current, {role: 'user', content: message}]);
+        setMessages(current => [...current, {role: 'user', content: message}]);
         let trace: AgentTraceTask | undefined;
         try {
             trace = await AgentChatService.startTrace(message);
@@ -916,8 +980,11 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
                 setSendError(`${zh ? '无法创建可溯源任务，本次请求未执行：' : 'Could not create a traceable task; the request was not run: '}${reason}`);
             }
         } finally {
-            const nextMessage = queuedMessagesRef.current.shift();
-            if (nextMessage) void sendMessage(nextMessage, true);
+            const [nextMessage, ...remainingMessages] = queuedMessagesRef.current;
+            if (nextMessage) {
+                replaceQueuedMessages(remainingMessages);
+                void sendMessage(nextMessage.content);
+            }
             else setSending(false);
         }
     };
@@ -941,14 +1008,31 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
         setDraft('');
         setSendError('');
         if (sending) {
-            queuedMessagesRef.current.push(message);
-            setMessages(current => [...current, {role: 'user', content: message}]);
+            replaceQueuedMessages([...queuedMessagesRef.current, {
+                id: ++nextQueuedMessageIdRef.current,
+                content: message,
+            }]);
             setSelectedNode(undefined);
             setNodeOperation(undefined);
             return;
         }
         setSending(true);
         void sendMessage(message);
+    };
+
+    const moveQueuedMessage = (messageId: number, targetId: number) => {
+        const fromIndex = queuedMessagesRef.current.findIndex(message => message.id === messageId);
+        const targetIndex = queuedMessagesRef.current.findIndex(message => message.id === targetId);
+        if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) return;
+        replaceQueuedMessages(arrayMove(queuedMessagesRef.current, fromIndex, targetIndex));
+    };
+
+    const finishQueuedMessageDrag = ({active, over}: DragEndEvent) => {
+        if (over) moveQueuedMessage(Number(active.id), Number(over.id));
+    };
+
+    const deleteQueuedMessage = (messageId: number) => {
+        replaceQueuedMessages(queuedMessagesRef.current.filter(message => message.id !== messageId));
     };
 
     const loadHistory = async () => {
@@ -1016,13 +1100,13 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
         && draft.trim() === `@${selectedNode.name}`;
 
     const selectNode = (node: ComputeClusterNode) => {
-        setDraft(current => current.replace(/@([^\s@]*)$/, `@${node.name}  `));
+        setDraft(current => current.replace(/@+[^\s@]*$/, `@${node.name}  `));
         setSelectedNode(node);
         setNodeOperation(undefined);
     };
 
     const selectAllDevices = () => {
-        setDraft(current => current.replace(/@([^\s@]*)$/, `${allDevicesMention}  `));
+        setDraft(current => current.replace(/@+[^\s@]*$/, `${allDevicesMention}  `));
         setSelectedNode(undefined);
         setNodeOperation(undefined);
     };
@@ -1085,7 +1169,6 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
         return groups;
     }, new Map<string, AgentConversation[]>()));
     const panel = <aside
-        ref={panelRef}
         className={`AgentSideChat${expanded ? ' expanded' : ''}${minimized ? ' minimized' : ''}`}
         role='dialog'
         aria-label={zh ? 'Agent 对话' : 'Agent chat'}
@@ -1093,7 +1176,7 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
         <header className='AgentSideChatHeader'>
             <div>
                 <div className='AgentSideChatTitleRow'>
-                    <strong>OpenSight Platform Agent</strong>
+                    <strong>OpenSight Agent</strong>
                     <button
                         type='button'
                         aria-pressed={historyOpen || expanded}
@@ -1145,10 +1228,15 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
                             setMinimized(false);
                             return;
                         }
-                        setExpanded(false);
-                        setMinimized(true);
+                        minimizeWindow();
                     }}
                 ><svg viewBox='0 0 12 12' aria-hidden='true'><path d='M3 6h6'/></svg></button>
+                <button
+                    type='button'
+                    className='AgentSideChatWindowControl close'
+                    aria-label={zh ? '关闭 Agent 对话' : 'Close Agent chat'}
+                    onClick={closeWindow}
+                ><svg viewBox='0 0 12 12' aria-hidden='true'><path d='m3 3 6 6m0-6-6 6'/></svg></button>
             </div>
         </header>
         <div className='AgentSideChatBody'>
@@ -1231,6 +1319,32 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
         {(statusError || sendError) && <div className='AgentSideChatError' role='status'>
             {statusError || sendError}
         </div>}
+        {queuedMessages.length > 0 && <section className='AgentSideChatQueue' aria-label={zh ? '排队任务' : 'Queued tasks'}>
+            <strong>{zh ? `排队任务 ${queuedMessages.length}` : `${queuedMessages.length} queued tasks`}</strong>
+            <DndContext
+                sensors={queuedMessageSensors}
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
+                onDragEnd={finishQueuedMessageDrag}
+            >
+                <SortableContext items={queuedMessages.map(message => message.id)} strategy={verticalListSortingStrategy}>
+                    <ol>
+                        <AnimatePresence initial={false}>
+                            {queuedMessages.map((message, index) => <SortableQueuedMessage
+                                key={message.id}
+                                message={message}
+                                reorderable={queuedMessages.length > 1}
+                                previousId={queuedMessages[index - 1]?.id}
+                                nextId={queuedMessages[index + 1]?.id}
+                                zh={zh}
+                                onMove={moveQueuedMessage}
+                                onDelete={deleteQueuedMessage}
+                            />)}
+                        </AnimatePresence>
+                    </ol>
+                </SortableContext>
+            </DndContext>
+        </section>}
         <form className='AgentSideChatComposer' onSubmit={send}>
             {mentionMatch && !selectedNode && <div id='AgentChatNodeSuggestions' className='AgentChatSuggestions' role='listbox' aria-label={zh ? '选择节点' : 'Choose node'}>
                 {nodes === null && !nodeError && <span>{zh ? '正在读取节点…' : 'Loading nodes…'}</span>}

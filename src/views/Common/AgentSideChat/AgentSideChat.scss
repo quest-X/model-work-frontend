@@ -432,15 +432,6 @@
     code { color: rgba(255, 255, 255, 0.86); font-family: monospace; }
   }
 
-  footer {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    color: rgba(255, 255, 255, 0.32);
-    font-family: monospace;
-    font-size: 7px;
-    overflow-wrap: anywhere;
-  }
 }
 
 .AgentAuthorizationActions {
@@ -524,6 +515,84 @@
   color: #ef9a9a;
   font-size: 9px;
   line-height: 1.45;
+}
+
+.AgentSideChatQueue {
+  display: flex;
+  max-height: 104px;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 6px 12px;
+
+  > strong { color: rgba(255, 255, 255, 0.48); font-size: 8px; line-height: 1; }
+
+  ol {
+    display: flex;
+    margin: 0;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0;
+    list-style: none;
+  }
+
+  li {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 4px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.045);
+    padding: 3px 5px;
+    overflow: hidden;
+    transition: background-color 100ms ease, opacity 100ms ease;
+
+    &.reorderable { cursor: grab; touch-action: none; user-select: none; }
+    &.dragging { cursor: grabbing; opacity: 0.6; }
+  }
+
+  li > span {
+    overflow: hidden;
+    flex: 1;
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  li > div { display: flex; flex: 0 0 auto; }
+
+  button {
+    display: grid;
+    width: 18px;
+    height: 18px;
+    place-items: center;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    padding: 0;
+    color: rgba(255, 255, 255, 0.48);
+    font: inherit;
+    font-size: 10px;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible { background: rgba(255, 255, 255, 0.08); outline: 0; color: white; }
+    &:disabled { cursor: default; opacity: 0.2; }
+    &.reorder { color: rgba(255, 255, 255, 0.58); cursor: inherit; }
+    &.delete { color: #ff5f57; }
+
+    svg {
+      width: 10px;
+      height: 10px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+  }
 }
 
 .AgentSideChatComposer {
@@ -626,7 +695,7 @@
     &:focus-visible,
     &.active { background: rgba(255, 255, 255, 0.08); outline: none; }
     &:disabled { cursor: default; opacity: 0.35; }
-    span { color: #d56565; font-size: 8px; }
+    span { color: #e7a640; font-size: 8px; }
     span.online { color: #79d89e; }
   }
 

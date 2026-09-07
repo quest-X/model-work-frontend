@@ -1,6 +1,6 @@
 import React from 'react';
 import {TextEncoder as NodeTextEncoder} from 'util';
-import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {Language} from '../../../../data/LanguageConfig';
 import {AgentChatService} from '../../../../services/AgentChatService';
 import * as ApprovalIdentity from '../../../../services/ApprovalIdentityService';
@@ -105,6 +105,7 @@ describe('AgentSideChat', () => {
 
     beforeAll(() => {
         Object.defineProperty(globalThis, 'TextEncoder', {configurable: true, value: NodeTextEncoder});
+        Object.defineProperty(window, 'scrollTo', {configurable: true, value: jest.fn()});
     });
 
     beforeEach(() => {
@@ -160,7 +161,7 @@ describe('AgentSideChat', () => {
         expect(dialog).not.toHaveClass('expanded');
         expect(await screen.findByText(/Qwen3-Coder · 正常/)).toBeInTheDocument();
         expect(Array.from(dialog.querySelectorAll('.AgentSideChatWindowControl')).map(button => button.getAttribute('aria-label')))
-            .toEqual(['扩大 Agent 对话', '最小化 Agent 对话']);
+            .toEqual(['扩大 Agent 对话', '最小化 Agent 对话', '关闭 Agent 对话']);
         expect(screen.getByRole('button', {name: '扩大 Agent 对话'})).toHaveTextContent('↗');
 
         fireEvent.click(screen.getByRole('button', {name: '最小化 Agent 对话'}));
@@ -221,15 +222,20 @@ describe('AgentSideChat', () => {
             {error: 'LLM unavailable'},
         ));
 
-        expect(screen.queryByRole('button', {name: '关闭 Agent 对话'})).not.toBeInTheDocument();
+        fireEvent.mouseDown(document.body);
+        expect(screen.getByRole('dialog', {name: 'Agent 对话'})).toBeInTheDocument();
+        expect(screen.getByText(/当前有 2 个运行任务。/)).toBeInTheDocument();
         fireEvent.keyDown(window, {key: 'Escape'});
+        expect(screen.getByRole('dialog', {name: 'Agent 对话'})).toHaveClass('minimized');
+        expect(screen.getByText(/当前有 2 个运行任务。/)).toBeInTheDocument();
+        expect(document.body).toHaveClass('AgentChatOpen');
+        fireEvent.click(screen.getByRole('button', {name: '恢复 Agent 小窗'}));
+        fireEvent.click(screen.getByRole('button', {name: '关闭 Agent 对话'}));
         expect(screen.queryByRole('dialog', {name: 'Agent 对话'})).not.toBeInTheDocument();
         expect(document.body).not.toHaveClass('AgentChatOpen');
         act(() => window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)));
         expect(await screen.findByText('有什么需要处理？')).toBeInTheDocument();
         expect(screen.queryByText(/当前有 2 个运行任务。/)).not.toBeInTheDocument();
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('dialog', {name: 'Agent 对话'})).not.toBeInTheDocument();
         embeddedHost.remove();
     });
 
@@ -247,7 +253,7 @@ describe('AgentSideChat', () => {
         expect(await screen.findByText('Qwen3-Coder · Fault')).toBeInTheDocument();
     });
 
-    it('queues messages while a request is running and sends them in order', async () => {
+    it('shows queued messages, lets the user drag-reorder and delete them, then sends the next in order', async () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([]);
         jest.spyOn(AgentChatService, 'status').mockResolvedValue({
             status: 'ready',
@@ -262,7 +268,7 @@ describe('AgentSideChat', () => {
             }))
             .mockResolvedValueOnce({
                 conversation_id: 'conversation-1',
-                message: '第二条完成',
+                message: '第三条完成',
                 model: 'Qwen3-Coder',
                 degraded: false,
             });
@@ -278,8 +284,21 @@ describe('AgentSideChat', () => {
         const queue = screen.getByRole('button', {name: '排队'});
         expect(queue).toBeEnabled();
         fireEvent.click(queue);
-        expect(screen.getByText('第二条')).toBeInTheDocument();
+        fireEvent.change(composer, {target: {value: '第三条'}});
+        fireEvent.click(screen.getByRole('button', {name: '排队'}));
+
+        const queued = screen.getByRole('region', {name: '排队任务'});
+        expect(within(queued).getByText('排队任务 2')).toBeInTheDocument();
+        expect(within(queued).getByText('第二条')).toBeInTheDocument();
+        expect(within(queued).getByText('第三条')).toBeInTheDocument();
+        expect(document.querySelectorAll('.AgentSideChatMessage.user')).toHaveLength(1);
         expect(sendRequest).toHaveBeenCalledTimes(1);
+        const thirdHandle = screen.getByRole('button', {name: '拖动调整排队任务顺序：第三条'});
+        fireEvent.keyDown(thirdHandle, {key: 'ArrowUp'});
+        expect(within(queued).getAllByRole('listitem').map(item => item.querySelector('span')?.textContent))
+            .toEqual(['第三条', '第二条']);
+        fireEvent.click(screen.getByRole('button', {name: '删除排队任务：第二条'}));
+        await waitFor(() => expect(within(queued).queryByText('第二条')).not.toBeInTheDocument());
 
         await act(async () => finishFirst({
             conversation_id: 'conversation-1',
@@ -289,8 +308,9 @@ describe('AgentSideChat', () => {
         }));
         expect(await screen.findByText(/第一条完成/)).toBeInTheDocument();
         await waitFor(() => expect(sendRequest).toHaveBeenCalledTimes(2));
-        expect(sendRequest).toHaveBeenLastCalledWith('第二条', 'conversation-1', 'trace-2');
-        expect(await screen.findByText(/第二条完成/)).toBeInTheDocument();
+        expect(sendRequest).toHaveBeenLastCalledWith('第三条', 'conversation-1', 'trace-2');
+        expect(await screen.findByText(/第三条完成/)).toBeInTheDocument();
+        expect(screen.queryByRole('region', {name: '排队任务'})).not.toBeInTheDocument();
         expect(screen.getByRole('button', {name: '发送'})).toBeDisabled();
     });
 
@@ -436,6 +456,10 @@ describe('AgentSideChat', () => {
 
         act(() => window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)));
         const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
+        fireEvent.change(composer, {target: {value: '@@'}});
+        fireEvent.click(await screen.findByRole('option', {name: /baoxin-166-windows/}));
+        expect(composer).toHaveValue('@baoxin-166-windows  ');
+
         fireEvent.change(composer, {target: {value: '@'}});
         const allDevicesOption = await screen.findByRole('option', {name: '@全部节点'});
         const nodeOption = await screen.findByRole('option', {name: /baoxin-166-windows/});
@@ -664,12 +688,12 @@ describe('AgentSideChat', () => {
         expect(send.mock.calls[0][0]).toContain('"disk_free_bytes":1024');
     });
 
-    it('dispatches the global OpenSight Platform Agent trigger', () => {
+    it('dispatches the global OpenSight Agent trigger', () => {
         const toggled = jest.fn();
         window.addEventListener(AGENT_CHAT_TOGGLE_EVENT, toggled);
         render(<AgentChatTrigger language={Language.CHINESE}/>);
 
-        fireEvent.click(screen.getByRole('button', {name: '打开 OpenSight Platform Agent'}));
+        fireEvent.click(screen.getByRole('button', {name: '打开 OpenSight Agent'}));
 
         expect(toggled).toHaveBeenCalledTimes(1);
         window.removeEventListener(AGENT_CHAT_TOGGLE_EVENT, toggled);
@@ -755,8 +779,9 @@ describe('AgentSideChat', () => {
         expect(card).toHaveTextContent('baoxin-166-windows');
         expect(card).toHaveTextContent('C:\\Users\\Public\\Desktop');
         expect(card).toHaveTextContent('{"limit":200}');
-        expect(card).toHaveTextContent('authorization-1');
-        expect(card).toHaveTextContent('trace-1');
+        expect(card).not.toHaveTextContent('authorization-1');
+        expect(card).not.toHaveTextContent('trace-1');
+        expect(screen.getByText('任务编号：trace-1')).toHaveClass('AgentSideChatTaskId');
         expect(create).toHaveBeenCalledWith('node-166', expect.objectContaining({
             operation: 'filesystem.list',
             target: {kind: 'known_folder', id: 'public_desktop'},
@@ -886,8 +911,9 @@ describe('AgentSideChat', () => {
         expect(await screen.findByText(state)).toBeInTheDocument();
         expect(screen.getByText(message)).toBeInTheDocument();
         const card = screen.getByRole('region', {name: '节点操作授权'});
-        expect(card).toHaveTextContent('authorization-1');
-        expect(card).toHaveTextContent('trace-1');
+        expect(card).not.toHaveTextContent('authorization-1');
+        expect(card).not.toHaveTextContent('trace-1');
+        expect(screen.getByText('任务编号：trace-1')).toHaveClass('AgentSideChatTaskId');
         await waitFor(() => expect(AgentChatService.finishTrace).toHaveBeenCalledWith(
             expect.objectContaining({id: 'trace-1'}),
             'failed',
