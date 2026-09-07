@@ -43,9 +43,9 @@ const POSIX_COMMANDS = [
     'ip', 'ls', 'mkdir', 'mv', 'ping', 'ps', 'pwd', 'tail', 'top', 'uname', 'whoami',
 ];
 
-export const completeTerminalCommand = (value: string, platform: string, output: string): string => {
+export const terminalCompletionCandidates = (value: string, platform: string, output: string): string[] => {
     const token = value.match(/[^\s]+$/)?.[0] || '';
-    if (!token) return value;
+    if (!token) return [];
     const tokenStart = value.length - token.length;
     const separator = Math.max(token.lastIndexOf('/'), token.lastIndexOf('\\'));
     const prefix = token.slice(separator + 1);
@@ -54,16 +54,13 @@ export const completeTerminalCommand = (value: string, platform: string, output:
     const candidates = tokenStart === 0
         ? (windows ? WINDOWS_COMMANDS : POSIX_COMMANDS)
         : Array.from(new Set(output.match(/[A-Za-z0-9\u4e00-\u9fff_.-]{2,}/g) || []));
-    const matches = candidates.filter(candidate => normalize(candidate).startsWith(normalize(prefix)));
-    if (!matches.length) return value;
-    const completion = matches.slice(1).reduce((common, candidate) => {
-        let length = 0;
-        while (length < common.length && normalize(common[length]) === normalize(candidate[length])) length += 1;
-        return common.slice(0, length);
-    }, matches[0]);
-    if (completion.length <= prefix.length) return value;
-    return `${value.slice(0, tokenStart)}${token.slice(0, separator + 1)}${completion}`;
+    return candidates
+        .filter(candidate => normalize(candidate).startsWith(normalize(prefix)))
+        .map(candidate => `${value.slice(0, tokenStart)}${token.slice(0, separator + 1)}${candidate}`);
 };
+
+export const completeTerminalCommand = (value: string, platform: string, output: string): string =>
+    terminalCompletionCandidates(value, platform, output)[0] || value;
 
 // The terminal surface intentionally owns one bounded connection lifecycle.
 // eslint-disable-next-line complexity
@@ -92,6 +89,11 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
     const startedHereRef = useRef(false);
     const initialCommandSessionRef = useRef('');
     const active = Boolean(session && ['connecting', 'running'].includes(session.state));
+    const passwordPrompt = /(?:password|密码)[^:\n]*:\s*$/i.test(output);
+    const completedCommand = passwordPrompt ? command : completeTerminalCommand(
+        command, targets.find(target => target.node_id === selectedNode)?.platform || '', output,
+    );
+    const completionHint = completedCommand === command ? '' : completedCommand;
 
     const refreshTargets = useCallback(async (signal?: AbortSignal) => {
         try {
@@ -293,24 +295,24 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
                 : 'Choose a normal node. Fault nodes become available after returning to normal.'))}</pre>
         <form className='ComputeTerminalInput' onSubmit={event => void send(event)}>
             <span aria-hidden='true'>$</span>
-            <input
-                type={/(?:password|密码)[^:\n]*:\s*$/i.test(output) ? 'password' : 'text'}
-                aria-label={zh ? '终端指令' : 'Terminal command'}
-                value={command}
-                disabled={!session || session.state !== 'running' || busy}
-                autoComplete='off'
-                spellCheck={false}
-                placeholder={zh ? '输入指令；Tab 补全，Enter 执行' : 'Type a command; Tab completes, Enter runs'}
-                onChange={event => setCommand(event.target.value)}
-                onKeyDown={event => {
-                    if (event.key !== 'Tab' || /(?:password|密码)[^:\n]*:\s*$/i.test(output)) return;
-                    const platform = targets.find(target => target.node_id === selectedNode)?.platform || '';
-                    const completed = completeTerminalCommand(command, platform, output);
-                    if (completed === command) return;
-                    event.preventDefault();
-                    setCommand(completed);
-                }}
-            />
+            <div className='ComputeTerminalInputField'>
+                {completionHint && <span aria-hidden='true'><i>{command}</i>{completionHint.slice(command.length)}</span>}
+                <input
+                    type={passwordPrompt ? 'password' : 'text'}
+                    aria-label={zh ? '终端指令' : 'Terminal command'}
+                    value={command}
+                    disabled={!session || session.state !== 'running' || busy}
+                    autoComplete='off'
+                    spellCheck={false}
+                    placeholder={zh ? '输入指令；Tab 补全，Enter 执行' : 'Type a command; Tab completes, Enter runs'}
+                    onChange={event => setCommand(event.target.value)}
+                    onKeyDown={event => {
+                        if (event.key !== 'Tab' || !completionHint) return;
+                        event.preventDefault();
+                        setCommand(completionHint);
+                    }}
+                />
+            </div>
             <button type='submit' disabled={!session || session.state !== 'running' || !command.trim() || busy}>{zh ? '发送' : 'Send'}</button>
         </form>
         <small className='ComputeTerminalBoundary'>{zh
