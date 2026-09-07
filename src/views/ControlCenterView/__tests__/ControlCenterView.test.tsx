@@ -5,6 +5,7 @@ import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {
     ComputeClusterNode,
     ComputeClusterService,
+    ComputeGroupDetail,
     ComputeResourceGraph,
 } from '../../../services/ComputeClusterService';
 import {AgentChatService} from '../../../services/AgentChatService';
@@ -155,6 +156,7 @@ describe('ControlCenterView', () => {
             group_count: 0,
             groups: [],
         });
+        jest.spyOn(ComputeClusterService, 'group').mockRejectedValue(new Error('field group not found'));
         jest.spyOn(ComputeClusterService, 'runtime').mockImplementation(() => new Promise(() => undefined));
         jest.spyOn(ComputeClusterService, 'runtimeInventory').mockImplementation(() => new Promise(() => undefined));
         jest.spyOn(ComputeClusterService, 'runtimeEvents').mockImplementation(() => new Promise(() => undefined));
@@ -1337,6 +1339,26 @@ describe('ControlCenterView', () => {
                 credential_types: ['owner_identity'],
             }],
         });
+        const fieldGroupDetail: ComputeGroupDetail = {
+            schema_version: 'field-group-snapshot.v1',
+            reporting_installation_id: '00000000-0000-4000-8000-000000000250',
+            group: {group_id: 'group-1', group_name: 'factory-a', scope: 'local'},
+            members: [{
+                installation_id: '00000000-0000-4000-8000-000000000250',
+                name: 'main-250',
+                role: 'main',
+                labels: {},
+            }, {
+                installation_id: onlineNode.installation_id,
+                name: onlineNode.name,
+                role: 'node',
+                labels: {},
+            }],
+            captured_at: 3,
+        };
+        jest.mocked(ComputeClusterService.group)
+            .mockResolvedValueOnce(fieldGroupDetail)
+            .mockResolvedValueOnce(fieldGroupDetail);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         await screen.findByRole('heading', {name: '在线节点'});
@@ -1352,25 +1374,23 @@ describe('ControlCenterView', () => {
 
         fireEvent.click(within(list).getByRole('button', {name: /中央控制群/}));
         const members = screen.getByRole('dialog', {name: /群成员/});
-        expect(within(members).getByText('成员身份：中央控制端（Master）')).toBeInTheDocument();
-        expect(within(members).getByText(/当前安装暂时无法查询此群的成员/)).toBeInTheDocument();
+        expect(await within(members).findByText(/群成员查询失败/)).toBeInTheDocument();
         expect(within(members).queryByText('在线节点')).not.toBeInTheDocument();
         fireEvent.keyDown(members, {key: 'Escape', code: 'Escape', keyCode: 27});
 
         fireEvent.click(await within(list).findByRole('button', {name: /factory-a/}));
         const localMembers = await screen.findByRole('dialog', {name: '群成员'});
-        expect(within(localMembers).getByText('在线节点')).toBeInTheDocument();
-        expect(within(localMembers).getByText('本机')).toBeInTheDocument();
+        expect(await within(localMembers).findByText('在线节点')).toBeInTheDocument();
+        expect(within(localMembers).getByText('群控制端')).toBeInTheDocument();
         expect(within(localMembers).getByText('成员身份：计算节点（Node）')).toBeInTheDocument();
         expect(within(localMembers).getByText('成员身份：主控制端（Main）')).toBeInTheDocument();
-        expect(within(localMembers).getByText('成员状态：已启用')).toBeInTheDocument();
         expect(within(localMembers).getAllByText('操作权限：暂不可查询')).toHaveLength(2);
         expect(within(localMembers).getAllByRole('region').map(region => region.getAttribute('aria-label')))
-            .toEqual(['Master', 'Main', 'Node']);
+            .toEqual(['Main', 'Node']);
         expect(within(within(localMembers).getByRole('region', {name: 'Main'})).getByText('main-250')).toBeInTheDocument();
         expect(within(within(localMembers).getByRole('region', {name: 'Main'})).queryByText('在线节点')).not.toBeInTheDocument();
         expect(within(within(localMembers).getByRole('region', {name: 'Node'})).getByText('在线节点')).toBeInTheDocument();
-        fireEvent.click(within(localMembers).getByRole('button', {name: /在线节点/}));
-        expect(await screen.findByRole('heading', {name: '在线节点'})).toBeInTheDocument();
+        expect(ComputeClusterService.group).toHaveBeenNthCalledWith(1, 'central-group', expect.any(AbortSignal));
+        expect(ComputeClusterService.group).toHaveBeenNthCalledWith(2, 'group-1', expect.any(AbortSignal));
     });
 });

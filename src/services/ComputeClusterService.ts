@@ -270,6 +270,25 @@ export type ComputeGroupMemberships = {
     groups: ComputeGroupMembership[];
 };
 
+export type ComputeGroupMember = {
+    installation_id: string;
+    name: string;
+    role: 'main' | 'node';
+    labels: Record<string, string>;
+};
+
+export type ComputeGroupDetail = {
+    schema_version: 'field-group-snapshot.v1';
+    reporting_installation_id: string;
+    group: {
+        group_id: string;
+        group_name: string;
+        scope: 'local';
+    };
+    members: ComputeGroupMember[];
+    captured_at: number;
+};
+
 export type ComputeFilesystemOperation = 'filesystem.stat' | 'filesystem.list';
 
 export type ComputeFilesystemTarget = {
@@ -829,6 +848,10 @@ export class ComputeClusterService {
 
     public static groups(signal?: AbortSignal): Promise<ComputeGroupMemberships> {
         return request('/groups', signal);
+    }
+
+    public static group(groupId: string, signal?: AbortSignal): Promise<ComputeGroupDetail> {
+        return request(`/groups/${encodeURIComponent(groupId)}`, signal);
     }
 
     public static runtime(nodeId: string, signal?: AbortSignal): Promise<ComputeRuntimeSnapshot> {

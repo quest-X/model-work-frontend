@@ -7,6 +7,7 @@ import {PopupWindowType} from '../../data/enums/PopupWindowType';
 import {updateActivePopupType} from '../../store/general/actionCreators';
 import {
     ComputeClusterNode,
+    ComputeGroupDetail,
     ComputeGroupMembership,
     ComputeLanAsset,
     ComputeManagedDevice,
@@ -371,6 +372,8 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [nodes, setNodes] = useState<ComputeClusterNode[]>([]);
     const [groupMemberships, setGroupMemberships] = useState<ComputeGroupMembership[]>([]);
     const [selectedGroupId, setSelectedGroupId] = useState('');
+    const [selectedGroupDetail, setSelectedGroupDetail] = useState<ComputeGroupDetail | null>(null);
+    const [groupDetailError, setGroupDetailError] = useState<{groupId: string; message: string} | null>(null);
     const [lanAssets, setLanAssets] = useState<ComputeLanAsset[]>([]);
     const [resourceGraph, setResourceGraph] = useState<ComputeResourceGraph | null>(null);
     const [selectedNodeId, setSelectedNodeId] = useState('');
@@ -515,6 +518,29 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [refresh]);
 
     useEffect(() => {
+        if (!selectedGroupId) return undefined;
+        const controller = new AbortController();
+        void ComputeClusterService.group(selectedGroupId, controller.signal).then(detail => {
+            if (controller.signal.aborted) return;
+            if (detail.group.group_id !== selectedGroupId) {
+                setGroupDetailError({
+                    groupId: selectedGroupId,
+                    message: zh ? '现场群详情与所选群不一致' : 'Field group detail does not match the selection',
+                });
+                return;
+            }
+            setSelectedGroupDetail(detail);
+            setGroupDetailError(null);
+        }, reason => {
+            if (!controller.signal.aborted) setGroupDetailError({
+                groupId: selectedGroupId,
+                message: reason instanceof Error ? reason.message : String(reason),
+            });
+        });
+        return () => controller.abort();
+    }, [selectedGroupId, zh]);
+
+    useEffect(() => {
         const refreshDevices = () => void refresh();
         window.addEventListener('opensight:edge-device-updated', refreshDevices);
         window.addEventListener('opensight:camera-resource-updated', refreshDevices);
@@ -603,12 +629,12 @@ export const ControlCenterView: React.FC<IProps> = ({
         }] : [];
     const currentGroupTone: Tone = currentGroup?.state === 'available' ? 'healthy' : 'offline';
     const selectedGroup = visibleGroups.find(group => group.group_id === selectedGroupId);
-    // Membership scope is derived from the signed owner identity/trust role.
-    const groupControllerRole = selectedGroup?.owner_name
-        && selectedGroup.credential_types.some(type => type === 'owner_identity' || type === 'owner_trust')
-        ? selectedGroup.scope === 'central' ? 'Master' : 'Main'
+    const groupDetail = selectedGroupDetail?.group.group_id === selectedGroup?.group_id
+        ? selectedGroupDetail
         : null;
-    const groupMembersAvailable = selectedGroup?.group_id === resourceGraph?.group_id && !error && !graphError;
+    const selectedGroupError = groupDetailError && groupDetailError.groupId === selectedGroup?.group_id
+        ? groupDetailError.message
+        : '';
     const normalCount = nodes.filter(node => machineTone(node) === 'healthy').length;
     const overviewTone = communicationTone(aggregateCommunicationStates(nodes.map(computeNodeState)));
     const terminalAvailable = Boolean(selectedNode?.online && selectedNode.network.ssh_available);
@@ -1604,7 +1630,11 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     className='ControlServiceCard'
                                     key={group.group_id}
                                     aria-pressed={selectedGroupId === group.group_id}
-                                    onClick={() => setSelectedGroupId(group.group_id)}
+                                    onClick={() => {
+                                        setSelectedGroupDetail(null);
+                                        setGroupDetailError(null);
+                                        setSelectedGroupId(group.group_id);
+                                    }}
                                 >
                                     <span className={`ControlStatusDot ${currentGroupTone}`} aria-hidden='true'/>
                                     <div>
@@ -1635,70 +1665,48 @@ export const ControlCenterView: React.FC<IProps> = ({
                         <DialogContent sx={{pt: '24px !important'}}>
                             <h2 id='group-members-summary' className='ControlGroupSummary'>
                                 {selectedGroup?.group_name || selectedGroup?.group_id}{zh ? ' 群，' : ' group, '}
-                                {groupMembersAvailable
-                                    ? (zh ? `${nodes.length + Number(Boolean(groupControllerRole))} 名成员`
-                                        : `${nodes.length + Number(Boolean(groupControllerRole))} members`)
-                                    : (zh ? '成员数量暂不可查询' : 'member count unavailable')}
+                                {groupDetail
+                                    ? (zh ? `${groupDetail.members.length} 名成员` : `${groupDetail.members.length} members`)
+                                    : selectedGroupError
+                                        ? (zh ? '成员查询失败' : 'member query failed')
+                                        : (zh ? '正在查询成员' : 'loading members')}
                             </h2>
-                            {/* Role sections retain bilingual labels and unavailable-member fallbacks. */}
-                            {['Master', 'Main', 'Node'].map(role => { // eslint-disable-line complexity
-                                const members = groupMembersAvailable ? nodes.filter(member =>
-                                    role === 'Main' ? member.role === 'main' : role === 'Node' && member.role !== 'main') : [];
-                                const hasController = groupControllerRole === role;
-                                const count = members.length + Number(hasController);
+                            {['Main', 'Node'].map(role => {
+                                const members = groupDetail?.members.filter(member =>
+                                    member.role === role.toLowerCase()) || [];
                                 return <section className='ControlGroupRoleSection' key={role} aria-label={role}>
-                                    <h3>{role} <span>{groupMembersAvailable ? count : (hasController ? '1+' : '—')}</span></h3>
+                                    <h3>{role} <span>{groupDetail ? members.length : '—'}</span></h3>
                                     <div className='ControlServiceGrid'>
-                            {hasController &&
-                                <article className='ControlServiceCard'>
+                                {members.map(member => <article
+                                    className='ControlServiceCard'
+                                    key={member.installation_id}
+                                >
                                     <div>
-                                        <span>{zh ? '群控制端' : 'Group controller'} · {groupControllerRole}</span>
+                                        <span>{member.role === 'main'
+                                            ? (zh ? '主控制端' : 'Group controller')
+                                            : (zh ? '计算节点' : 'Compute node')}</span>
                                         <div className='ControlGroupMemberName'>
-                                            <strong>{selectedGroup?.owner_name}</strong>
-                                            {selectedGroup?.relationship === 'owner' && <span className='ControlGroupLocalBadge'>{zh ? '本机' : 'This machine'}</span>}
+                                            <strong>{member.name}</strong>
+                                            {member.installation_id === groupDetail?.reporting_installation_id
+                                                && <span className='ControlGroupLocalBadge'>{zh ? '群控制端' : 'Controller'}</span>}
                                         </div>
-                                        <small>{zh ? '成员身份：' : 'Role: '}{groupControllerRole === 'Master'
-                                            ? (zh ? '中央控制端（Master）' : 'Central controller (Master)')
-                                            : (zh ? '主控制端（Main）' : 'Group controller (Main)')}</small>
-                                        <small>{zh ? '群内身份：群主' : 'Membership: owner'}</small>
+                                        <small>{zh ? '成员身份：' : 'Role: '}{member.role === 'main'
+                                            ? (zh ? '主控制端（Main）' : 'Group controller (Main)')
+                                            : (zh ? '计算节点（Node）' : 'Compute node (Node)')}</small>
                                         <small>{zh ? '在线状态：未提供' : 'Online status: not provided'}</small>
                                         <small>{zh ? '操作权限：暂不可查询' : 'Permissions: unavailable'}</small>
+                                        <small>{member.installation_id}</small>
                                     </div>
-                                </article>
-                            }
-                                {members.map(member => <button
-                                    type='button'
-                                    className='ControlServiceCard'
-                                    key={member.node_id}
-                                    onClick={() => {
-                                        setSelectedGroupId('');
-                                        overviewSelected.current = false;
-                                        setSelectedNodeId(member.node_id);
-                                        setWorkspace('node');
-                                    }}
-                                >
-                                    <span className={`ControlStatusDot ${machineTone(member)}`} aria-hidden='true'/>
-                                    <div>
-                                        <span>{computeNodeLabel(member, zh)}</span>
-                                        <strong>{member.name}</strong>
-                                        <small>{zh ? '成员身份：' : 'Role: '}{member.role === 'main'
-                                            ? (zh ? '主节点（Main）' : 'Main') : (zh ? '计算节点（Node）' : 'Node')}</small>
-                                        <small>{zh ? '成员状态：' : 'Membership: '}{member.enabled
-                                            ? (zh ? '已启用' : 'Enabled') : (zh ? '已停用' : 'Disabled')}</small>
-                                        <small>{zh ? '操作权限：暂不可查询' : 'Permissions: unavailable'}</small>
-                                        {member.network.addresses.length > 0 && <small>{member.network.addresses.join(' · ')}</small>}
-                                        <small>{member.node_id}</small>
+                                </article>)}
                                     </div>
-                                </button>)}
-                                    </div>
-                                    {!count && <p className='ControlGroupRoleNotice'>{groupMembersAvailable
+                                    {!members.length && <p className='ControlGroupRoleNotice'>{groupDetail
                                         ? (zh ? `暂无 ${role} 成员` : `No ${role} members`)
                                         : (zh ? '当前无法查询' : 'Currently unavailable')}</p>}
                                 </section>;
                             })}
-                            {!groupMembersAvailable && <div className='ControlEmptyBlock'>{error || graphError || (zh
-                                ? '当前安装暂时无法查询此群的成员，请在该群的控制端查看。'
-                                : 'Members are unavailable on this installation. Open this group’s controller to view them.')}</div>}
+                            {!groupDetail && <div className='ControlEmptyBlock'>{selectedGroupError
+                                ? (zh ? `群成员查询失败：${selectedGroupError}` : `Group member query failed: ${selectedGroupError}`)
+                                : (zh ? '正在查询群成员…' : 'Loading group members…')}</div>}
                         </DialogContent>
                     </Dialog>
                 </div>}
