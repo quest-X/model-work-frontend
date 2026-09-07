@@ -6,6 +6,7 @@ import {
     ComputeClusterNode,
     ComputeClusterService,
     ComputeGroupDetail,
+    ComputeGroupResources,
     ComputeResourceGraph,
 } from '../../../services/ComputeClusterService';
 import {AgentChatService} from '../../../services/AgentChatService';
@@ -157,6 +158,7 @@ describe('ControlCenterView', () => {
             groups: [],
         });
         jest.spyOn(ComputeClusterService, 'group').mockRejectedValue(new Error('field group not found'));
+        jest.spyOn(ComputeClusterService, 'groupResources').mockRejectedValue(new Error('field resources not found'));
         jest.spyOn(ComputeClusterService, 'runtime').mockImplementation(() => new Promise(() => undefined));
         jest.spyOn(ComputeClusterService, 'runtimeInventory').mockImplementation(() => new Promise(() => undefined));
         jest.spyOn(ComputeClusterService, 'runtimeEvents').mockImplementation(() => new Promise(() => undefined));
@@ -1305,6 +1307,7 @@ describe('ControlCenterView', () => {
 
     it('shows the central group at zero and local groups from one', async () => {
         const onlineNode = node('在线节点', true);
+        const fieldNode = node('现场节点', true);
         const currentGraph = graph(onlineNode);
         currentGraph.entities.unshift({
             entity_id: 'group:group-1',
@@ -1314,6 +1317,23 @@ describe('ControlCenterView', () => {
             callable: false,
             modes: [],
         });
+        const fieldGraph = graph(fieldNode);
+        fieldGraph.entities.unshift({
+            entity_id: 'group:group-1',
+            kind: 'compute_group',
+            label: 'factory-a',
+            state: 'available',
+            callable: false,
+            modes: [],
+        });
+        const fieldGroupResources: ComputeGroupResources = {
+            schema_version: 'field-group-resource-snapshot.v1',
+            reporting_installation_id: '00000000-0000-4000-8000-000000000250',
+            group: {group_id: 'group-1', group_name: 'factory-a', scope: 'local'},
+            nodes: [fieldNode],
+            captured_at: fieldGraph.generated_at,
+            resource_graph: fieldGraph,
+        };
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([onlineNode]);
         jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(currentGraph);
         jest.mocked(ComputeClusterService.groups).mockResolvedValue({
@@ -1349,8 +1369,8 @@ describe('ControlCenterView', () => {
                 role: 'main',
                 labels: {},
             }, {
-                installation_id: onlineNode.installation_id,
-                name: onlineNode.name,
+                installation_id: fieldNode.installation_id,
+                name: fieldNode.name,
                 role: 'node',
                 labels: {},
             }],
@@ -1359,6 +1379,7 @@ describe('ControlCenterView', () => {
         jest.mocked(ComputeClusterService.group)
             .mockResolvedValueOnce(fieldGroupDetail)
             .mockResolvedValueOnce(fieldGroupDetail);
+        jest.mocked(ComputeClusterService.groupResources).mockResolvedValue(fieldGroupResources);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         await screen.findByRole('heading', {name: '在线节点'});
@@ -1376,11 +1397,12 @@ describe('ControlCenterView', () => {
         const members = screen.getByRole('dialog', {name: /群成员/});
         expect(await within(members).findByText(/群成员查询失败/)).toBeInTheDocument();
         expect(within(members).queryByText('在线节点')).not.toBeInTheDocument();
+        expect(ComputeClusterService.groupResources).not.toHaveBeenCalled();
         fireEvent.keyDown(members, {key: 'Escape', code: 'Escape', keyCode: 27});
 
         fireEvent.click(await within(list).findByRole('button', {name: /factory-a/}));
         const localMembers = await screen.findByRole('dialog', {name: '群成员'});
-        expect(await within(localMembers).findByText('在线节点')).toBeInTheDocument();
+        expect(await within(localMembers).findByText('现场节点')).toBeInTheDocument();
         expect(within(localMembers).getByText('群控制端')).toBeInTheDocument();
         expect(within(localMembers).getByText('成员身份：计算节点（Node）')).toBeInTheDocument();
         expect(within(localMembers).getByText('成员身份：主控制端（Main）')).toBeInTheDocument();
@@ -1388,9 +1410,14 @@ describe('ControlCenterView', () => {
         expect(within(localMembers).getAllByRole('region').map(region => region.getAttribute('aria-label')))
             .toEqual(['Main', 'Node']);
         expect(within(within(localMembers).getByRole('region', {name: 'Main'})).getByText('main-250')).toBeInTheDocument();
-        expect(within(within(localMembers).getByRole('region', {name: 'Main'})).queryByText('在线节点')).not.toBeInTheDocument();
-        expect(within(within(localMembers).getByRole('region', {name: 'Node'})).getByText('在线节点')).toBeInTheDocument();
+        expect(within(within(localMembers).getByRole('region', {name: 'Main'})).queryByText('现场节点')).not.toBeInTheDocument();
+        expect(within(within(localMembers).getByRole('region', {name: 'Node'})).getByText('现场节点')).toBeInTheDocument();
+        fireEvent.click(await within(localMembers).findByRole('button', {name: '在图谱中查看'}));
+        const fieldGraphPanel = await screen.findByRole('region', {name: '主节点、边缘设备与摄像头拓扑'});
+        expect(within(fieldGraphPanel).getByRole('button', {name: '查看 现场节点 节点信息'})).toBeInTheDocument();
+        expect(screen.getByText('factory-a', {selector: '.ControlToolbarGroup strong'})).toBeInTheDocument();
         expect(ComputeClusterService.group).toHaveBeenNthCalledWith(1, 'central-group', expect.any(AbortSignal));
         expect(ComputeClusterService.group).toHaveBeenNthCalledWith(2, 'group-1', expect.any(AbortSignal));
+        expect(ComputeClusterService.groupResources).toHaveBeenCalledWith('group-1', expect.any(AbortSignal));
     });
 });

@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {connect} from 'react-redux';
-import {Dialog, DialogTitle, DialogContent} from '@mui/material';
+import {Button, Dialog, DialogActions, DialogTitle, DialogContent} from '@mui/material';
 import {Language} from '../../data/LanguageConfig';
 import {Direction} from '../../data/enums/Direction';
 import {PopupWindowType} from '../../data/enums/PopupWindowType';
@@ -9,6 +9,7 @@ import {
     ComputeClusterNode,
     ComputeGroupDetail,
     ComputeGroupMembership,
+    ComputeGroupResources,
     ComputeLanAsset,
     ComputeManagedDevice,
     ComputeResourceGraph,
@@ -374,6 +375,9 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [selectedGroupId, setSelectedGroupId] = useState('');
     const [selectedGroupDetail, setSelectedGroupDetail] = useState<ComputeGroupDetail | null>(null);
     const [groupDetailError, setGroupDetailError] = useState<{groupId: string; message: string} | null>(null);
+    const [selectedGroupResources, setSelectedGroupResources] = useState<ComputeGroupResources | null>(null);
+    const [groupResourceError, setGroupResourceError] = useState<{groupId: string; message: string} | null>(null);
+    const [activeGroupResources, setActiveGroupResources] = useState<ComputeGroupResources | null>(null);
     const [lanAssets, setLanAssets] = useState<ComputeLanAsset[]>([]);
     const [resourceGraph, setResourceGraph] = useState<ComputeResourceGraph | null>(null);
     const [selectedNodeId, setSelectedNodeId] = useState('');
@@ -542,6 +546,37 @@ export const ControlCenterView: React.FC<IProps> = ({
 
     useEffect(() => {
         const refreshDevices = () => void refresh();
+    useEffect(() => {
+        if (!selectedGroupId) return undefined;
+        if (groupMemberships.find(group => group.group_id === selectedGroupId)?.scope === 'central') {
+            setSelectedGroupResources(null);
+            setGroupResourceError(null);
+            return undefined;
+        }
+        const controller = new AbortController();
+        void ComputeClusterService.groupResources(selectedGroupId, controller.signal).then(snapshot => {
+            if (controller.signal.aborted) return;
+            if (
+                snapshot.group.group_id !== selectedGroupId
+                || snapshot.resource_graph.group_id !== selectedGroupId
+            ) {
+                setGroupResourceError({
+                    groupId: selectedGroupId,
+                    message: zh ? '现场群资源与所选群不一致' : 'Field resources do not match the selection',
+                });
+                return;
+            }
+            setSelectedGroupResources(snapshot);
+            setGroupResourceError(null);
+        }, reason => {
+            if (!controller.signal.aborted) setGroupResourceError({
+                groupId: selectedGroupId,
+                message: reason instanceof Error ? reason.message : String(reason),
+            });
+        });
+        return () => controller.abort();
+    }, [groupMemberships, selectedGroupId, zh]);
+
         window.addEventListener('opensight:edge-device-updated', refreshDevices);
         window.addEventListener('opensight:camera-resource-updated', refreshDevices);
         return () => {
@@ -614,12 +649,14 @@ export const ControlCenterView: React.FC<IProps> = ({
     const runtimeInventoryCapable = Boolean(
         selectedNode?.online && selectedNode.capabilities.includes('runtime.inventory.v1'),
     );
-    const currentGroup = resourceGraph?.entities.find(entity => entity.kind === 'compute_group') || null;
+    const overviewResourceGraph = activeGroupResources?.resource_graph || resourceGraph;
+    const overviewNodes = activeGroupResources?.nodes || nodes;
+    const currentGroup = overviewResourceGraph?.entities.find(entity => entity.kind === 'compute_group') || null;
     const visibleGroups: ComputeGroupMembership[] = groupMemberships.length
         ? groupMemberships
         : currentGroup ? [{
             index: 1,
-            group_id: resourceGraph?.group_id || currentGroup.entity_id,
+            group_id: overviewResourceGraph?.group_id || currentGroup.entity_id,
             group_name: currentGroup.label,
             owner_name: null,
             relationship: 'member',
@@ -635,8 +672,14 @@ export const ControlCenterView: React.FC<IProps> = ({
     const selectedGroupError = groupDetailError && groupDetailError.groupId === selectedGroup?.group_id
         ? groupDetailError.message
         : '';
-    const normalCount = nodes.filter(node => machineTone(node) === 'healthy').length;
-    const overviewTone = communicationTone(aggregateCommunicationStates(nodes.map(computeNodeState)));
+    const selectedGroupResource = selectedGroupResources?.group.group_id === selectedGroup?.group_id
+        ? selectedGroupResources
+        : null;
+    const selectedGroupResourceError = groupResourceError && groupResourceError.groupId === selectedGroup?.group_id
+        ? groupResourceError.message
+        : '';
+    const normalCount = overviewNodes.filter(node => machineTone(node) === 'healthy').length;
+    const overviewTone = communicationTone(aggregateCommunicationStates(overviewNodes.map(computeNodeState)));
     const terminalAvailable = Boolean(selectedNode?.online && selectedNode.network.ssh_available);
     const toolbarTone: Tone | null = workspace === 'groups'
         ? visibleGroups.length ? currentGroupTone : null
@@ -646,7 +689,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 ? (terminalAvailable ? 'healthy' : 'offline')
                 : selectedNode
                     ? machineTone(selectedNode)
-                    : nodes.length ? overviewTone : null;
+                    : overviewNodes.length ? overviewTone : null;
     const refreshWarningKey = error ? `nodes:${error}` : graphError ? `graph:${graphError}` : '';
 
     useEffect(() => {
@@ -947,7 +990,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <small>{zh ? '地图 / 图谱' : 'Map / graph'}</small>
                 </span>
                 <span className={`ControlMachineState ${overviewTone}`}>
-                    {normalCount} / {nodes.length}
+                    {normalCount} / {overviewNodes.length}
                 </span>
             </button>
             {organizedNodes.map(([group, groupNodes]) => <React.Fragment key={group || 'all'}>
@@ -964,6 +1007,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                         aria-pressed={node.node_id === selectedNodeId}
                         onClick={() => {
                             overviewSelected.current = false;
+                            setActiveGroupResources(null);
                             setSelectedNodeId(node.node_id);
                             setWorkspace('node');
                         }}
@@ -1568,7 +1612,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                         ? (zh ? '网络资产' : 'Network assets')
                         : workspace === 'terminal'
                             ? (zh ? '终端连接' : 'Terminal connection')
-                            : selectedNode?.name || (overviewView === 'map'
+                            : selectedNode?.name || activeGroupResources?.group.group_name || (overviewView === 'map'
                                 ? (zh ? '边缘集群地图' : 'Edge cluster map')
                                 : (zh ? '边缘集群图谱' : 'Edge cluster graph'))}</strong>
                     {workspace === 'groups'
@@ -1583,7 +1627,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     {queriedAt && <small>{zh ? '查询于' : 'Checked'} {queriedAt.toLocaleTimeString(zh ? 'zh-CN' : 'en-US')}</small>}
                     <span>{workspace === 'groups'
                         ? `${visibleGroups.length} ${zh ? '个群' : visibleGroups.length === 1 ? 'group' : 'groups'}`
-                        : `${normalCount} / ${nodes.length} ${zh ? '正常' : 'normal'}`}</span>
+                        : `${normalCount} / ${overviewNodes.length} ${zh ? '正常' : 'normal'}`}</span>
                     {workspace === 'node' && !selectedNode
                         ? <div className='ControlOverviewViewSwitch' role='group' aria-label={zh ? '总览视角' : 'Overview view'}>
                             <button
@@ -1633,6 +1677,8 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     onClick={() => {
                                         setSelectedGroupDetail(null);
                                         setGroupDetailError(null);
+                                        setSelectedGroupResources(null);
+                                        setGroupResourceError(null);
                                         setSelectedGroupId(group.group_id);
                                     }}
                                 >
@@ -1708,6 +1754,28 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 ? (zh ? `群成员查询失败：${selectedGroupError}` : `Group member query failed: ${selectedGroupError}`)
                                 : (zh ? '正在查询群成员…' : 'Loading group members…')}</div>}
                         </DialogContent>
+                        <DialogActions sx={{px: 3, pb: 3, gap: 1}}>
+                            {selectedGroupResourceError && <span role='status'>
+                                {zh ? `资源查询失败：${selectedGroupResourceError}` : `Resource query failed: ${selectedGroupResourceError}`}
+                            </span>}
+                            <Button
+                                variant='contained'
+                                disabled={selectedGroup?.scope !== 'central' && !selectedGroupResource}
+                                onClick={() => {
+                                    if (selectedGroup?.scope !== 'central' && !selectedGroupResource) return;
+                                    setActiveGroupResources(selectedGroupResource);
+                                    setSelectedGroupId('');
+                                    setSelectedNodeId('');
+                                    overviewSelected.current = true;
+                                    setOverviewView('graph');
+                                    setWorkspace('node');
+                                }}
+                            >{selectedGroup?.scope === 'central' || selectedGroupResource
+                                    ? (zh ? '在图谱中查看' : 'View in graph')
+                                    : selectedGroupResourceError
+                                        ? (zh ? '资源图不可用' : 'Graph unavailable')
+                                        : (zh ? '正在读取资源图…' : 'Loading graph…')}</Button>
+                        </DialogActions>
                     </Dialog>
                 </div>}
                 {workspace === 'network' && <div className='ControlFeatureWorkspace'>
@@ -1732,12 +1800,12 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <strong>{zh ? '正在读取计算群' : 'Loading compute cluster'}</strong>
                     <span>{zh ? '正在获取已加入计算群的机器…' : 'Fetching enrolled machines…'}</span>
                 </div>}
-                {workspace === 'node' && !loading && !selectedNode && nodes.length === 0 && <div className='ControlCenterMessage error'>
+                {workspace === 'node' && !loading && !selectedNode && overviewNodes.length === 0 && <div className='ControlCenterMessage error'>
                     <strong>{error ? (zh ? '无法读取计算群' : 'Compute cluster unavailable') : (zh ? '暂无机器' : 'No machines')}</strong>
                     <span>{error || (zh ? '请先将机器加入计算群' : 'Enroll a machine in the compute cluster first')}</span>
                     <button type='button' onClick={() => void refresh()}>{zh ? '重试' : 'Retry'}</button>
                 </div>}
-                {workspace === 'node' && !loading && !selectedNode && nodes.length > 0 && <div className='ControlNodeContent'>
+                {workspace === 'node' && !loading && !selectedNode && overviewNodes.length > 0 && <div className='ControlNodeContent'>
                     {(error || graphError) && dismissedRefreshWarningKey !== refreshWarningKey && <div className='ControlRefreshWarning' role='status'>
                         <span>{error
                                 ? (zh ? '本次刷新失败，正在显示上一次数据：' : 'Refresh failed; showing the last snapshot: ')
@@ -1754,12 +1822,12 @@ export const ControlCenterView: React.FC<IProps> = ({
                     </div>}
                     {overviewView === 'map'
                         ? <React.Suspense fallback={<div className='ControlCenterMessage'>{zh ? '正在载入地图…' : 'Loading map…'}</div>}>
-                            <ClusterGeographicMap graph={resourceGraph} nodes={nodes} zh={zh}/>
+                            <ClusterGeographicMap graph={overviewResourceGraph} nodes={overviewNodes} zh={zh}/>
                         </React.Suspense>
-                        : resourceGraph
+                        : overviewResourceGraph
                             ? <ResourceKnowledgeGraph
-                                graph={resourceGraph}
-                                nodes={nodes}
+                                graph={overviewResourceGraph}
+                                nodes={overviewNodes}
                                 zh={zh}
                                 fitWindow
                                 onSelectWorkAgent={() => undefined}

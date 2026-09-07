@@ -289,6 +289,15 @@ export type ComputeGroupDetail = {
     captured_at: number;
 };
 
+export type ComputeGroupResources = {
+    schema_version: 'field-group-resource-snapshot.v1';
+    reporting_installation_id: string;
+    group: ComputeGroupDetail['group'];
+    nodes: ComputeClusterNode[];
+    captured_at: number;
+    resource_graph: ComputeResourceGraph;
+};
+
 export type ComputeFilesystemOperation = 'filesystem.stat' | 'filesystem.list';
 
 export type ComputeFilesystemTarget = {
@@ -852,6 +861,10 @@ export class ComputeClusterService {
 
     public static group(groupId: string, signal?: AbortSignal): Promise<ComputeGroupDetail> {
         return request(`/groups/${encodeURIComponent(groupId)}`, signal);
+    }
+
+    public static groupResources(groupId: string, signal?: AbortSignal): Promise<ComputeGroupResources> {
+        return request(`/groups/${encodeURIComponent(groupId)}/resource-graph`, signal);
     }
 
     public static runtime(nodeId: string, signal?: AbortSignal): Promise<ComputeRuntimeSnapshot> {
