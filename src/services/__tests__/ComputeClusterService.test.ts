@@ -219,6 +219,14 @@ describe('ComputeClusterService field group lifecycle', () => {
             ssh_user: 'field-user',
             control_host: 'fd7a:115c:a1e0::14',
             lan_host: null,
+            authority_subject: {
+                role: 'main' as const,
+                installation_id: '00000000-0000-4000-8000-000000000014',
+                owner_id: '00000000-0000-4000-8000-000000000114',
+                group_id: '00000000-0000-4000-8000-000000000214',
+                generation: 1,
+                public_key: 'A'.repeat(43) + '=',
+            },
         };
 
         await ComputeClusterService.admitFieldGroup(input);

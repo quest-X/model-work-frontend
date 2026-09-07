@@ -309,6 +309,14 @@ export type ComputeFieldGroupAdmissionInput = {
     ssh_user: string;
     control_host: string;
     lan_host?: string | null;
+    authority_subject: {
+        role: 'main';
+        installation_id: string;
+        owner_id: string;
+        group_id: string;
+        generation: number;
+        public_key: string;
+    };
 };
 
 export type ComputeFieldGroupAdmission = {

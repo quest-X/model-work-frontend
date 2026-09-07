@@ -90,6 +90,7 @@ type FieldGroupAdmissionDraft = {
     ssh_user: string;
     control_host: string;
     lan_host: string;
+    authority_identity: string;
 };
 
 const emptyFieldGroupAdmission: FieldGroupAdmissionDraft = {
@@ -98,6 +99,7 @@ const emptyFieldGroupAdmission: FieldGroupAdmissionDraft = {
     ssh_user: '',
     control_host: '',
     lan_host: '',
+    authority_identity: '',
 };
 const fieldGroupInputSx = {
     '& .MuiInputBase-input': {color: '#eee'},
@@ -735,12 +737,22 @@ export const ControlCenterView: React.FC<IProps> = ({
         setGroupMutationBusy(true);
         setGroupMutationMessage('');
         try {
+            const publicIdentity = JSON.parse(groupAdmissionDraft.authority_identity);
+            const installationId = groupAdmissionDraft.installation_id.trim();
             const admission = await ComputeClusterService.admitFieldGroup({
-                installation_id: groupAdmissionDraft.installation_id.trim(),
+                installation_id: installationId,
                 name: groupAdmissionDraft.name.trim(),
                 ssh_user: groupAdmissionDraft.ssh_user.trim(),
                 control_host: groupAdmissionDraft.control_host.trim(),
                 lan_host: groupAdmissionDraft.lan_host.trim() || null,
+                authority_subject: {
+                    role: 'main',
+                    installation_id: installationId,
+                    owner_id: publicIdentity.owner_id,
+                    group_id: publicIdentity.group_id,
+                    generation: publicIdentity.generation,
+                    public_key: publicIdentity.public_key,
+                },
             });
             setGroupAdmission(admission);
         } catch (reason) {
@@ -1883,8 +1895,8 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     </>
                                     : <>
                                         <p>{zh
-                                            ? '先在现场 Main 运行 model-work-node show，再填写稳定身份和 SSH 连接信息。'
-                                            : 'Run model-work-node show on the field Main, then enter its stable identity and SSH connection.'}</p>
+                                            ? '先在现场 Main 运行 model-work-node show 和 model-work-node owner show，再填写稳定身份和 SSH 连接信息。'
+                                            : 'Run model-work-node show and model-work-node owner show on the field Main, then enter its stable identity and SSH connection.'}</p>
                                         <TextField required size='small' label={zh ? 'Main 名称' : 'Main name'}
                                             sx={fieldGroupInputSx}
                                             value={groupAdmissionDraft.name}
@@ -1905,6 +1917,12 @@ export const ControlCenterView: React.FC<IProps> = ({
                                             sx={fieldGroupInputSx}
                                             value={groupAdmissionDraft.lan_host}
                                             onChange={event => setGroupAdmissionDraft(current => ({...current, lan_host: event.target.value}))}/>
+                                        <TextField required multiline minRows={3} size='small'
+                                            label={zh ? 'Main 公开身份 JSON' : 'Main public identity JSON'}
+                                            helperText={zh ? '粘贴 model-work-node owner show 的完整输出' : 'Paste the complete model-work-node owner show output'}
+                                            sx={fieldGroupInputSx}
+                                            value={groupAdmissionDraft.authority_identity}
+                                            onChange={event => setGroupAdmissionDraft(current => ({...current, authority_identity: event.target.value}))}/>
                                     </>}
                                 {groupAdmissionOpen && groupMutationMessage && <span role='alert'>{groupMutationMessage}</span>}
                             </DialogContent>

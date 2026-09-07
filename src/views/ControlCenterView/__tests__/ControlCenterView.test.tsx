@@ -1495,6 +1495,12 @@ describe('ControlCenterView', () => {
         });
         fireEvent.change(within(dialog).getByLabelText(/SSH 用户/), {target: {value: 'field-user'}});
         fireEvent.change(within(dialog).getByLabelText(/Tailscale 地址/), {target: {value: 'fd7a:115c:a1e0::14'}});
+        fireEvent.change(within(dialog).getByLabelText(/Main 公开身份 JSON/), {target: {value: JSON.stringify({
+            owner_id: '00000000-0000-4000-8000-000000000114',
+            group_id: '00000000-0000-4000-8000-000000000214',
+            generation: 1,
+            public_key: 'A'.repeat(43) + '=',
+        })}});
         fireEvent.click(within(dialog).getByRole('button', {name: '登记并生成邀请'}));
 
         expect(await screen.findByText(/model-work-node owner trust --invitation/)).toBeInTheDocument();
@@ -1505,6 +1511,14 @@ describe('ControlCenterView', () => {
             ssh_user: 'field-user',
             control_host: 'fd7a:115c:a1e0::14',
             lan_host: null,
+            authority_subject: {
+                role: 'main',
+                installation_id: '00000000-0000-4000-8000-000000000014',
+                owner_id: '00000000-0000-4000-8000-000000000114',
+                group_id: '00000000-0000-4000-8000-000000000214',
+                generation: 1,
+                public_key: 'A'.repeat(43) + '=',
+            },
         });
     });
 
