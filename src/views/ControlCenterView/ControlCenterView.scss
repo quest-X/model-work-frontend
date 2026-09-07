@@ -316,9 +316,33 @@ span.ControlMachineIcon {
 
   .ComputeKnowledgeHeading > div:first-child > span { color: #75caf9; }
   .ComputeKnowledgeStats strong { color: #9edcff; }
+  .ComputeKnowledgeStats .online strong { color: #66dda0; }
+  .ComputeKnowledgeStats .warning strong { color: $computeFaultColor; }
+  .ComputeKnowledgeStats .offline strong {
+    color: #ef8b8b;
+    text-shadow: 0 0 6px rgba(239, 139, 139, 0.4);
+  }
 }
 
 .ControlGeoMapToolbar {
+  .ControlGeoMapStatus {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    padding: 2px 0;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+
+    &:hover:not(:disabled),
+    &:focus-visible { color: rgba(255, 255, 255, 0.82); }
+    &:focus-visible { outline: 1px solid rgba(121, 204, 251, 0.75); outline-offset: 2px; }
+    &:disabled { cursor: default; opacity: 0.35; }
+  }
+
   .ControlGeoMapLevels {
     display: flex;
     align-items: center;
@@ -346,8 +370,8 @@ span.ControlMachineIcon {
     background: #5fda9a;
     box-shadow: 0 0 7px rgba(95, 218, 154, 0.52);
 
-    &.warning { background: #e7a640; box-shadow: 0 0 7px rgba(231, 166, 64, 0.48); }
-    &.offline { background: #e45c62; box-shadow: 0 0 7px rgba(228, 92, 98, 0.42); }
+    &.warning { background: $computeFaultColor; box-shadow: 0 0 7px rgba($computeFaultColor, 0.48); }
+    &.offline { background: $computeAbnormalColor; box-shadow: 0 0 7px rgba($computeAbnormalColor, 0.48); }
   }
 }
 
@@ -436,6 +460,15 @@ span.ControlMachineIcon {
     &:hover,
     &:focus-visible { background: rgba(48, 135, 181, 0.42); color: white; }
   }
+
+  svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-width: 1.8;
+  }
 }
 
 .ControlGeoMapMarker {
@@ -461,16 +494,17 @@ span.ControlMachineIcon {
   &:focus-visible circle { stroke-width: 2.5; }
 
   &.warning circle {
-    fill: #e7a640;
-    stroke: #f3c46e;
-    filter: drop-shadow(0 0 6px rgba(231, 166, 64, 0.8));
+    fill: $computeFaultColor;
+    stroke: $computeFaultColor;
+    filter: drop-shadow(0 0 6px rgba($computeFaultColor, 0.48));
   }
 
   &.offline circle {
-    fill: #df6262;
-    stroke: #ef8b8b;
-    filter: drop-shadow(0 0 6px rgba(223, 98, 98, 0.8));
+    fill: $computeAbnormalColor;
+    stroke: $computeAbnormalColor;
+    filter: drop-shadow(0 0 6px rgba($computeAbnormalColor, 0.48));
   }
+
 }
 
 .ControlCenterBody {

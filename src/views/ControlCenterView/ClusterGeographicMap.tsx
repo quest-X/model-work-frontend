@@ -10,12 +10,11 @@ import {
     ComputeResourceGraph,
     ComputeResourceGraphEntity,
     computeNodeState,
-    aggregateCommunicationStates,
 } from '../../services/ComputeClusterService';
 
 type MapLevel = 'world' | 'china' | 'province';
 type MapTransform = {x: number; y: number; scale: number};
-type MapMarkerTone = 'healthy' | 'warning';
+type MapMarkerTone = 'healthy' | 'warning' | 'offline';
 type MapStatusCounts = Record<MapMarkerTone, number>;
 type WorldProperties = {name: string};
 type ProvinceProperties = {'地名': string; name: string; id: string};
@@ -79,10 +78,14 @@ const prefectureMatches = (
 const mapNodeTone = (node: ComputeClusterNode): MapMarkerTone =>
     computeNodeState(node) === 'normal' ? 'healthy' : 'warning';
 
-const mapStatusCounts = (markerNodes: ComputeClusterNode[]): MapStatusCounts => markerNodes.reduce(
-    (counts, node) => ({...counts, [mapNodeTone(node)]: counts[mapNodeTone(node)] + 1}),
-    {healthy: 0, warning: 0},
-);
+const mapStatusCounts = (markerNodes: ComputeClusterNode[]): MapStatusCounts => {
+    const healthy = markerNodes.filter(node => mapNodeTone(node) === 'healthy').length;
+    return {
+        healthy,
+        warning: markerNodes.length - healthy,
+        offline: markerNodes.filter(node => node.communication_state === 'abnormal').length,
+    };
+};
 
 // Geographic gestures, drill-down, and cluster overlays intentionally share one local state owner.
 // eslint-disable-next-line complexity
@@ -95,6 +98,7 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph
     const svgRef = useRef<SVGSVGElement | null>(null);
     const drag = useRef<{pointerId: number; x: number; y: number; originX: number; originY: number; moved: boolean} | null>(null);
     const suppressClick = useRef(false);
+    const lastStatusTarget = useRef<{tone: MapMarkerTone; regionId: string} | null>(null);
     const nodeIndex = useMemo(() => new Map(nodes.map(node => [node.node_id, node])), [nodes]);
     const regionStats = useMemo(() => {
         const nodeEntities = graph?.entities.filter(entity => entity.kind === 'compute_node') || [];
@@ -126,23 +130,18 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph
     }, [collection, level]);
     const path = useMemo(() => geoPath(projection), [projection]);
     const statusCounts = mapStatusCounts(nodes);
-    const markerNodeCount = (markerNodes: ComputeClusterNode[]): string => {
-        const parentIds = new Set(markerNodes.map(node => node.node_id));
-        const childCount = graph?.entities.filter(entity =>
-            entity.kind === 'managed_device'
-            && entity.device_kind === 'edge_compute'
-            && Boolean(entity.node_id && parentIds.has(entity.node_id))).length || 0;
-        return `${markerNodes.length}/${childCount}`;
-    };
+    const deviceCount = graph?.entities.filter(entity => entity.kind === 'managed_device').length || 0;
+    const markerHealthRatio = (markerNodes: ComputeClusterNode[]): string =>
+        `${mapStatusCounts(markerNodes).healthy}/${markerNodes.length}`;
     const markerTone = (markerNodes: ComputeClusterNode[]): MapMarkerTone => {
-        const state = aggregateCommunicationStates(markerNodes.map(computeNodeState));
-        return state === 'normal' ? 'healthy' : 'warning';
+        const counts = mapStatusCounts(markerNodes);
+        return counts.healthy > counts.warning ? 'healthy' : 'warning';
     };
     const markerStatusLabel = (markerNodes: ComputeClusterNode[]): string => {
         const counts = mapStatusCounts(markerNodes);
         return zh
-            ? `正常 ${counts.healthy} · 故障 ${counts.warning}`
-            : `Normal ${counts.healthy} · Fault ${counts.warning}`;
+            ? `正常 ${counts.healthy} · 故障 ${counts.warning} · 异常 ${counts.offline}`
+            : `Normal ${counts.healthy} · Fault ${counts.warning} · Abnormal ${counts.offline}`;
     };
     // ponytail: The graph currently exposes province-level regions only; add country/coordinates to the API before placing non-China nodes.
     const chinaNodes = useMemo(() => [...new Map(regionStats
@@ -187,11 +186,33 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph
         setTransform(IDENTITY);
         setHoveredName('');
     };
+    const cycleStatusRegion = (tone: MapMarkerTone) => {
+        const candidates = regionStats.map(region => ({
+            region,
+            count: mapStatusCounts(region.nodes)[tone],
+        })).filter(candidate => candidate.count > 0)
+            .sort((left, right) => right.count - left.count || left.region.name.localeCompare(right.region.name));
+        if (!candidates.length) return;
+        const last = lastStatusTarget.current;
+        const continuing = level === 'province' && last?.tone === tone
+            && selectedProvince?.properties.id === last.regionId;
+        const currentIndex = continuing
+            ? candidates.findIndex(candidate => candidate.region.feature.properties.id === last.regionId)
+            : -1;
+        const next = candidates[(currentIndex + 1) % candidates.length].region;
+        lastStatusTarget.current = {tone, regionId: next.feature.properties.id};
+        openProvince(next.feature);
+    };
     const zoomAt = (factor: number, x = WIDTH / 2, y = HEIGHT / 2) => setTransform(current => {
         const scale = Math.max(1, Math.min(12, current.scale * factor));
         const ratio = scale / current.scale;
         return {scale, x: x - (x - current.x) * ratio, y: y - (y - current.y) * ratio};
     });
+    const zoomOut = () => {
+        if (transform.scale > 1) return zoomAt(1 / 1.45);
+        if (level === 'province') changeLevel('china');
+        else if (level === 'china') changeLevel('world');
+    };
     const zoomTo = (selected: MapFeature) => {
         const [[x0, y0], [x1, y1]] = path.bounds(selected);
         const scale = Math.max(1, Math.min(10, .82 / Math.max((x1 - x0) / WIDTH, (y1 - y0) / HEIGHT)));
@@ -228,7 +249,7 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph
     return <section className='ComputeKnowledgePanel ControlGeoMapPanel' aria-label={zh ? '计算群地理地图' : 'Compute cluster geographic map'}>
         <div className='ComputeKnowledgeHeading'>
             <div>
-                <span>{zh ? '地理视角 · 悬浮轮廓 / 点击下钻' : 'Geographic view · Hover outlines / click to drill down'}</span>
+                <span>{zh ? '地理视角 (悬浮轮廓 / 点击下钻)' : 'Geographic view · Hover outlines / click to drill down'}</span>
                 <h3>{level === 'world'
                     ? (zh ? '全球节点地图' : 'Global node map')
                     : level === 'china'
@@ -238,11 +259,12 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph
                     ? '滚轮缩放、拖拽移动；点击省份进入市级地图。'
                     : 'Scroll to zoom and drag to pan. Click a province to open its city map.'}</p>
             </div>
-            <div className='ComputeKnowledgeStats'>
+            <div className='ComputeKnowledgeStats map-summary'>
                 <div><strong>{graph?.summary.regions || 0}</strong><span>{zh ? '地域' : 'regions'}</span></div>
-                <div><strong>{nodes.length}</strong><span>{zh ? '主节点' : 'main nodes'}</span></div>
-                <div className='online'><strong>{statusCounts.healthy}</strong><span>{zh ? '正常' : 'Normal'}</span></div>
-                <div className='warning'><strong>{statusCounts.warning}</strong><span>{zh ? '故障' : 'Fault'}</span></div>
+                <div><strong>{deviceCount}</strong><span>{zh ? '设备总数' : 'devices'}</span></div>
+                <div className='online'><strong>{statusCounts.healthy}</strong><span>{zh ? '正常节点' : 'Normal nodes'}</span></div>
+                <div className='warning'><strong>{statusCounts.warning}</strong><span>{zh ? '故障节点' : 'Fault nodes'}</span></div>
+                <div className='offline'><strong>{statusCounts.offline}</strong><span>{zh ? '异常节点' : 'Abnormal nodes'}</span></div>
             </div>
         </div>
 
@@ -262,8 +284,15 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph
                     </button>
                 </>}
             </div>
-            <span><i className='ControlGeoMapDot online'/>{zh ? '正常节点' : 'Normal node'}</span>
-            <span><i className='ControlGeoMapDot warning'/>{zh ? '故障节点' : 'Fault node'}</span>
+            <button type='button' className='ControlGeoMapStatus' disabled={!statusCounts.healthy} onClick={() => cycleStatusRegion('healthy')}>
+                <i className='ControlGeoMapDot online'/>{zh ? '正常节点' : 'Normal node'}
+            </button>
+            <button type='button' className='ControlGeoMapStatus' disabled={!statusCounts.warning} onClick={() => cycleStatusRegion('warning')}>
+                <i className='ControlGeoMapDot warning'/>{zh ? '故障节点' : 'Fault node'}
+            </button>
+            <button type='button' className='ControlGeoMapStatus' disabled={!statusCounts.offline} onClick={() => cycleStatusRegion('offline')}>
+                <i className='ControlGeoMapDot offline'/>{zh ? '异常节点' : 'Abnormal node'}
+            </button>
             <small>{zh ? '边界数据仅用于节点位置展示' : 'Boundaries are for node location display only'}</small>
         </div>
 
@@ -286,8 +315,13 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph
             </div>
             <div className='ControlGeoMapZoom' role='group' aria-label={zh ? '地图缩放' : 'Map zoom'}>
                 <button type='button' onClick={() => zoomAt(1.45)} aria-label={zh ? '放大地图' : 'Zoom in'}>+</button>
-                <button type='button' onClick={() => zoomAt(1 / 1.45)} aria-label={zh ? '缩小地图' : 'Zoom out'}>−</button>
-                <button type='button' onClick={() => setTransform(IDENTITY)} aria-label={zh ? '重置地图' : 'Reset map'}>◎</button>
+                <button type='button' onClick={zoomOut} aria-label={zh ? '缩小地图' : 'Zoom out'}>−</button>
+                <button type='button' onClick={() => setTransform(IDENTITY)} aria-label={zh ? '重新定位地图' : 'Recenter map'}>
+                    <svg viewBox='0 0 24 24' aria-hidden='true'>
+                        <circle cx='12' cy='12' r='3'/>
+                        <path d='M12 2v4M12 18v4M2 12h4M18 12h4'/>
+                    </svg>
+                </button>
             </div>
             <svg
                 ref={svgRef}
@@ -368,7 +402,7 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph
                         onClick={() => selectFeature(china, 'China')}
                         onKeyDown={event => selectMarker(event, china, 'China')}
                     >
-                        <circle r='12'/><text y='3'>{markerNodeCount(chinaNodes)}</text>
+                        <circle r='12'/><text y='3'>{markerHealthRatio(chinaNodes)}</text>
                     </g>;
                 })() : level === 'china' ? regionStats.filter(region => region.nodes.length).map(region => {
                     return <g
@@ -382,7 +416,7 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph
                         onClick={() => selectFeature(region.feature, region.feature.properties['地名'])}
                         onKeyDown={event => selectMarker(event, region.feature, region.feature.properties['地名'])}
                     >
-                        <circle r='12'/><text y='3'>{markerNodeCount(region.nodes)}</text>
+                        <circle r='12'/><text y='3'>{markerHealthRatio(region.nodes)}</text>
                     </g>;
                 }) : prefectureStats.filter(prefecture => prefecture.nodes.length).map(prefecture => <g
                     key={prefecture.feature.properties.id}
@@ -395,7 +429,7 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph
                     onClick={() => selectFeature(prefecture.feature, prefecture.feature.properties['地名'])}
                     onKeyDown={event => selectMarker(event, prefecture.feature, prefecture.feature.properties['地名'])}
                 >
-                    <circle r='12'/><text y='3'>{markerNodeCount(prefecture.nodes)}</text>
+                    <circle r='12'/><text y='3'>{markerHealthRatio(prefecture.nodes)}</text>
                 </g>)}
             </svg>
         </div>

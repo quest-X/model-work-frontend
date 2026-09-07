@@ -10,6 +10,7 @@ import {
     ComputeResourceGraph,
 } from '../../../services/ComputeClusterService';
 import {AgentChatService} from '../../../services/AgentChatService';
+import {ClusterGeographicMap} from '../ClusterGeographicMap';
 import {ControlCenterView} from '../ControlCenterView';
 
 const originalFetch = global.fetch;
@@ -175,6 +176,31 @@ describe('ControlCenterView', () => {
         jest.restoreAllMocks();
         Object.defineProperty(global, 'fetch', {configurable: true, writable: true, value: originalFetch});
         window.localStorage.clear();
+    });
+
+    it('cycles status regions from the highest node count', () => {
+        const shanghaiA = node('上海节点 A', true);
+        const shanghaiB = node('上海节点 B', true);
+        const shandong = node('山东节点', true);
+        const regionGraph = graph(shanghaiA);
+        regionGraph.summary.regions = 2;
+        regionGraph.entities = [shanghaiA, shanghaiB, shandong].map((item, index) => ({
+            ...regionGraph.entities[1],
+            entity_id: `node:${item.node_id}`,
+            label: item.name,
+            node_id: item.node_id,
+            region_id: index < 2 ? '310000' : '370000',
+            region_name: index < 2 ? '上海市' : '山东省',
+        }));
+        render(<ClusterGeographicMap graph={regionGraph} nodes={[shanghaiA, shanghaiB, shandong]} zh/>);
+
+        const normalRegions = screen.getByRole('button', {name: '正常节点'});
+        fireEvent.click(normalRegions);
+        expect(screen.getByText('上海市地图')).toBeInTheDocument();
+        fireEvent.click(normalRegions);
+        expect(screen.getByText('山东省市级地图')).toBeInTheDocument();
+        fireEvent.click(normalRegions);
+        expect(screen.getByText('上海市地图')).toBeInTheDocument();
     });
 
     it('selects an online machine and switches the central status view', async () => {
@@ -717,8 +743,6 @@ describe('ControlCenterView', () => {
         const districtFetch = jest.fn();
         Object.defineProperty(global, 'fetch', {configurable: true, writable: true, value: districtFetch});
         const onlineNode = node('在线节点', true);
-        onlineNode.network.lan_ssh_available = false;
-        onlineNode.communication_state = 'fault';
         onlineNode.labels = {
             region: '310000',
             region_name: '上海市',
@@ -728,8 +752,6 @@ describe('ControlCenterView', () => {
             site_name: '办公室',
         };
         const backupNode = node('上海备用节点', true);
-        backupNode.network.lan_ssh_available = false;
-        backupNode.communication_state = 'fault';
         backupNode.labels = {...onlineNode.labels};
         const rizhaoNode = node('日照节点', false);
         rizhaoNode.communication_state = 'abnormal';
@@ -789,15 +811,18 @@ describe('ControlCenterView', () => {
         expect(machine).toHaveAttribute('aria-pressed', 'false');
         expect(overview).toHaveAttribute('aria-pressed', 'true');
         expect(await screen.findByRole('region', {name: '计算群地理地图'}, {timeout: 15_000})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '重新定位地图'})).toBeInTheDocument();
         expect(screen.getByText('边缘集群地图', {selector: 'strong'})).toBeInTheDocument();
+        expect(screen.getByText('地理视角 (悬浮轮廓 / 点击下钻)')).toBeInTheDocument();
         const mapStats = screen.getByRole('region', {name: '计算群地理地图'})
             .querySelector('.ComputeKnowledgeStats');
-        expect(mapStats).toHaveTextContent('3主节点');
-        expect(mapStats?.querySelector('.online')).toHaveTextContent('0正常');
-        expect(mapStats?.querySelector('.warning')).toHaveTextContent('3故障');
-        expect(mapStats?.querySelector('.offline')).not.toBeInTheDocument();
-        expect(container.querySelector('.ControlGeoMapMarker')).toHaveTextContent('3/1');
-        expect(container.querySelector('.ControlGeoMapMarker')).toHaveClass('warning');
+        expect(mapStats).toHaveClass('map-summary');
+        expect(Array.from(mapStats?.querySelectorAll(':scope > div > span') || []).map(item => item.textContent))
+            .toEqual(['地域', '设备总数', '正常节点', '故障节点', '异常节点']);
+        expect(Array.from(mapStats?.querySelectorAll(':scope > div > strong') || []).map(item => item.textContent))
+            .toEqual(['1', '1', '2', '1', '1']);
+        expect(container.querySelector('.ControlGeoMapMarker')).toHaveTextContent('2/3');
+        expect(container.querySelector('.ControlGeoMapMarker')).toHaveClass('healthy');
         expect(screen.queryByRole('heading', {name: '在线节点'})).not.toBeInTheDocument();
 
         const china = container.querySelector('[data-map-feature="China"]');
@@ -812,18 +837,27 @@ describe('ControlCenterView', () => {
         expect(setPointerCapture).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', {name: '进入中国下一级地图'}));
         expect(screen.getByText('中国节点地图')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '放大地图'}));
+        fireEvent.click(screen.getByRole('button', {name: '缩小地图'}));
+        expect(screen.getByText('中国节点地图')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '缩小地图'}));
+        expect(screen.getByText('全球节点地图')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '进入中国下一级地图'}));
         const shandong = container.querySelector('[data-map-feature="山东省"]');
         expect(shandong).toBeInTheDocument();
-        expect(screen.getByRole('button', {name: '进入上海市下一级地图'})).toHaveClass('warning');
+        expect(screen.getByRole('button', {name: '进入上海市下一级地图'})).toHaveClass('healthy');
         const shandongMarker = screen.getByRole('button', {name: '进入山东省下一级地图'});
         expect(shandongMarker).toHaveClass('warning');
         fireEvent.click(shandongMarker);
         expect(screen.getByText('山东省市级地图')).toBeInTheDocument();
-        expect(container.querySelector('[data-map-prefecture="日照市"]')).toHaveTextContent('1/0');
-        expect(screen.getByText('正常 0 · 故障 1 · 日照市')).toBeInTheDocument();
-        expect(screen.getByText('正常节点')).toBeInTheDocument();
-        expect(screen.getByText('故障节点')).toBeInTheDocument();
-        expect(screen.queryByText('异常节点')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '缩小地图'}));
+        expect(screen.getByText('中国节点地图')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '进入山东省下一级地图'}));
+        expect(container.querySelector('[data-map-prefecture="日照市"]')).toHaveTextContent('0/1');
+        expect(screen.getByText('正常 0 · 故障 1 · 异常 1 · 日照市')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '正常节点'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '故障节点'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '异常节点'})).toBeInTheDocument();
         expect(screen.queryByText('在线节点', {selector: '.ComputeKnowledgeLegend span'})).not.toBeInTheDocument();
         expect(screen.queryByText('离线节点', {selector: '.ComputeKnowledgeLegend span'})).not.toBeInTheDocument();
         const jinan = container.querySelector('[data-map-feature="济南市"]');
@@ -836,7 +870,7 @@ describe('ControlCenterView', () => {
         expect(shanghai).toBeInTheDocument();
         fireEvent.click(shanghai as Element);
         expect(screen.getByText('上海市地图')).toBeInTheDocument();
-        expect(container.querySelector('[data-map-prefecture="上海市"]')).toHaveTextContent('2/1');
+        expect(container.querySelector('[data-map-prefecture="上海市"]')).toHaveTextContent('2/2');
         expect(container.querySelector('[data-map-feature="浦东新区"]')).not.toBeInTheDocument();
 
         expect(screen.queryByRole('button', {name: '刷新机器状态'})).not.toBeInTheDocument();
@@ -844,16 +878,16 @@ describe('ControlCenterView', () => {
         const graphPanel = screen.getByRole('region', {name: '主节点、边缘设备与摄像头拓扑'});
         expect(graphPanel.querySelector('.ComputeGraphViewport')).toHaveClass('fit-window');
         const graphStats = graphPanel.querySelector('.ComputeKnowledgeStats');
-        expect(graphStats?.querySelector('.online')).toHaveTextContent('0正常');
-        expect(graphStats?.querySelector('.warning')).toHaveTextContent('3故障');
+        expect(graphStats?.querySelector('.online')).toHaveTextContent('2正常');
+        expect(graphStats?.querySelector('.warning')).toHaveTextContent('1故障');
         expect(graphStats?.querySelector('.offline')).not.toBeInTheDocument();
-        expect(within(graphPanel).getByText('0/2 正常节点')).toBeInTheDocument();
+        expect(within(graphPanel).getByText('2/2 正常节点')).toBeInTheDocument();
         expect(within(graphPanel).getByText('0/1 正常节点')).toBeInTheDocument();
         const graphNode = within(graphPanel).getByRole('button', {name: '查看 在线节点 节点信息'});
-        expect(graphNode).toHaveClass('node-warning');
+        expect(graphNode).toHaveClass('node-online');
         expect(within(graphPanel).getByRole('button', {name: '查看 日照节点 节点信息'})).toHaveClass('node-warning');
         fireEvent.mouseEnter(graphNode);
-        expect(within(graphPanel).getByText('故障 · 心跳 刚刚')).toHaveClass('warning');
+        expect(within(graphPanel).getByText('正常 · 心跳 刚刚')).toHaveClass('online');
         expect(screen.getByText('边缘集群图谱', {selector: 'strong'})).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '地图'}));
         expect(screen.getByRole('region', {name: '计算群地理地图'})).toBeInTheDocument();
