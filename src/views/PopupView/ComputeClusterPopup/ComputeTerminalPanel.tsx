@@ -34,6 +34,37 @@ const terminalTransportClass = (session: ComputeTerminalSession | null): string 
     return '';
 };
 
+const WINDOWS_COMMANDS = [
+    'cd', 'cls', 'copy', 'dir', 'echo', 'findstr', 'hostname', 'ipconfig', 'mkdir',
+    'move', 'ping', 'powershell', 'tasklist', 'type', 'ver', 'where', 'whoami',
+];
+const POSIX_COMMANDS = [
+    'cat', 'cd', 'clear', 'cp', 'df', 'du', 'echo', 'free', 'grep', 'head', 'hostname',
+    'ip', 'ls', 'mkdir', 'mv', 'ping', 'ps', 'pwd', 'tail', 'top', 'uname', 'whoami',
+];
+
+export const completeTerminalCommand = (value: string, platform: string, output: string): string => {
+    const token = value.match(/[^\s]+$/)?.[0] || '';
+    if (!token) return value;
+    const tokenStart = value.length - token.length;
+    const separator = Math.max(token.lastIndexOf('/'), token.lastIndexOf('\\'));
+    const prefix = token.slice(separator + 1);
+    const windows = /win/i.test(platform);
+    const normalize = (candidate: string) => windows ? candidate.toLowerCase() : candidate;
+    const candidates = tokenStart === 0
+        ? (windows ? WINDOWS_COMMANDS : POSIX_COMMANDS)
+        : Array.from(new Set(output.match(/[A-Za-z0-9\u4e00-\u9fff_.-]{2,}/g) || []));
+    const matches = candidates.filter(candidate => normalize(candidate).startsWith(normalize(prefix)));
+    if (!matches.length) return value;
+    const completion = matches.slice(1).reduce((common, candidate) => {
+        let length = 0;
+        while (length < common.length && normalize(common[length]) === normalize(candidate[length])) length += 1;
+        return common.slice(0, length);
+    }, matches[0]);
+    if (completion.length <= prefix.length) return value;
+    return `${value.slice(0, tokenStart)}${token.slice(0, separator + 1)}${completion}`;
+};
+
 // The terminal surface intentionally owns one bounded connection lifecycle.
 // eslint-disable-next-line complexity
 export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
@@ -269,8 +300,16 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
                 disabled={!session || session.state !== 'running' || busy}
                 autoComplete='off'
                 spellCheck={false}
-                placeholder={zh ? '输入指令后按 Enter' : 'Type a command and press Enter'}
+                placeholder={zh ? '输入指令；Tab 补全，Enter 执行' : 'Type a command; Tab completes, Enter runs'}
                 onChange={event => setCommand(event.target.value)}
+                onKeyDown={event => {
+                    if (event.key !== 'Tab' || /(?:password|密码)[^:\n]*:\s*$/i.test(output)) return;
+                    const platform = targets.find(target => target.node_id === selectedNode)?.platform || '';
+                    const completed = completeTerminalCommand(command, platform, output);
+                    if (completed === command) return;
+                    event.preventDefault();
+                    setCommand(completed);
+                }}
             />
             <button type='submit' disabled={!session || session.state !== 'running' || !command.trim() || busy}>{zh ? '发送' : 'Send'}</button>
         </form>
