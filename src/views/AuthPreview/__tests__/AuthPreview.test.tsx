@@ -79,9 +79,15 @@ describe('AuthPreview', () => {
         render(<AuthPreview><div>workspace preview</div></AuthPreview>);
         const password = await screen.findByLabelText('密码');
         expect(password).toHaveAttribute('type', 'password');
-        fireEvent.click(screen.getByRole('button', {name: '显示密码'}));
+        const showPassword = screen.getByRole('button', {name: '显示密码'});
+        expect(showPassword).not.toHaveTextContent('显示');
+        expect(showPassword.querySelector('img')).toHaveAttribute('src', '/ico/eye.png');
+        fireEvent.click(showPassword);
         expect(password).toHaveAttribute('type', 'text');
-        fireEvent.click(screen.getByRole('button', {name: '隐藏密码'}));
+        const hidePassword = screen.getByRole('button', {name: '隐藏密码'});
+        expect(hidePassword).not.toHaveTextContent('隐藏');
+        expect(hidePassword.querySelector('img')).toHaveAttribute('src', '/ico/eye-off.png');
+        fireEvent.click(hidePassword);
         expect(password).toHaveAttribute('type', 'password');
     });
     it('keeps both login options using browser passwords and persistent sessions', async () => {

@@ -156,7 +156,10 @@ export const AuthPreview: React.FC<IProps> = ({children}) => {
                         aria-pressed={passwordVisible}
                         onClick={() => setPasswordVisible(visible => !visible)}
                     >
-                        {passwordVisible ? '隐藏' : '显示'}
+                        <img
+                            src={passwordVisible ? '/ico/eye-off.png' : '/ico/eye.png'}
+                            alt=''
+                        />
                     </button>
                 </div>
                 {loginError && <span className='AuthPreviewError' role='alert'>{loginError}</span>}
