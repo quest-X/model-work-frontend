@@ -117,7 +117,7 @@ export const computeSshAvailability = (node: ComputeClusterNode): {lan: boolean;
 export type ComputeCommunicationState = 'normal' | 'fault' | 'abnormal';
 
 export const aggregateCommunicationStates = (states: ComputeCommunicationState[]): 'normal' | 'fault' =>
-    states.length && states.every(state => state === 'normal') ? 'normal' : 'fault';
+    states.filter(state => state === 'normal').length > states.length / 2 ? 'normal' : 'fault';
 
 export const computeLinkStates = (node?: ComputeClusterNode): {lan: ComputeCommunicationState; tailscale: ComputeCommunicationState} => {
     if (!node || !node.online || node.network.error

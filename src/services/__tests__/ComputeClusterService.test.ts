@@ -294,11 +294,12 @@ describe('communication aggregation', () => {
         [['normal', 'normal'], 'normal'],
         [['abnormal', 'abnormal'], 'fault'],
         [['normal', 'abnormal'], 'fault'],
-        [['normal', 'normal', 'abnormal'], 'fault'],
+        [['normal', 'normal', 'abnormal'], 'normal'],
+        [['normal', 'normal', 'normal', 'normal', 'fault', 'abnormal'], 'normal'],
         [['normal', 'fault'], 'fault'],
         [['abnormal', 'fault'], 'fault'],
         [[], 'fault'],
-    ])('aggregates %j as %s without majority voting', (states, expected) => {
+    ])('aggregates %j as majority state %s', (states, expected) => {
         expect(aggregateCommunicationStates(states as ('normal' | 'fault' | 'abnormal')[])).toBe(expected);
     });
 });
