@@ -16,7 +16,7 @@ This repository contains the OpenSight web frontend and product interaction laye
 |------------|----------------|
 | [model-work-backend](https://github.com/quest-X/model-work-backend) | Inference, datasets, training, accounts, and extension hosting |
 | [model-work-extension](https://github.com/quest-X/model-work-extension) | Retrieval, model inspection, cameras, compute groups, and other plugins |
-| [model-work-node](https://github.com/quest-X/model-work-node) | Lynx communication, scheduling, and task execution |
+| [model-work-node](https://github.com/quest-X/model-work-node) | LynX communication, scheduling, and task execution |
 | [model-work-monitor](https://github.com/quest-X/model-work-monitor) | Backend operations and data-status console |
 
 OpenSight continues to evolve from Skalski's [make-sense](https://github.com/SkalskiP/make-sense).

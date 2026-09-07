@@ -16,7 +16,7 @@
 |------|------|
 | [model-work-backend](https://github.com/quest-X/model-work-backend) | 推理、数据集、训练、账户及扩展宿主 |
 | [model-work-extension](https://github.com/quest-X/model-work-extension) | 检索、模型透视、相机和计算群等插件 |
-| [model-work-node](https://github.com/quest-X/model-work-node) | 灵汐节点（Lynx）的通讯、调度和任务执行 |
+| [model-work-node](https://github.com/quest-X/model-work-node) | 灵溪节点（LynX）的通讯、调度和任务执行 |
 | [model-work-monitor](https://github.com/quest-X/model-work-monitor) | 后端运维与数据状态控制台 |
 
 OpenSight 基于 Skalski 的 [make-sense](https://github.com/SkalskiP/make-sense) 持续演进。
