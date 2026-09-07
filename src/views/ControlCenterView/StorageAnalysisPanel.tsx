@@ -140,6 +140,7 @@ export const StorageAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) => {
                     response.task_id as string,
                     controller.signal,
                 );
+                if (controller.signal.aborted) return;
                 if (!responseMatches(next, currentRequest, response.task_id as string)) {
                     throw new Error('storage_response_mismatch');
                 }

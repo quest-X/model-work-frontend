@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {
     ComputeClusterNode,
     ComputeClusterService,
@@ -185,5 +185,58 @@ describe('StorageAnalysisPanel', () => {
 
         expect(cancel).toHaveBeenCalledWith({node_id: nodeId, task_id: authorizationId}, 'cancel');
         expect(screen.getByRole('button', {name: '正在取消…'})).toBeDisabled();
+    });
+
+    it('pauses the old node poll and resumes it without accepting a late response', async () => {
+        let resolveFirstPoll!: (value: ComputeStorageResponse) => void;
+        const firstPoll = new Promise<ComputeStorageResponse>(resolve => {
+            resolveFirstPoll = resolve;
+        });
+        const otherNode: ComputeClusterNode = {
+            ...node,
+            node_id: '00000000-0000-4000-8000-000000000012',
+            installation_id: '00000000-0000-4000-8000-000000000012',
+            name: 'other-node',
+        };
+        jest.spyOn(ComputeClusterService, 'createStorageAuthorization').mockResolvedValue({
+            authorization: authorization(requestId),
+            response: response(requestId, 'authorization_required'),
+        });
+        jest.spyOn(ComputeClusterService, 'approveStorageAuthorization').mockResolvedValue({
+            authorization: {...authorization(requestId), state: 'approved'},
+            response: response(requestId, 'queued'),
+        });
+        const status = jest.spyOn(ComputeClusterService, 'storageStatus')
+            .mockImplementationOnce(() => firstPoll)
+            .mockResolvedValueOnce(response(requestId, 'succeeded'));
+        const panels = (selectedNodeId: string) => <>
+            <div hidden={selectedNodeId !== node.node_id}>
+                <StorageAnalysisPanel node={node} zh visible={selectedNodeId === node.node_id}/>
+            </div>
+            <div hidden={selectedNodeId !== otherNode.node_id}>
+                <StorageAnalysisPanel node={otherNode} zh visible={selectedNodeId === otherNode.node_id}/>
+            </div>
+        </>;
+
+        const {rerender} = render(panels(node.node_id));
+        fireEvent.change(screen.getByRole('textbox', {name: '扫描目录'}), {target: {value: 'C:\\Data'}});
+        fireEvent.click(screen.getByRole('button', {name: '开始扫描'}));
+        fireEvent.click(await screen.findByRole('button', {name: '授权并扫描'}));
+        await waitFor(() => expect(status).toHaveBeenCalledTimes(1));
+        const firstSignal = status.mock.calls[0][2];
+
+        rerender(panels(otherNode.node_id));
+        expect(firstSignal?.aborted).toBe(true);
+        rerender(panels(node.node_id));
+
+        expect(await screen.findByText('model.onnx')).toBeInTheDocument();
+        expect(status).toHaveBeenCalledTimes(2);
+        expect(status.mock.calls.every(([calledNodeId]) => calledNodeId === node.node_id)).toBe(true);
+
+        await act(async () => {
+            resolveFirstPoll(response(requestId, 'queued'));
+            await firstPoll;
+        });
+        expect(screen.queryByText('正在遍历目录')).not.toBeInTheDocument();
     });
 });
