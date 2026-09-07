@@ -211,6 +211,74 @@ export type ComputeRuntimeInventory = {
     }[];
 };
 
+export type ComputeStartupItem = {
+    item_id: string;
+    name: string;
+    source: 'machine' | 'user';
+    enabled: boolean;
+    protected: boolean;
+};
+
+export type ComputeStartupList = {
+    schema_version: 'startup.list-result.v1';
+    platform: 'linux' | 'macos' | 'unsupported' | 'windows';
+    available: boolean;
+    items: ComputeStartupItem[];
+};
+
+export type ComputeStartupRequest = {
+    schema_version: 'agentos.capability-request.v1';
+    request_id: string;
+    idempotency_key: string;
+    tool: 'agentos.startup.set_enabled';
+    node_id: string;
+    arguments: {item_id: string; enabled: boolean; expected_enabled: boolean};
+};
+
+export type ComputeStartupAuthorization = ApprovalRequest & {
+    operation: 'agentos.startup.set_enabled';
+    target: {
+        kind: 'startup_item';
+        item_id: string;
+        request_id: string;
+        idempotency_key: string;
+    };
+    parameters: {enabled: boolean; expected_enabled: boolean};
+    state: 'pending' | 'approved' | 'executing' | 'succeeded' | 'failed' | 'rejected' | 'expired';
+    error_code: string | null;
+    node_name?: string;
+};
+
+export type ComputeStartupResponse = {
+    schema_version: 'agentos.capability-response.v1';
+    request_id: string;
+    tool: 'agentos.startup.set_enabled';
+    node_id: string;
+    state: 'authorization_required' | 'succeeded';
+    task_id: null;
+    progress: null;
+    result: {
+        schema_version: 'startup.set-enabled-result.v1';
+        item: ComputeStartupItem;
+        previous_enabled: boolean;
+        changed: true;
+    } | null;
+    authorization: {
+        authorization_id: string;
+        operation: 'agentos.startup.set_enabled';
+        target_summary: string;
+        parameters_summary: 'disable' | 'enable';
+        expires_at: number;
+    } | null;
+    error: null;
+};
+
+export type ComputeStartupAuthorizationResult = {
+    authorization: ComputeStartupAuthorization;
+    item?: ComputeStartupItem;
+    response: ComputeStartupResponse;
+};
+
 export type ComputeRuntimeEvent = {
     cursor: number;
     created_at: number;
@@ -1097,6 +1165,39 @@ export class ComputeClusterService {
 
     public static runtimeInventory(nodeId: string, signal?: AbortSignal): Promise<ComputeRuntimeInventory> {
         return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/inventory`, signal);
+    }
+
+    public static startupItems(nodeId: string, signal?: AbortSignal): Promise<ComputeStartupList> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/agentos/startup`, signal);
+    }
+
+    public static createStartupAuthorization(
+        nodeId: string,
+        input: {request: ComputeStartupRequest; user: ComputeFilesystemAuthorizationRequest['user']; ttl_seconds: number},
+        signal?: AbortSignal,
+    ): Promise<ComputeStartupAuthorizationResult> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/agentos/startup/authorizations`, signal, {
+            method: 'POST', body: JSON.stringify(input),
+        });
+    }
+
+    public static approveStartupAuthorization(
+        authorizationId: string,
+        signature: string,
+        signal?: AbortSignal,
+    ): Promise<ComputeStartupAuthorizationResult> {
+        return request(`/agentos/startup/authorizations/${encodeURIComponent(authorizationId)}/approve`, signal, {
+            method: 'POST', body: JSON.stringify({signature}),
+        });
+    }
+
+    public static rejectStartupAuthorization(
+        authorizationId: string,
+        signal?: AbortSignal,
+    ): Promise<ComputeStartupAuthorization & {state: 'rejected'}> {
+        return request(`/agentos/startup/authorizations/${encodeURIComponent(authorizationId)}/reject`, signal, {
+            method: 'POST', body: '{}',
+        });
     }
 
     public static runtimeEvents(

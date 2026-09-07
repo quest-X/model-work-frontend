@@ -361,6 +361,7 @@ describe('ControlCenterView', () => {
 
     it('opens the resource monitor without overview service cards', async () => {
         const monitoredNode = runtimeNode('节点甲');
+        monitoredNode.capabilities.push('runtime.startup.read.v1', 'control.startup.manage.v1');
         monitoredNode.resources.gpus = [{
             index: 0,
             uuid: 'GPU-1',
@@ -402,6 +403,24 @@ describe('ControlCenterView', () => {
                 display_name: 'Alpha Service',
                 state: 'stopped',
                 start_type: 'automatic',
+            }],
+        });
+        jest.spyOn(ComputeClusterService, 'startupItems').mockResolvedValue({
+            schema_version: 'startup.list-result.v1',
+            platform: 'windows',
+            available: true,
+            items: [{
+                item_id: 'a'.repeat(64),
+                name: 'Alpha Service',
+                source: 'machine',
+                enabled: false,
+                protected: false,
+            }, {
+                item_id: 'b'.repeat(64),
+                name: 'OpenSight Node',
+                source: 'machine',
+                enabled: true,
+                protected: true,
             }],
         });
         jest.spyOn(ComputeClusterService, 'tasks').mockResolvedValue({
@@ -539,20 +558,18 @@ describe('ControlCenterView', () => {
         fireEvent.click(within(processSection).getByRole('button', {name: '按名称降序排列'}));
         expect(processRows()[0]).toHaveTextContent('zeta.exe');
         fireEvent.click(within(monitorNavigation).getByRole('button', {name: '启动应用'}));
-        const startupSection = within(monitor).getByLabelText('启动应用清单');
+        const startupSection = await within(monitor).findByLabelText('启动应用清单');
         expect(startupSection.querySelector('.ControlMonitorSearchHeader')).toBeInTheDocument();
         const startupRows = () => within(startupSection).getAllByRole('row').slice(1);
         expect(startupRows()[0]).toHaveTextContent('Alpha Service');
-        expect(startupRows()[0]).toHaveTextContent('故障');
-        fireEvent.click(within(startupSection).getByRole('button', {name: '按名称降序排列'}));
-        expect(startupRows()[0]).toHaveTextContent('节点服务node-service');
-        expect(startupRows()[0]).toHaveTextContent('正常');
-        expect(startupRows()[0]).not.toHaveTextContent('Agent');
+        expect(startupRows()[0]).toHaveTextContent('已禁用');
+        expect(startupRows()[1]).toHaveTextContent('OpenSight Node');
+        expect(within(startupSection).getByRole('button', {name: '受保护'})).toBeDisabled();
         const startupSearch = within(startupSection).getByRole('searchbox', {name: '搜索启动应用'});
-        fireEvent.change(startupSearch, {target: {value: 'AlphaService'}});
+        fireEvent.change(startupSearch, {target: {value: 'Alpha'}});
         expect(startupRows()).toHaveLength(1);
         expect(startupRows()[0]).toHaveTextContent('Alpha Service');
-        expect(startupSection).toHaveTextContent('自动');
+        expect(startupSection).toHaveTextContent('整机');
         expect(within(monitorNavigation).queryByRole('button', {name: '网络'})).not.toBeInTheDocument();
         fireEvent.click(within(monitorNavigation).getByRole('button', {name: '性能'}));
         fireEvent.click(within(monitor).getByRole('button', {name: '网络 正常'}));

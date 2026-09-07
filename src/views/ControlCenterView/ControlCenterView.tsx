@@ -42,6 +42,7 @@ import {ResourceKnowledgeGraph} from '../PopupView/ComputeClusterPopup/ResourceK
 import {ComputeFilePanel} from './ComputeFilePanel';
 import {StorageAnalysisPanel} from './StorageAnalysisPanel';
 import {DuplicateAnalysisPanel} from './DuplicateAnalysisPanel';
+import {StartupItemsPanel} from './StartupItemsPanel';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
@@ -75,7 +76,6 @@ type NodeVisibility = 'all' | 'normal' | 'fault';
 type OverviewView = 'map' | 'graph';
 type MonitorView = 'performance' | 'processes' | 'startup' | 'tasks' | 'conversations';
 type ProcessSortKey = 'name' | 'pid' | 'cpu' | 'memory' | 'state';
-type StartupSortKey = 'name' | 'identifier' | 'state' | 'startType';
 type TaskSortKey = 'task' | 'device' | 'state' | 'updated';
 type SortDirection = 'asc' | 'desc';
 type TaskHistoryItem = {
@@ -108,8 +108,6 @@ const fieldGroupInputSx = {
     '& .MuiOutlinedInput-notchedOutline': {borderColor: '#666'},
 };
 
-const deterministicTextCompare = (left: string, right: string): number =>
-    left < right ? -1 : left > right ? 1 : 0;
 type ResourceMetricId = 'cpu' | 'memory' | 'gpu' | 'disk' | 'network';
 type ResourceSample = {
     nodeId: string;
@@ -272,23 +270,6 @@ const processStateLabel = (
     unknown: zh ? '未知' : 'Unknown',
 })[state];
 
-const startupStateLabel = (
-    state: ComputeRuntimeInventory['startup_services'][number]['state'],
-    zh: boolean,
-): string => toneLabel(state === 'running' ? 'healthy' : 'offline', zh);
-
-const isNodeService = (service: ComputeRuntimeInventory['startup_services'][number]): boolean =>
-    service.name === 'ModelWorkNodeAgent' || service.display_name === 'Model Work Node Agent';
-
-const startupServiceName = (
-    service: ComputeRuntimeInventory['startup_services'][number],
-    zh: boolean,
-): string => isNodeService(service) ? (zh ? '节点服务' : 'Node service') : service.display_name;
-
-const startupServiceIdentifier = (
-    service: ComputeRuntimeInventory['startup_services'][number],
-): string => isNodeService(service) ? 'node-service' : service.name;
-
 const taskStateLabel = (state: string, zh: boolean): string => ({
     queued: zh ? '排队' : 'Queued',
     running: zh ? '运行中' : 'Running',
@@ -432,11 +413,6 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [processSort, setProcessSort] = useState<{key: ProcessSortKey; direction: SortDirection}>({
         key: 'memory',
         direction: 'desc',
-    });
-    const [startupQuery, setStartupQuery] = useState('');
-    const [startupSort, setStartupSort] = useState<{key: StartupSortKey; direction: SortDirection}>({
-        key: 'name',
-        direction: 'asc',
     });
     const [taskHistory, setTaskHistory] = useState<TaskHistoryItem[]>([]);
     const [taskQuery, setTaskQuery] = useState('');
@@ -970,31 +946,6 @@ export const ControlCenterView: React.FC<IProps> = ({
         setProcessSort(current => current.key === key
             ? {key, direction: current.direction === 'asc' ? 'desc' : 'asc'}
             : {key, direction: key === 'name' ? 'asc' : 'desc'});
-    };
-
-    const sortedStartupServices = useMemo(() => (runtimeInventory?.startup_services || []).filter(service => {
-        const query = startupQuery.trim().toLocaleLowerCase();
-        return !query || [
-            startupServiceName(service, zh), startupServiceIdentifier(service),
-            service.display_name, service.name, startupStateLabel(service.state, zh), zh ? '自动' : 'Automatic',
-        ]
-            .some(value => value.toLocaleLowerCase().includes(query));
-    }).sort((left, right) => {
-        const comparison = startupSort.key === 'name'
-            ? deterministicTextCompare(startupServiceName(left, zh), startupServiceName(right, zh))
-            : startupSort.key === 'identifier'
-                ? deterministicTextCompare(startupServiceIdentifier(left), startupServiceIdentifier(right))
-                : startupSort.key === 'state'
-                    ? deterministicTextCompare(left.state, right.state)
-                    : deterministicTextCompare(left.start_type, right.start_type);
-        return (startupSort.direction === 'asc' ? comparison : -comparison)
-            || deterministicTextCompare(left.name, right.name);
-    }), [runtimeInventory, startupQuery, startupSort, zh]);
-
-    const sortStartupServices = (key: StartupSortKey) => {
-        setStartupSort(current => current.key === key
-            ? {key, direction: current.direction === 'asc' ? 'desc' : 'asc'}
-            : {key, direction: 'asc'});
     };
 
     const sortedTaskHistory = useMemo(() => taskHistory.filter(task => {
@@ -2284,59 +2235,11 @@ export const ControlCenterView: React.FC<IProps> = ({
                             <span>{runtimeInventoryError}</span>
                         </div>)}
 
-                        {monitorView === 'startup' && (runtimeInventory?.startup_services_available ? <section
-                            className='ControlMonitorProcesses ControlMonitorInventory'
-                            aria-label={zh ? '启动应用清单' : 'Startup app list'}
-                        >
-                            <header className='ControlMonitorSearchHeader'>
-                                <h3>{zh ? '启动应用' : 'Startup apps'}</h3>
-                                <div className='ControlMonitorSearchTools'>
-                                    <input
-                                        type='search'
-                                        value={startupQuery}
-                                        aria-label={zh ? '搜索启动应用' : 'Search startup apps'}
-                                        placeholder={zh ? '搜索名称、标识、状态或类型' : 'Search name, identifier, status, or type'}
-                                        onChange={event => setStartupQuery(event.target.value)}
-                                    />
-                                    <span>{startupQuery.trim() ? `${sortedStartupServices.length}/${runtimeInventory.startup_services.length}` : runtimeInventory.startup_services.length}</span>
-                                </div>
-                            </header>
-                            <table>
-                                <thead><tr>{([
-                                    ['name', zh ? '名称' : 'Name'],
-                                    ['identifier', zh ? '标识' : 'Identifier'],
-                                    ['state', zh ? '状态' : 'Status'],
-                                    ['startType', zh ? '启动类型' : 'Startup type'],
-                                ] as [StartupSortKey, string][]).map(([key, label]) => {
-                                    const active = startupSort.key === key;
-                                    const nextDirection = active && startupSort.direction === 'asc' ? 'desc' : 'asc';
-                                    return <th key={key} aria-sort={active ? (startupSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                                        <button
-                                            type='button'
-                                            aria-label={zh
-                                                ? `按${label}${nextDirection === 'asc' ? '升序' : '降序'}排列`
-                                                : `Sort by ${label} ${nextDirection === 'asc' ? 'ascending' : 'descending'}`}
-                                            onClick={() => sortStartupServices(key)}
-                                        >{label}<span aria-hidden='true'>{active ? (startupSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span></button>
-                                    </th>;
-                                })}</tr></thead>
-                                <tbody>{sortedStartupServices.map((service, index) => <tr key={`${service.name}-${index}`}>
-                                    <td>{startupServiceName(service, zh)}</td>
-                                    <td>{startupServiceIdentifier(service)}</td>
-                                    <td>{startupStateLabel(service.state, zh)}</td>
-                                    <td>{zh ? '自动' : 'Automatic'}</td>
-                                </tr>)}</tbody>
-                            </table>
-                        </section> : <div className='ControlMonitorUnavailable'>
-                            <strong>{runtimeInventoryError
-                                ? (zh ? '启动应用清单暂不可用' : 'The startup app list is unavailable')
-                                : runtimeInventoryCapable
-                                    ? runtimeInventory
-                                        ? (zh ? '节点无法读取启动应用清单' : 'The node cannot read its startup app list')
-                                        : (zh ? '正在读取启动应用清单…' : 'Loading startup app list…')
-                                    : (zh ? '节点版本暂不支持启动应用清单' : 'This node does not support startup app lists yet')}</strong>
-                            <span>{runtimeInventoryError}</span>
-                        </div>)}
+                        {monitorView === 'startup' && <StartupItemsPanel
+                            node={selectedNode || null}
+                            zh={zh}
+                            visible
+                        />}
 
                         {monitorView === 'tasks' && <section
                             className='ControlMonitorTaskHistory ControlMonitorStandaloneHistory'
