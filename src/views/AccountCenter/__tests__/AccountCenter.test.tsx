@@ -1,16 +1,19 @@
 import React from 'react';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {AccountCenter} from '../AccountCenter';
-import {AccountUser, accountAudit, accountSessions, changeAccountPassword,
-    revokeOtherAccountSessions, updateAccountProfile, uploadAccountAvatar} from '../../../services/AccountService';
+import {AccountUser, accountAudit, accountSessions, accountUsers, changeAccountPassword,
+    createMemberAccount, revokeOtherAccountSessions, updateAccountProfile,
+    updateMemberAccount, uploadAccountAvatar} from '../../../services/AccountService';
 
 jest.mock('../../../services/AccountService', () => ({
     accountAudit: jest.fn(), accountSessions: jest.fn(), changeAccountPassword: jest.fn(),
+    accountUsers: jest.fn(), createMemberAccount: jest.fn(), updateMemberAccount: jest.fn(),
     revokeOtherAccountSessions: jest.fn(), updateAccountProfile: jest.fn(), uploadAccountAvatar: jest.fn(),
 }));
 
 const user: AccountUser = {account_id: 'account-1', username: 'admin', display_name: 'Admin', role: 'admin',
-    password_change_required: true, avatar_url: null, permissions: ['node.upgrade'],
+    enabled: true, password_change_required: true, avatar_url: null, permissions: ['node.upgrade'],
+    scopes: {groups: ['*'], nodes: ['*'], projects: ['*']},
     approval: {user_id: 'account-1', user_name: 'Admin', user_public_key: 'public-key'}};
 
 beforeEach(() => {
@@ -18,6 +21,7 @@ beforeEach(() => {
     (accountSessions as jest.Mock).mockResolvedValue({sessions: [{current: false, created_at: 1,
         expires_at: 2000000000, last_seen_at: 2, client_label: 'Browser'}]});
     (accountAudit as jest.Mock).mockResolvedValue({events: []});
+    (accountUsers as jest.Mock).mockResolvedValue({users: [user]});
 });
 
 it('hides from the backdrop without losing form content', async () => {
@@ -153,4 +157,44 @@ it('clears generated candidates on close and allows manual password entry', asyn
     await screen.findByText('Browser');
     expect(screen.queryByRole('option', {name: /Generated password/})).not.toBeInTheDocument();
     expect(screen.getByLabelText('New password (10+ characters)')).toHaveValue('');
+});
+
+it('creates and permanently disables a scoped member', async () => {
+    const administrator = {...user, password_change_required: false};
+    const member: AccountUser = {
+        ...administrator,
+        account_id: 'member-1', username: 'member.one', display_name: 'Member One', role: 'member',
+        password_change_required: true, permissions: ['cluster.read', 'agent.use'],
+        scopes: {groups: ['group-a'], nodes: ['node-a'], projects: ['project-a']},
+    };
+    (accountUsers as jest.Mock)
+        .mockResolvedValueOnce({users: [administrator]})
+        .mockResolvedValue({users: [administrator, member]});
+    (createMemberAccount as jest.Mock).mockResolvedValue({user: member});
+    (updateMemberAccount as jest.Mock).mockResolvedValue({user: {...member, enabled: false}});
+    render(<AccountCenter user={administrator} zh={false} onClose={jest.fn()} onUserChanged={jest.fn()}/>);
+
+    await screen.findByText('Browser');
+    fireEvent.change(screen.getAllByLabelText('Username')[1], {target: {value: 'member.one'}});
+    fireEvent.change(screen.getAllByLabelText('Display name')[1], {target: {value: 'Member One'}});
+    fireEvent.change(screen.getByLabelText('Initial password (10+ characters)'), {target: {value: 'member-password'}});
+    fireEvent.change(screen.getByLabelText('Group scopes (comma separated)'), {target: {value: 'group-a'}});
+    fireEvent.change(screen.getByLabelText('Node scopes (comma separated)'), {target: {value: 'node-a'}});
+    fireEvent.change(screen.getByLabelText('Project scopes (comma separated)'), {target: {value: 'project-a'}});
+    fireEvent.click(screen.getByText('Create member'));
+    await screen.findByText('Member created');
+    expect(createMemberAccount).toHaveBeenCalledWith({
+        username: 'member.one', display_name: 'Member One', initial_password: 'member-password',
+        permissions: ['cluster.read', 'agent.use'],
+        scopes: {groups: ['group-a'], nodes: ['node-a'], projects: ['project-a']},
+    });
+
+    fireEvent.change(screen.getByLabelText('Member account'), {target: {value: 'member-1'}});
+    fireEvent.click(screen.getByText('Disable permanently'));
+    await screen.findByText('Member permanently disabled');
+    expect(updateMemberAccount).toHaveBeenCalledWith('member-1', {
+        enabled: false,
+        permissions: ['cluster.read', 'agent.use'],
+        scopes: {groups: ['group-a'], nodes: ['node-a'], projects: ['project-a']},
+    });
 });

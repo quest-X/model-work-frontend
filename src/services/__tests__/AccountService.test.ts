@@ -1,5 +1,6 @@
 import {currentAccountSession, loginAccount, logoutAccount, refreshAccountSession, updateAccountProfile,
-    uploadAccountAvatar, changeAccountPassword, serverSignAuthorization} from '../AccountService';
+    uploadAccountAvatar, changeAccountPassword, serverSignAuthorization, accountUsers,
+    createMemberAccount, updateMemberAccount} from '../AccountService';
 
 const session = {user: {account_id: 'account-1', display_name: 'Admin',
     approval: {user_id: 'account-1', user_name: 'Admin', user_public_key: 'public-key'}},
@@ -39,6 +40,28 @@ describe('AccountService', () => {
         const options = (fetch as jest.Mock).mock.calls[0][1];
         expect(options.body.get('avatar')).toBe(file);
         expect(options.headers['Content-Type']).toBeUndefined();
+    });
+
+    it('uses the account API for scoped member administration', async () => {
+        (fetch as jest.Mock).mockResolvedValueOnce(response(session));
+        await loginAccount('admin', 'password', true);
+        const member = {
+            username: 'member.one', display_name: 'Member One', initial_password: 'member-password',
+            permissions: ['cluster.read'],
+            scopes: {groups: ['group-a'], nodes: ['node-a'], projects: ['project-a']},
+        };
+        (fetch as jest.Mock).mockResolvedValue(response({users: []}));
+        await accountUsers();
+        expect(fetch).toHaveBeenLastCalledWith('/core_service/account/users', expect.any(Object));
+        await createMemberAccount(member);
+        expect(fetch).toHaveBeenLastCalledWith('/core_service/account/users', expect.objectContaining({
+            method: 'POST', body: JSON.stringify(member),
+        }));
+        const update = {enabled: false, permissions: member.permissions, scopes: member.scopes};
+        await updateMemberAccount('member/id', update);
+        expect(fetch).toHaveBeenLastCalledWith('/core_service/account/users/member%2Fid', expect.objectContaining({
+            method: 'PATCH', body: JSON.stringify(update),
+        }));
     });
 
     it('does not restore a stale session after logout', async () => {

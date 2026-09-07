@@ -96,10 +96,11 @@
     padding: 12px;
   }
   .AccountAudit { grid-column: 1 / -1; }
+  .AccountMembers { grid-column: 1 / -1; }
   h3 { margin: 0 0 12px; font-size: 12px; }
   p { color: rgba(255, 255, 255, 0.55); font-size: 11px; line-height: 1.6; }
   label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 11px; color: #aaa; font-size: 10px; }
-  input {
+  input, select {
     box-sizing: border-box; height: 30px; border: 1px solid rgba(255,255,255,.1); border-radius: 3px;
     outline: none; background: #191919; padding: 0 10px; color: #eee; font: inherit; font-size: 12px;
     &:focus { border-color: #51bdfd; }
@@ -119,12 +120,16 @@
 .AccountIdentity { display: block; overflow: hidden; margin-top: 8px; color: #888; overflow-wrap: anywhere; }
 .AccountList { display: grid; gap: 7px; max-height: 190px; overflow: auto; > div { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.05); padding: 7px 0; font-size: 10px; strong { color: #ddd; } span { color: #888; } small { grid-column: 1 / -1; overflow: hidden; color: #666; text-overflow: ellipsis; white-space: nowrap; } } }
 .AccountCenterGrid .AccountSecondaryAction { margin-top: 12px; background: #34383c; color: #ddd; }
+.AccountMemberFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.AccountMemberActions { display: flex; gap: 8px; }
+.AccountCenterGrid .AccountDangerAction { background: #713939; }
 
 @media (max-width: 720px) {
   .AccountCenterBackdrop { padding: 10px; }
   .AccountCenter { max-height: calc(100vh - 20px); }
   .AccountCenterScroll { padding: 16px; }
-  .AccountCenterGrid { grid-template-columns: 1fr; .AccountAudit { grid-column: auto; } }
+  .AccountCenterGrid { grid-template-columns: 1fr; .AccountAudit, .AccountMembers { grid-column: auto; } }
+  .AccountMemberFields { grid-template-columns: 1fr; }
 }
 
 .AccountIdentityDetails { margin-top: 12px; font-size: 11px; color: #999; summary { cursor: pointer; &:focus-visible { outline: 1px solid #51bdfd; } } }

@@ -1,17 +1,28 @@
 import {DEMO_SESSION_KEY, isDemoMode} from '../demo/DemoMode';
 
 export type AccountApproval = {user_id: string; user_name: string; user_public_key: string};
+export type AccountScopes = {groups: string[]; nodes: string[]; projects: string[]};
 export type AccountUser = {
     account_id: string;
     username: string;
     display_name: string;
     role: 'admin' | 'member';
+    enabled: boolean;
     password_change_required: boolean;
     avatar_url: string | null;
     approval: AccountApproval;
     permissions: string[];
+    scopes: AccountScopes;
 };
 export type AccountSession = {user: AccountUser; csrf_token: string; expires_at: number};
+export type MemberAccountCreate = {
+    username: string;
+    display_name: string;
+    initial_password: string;
+    permissions: string[];
+    scopes: AccountScopes;
+};
+export type MemberAccountUpdate = Pick<AccountUser, 'enabled' | 'permissions' | 'scopes'>;
 
 export const ACCOUNT_SESSION_CHANGED = 'opensight:account-session-changed';
 let activeSession: AccountSession | null = null;
@@ -122,6 +133,17 @@ export const revokeOtherAccountSessions = (): Promise<{revoked: number}> =>
 export const accountAudit = (): Promise<{events: Array<{
     action: string; detail: string; created_at: number;
 }>}> => request('/audit');
+
+export const accountUsers = (): Promise<{users: AccountUser[]}> => request('/users');
+
+export const createMemberAccount = (member: MemberAccountCreate): Promise<{user: AccountUser}> =>
+    request('/users', {method: 'POST', body: JSON.stringify(member)});
+
+export const updateMemberAccount = (
+    accountId: string, member: MemberAccountUpdate,
+): Promise<{user: AccountUser}> => request(`/users/${encodeURIComponent(accountId)}`, {
+    method: 'PATCH', body: JSON.stringify(member),
+});
 
 export const serverSignAuthorization = (authorizationRequest: object): Promise<{signature: string}> =>
     request('/authorization/sign', {method: 'POST', body: JSON.stringify({request: authorizationRequest})});

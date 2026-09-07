@@ -1,4 +1,5 @@
 import {getExtensionEngineBaseUrl} from '../utils/DefaultBackendUrl';
+import {GeneralSelector} from '../store/selectors/GeneralSelector';
 
 export type AgentChatStatus = {
     status: 'ready' | 'degraded';
@@ -64,9 +65,11 @@ const baseUrl = (): string => `${getExtensionEngineBaseUrl()}/extensions/llm-con
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const response = await fetch(`${baseUrl()}${path}`, {
+        credentials: 'same-origin',
         ...init,
         headers: {
             ...(init?.body ? {'Content-Type': 'application/json'} : {}),
+            'X-OpenSight-Project': GeneralSelector.getProjectName().trim() || 'default-project',
             ...(init?.headers || {}),
         },
     });
