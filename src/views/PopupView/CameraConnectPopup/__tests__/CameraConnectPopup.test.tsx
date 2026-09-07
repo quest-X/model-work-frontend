@@ -230,6 +230,7 @@ describe('CameraConnectPopup LAN discovery', () => {
         const firstOpen = render(<CameraConnectPopup language={Language.CHINESE} imagesData={[]} />);
         fireEvent.click(screen.getByRole('button', {name: '开始扫描'}));
         expect(await screen.findByText('后台扫描中；关闭窗口不会停止。')).toBeInTheDocument();
+        expect(screen.getByRole('progressbar', {name: '扫描进度'})).toBeInTheDocument();
 
         firstOpen.unmount();
         render(<CameraConnectPopup language={Language.CHINESE} imagesData={[]} />);

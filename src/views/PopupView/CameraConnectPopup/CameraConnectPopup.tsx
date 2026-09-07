@@ -456,7 +456,7 @@ export const CameraConnectPopup: React.FC<IProps> = (
                                 : (chinese ? '开始扫描' : 'Start scan')}
                     </button>
                 </div>
-                {scanning && nodeId && <div className='JetsonScanProgress'>
+                {scanning && <div className='JetsonScanProgress'>
                     <progress aria-label={chinese ? '扫描进度' : 'Scan progress'}/>
                 </div>}
                 {scanError && <div className='CameraDiscoveryError'>{scanError}</div>}
