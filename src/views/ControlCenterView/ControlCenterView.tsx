@@ -701,7 +701,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     ...agentResponse.tasks.map(task => ({
                         taskId: task.id,
                         taskType: task.kind,
-                        device: 'OpenSight Agent',
+                        device: 'OpenSight Platform Agent',
                         state: task.status,
                         updatedAt: Date.parse(task.updated_at) / 1000,
                     })),

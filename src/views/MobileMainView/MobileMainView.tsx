@@ -70,7 +70,7 @@ const MobileMainView: React.FC<IProps> = ({size}) => {
                     alt={"make-sense"}
                     src={"/make-sense-ico-transparent.png"}
                 />
-                Opensight Platform
+                OpenSight Platform
             </div>
         </div>
         <div className="TriangleHorizontal Bottom">

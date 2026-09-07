@@ -664,12 +664,12 @@ describe('AgentSideChat', () => {
         expect(send.mock.calls[0][0]).toContain('"disk_free_bytes":1024');
     });
 
-    it('dispatches the global OpenSight Agent trigger', () => {
+    it('dispatches the global OpenSight Platform Agent trigger', () => {
         const toggled = jest.fn();
         window.addEventListener(AGENT_CHAT_TOGGLE_EVENT, toggled);
         render(<AgentChatTrigger language={Language.CHINESE}/>);
 
-        fireEvent.click(screen.getByRole('button', {name: '打开 OpenSight Agent'}));
+        fireEvent.click(screen.getByRole('button', {name: '打开 OpenSight Platform Agent'}));
 
         expect(toggled).toHaveBeenCalledTimes(1);
         window.removeEventListener(AGENT_CHAT_TOGGLE_EVENT, toggled);

@@ -14,8 +14,8 @@ export const AgentChatTrigger: React.FC<IProps> = ({language}) => {
     return <button
         type='button'
         className='AgentChatTrigger'
-        aria-label={zh ? '打开 OpenSight Agent' : 'Open OpenSight Agent'}
-        title={zh ? '打开 OpenSight Agent' : 'Open OpenSight Agent'}
+        aria-label={zh ? '打开 OpenSight Platform Agent' : 'Open OpenSight Platform Agent'}
+        title={zh ? '打开 OpenSight Platform Agent' : 'Open OpenSight Platform Agent'}
         onClick={() => window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT))}
     >
         <img draggable={false} alt='' src='/ico/agent-chat.svg'/>

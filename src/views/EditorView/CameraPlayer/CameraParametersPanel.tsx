@@ -30,7 +30,7 @@ const NEUTRAL_PREVIEW_SETTINGS = {
 } as const;
 
 type EditableField = keyof CameraPreviewSettingsUpdate;
-type ParameterSource = 'HCNetSDK' | 'ISAPI' | 'OpenSight' | '资源配置' | 'HCNetSDK + ISAPI';
+type ParameterSource = 'HCNetSDK' | 'ISAPI' | 'OpenSight Platform' | '资源配置' | 'HCNetSDK + ISAPI';
 type EditorOption = {value: string; label: string};
 type ParameterEditor = {
     field: EditableField;
@@ -173,7 +173,7 @@ const rows = (
         {
             title: chinese ? '软件预览调参（1012）' : 'Software preview adjustments (1012)',
             common: true,
-            source: 'OpenSight',
+            source: 'OpenSight Platform',
             rows: [
                 {label: chinese ? '亮度' : 'Brightness', original: previewOriginal.brightness, current: previewCurrent.brightness, path: 'preview.current.brightness', format: number(2), editor: {field: 'brightness', type: 'number', min: -1, max: 1}},
                 {label: chinese ? '对比度' : 'Contrast', original: previewOriginal.contrast, current: previewCurrent.contrast, path: 'preview.current.contrast', format: number(2), editor: {field: 'contrast', type: 'number', min: 0, max: 3}},
@@ -244,7 +244,7 @@ const rows = (
         {
             title: chinese ? '画面测量' : 'Image measurements',
             common: true,
-            source: 'OpenSight',
+            source: 'OpenSight Platform',
             rows: [
                 {label: chinese ? '亮度' : 'Luma', original: beforeMetrics?.luma, current: afterMetrics?.luma, path: 'controls.metrics.luma', format: percent},
                 {label: chinese ? '暗部比例' : 'Dark areas', original: beforeMetrics?.dark_ratio, current: afterMetrics?.dark_ratio, path: 'controls.metrics.dark_ratio', format: percent},
@@ -554,7 +554,7 @@ const CameraParametersPanel: React.FC<IProps> = ({resourceId, language, onClose,
                 </> : <div className='CameraParameterApplyConfirm'>
                     <div>
                         <strong>{chinese ? '确认将参数下发到物理相机？' : 'Dispatch these parameters to the physical camera?'}</strong>
-                        <span>{chinese ? '这会改变相机成像参数；系统将先备份、写后回读，失败时自动恢复。' : 'This changes camera imaging settings; OpenSight backs up, verifies, and rolls back on failure.'}</span>
+                        <span>{chinese ? '这会改变相机成像参数；系统将先备份、写后回读，失败时自动恢复。' : 'This changes camera imaging settings; OpenSight Platform backs up, verifies, and rolls back on failure.'}</span>
                     </div>
                     <button type='button' disabled={!!trialAction || saving} onClick={() => setConfirmDispatch(false)}>
                         {chinese ? '取消' : 'Cancel'}

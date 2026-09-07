@@ -630,7 +630,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
             {!embedded && <>
             <header>
                 <div>
-                    <span className='ComputeClusterEyebrow'>OpenSight · model-work-node</span>
+                    <span className='ComputeClusterEyebrow'>OpenSight Platform · model-work-node</span>
                     <h2>{zh ? '计算群' : 'Compute Cluster'}</h2>
                     <p>{zh
                         ? '统一查看资源关系、工作调度、网络资产、节点状态与终端连接。'
@@ -693,7 +693,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                     <p>{zh
                         ? '由管理员签发一次性注册令牌，再在目标机器执行 model-work-node cluster join。'
                         : 'Mint a one-time enrollment token, then run model-work-node cluster join on the target machine.'}</p>
-                    <code>model-work-node cluster join --control-url &lt;OpenSight URL&gt; --enrollment-token-file &lt;secret file&gt;</code>
+                    <code>model-work-node cluster join --control-url &lt;OpenSight Platform URL&gt; --enrollment-token-file &lt;secret file&gt;</code>
                 </div>}
                 {!loading && activeWorkspace === 'graph' && <>
                     {orchestrationEnabled && scheduler && <section className='ComputeSchedulerPanel'>
@@ -852,7 +852,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                         <div>
                             <span>{zh ? '自动发现' : 'Automated discovery'}</span>
                             <h3>{zh ? '局域网扫描计划' : 'LAN discovery schedules'}</h3>
-                            <p>{zh ? '计划由 Mac Client 后台运行；关闭 OpenSight 后仍继续，最短间隔 15 分钟。' : 'Schedules run in the Mac Client background after OpenSight closes; minimum interval is 15 minutes.'}</p>
+                            <p>{zh ? '计划由 Mac Client 后台运行；关闭 OpenSight Platform 后仍继续，最短间隔 15 分钟。' : 'Schedules run in the Mac Client background after OpenSight Platform closes; minimum interval is 15 minutes.'}</p>
                         </div>
                         <div className='ComputeLanScheduleCreate'>
                             <label>

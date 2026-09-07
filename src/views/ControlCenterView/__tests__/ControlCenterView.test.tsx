@@ -550,7 +550,7 @@ describe('ControlCenterView', () => {
         fireEvent.change(taskSearch, {target: {value: 'trace-agent-1'}});
         expect(taskRows()).toHaveLength(1);
         expect(taskRows()[0]).toHaveTextContent('Agent 请求');
-        expect(taskRows()[0]).toHaveTextContent('OpenSight Agent');
+        expect(taskRows()[0]).toHaveTextContent('OpenSight Platform Agent');
         fireEvent.change(taskSearch, {target: {value: '不存在'}});
         expect(within(taskSection).getByText('未找到匹配任务')).toBeInTheDocument();
         expect(ComputeClusterService.tasks).toHaveBeenCalledWith(undefined, 200);
@@ -655,7 +655,7 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText(/本次刷新失败.*HTTP 500/)).not.toBeInTheDocument();
     });
 
-    it('does not duplicate the global OpenSight Agent trigger inside the control center', async () => {
+    it('does not duplicate the global OpenSight Platform Agent trigger inside the control center', async () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([node('在线节点', true)]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 

@@ -954,7 +954,7 @@ describe('ComputeClusterPopup', () => {
         render(<ComputeClusterPopup language={Language.CHINESE}/>);
 
         expect(await screen.findByText('尚未注册计算节点')).toBeInTheDocument();
-        expect(screen.getByText('model-work-node cluster join --control-url <OpenSight URL> --enrollment-token-file <secret file>')).toBeInTheDocument();
+        expect(screen.getByText('model-work-node cluster join --control-url <OpenSight Platform URL> --enrollment-token-file <secret file>')).toBeInTheDocument();
     });
 
     it('shows the durable OTA phase history and the legacy controller fallback', async () => {

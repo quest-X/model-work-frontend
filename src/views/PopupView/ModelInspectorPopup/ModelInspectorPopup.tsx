@@ -576,7 +576,7 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
                     <span className='mi-brand-mark' aria-hidden='true'><i/><i/><i/></span>
                     <div>
                         <h2>{t('模型透视', 'Model Inspector')} <em>LAB</em></h2>
-                        <p>{t('沿 opensight 当前推理链观察特征如何形成', 'Follow feature formation along the active opensight inference path')}</p>
+                        <p>{t('沿 OpenSight Platform 当前推理链观察特征如何形成', 'Follow feature formation along the active OpenSight Platform inference path')}</p>
                     </div>
                 </div>
                 <div className='mi-header-meta'>
@@ -682,7 +682,7 @@ export const ModelInspectorPopup: React.FC<IProps> = ({language, activeImage, ac
                                     ? t('正在生成语义阶段透视', 'Generating semantic stage views')
                                     : activeImage
                                         ? t('当前图片尚未生成阶段透视', 'This image has not been inspected yet')
-                                        : t('请先在 opensight 中打开一张图片', 'Open an image in opensight first')}</h3>
+                                        : t('请先在 OpenSight Platform 中打开一张图片', 'Open an image in OpenSight Platform first')}</h3>
                                 <p>{t('点击左侧按钮生成当前图片的透视。', 'Use the button on the left to inspect the current image.')}</p>
                             </div> : <>
                                 <div className='mi-canvas-stage'>

@@ -158,7 +158,7 @@ const CameraControlPanel: React.FC<IProps> = ({
         if (!draft || saving || (!localDirty && !preview?.dirty)) return;
         const confirmed = window.confirm(chinese
             ? '确认将当前参数应用到物理相机？\n系统将先备份、写后回读，失败时自动恢复。'
-            : 'Apply the current settings to the physical camera?\nOpenSight will back up, verify, and roll back on failure.');
+            : 'Apply the current settings to the physical camera?\nOpenSight Platform will back up, verify, and roll back on failure.');
         if (!confirmed) return;
         void run(
             async () => {

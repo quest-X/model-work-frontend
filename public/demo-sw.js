@@ -74,7 +74,7 @@ const session = () => ({
   user: {
     account_id: 'demo-admin',
     username: 'admin',
-    display_name: 'OpenSight 演示管理员',
+    display_name: 'OpenSight Platform 演示管理员',
     role: 'admin',
     password_change_required: false,
     avatar_url: null,
@@ -217,7 +217,7 @@ const visualSearchTask = async request => {
 const graph = () => {
   const regions = [['shanghai', '上海', 2], ['shandong', '山东', 1]];
   const entities = [
-    {entity_id: 'group:demo', kind: 'compute_group', label: 'OpenSight 演示集群', state: 'available', callable: true,
+    {entity_id: 'group:demo', kind: 'compute_group', label: 'OpenSight Platform 演示集群', state: 'available', callable: true,
       modes: [], member_count: 3, online_member_count: 3},
     ...regions.map(([id, label, count]) => ({entity_id: `region:${id}`, kind: 'compute_region', label,
       state: 'available', callable: true, modes: [], region_id: id, region_name: label,
@@ -261,7 +261,7 @@ const handleDemoRequest = async request => {
   if (pathname === '/core_service/account/logout' && method === 'POST') return new Response(null, {status: 204});
 
   if (pathname === '/core_service/health') return json({
-    status: 'ok', engine: {type: 'core', name: 'OpenSight Demo Core', api_version: '1',
+    status: 'ok', engine: {type: 'core', name: 'OpenSight Platform Demo Core', api_version: '1',
       base_path: '/core_service', capabilities: ['detection', 'segmentation', 'datasets']},
     model: models[0].name, model_asset_id: models[0].id, model_type: 'detection',
     segmentation_model: models[1].name, segmentation_model_asset_id: models[1].id,
@@ -311,7 +311,7 @@ const handleDemoRequest = async request => {
   });
 
   if (pathname === '/extension_service/health') return json({
-    status: 'ok', engine: {type: 'extension', name: 'OpenSight Demo Extension', api_version: '1',
+    status: 'ok', engine: {type: 'extension', name: 'OpenSight Platform Demo Extension', api_version: '1',
       base_path: '/extension_service', capabilities: ['vector_db', 'compute_cluster']},
     services: {vector_db: 'ready', compute_cluster: 'ready'},
   });
@@ -358,7 +358,7 @@ const handleDemoRequest = async request => {
   const cluster = '/extension_service/extensions/compute-cluster';
   if (pathname === `${cluster}/nodes`) return json({nodes: NODES});
   if (pathname === `${cluster}/groups`) return json({schema_version: 'group-memberships.v1', group_count: 1,
-    groups: [{index: 1, group_id: 'demo', group_name: 'OpenSight 演示集群', owner_name: 'admin',
+    groups: [{index: 1, group_id: 'demo', group_name: 'OpenSight Platform 演示集群', owner_name: 'admin',
       relationship: 'owner', scope: 'central', joined_at: 1,
       credential_types: ['owner_identity', 'owner_trust']}]});
   if (pathname === `${cluster}/resource-graph`) return json(graph());

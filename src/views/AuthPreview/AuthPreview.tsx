@@ -101,13 +101,13 @@ export const AuthPreview: React.FC<IProps> = ({children}) => {
             <header className='AuthPreviewHeader'>
                 <div className='AuthPreviewBrand'>
                     <span className='AuthPreviewLogo'><img src='/make-sense-ico-transparent.png' alt=''/></span>
-                    <span>OpenSight</span>
+                    <span>OpenSight Platform</span>
                 </div>
                 <span className='AuthPreviewEdition'>AgentOS</span>
             </header>
             <div className='AuthPreviewIntro'>
                 <div className='AuthPreviewDevice'><span aria-hidden='true'/>本地边缘计算集群后台</div>
-                <h1 id='auth-preview-title'>登录到 OpenSight</h1>
+                <h1 id='auth-preview-title'>登录到 OpenSight Platform</h1>
                 <p>进入设备工作台，管理视觉任务、模型与边缘节点。</p>
                 {isDemoMode && <p className='AuthPreviewDemoHint'>演示账号已填充，直接登录即可。</p>}
             </div>

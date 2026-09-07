@@ -15,7 +15,7 @@ export const InferenceServerDataMap: Record<InferenceServerType, IInferenceServe
         isDisabled: false
     },
     [InferenceServerType.MAKESENSE]: {
-        name: 'opensight Inference Server',
+        name: 'OpenSight Platform Inference Server',
         imageSrc: 'ico/make-sense-ico-transparent.png',
         imageAlt: 'make-sense-inference-server',
         isDisabled: false
