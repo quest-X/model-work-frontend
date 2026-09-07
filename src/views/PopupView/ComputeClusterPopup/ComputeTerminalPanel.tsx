@@ -14,15 +14,17 @@ interface ComputeTerminalPanelProps {
     targetLabel?: string;
     initialCommand?: string;
     closeOnUnmount?: boolean;
+    focusKey?: boolean;
     onActiveChange?: (active: boolean) => void;
 }
 
-const targetReason = (target: ComputeTerminalTarget, zh: boolean): string => {
-    return target.available ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
-};
+const targetNormal = (target: ComputeTerminalTarget): boolean => target.online && target.available;
 
-const terminalStateLabel = (session: ComputeTerminalSession | null, zh: boolean): string => {
-    const state = session?.state === 'running' ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
+const targetReason = (target: ComputeTerminalTarget, zh: boolean): string =>
+    targetNormal(target) ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
+
+const terminalStateLabel = (session: ComputeTerminalSession | null, normal: boolean, zh: boolean): string => {
+    const state = normal ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
     if (session?.transport === 'lan') return `${zh ? '局域网 SSH' : 'LAN SSH'} · ${state}`;
     if (session?.transport === 'tailscale') return `Tailscale · ${state}`;
     return state;
@@ -59,8 +61,9 @@ export const terminalCompletionCandidates = (value: string, platform: string, ou
         .map(candidate => `${value.slice(0, tokenStart)}${token.slice(0, separator + 1)}${candidate}`);
 };
 
-export const completeTerminalCommand = (value: string, platform: string, output: string): string =>
-    terminalCompletionCandidates(value, platform, output)[0] || value;
+export const completeTerminalCommand = (value: string, platform: string, output: string): string => {
+    return terminalCompletionCandidates(value, platform, output)[0] || value;
+};
 
 // The terminal surface intentionally owns one bounded connection lifecycle.
 // eslint-disable-next-line complexity
@@ -72,6 +75,7 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
     targetLabel,
     initialCommand,
     closeOnUnmount = false,
+    focusKey = false,
     onActiveChange,
 }) => {
     const [targets, setTargets] = useState<ComputeTerminalTarget[]>([]);
@@ -85,10 +89,17 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
     const cursorRef = useRef(0);
     const sessionIdRef = useRef('');
     const outputRef = useRef<HTMLPreElement | null>(null);
+    const inputRef = useRef<HTMLInputElement | null>(null);
     const autoConnectStartedRef = useRef(false);
     const startedHereRef = useRef(false);
     const initialCommandSessionRef = useRef('');
     const active = Boolean(session && ['connecting', 'running'].includes(session.state));
+    const selectedTarget = targets.find(target => target.node_id === selectedNode);
+    const selectedTargetAvailable = Boolean(selectedTarget?.available);
+    const selectedTargetNormal = Boolean(selectedTarget && targetNormal(selectedTarget));
+    const activeSession = active ? session : null;
+    const displayedNormal = active || selectedTargetNormal;
+    const displayedOutput = output.replace(/(?:\r?\n){3,}/g, '\n\n');
     const passwordPrompt = /(?:password|密码)[^:\n]*:\s*$/i.test(output);
     const completedCommand = passwordPrompt ? command : completeTerminalCommand(
         command, targets.find(target => target.node_id === selectedNode)?.platform || '', output,
@@ -99,13 +110,15 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
         try {
             const response = await ComputeClusterService.terminalTargets(signal);
             setTargets(response.targets);
-            setSelectedNode(current => current
-                || response.targets.find(target => target.node_id === preferredNodeId && target.available)?.node_id
-                || response.targets.find(target => target.available)?.node_id
-                || '');
-            const activeTarget = preferredNodeId
-                ? response.targets.find(target => target.node_id === preferredNodeId && target.active_session_id)
-                : response.targets.find(target => target.active_session_id);
+            setSelectedNode(current => {
+                const currentTarget = response.targets.find(target => target.node_id === current);
+                return (currentTarget?.available ? current : '')
+                    || response.targets.find(target => target.node_id === preferredNodeId && target.available)?.node_id
+                    || '';
+            });
+            const activeTarget = response.targets.find(target =>
+                target.node_id === preferredNodeId && target.active_session_id,
+            );
             if (activeTarget?.active_session_id && activeTarget.active_session_id !== sessionIdRef.current) {
                 const restored = await ComputeClusterService.terminal(activeTarget.active_session_id, 0, signal);
                 sessionIdRef.current = restored.session_id;
@@ -167,6 +180,10 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
     }, [output]);
 
     useEffect(() => {
+        if (session?.state === 'running' && !busy) inputRef.current?.focus();
+    }, [busy, focusKey, session?.session_id, session?.state]);
+
+    useEffect(() => {
         onActiveChange?.(active);
     }, [active, onActiveChange]);
 
@@ -177,7 +194,7 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
     }, [closeOnUnmount]);
 
     const connect = useCallback(async () => {
-        if (!selectedNode || busy) return;
+        if (!selectedNode || !selectedTargetAvailable || busy) return;
         setBusy(true);
         try {
             const next = preferredTransport
@@ -198,7 +215,7 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
         } finally {
             setBusy(false);
         }
-    }, [busy, initialCommand, preferredTransport, selectedNode]);
+    }, [busy, initialCommand, preferredTransport, selectedNode, selectedTargetAvailable]);
 
     useEffect(() => {
         if (!autoConnect || autoConnectStartedRef.current || !targetsReady || !selectedNode || session) return;
@@ -260,12 +277,12 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
                         ? '先连接所属节点，再进入这台局域网设备；密码只在当前终端输入，不会保存。'
                         : 'Connect through the owning node, then enter this LAN device. Password input is never saved.')
                     : (zh
-                        ? '连接目标与认证材料由 Mac Client 保管，不通过网页配置或接口返回；终端输出按原样展示。'
-                        : 'The Mac Client owns destinations and credentials; they are never configured or returned by the web API, while terminal output is shown verbatim.')}</p>
+                        ? '连接目标与认证材料由 Mac Client 保管，不通过网页配置或接口返回；异常连续空行会自动压缩。'
+                        : 'The Mac Client owns destinations and credentials; they are never configured or returned by the web API. Abnormal runs of blank terminal lines are collapsed.')}</p>
             </div>
-            <div className={`ComputeTerminalState ${session?.state === 'running' ? 'running' : 'failed'} ${terminalTransportClass(session)}`}>
-                <i/><strong>{terminalStateLabel(session, zh)}</strong>
-            </div>
+            {(selectedTarget || activeSession) && <div className={`ComputeTerminalState ${activeSession?.state === 'connecting' ? 'connecting' : displayedNormal ? 'running' : 'failed'} ${terminalTransportClass(activeSession)}`}>
+                <i/><strong>{terminalStateLabel(activeSession, displayedNormal, zh)}</strong>
+            </div>}
         </div>
 
         <div className='ComputeTerminalToolbar'>
@@ -280,7 +297,7 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
                     </option>)}
                 </select>
             </label>
-            {!active && <button type='button' disabled={!selectedNode || busy} onClick={() => void connect()}>{zh ? '连接终端' : 'Connect'}</button>}
+            {!active && <button type='button' disabled={!selectedTargetAvailable || busy} onClick={() => void connect()}>{zh ? '连接终端' : 'Connect'}</button>}
             {active && <>
                 <button type='button' disabled={busy || session?.state !== 'running'} onClick={() => void control('interrupt')}>Ctrl+C</button>
                 <button type='button' className='danger' disabled={busy} onClick={() => void control('close')}>{zh ? '断开' : 'Disconnect'}</button>
@@ -288,16 +305,17 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
         </div>
 
         {error && <div className='ComputeTerminalError' role='alert'>{error}</div>}
-        <pre className='ComputeTerminalScreen' ref={outputRef} aria-label={zh ? '终端输出' : 'Terminal output'}>{output || (targetLabel
+        <pre className='ComputeTerminalScreen' ref={outputRef} aria-label={zh ? '终端输出' : 'Terminal output'} onClick={() => inputRef.current?.focus()}>{displayedOutput || (targetLabel
             ? (zh ? '点击“连接终端”进入设备。' : 'Select “Connect” to enter the device.')
             : (zh
-                ? '选择正常节点并连接。故障节点不可选，恢复正常后会自动变为可连接。'
-                : 'Choose a normal node. Fault nodes become available after returning to normal.'))}</pre>
+                ? '选择节点并连接；故障节点仍有可用 SSH 路径时也可连接。'
+                : 'Choose a node. Fault nodes remain connectable while an SSH route is available.'))}</pre>
         <form className='ComputeTerminalInput' onSubmit={event => void send(event)}>
             <span aria-hidden='true'>$</span>
             <div className='ComputeTerminalInputField'>
                 {completionHint && <span aria-hidden='true'><i>{command}</i>{completionHint.slice(command.length)}</span>}
                 <input
+                    ref={inputRef}
                     type={passwordPrompt ? 'password' : 'text'}
                     aria-label={zh ? '终端指令' : 'Terminal command'}
                     value={command}

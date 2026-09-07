@@ -153,7 +153,7 @@
 
 .ComputeClusterSummary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 1px;
   background: rgba(255, 255, 255, 0.08);
 
@@ -276,16 +276,25 @@
   strong { color: #d6b8ff; font-size: 14px; }
   span { color: rgba(255, 255, 255, 0.36); font-size: 8px; white-space: nowrap; }
   .online strong { color: #66dda0; }
-  .warning strong { color: #e7a640; }
+  .warning strong { color: $computeFaultColor; }
   .offline strong { color: #ff8f8f; }
 }
 
 .ComputeKnowledgeStats.graph-summary {
   display: grid;
-  grid-template-columns: repeat(4, max-content);
-  gap: 8px 18px;
-  .edge-devices { grid-column: 1 / span 2; }
-  .cameras { grid-column: 3 / span 2; }
+  grid-template-columns: repeat(3, max-content);
+}
+
+.ComputeKnowledgeStats.map-summary {
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  justify-content: end;
+  justify-items: end;
+  gap: 8px 16px;
+  > div { align-items: flex-end; text-align: right; }
+  > div:nth-child(1) { grid-area: 1 / 2; }
+  > div:nth-child(2) { grid-area: 1 / 3; }
+  > div:nth-child(n + 3) { grid-row: 2; }
 }
 
 .ComputeKnowledgeLegend {
@@ -307,9 +316,10 @@
   i.entity-shape.capsule { width: 15px; height: 8px; border-color: rgba(207, 130, 242, 0.7); border-radius: 999px; background: rgba(116, 73, 135, 0.56); }
   i.entity-shape.rectangle { width: 13px; height: 9px; border-color: rgba(241, 189, 103, 0.72); border-radius: 1px; background: rgba(118, 85, 40, 0.56); }
   i.entity-shape.rounded-rectangle { width: 15px; height: 9px; border-color: rgba(241, 189, 103, 0.72); border-radius: 4px; background: rgba(118, 85, 40, 0.56); }
-  i.entity-shape.region { width: 15px; height: 9px; border-color: rgba(155, 119, 204, 0.72); border-radius: 3px; background: rgba(67, 48, 91, 0.38); }
+  i.entity-shape.region { width: 15px; height: 9px; border-color: rgba(229, 179, 94, .6); border-radius: 3px; background: rgba(67, 48, 91, 0.38); }
   i.entity-shape.sensor { border-color: rgba(91, 195, 255, 0.78); background: rgba(43, 113, 153, 0.62); }
   i.entity-shape.edge-device { border-color: rgba(102, 221, 160, 0.78); background: rgba(34, 117, 77, 0.72); }
+  i.entity-shape.task-flow { width: 7px; height: 7px; border: 0; border-radius: 50%; background: #64c8ff; box-shadow: 0 0 5px #42baff; }
   i.entity-shape.controller { border-color: rgba(190, 137, 241, 0.78); background: rgba(76, 47, 105, 0.72); }
   i.entity-shape.actuator { border-color: rgba(244, 194, 83, 0.82); background: rgba(136, 100, 34, 0.64); }
   i.node-state { width: 8px; height: 8px; border: 1px solid rgba(255, 255, 255, 0.18); }
@@ -419,7 +429,7 @@
   > small { position: absolute; top: 12px; right: 13px; color: rgba(255, 255, 255, 0.38); font-size: 7px; }
   &.state-unavailable { border-color: rgba(218, 77, 77, 0.2); background: linear-gradient(180deg, rgba(112, 39, 45, 0.1), rgba(25, 22, 31, 0.1)); }
   &.state-normal { border-color: rgba(85, 199, 123, .45); }
-  &.state-fault { border-color: rgba(229, 179, 94, .6); }
+  &.state-fault { border-color: rgba($computeFaultColor, .6); }
 }
 
 .ComputeGraphEdge {
@@ -437,10 +447,58 @@
   &.focused { opacity: 1; stroke-width: 2.2; filter: drop-shadow(0 0 3px currentColor); }
 }
 
+.ComputeGraphEdgeHit {
+  stroke: transparent;
+  stroke-width: 16;
+  outline: none;
+  pointer-events: stroke;
+  cursor: pointer;
+  vector-effect: non-scaling-stroke;
+}
+
+.ComputeGraphTaskFlow {
+  transition: opacity .18s ease;
+  pointer-events: none;
+  &.muted { opacity: .08; }
+  .ComputeGraphTaskPath {
+    fill: none;
+    stroke: rgba(75, 184, 255, .72);
+    stroke-width: 1.8;
+    stroke-dasharray: 4 5;
+    vector-effect: non-scaling-stroke;
+    filter: drop-shadow(0 0 3px rgba(75, 184, 255, .72));
+  }
+  .ComputeGraphTaskFlowHit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 16;
+    outline: none;
+    pointer-events: stroke;
+    cursor: pointer;
+    vector-effect: non-scaling-stroke;
+  }
+  circle {
+    fill: #64c8ff;
+    stroke: rgba(213, 244, 255, .92);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+    filter: drop-shadow(0 0 5px #42baff);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ComputeGraphTaskFlow circle { display: none; }
+}
+
 .ComputeGraphEdgeUnavailable line {
   stroke: #ff6868;
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
+}
+
+.ComputeGraphEdgeUnavailable {
+  transition: opacity .18s ease;
+  &.muted { opacity: .08; }
 }
 
 .ComputeGraphNode {
@@ -465,7 +523,7 @@
   cursor: pointer;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
   transform: translate(-50%, -50%);
-  transition: border-color .16s ease, box-shadow .16s ease, opacity .16s ease, transform .16s ease;
+  transition: border-color .16s ease, box-shadow .16s ease, filter .16s ease, opacity .16s ease, transform .16s ease;
   &:hover { z-index: 4; border-color: rgba(208, 171, 255, 0.72); box-shadow: 0 9px 25px rgba(0, 0, 0, 0.35), 0 0 15px rgba(174, 111, 245, 0.14); transform: translate(-50%, calc(-50% - 2px)); }
   &:focus-visible { z-index: 5; outline: 2px solid rgba(101, 191, 246, 0.84); outline-offset: 3px; }
   &.unavailable { border-color: rgba(255, 255, 255, 0.11); filter: saturate(.55); }
@@ -609,6 +667,40 @@
   }
 }
 
+.ComputeGraphScene.has-relation-focus {
+  .ComputeGraphNode.muted { opacity: .12; filter: saturate(.25); }
+  .ComputeGraphNode.relation-focused {
+    z-index: 4;
+    opacity: 1;
+    border-color: #f1bd67;
+    box-shadow: 0 0 0 2px rgba(241, 189, 103, .22), 0 0 26px rgba(241, 189, 103, .3);
+  }
+}
+
+.ComputeGraphEdgeLabel {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 260px;
+  border: 1px solid rgba(241, 189, 103, .72);
+  border-radius: 7px;
+  background: rgba(18, 18, 22, .96);
+  padding: 7px 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .42), 0 0 16px rgba(241, 189, 103, .16);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  > span { color: rgba(241, 189, 103, .72); font-size: 7px; }
+  > strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+  b { margin: 0 7px; color: #f1bd67; font-weight: 500; }
+  &.task-flow {
+    border-color: rgba(100, 200, 255, .78);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .42), 0 0 16px rgba(66, 186, 255, .22);
+    > span, b { color: #64c8ff; }
+  }
+}
+
 .ComputeGraphHoverCard {
   position: absolute;
   z-index: 7;
@@ -640,7 +732,7 @@
   > strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
   > small { color: rgba(255, 255, 255, 0.5); font-size: 8px; }
   > small.online { color: #7fe0a8; }
-  > small.warning { color: #e7a640; }
+  > small.warning { color: $computeFaultColor; }
   > small.offline { color: #ff9d9d; }
 }
 
@@ -658,7 +750,7 @@
     background: rgba(255, 255, 255, 0.025);
     padding: 7px;
     > span { color: rgba(255, 255, 255, 0.45); font-size: 7px; white-space: nowrap; }
-    > strong { color: #e7a640; font-size: 9px; }
+    > strong { color: $computeFaultColor; font-size: 9px; }
     > small { overflow: hidden; color: rgba(255, 255, 255, 0.3); font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
     &.available { border-color: rgba(102, 221, 160, 0.24); background: rgba(56, 139, 94, 0.08); }
     &.available > strong { color: #7fe0a8; }
@@ -828,7 +920,7 @@
   &.running.remote,
   &.connecting.remote { color: #7bd0ff; i { background: #51baf4; box-shadow: 0 0 8px rgba(81, 186, 244, .65); } }
   &.connecting i { animation: compute-pulse 1s infinite; }
-  &.failed { color: #e89893; i { background: #d66363; } }
+  &.failed { color: $computeFaultColor; i { background: $computeFaultColor; } }
 }
 
 .ComputeTerminalToolbar {
@@ -888,6 +980,19 @@
 
 .ComputeTerminalError { margin: 0 18px 10px; border-radius: 4px; background: rgba(214, 99, 99, .13); padding: 8px 10px; color: #eaa29e; font-size: 9px; }
 .ComputeTerminalBoundary { display: block; padding: 10px 18px 14px; color: rgba(255, 255, 255, .34); font-size: 8px; }
+
+.ComputeClusterContent:has(> .ComputeTerminalPanel) {
+  display: flex;
+  overflow: hidden;
+
+  > .ComputeTerminalPanel { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+  .ComputeTerminalHeading,
+  .ComputeTerminalToolbar,
+  .ComputeTerminalError,
+  .ComputeTerminalInput,
+  .ComputeTerminalBoundary { flex: 0 0 auto; }
+  .ComputeTerminalScreen { height: auto; min-height: 120px; flex: 1; }
+}
 
 @keyframes compute-pulse {
   0%, 100% { opacity: .45; transform: scale(.85); }
@@ -1101,7 +1206,15 @@
 }
 
 .ComputeNodeSectionTitle {
+  justify-content: space-between;
   padding: 0 0 9px;
+  > div { display: flex; align-items: center; gap: 7px; }
+  .ComputeNodeToolbar { gap: 18px; }
+  .ComputeNodeFilters { display: flex; gap: 8px; }
+  button { border: 1px solid rgba(51, 174, 247, 0.24); border-radius: 4px; background: rgba(51, 174, 247, 0.08); padding: 7px 10px; color: #a9ddfb; font-size: 9px; }
+  .ComputeNodeFilters button[aria-pressed='true'] { border-color: rgba(51, 174, 247, 0.62); background: rgba(51, 174, 247, 0.2); color: #d7f1ff; }
+  .ComputeNodeFilters strong { margin-left: 3px; font-size: inherit; }
+  .ComputeBatchUpgradeButton { padding: 7px 14px; }
 }
 
 .ComputeTaskEmpty,
@@ -1119,6 +1232,15 @@
   margin: 0 0 16px;
   background: rgba(255, 191, 82, 0.07);
   color: rgba(255, 210, 135, 0.72);
+}
+
+.ComputeClusterContent:has(> .ComputeClusterEmpty + .ComputeTaskDisabled) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  > .ComputeClusterEmpty { height: auto; min-height: 0; flex: 1; }
+  > .ComputeTaskDisabled { flex: 0 0 auto; margin: 0; }
 }
 
 .ComputeTaskList {
@@ -1221,43 +1343,85 @@
   overflow: hidden;
   margin-bottom: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-left: 3px solid #686d73;
   border-radius: 6px;
   background: #202124;
-  &.online { border-left-color: #55c77b; }
   &:last-child { margin-bottom: 0; }
 }
 
 .ComputeNodeHeading {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr)) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  padding: 13px 15px;
+  padding: 10px 15px;
+  list-style: none;
+  cursor: pointer;
+  &::-webkit-details-marker { display: none; }
+  &::before { grid-column: 13; grid-row: 1; justify-self: end; content: '›'; color: rgba(255, 255, 255, 0.5); font-size: 17px; transition: transform 0.15s ease; }
+  &:focus-visible { outline: 1px solid #33aef7; outline-offset: -2px; }
+}
+
+.ComputeNodeCard[open] > .ComputeNodeHeading::before { transform: rotate(90deg); }
+
+.ComputeNodeHeaderActions {
+  grid-column: 9 / span 4;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  align-items: center;
+  justify-items: start;
+  gap: 8px;
+  .ComputeNodeHeartbeat { grid-column: 1; }
+  .ComputeNodeVersion { grid-column: 2; }
+  > button { grid-column: 3; }
+  > button,
+  .ComputeNodeVersion {
+    border: 1px solid rgba(51, 174, 247, 0.28);
+    border-radius: 4px;
+    background: rgba(51, 174, 247, 0.09);
+    padding: 6px 9px;
+    color: #a9ddfb;
+    font-size: 9px;
+  }
+  > button:disabled { border-color: rgba(229, 179, 94, 0.24); background: rgba(229, 179, 94, 0.07); color: #e5b35e; }
+  .ComputeNodeVersion { border: 0; background: transparent; padding: 0; color: rgba(255, 255, 255, 0.36); white-space: nowrap; }
+  .ComputeNodeVersion strong { color: rgba(255, 255, 255, 0.7); font-weight: 500; }
+}
+
+.ComputeNodeCompactStats {
+  grid-column: 4 / span 5;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(5, minmax(38px, 1fr));
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 8px;
+  text-align: left;
+  strong { margin-left: 3px; color: rgba(255, 255, 255, 0.8); font-size: 10px; font-weight: 500; }
 }
 
 .ComputeNodeIdentity {
+  grid-column: 1 / span 3;
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 9px;
   h3 { margin: 0; font-size: 14px; }
-  code { color: rgba(255, 255, 255, 0.36); font-size: 9px; }
+  .ComputeNodeRegion { color: rgba(255, 255, 255, 0.38); font-size: 9px; }
 }
 
 .ComputeNodeStatus i { background: #6d737a; }
-.ComputeNodeCard.normal { border-left-color: #55c77b; }
-.ComputeNodeCard.fault { border-left-color: #e5b35e; }
 .ComputeNodeCard.normal .ComputeNodeStatus { color: #8bdd9f; }
-.ComputeNodeCard.fault .ComputeNodeStatus { color: #e5b35e; }
+.ComputeNodeCard.fault .ComputeNodeStatus { color: $computeFaultColor; }
 .ComputeNodeCard.normal .ComputeNodeStatus i { background: #55c77b; }
-.ComputeNodeCard.fault .ComputeNodeStatus i { background: #e5b35e; }
+.ComputeNodeCard.fault .ComputeNodeStatus i { background: $computeFaultColor; }
 
 .ComputeNodeHeartbeat {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
   span { color: rgba(255, 255, 255, 0.36); font-size: 9px; }
   strong { color: rgba(255, 255, 255, 0.7); font-size: 10px; font-weight: 500; }
 }
@@ -1302,10 +1466,19 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  margin-bottom: 9px;
+  list-style: none;
+  cursor: pointer;
+  &::-webkit-details-marker { display: none; }
+  &::before { content: '›'; color: rgba(255, 255, 255, 0.5); font-size: 16px; transition: transform 0.15s ease; }
+  &:focus-visible { outline: 1px solid #33aef7; outline-offset: 3px; }
   strong { font-size: 10px; }
   span { min-width: 18px; border-radius: 999px; background: rgba(51, 174, 247, 0.16); padding: 2px 6px; color: #79c9f8; font-size: 9px; text-align: center; }
   small { margin-left: auto; color: rgba(255, 255, 255, 0.35); font-size: 8px; }
+}
+
+.ComputeNodeDeviceSection[open] .ComputeNodeDeviceHeading {
+  margin-bottom: 9px;
+  &::before { transform: rotate(90deg); }
 }
 
 .ComputeNodeDeviceList {
@@ -1342,8 +1515,13 @@
   padding: 8px 15px;
   color: rgba(255, 255, 255, 0.36);
   font-size: 8px;
+  code { color: inherit; font-size: inherit; }
   .ssh-ready { color: #7bd694; }
 }
+
+.ComputeNodeFilterEmpty { padding: 24px; color: rgba(255, 255, 255, 0.4); font-size: 10px; text-align: center; }
+
+.ComputeNodeUpgradeArea { margin-bottom: 12px; }
 
 .ComputeUpgradePanel {
   display: grid;
@@ -1377,6 +1555,8 @@
 
 .ComputeUpgradeNodes,
 .ComputeUpgradeBatch { display: grid; gap: 7px; }
+
+.ComputeUpgradeNodeState { align-items: flex-end; }
 
 .ComputeUpgradeNodes > label,
 .ComputeUpgradeBatch > article {
@@ -1457,6 +1637,12 @@
   .ComputeLanScheduleList article { grid-template-columns: auto 1fr; }
   .ComputeTaskActions { justify-content: flex-start; }
   .ComputeNodeGpuList > div { grid-template-columns: 1fr; }
+  .ComputeNodeSectionTitle, .ComputeNodeToolbar { align-items: flex-start; flex-direction: column; }
+  .ComputeNodeHeading { grid-template-columns: minmax(0, 1fr) auto; align-items: flex-start; }
+  .ComputeNodeHeading::before { grid-column: 2; }
+  .ComputeNodeIdentity { grid-column: 1; }
+  .ComputeNodeCompactStats, .ComputeNodeHeaderActions { grid-column: 1 / -1; width: 100%; }
+  .ComputeNodeHeaderActions { width: 100%; }
   .ComputeNodeDeviceList > div { grid-template-columns: auto 1fr; }
   .ComputeDeviceMeta { align-items: flex-start; }
   .ComputeWorkspaceNav button { min-height: 48px; flex-direction: column; gap: 3px; font-size: 9px; }

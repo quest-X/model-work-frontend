@@ -580,7 +580,7 @@ describe('ControlCenterView', () => {
         fireEvent.change(taskSearch, {target: {value: 'trace-agent-1'}});
         expect(taskRows()).toHaveLength(1);
         expect(taskRows()[0]).toHaveTextContent('Agent 请求');
-        expect(taskRows()[0]).toHaveTextContent('OpenSight Platform Agent');
+        expect(taskRows()[0]).toHaveTextContent('OpenSight Agent');
         fireEvent.change(taskSearch, {target: {value: '不存在'}});
         expect(within(taskSection).getByText('未找到匹配任务')).toBeInTheDocument();
         expect(ComputeClusterService.tasks).toHaveBeenCalledWith(undefined, 200);
@@ -685,7 +685,7 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText(/本次刷新失败.*HTTP 500/)).not.toBeInTheDocument();
     });
 
-    it('does not duplicate the global OpenSight Platform Agent trigger inside the control center', async () => {
+    it('does not duplicate the global OpenSight Agent trigger inside the control center', async () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([node('在线节点', true)]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
@@ -878,9 +878,10 @@ describe('ControlCenterView', () => {
         const graphPanel = screen.getByRole('region', {name: '主节点、边缘设备与摄像头拓扑'});
         expect(graphPanel.querySelector('.ComputeGraphViewport')).toHaveClass('fit-window');
         const graphStats = graphPanel.querySelector('.ComputeKnowledgeStats');
-        expect(graphStats?.querySelector('.online')).toHaveTextContent('2正常');
-        expect(graphStats?.querySelector('.warning')).toHaveTextContent('1故障');
-        expect(graphStats?.querySelector('.offline')).not.toBeInTheDocument();
+        expect(Array.from(graphStats?.querySelectorAll(':scope > div > span') || []).map(item => item.textContent))
+            .toEqual(['设备总数', '计算节点', '摄像头']);
+        expect(Array.from(graphStats?.querySelectorAll(':scope > div > strong') || []).map(item => item.textContent))
+            .toEqual(['1', '1', '0']);
         expect(within(graphPanel).getByText('2/2 正常节点')).toBeInTheDocument();
         expect(within(graphPanel).getByText('0/1 正常节点')).toBeInTheDocument();
         const graphNode = within(graphPanel).getByRole('button', {name: '查看 在线节点 节点信息'});
@@ -1239,6 +1240,21 @@ describe('ControlCenterView', () => {
         expect(screen.getByLabelText('终端指令')).toBeInTheDocument();
         await waitFor(() => expect(screen.getByRole('combobox', {name: '目标节点'})).toHaveValue('在线节点-id'));
         expect(container.querySelector('.ControlCenterBody .ComputeTerminalPanel')).toBeInTheDocument();
+    });
+
+    it('opens single-node storage analysis from related features', async () => {
+        const machine = node('在线节点', true);
+        machine.capabilities.push('task.storage.scan.v1');
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByRole('heading', {name: '在线节点'});
+        fireEvent.click(screen.getByText('相关功能'));
+        fireEvent.click(within(screen.getByLabelText('相关功能列表')).getByRole('button', {name: /实用工具/}));
+
+        expect(screen.getByRole('heading', {name: '存储分析'})).toBeInTheDocument();
+        expect(screen.getByText('只读 · 正常')).toBeInTheDocument();
+        expect(screen.getByRole('textbox', {name: '扫描目录'})).toBeInTheDocument();
     });
 
     it('opens terminal connection from the network status cards', async () => {

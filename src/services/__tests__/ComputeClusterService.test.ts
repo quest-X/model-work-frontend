@@ -3,6 +3,7 @@ import {
     ComputeClusterService,
     ComputeTask,
     computeSshAvailability,
+    computeNodeUpgradeAvailable,
     computeNodeState,
     computeLinkStates,
     aggregateCommunicationStates,
@@ -254,6 +255,21 @@ describe('computeSshAvailability', () => {
     it('falls back to the v0.9.1 control route when split SSH fields are absent', () => {
         expect(computeSshAvailability(node('lan'))).toEqual({lan: true, tailscale: true});
         expect(computeSshAvailability(node('tailscale'))).toEqual({lan: false, tailscale: true});
+    });
+});
+
+describe('computeNodeUpgradeAvailable', () => {
+    const node = (communication_state: 'fault' | 'abnormal', tailscale: boolean): ComputeClusterNode => ({
+        enabled: true, online: false, communication_state,
+        capabilities: ['control.node.upgrade.v1'], control_transport: 'tailscale',
+        network: {online: tailscale, ssh_available: tailscale, lan_ssh_available: false, tailscale_ssh_available: tailscale},
+        network_dependencies: [],
+    } as ComputeClusterNode);
+
+    it('allows a fault node over remote SSH but blocks abnormal or unreachable nodes', () => {
+        expect(computeNodeUpgradeAvailable(node('fault', true))).toBe(true);
+        expect(computeNodeUpgradeAvailable(node('abnormal', true))).toBe(false);
+        expect(computeNodeUpgradeAvailable(node('fault', false))).toBe(false);
     });
 });
 

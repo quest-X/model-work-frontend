@@ -1,6 +1,7 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {
     ComputeClusterNode,
+    computeNodeUpgradeAvailable,
     ComputeClusterService,
     ComputeUpgradeBatch,
     ComputeUpgradeBatchNode,
@@ -8,7 +9,7 @@ import {
 } from '../../../services/ComputeClusterService';
 import {ApprovalIdentityPanel} from '../../Common/ApprovalIdentityPanel';
 
-const ACTIVE_BATCH_KEY = 'opensight.compute-upgrade-batch.v1';
+export const ACTIVE_BATCH_KEY = 'opensight.compute-upgrade-batch.v1';
 const manifestKey = (manifest: ComputeUpgradeManifest): string =>
     `${manifest.platform}/${manifest.architecture}`;
 const architecture = (value: string): string => ({amd64: 'x86_64', arm64: 'aarch64'}[value.toLowerCase()] || value.toLowerCase());
@@ -94,8 +95,7 @@ export const ComputeUpgradePanel: React.FC<{
     const [batch, setBatch] = useState<ComputeUpgradeBatch | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-    const eligible = useMemo(() => nodes.filter(node => node.online
-        && node.capabilities.includes('control.node.upgrade.v1')), [nodes]);
+    const eligible = useMemo(() => nodes.filter(computeNodeUpgradeAvailable), [nodes]);
 
     useEffect(() => {
         const batchId = localStorage.getItem(ACTIVE_BATCH_KEY);
@@ -207,26 +207,29 @@ export const ComputeUpgradePanel: React.FC<{
         <ApprovalIdentityPanel zh={zh}/>
         {!batch && <>
             <div className='ComputeUpgradeManifestInput'>
-                <label htmlFor='compute-main-release'>{zh ? '本机 Main 的升级版本' : 'Release on this Main'}</label>
+                <label htmlFor='compute-main-release'>{zh ? '当前控制端的升级版本' : 'Release on this controller'}</label>
                 <select id='compute-main-release' value={release} disabled={loading || busy} onChange={event => {
                     setRelease(event.target.value);
                     setSelected([]);
                 }}>
-                    <option value=''>{loading ? (zh ? '正在读取 Main 安装包…' : 'Loading Main packages…') : (zh ? '请选择目标版本' : 'Select target version')}</option>
+                    <option value=''>{loading ? (zh ? '正在读取控制端安装包…' : 'Loading controller packages…') : (zh ? '请选择目标版本' : 'Select target version')}</option>
                     {versions.map(version => <option key={version} value={version}>v{version}</option>)}
                 </select>
                 <button type='button' disabled={loading || busy} onClick={() => void loadReleases()}>{zh ? '刷新版本' : 'Refresh releases'}</button>
-                <small>{zh ? '安装包由当前 Main 分发，发布信息和校验由系统自动处理。' : 'This Main distributes the package and handles release metadata and verification.'}</small>
-                {!loading && !error && versions.length === 0 && <p role='status'>{zh ? '当前 Main 尚未发布可用安装包。请先在 16 上发布目标版本，再刷新列表。' : 'No packages published on this Main. Publish a target release on this Main, then refresh.'}</p>}
+                <small>{zh ? '安装包由当前控制端分发，发布信息和校验由系统自动处理。' : 'This controller distributes the package and handles release metadata and verification.'}</small>
+                {!loading && !error && versions.length === 0 && <p role='status'>{zh ? '当前控制端尚未发布可用安装包。请先发布目标版本，再刷新列表。' : 'No packages published on this controller. Publish a target release, then refresh.'}</p>}
             </div>
             <div className='ComputeUpgradeNodes'>
                 {eligible.map(node => <label key={node.node_id}>
                     <input type='checkbox' disabled={busy || !compatible(node)} checked={selected.includes(node.node_id)} onChange={event => setSelected(current =>
                         event.target.checked ? [...current, node.node_id] : current.filter(id => id !== node.node_id))}/>
-                    <strong>{node.name}</strong><small>{node.resources.platform} · {node.resources.architecture} · v{node.agent_version}</small>
-                    <span>{compatible(node) ? (zh ? '可从当前 Main 升级' : 'Ready from this Main') : (!release ? (zh ? '请先选择版本' : 'Select a release first') : (zh ? '该版本不适用于此节点' : 'Release unavailable for this node'))}</span>
+                    <div><strong>{node.name}</strong><small>{node.resources.platform} · {node.resources.architecture}</small></div>
+                    <div className='ComputeUpgradeNodeState'>
+                        <strong>{zh ? '当前版本' : 'Current version'} v{node.agent_version}</strong>
+                        <span>{compatible(node) ? (zh ? '可从当前控制端升级' : 'Ready from this controller') : (!release ? (zh ? '请先选择版本' : 'Select a release first') : (zh ? '该版本不适用于此节点' : 'Release unavailable for this node'))}</span>
+                    </div>
                 </label>)}
-                {eligible.length === 0 && <p>{zh ? '没有已启用 OTA 且当前正常的节点。' : 'No normal OTA-enabled nodes.'}</p>}
+                {eligible.length === 0 && <p>{zh ? '没有已启用 OTA、非异常且可联通的节点。' : 'No enabled, reachable, non-abnormal OTA nodes.'}</p>}
             </div>
             <button type='button' disabled={busy || loading || !release || selected.length === 0 || selected.some(id => {
                 const node = eligible.find(item => item.node_id === id);

@@ -14,6 +14,7 @@ import {
     ComputeLanAsset,
     ComputeManagedDevice,
     ComputeResourceGraph,
+    ComputeTask,
     ComputeRuntimeInventory,
     ComputeClusterService,
     cameraStreamingAvailable,
@@ -38,6 +39,8 @@ import {EdgeDeviceTerminalPopup} from '../PopupView/EdgeDeviceTerminalPopup/Edge
 import {CameraLiveViewPopup} from '../PopupView/CameraLiveViewPopup/CameraLiveViewPopup';
 import {ComputeTerminalPanel} from '../PopupView/ComputeClusterPopup/ComputeTerminalPanel';
 import {ResourceKnowledgeGraph} from '../PopupView/ComputeClusterPopup/ResourceKnowledgeGraph';
+import {ComputeFilePanel} from './ComputeFilePanel';
+import {StorageAnalysisPanel} from './StorageAnalysisPanel';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
@@ -63,7 +66,7 @@ const toneLabel = (tone: Tone, zh: boolean): string => tone === 'healthy'
     ? zh ? '正常' : 'Normal'
     : zh ? '故障' : 'Fault';
 type SidePanel = 'machines' | 'features';
-type Workspace = 'node' | 'network' | 'terminal' | 'groups';
+type Workspace = 'node' | 'network' | 'files' | 'utilities' | 'terminal' | 'groups';
 type MachineIconKind = 'jetson' | 'windows' | 'linux' | 'macos' | 'computer';
 type NodeGrouping = 'none' | 'region' | 'platform';
 type NodeOrdering = 'status' | 'activity' | 'name';
@@ -406,6 +409,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [groupMutationMessage, setGroupMutationMessage] = useState('');
     const [lanAssets, setLanAssets] = useState<ComputeLanAsset[]>([]);
     const [resourceGraph, setResourceGraph] = useState<ComputeResourceGraph | null>(null);
+    const [computeTasks, setComputeTasks] = useState<ComputeTask[]>([]);
     const [selectedNodeId, setSelectedNodeId] = useState('');
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -602,6 +606,28 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [groupMemberships, selectedGroupId, zh]);
 
     useEffect(() => {
+        if (workspace !== 'node' || overviewView !== 'graph' || selectedNodeId) {
+            setComputeTasks([]);
+            return undefined;
+        }
+        const controller = new AbortController();
+        const refreshTaskFlows = async () => {
+            try {
+                const response = await ComputeClusterService.tasks(controller.signal, 200);
+                if (mounted.current) setComputeTasks(response.tasks);
+            } catch {
+                if (mounted.current && !controller.signal.aborted) setComputeTasks([]);
+            }
+        };
+        void refreshTaskFlows();
+        const timer = window.setInterval(() => void refreshTaskFlows(), 2000);
+        return () => {
+            controller.abort();
+            window.clearInterval(timer);
+        };
+    }, [overviewView, selectedNodeId, workspace]);
+
+    useEffect(() => {
         const refreshDevices = () => void refresh();
         window.addEventListener('opensight:edge-device-updated', refreshDevices);
         window.addEventListener('opensight:camera-resource-updated', refreshDevices);
@@ -763,12 +789,18 @@ export const ControlCenterView: React.FC<IProps> = ({
     const normalCount = overviewNodes.filter(node => machineTone(node) === 'healthy').length;
     const overviewTone = communicationTone(aggregateCommunicationStates(overviewNodes.map(computeNodeState)));
     const terminalAvailable = Boolean(selectedNode?.online && selectedNode.network.ssh_available);
+    const filesAvailable = overviewNodes.some(node => node.online && node.capabilities.includes('filesystem.list.v1'));
+    const utilitiesAvailable = overviewNodes.some(node => node.online && node.capabilities.includes('task.storage.scan.v1'));
     const toolbarTone: Tone | null = workspace === 'groups'
         ? visibleGroups.length ? currentGroupTone : null
         : workspace === 'network'
             ? (error ? 'offline' : 'healthy')
             : workspace === 'terminal'
                 ? (terminalAvailable ? 'healthy' : 'offline')
+                : workspace === 'files'
+                    ? (filesAvailable ? 'healthy' : 'offline')
+                : workspace === 'utilities'
+                    ? (utilitiesAvailable ? 'healthy' : 'offline')
                 : selectedNode
                     ? machineTone(selectedNode)
                     : overviewNodes.length ? overviewTone : null;
@@ -852,7 +884,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     ...agentResponse.tasks.map(task => ({
                         taskId: task.id,
                         taskType: task.kind,
-                        device: 'OpenSight Platform Agent',
+                        device: 'OpenSight Agent',
                         state: task.status,
                         updatedAt: Date.parse(task.updated_at) / 1000,
                     })),
@@ -1067,6 +1099,14 @@ export const ControlCenterView: React.FC<IProps> = ({
                     setWorkspace('node');
                 }}
             >
+                <span className='ControlMachineIcon overview' aria-hidden='true'>
+                    <svg viewBox='0 0 24 24'>
+                        <rect x='3.5' y='3.5' width='7' height='7' rx='1'/>
+                        <rect x='13.5' y='3.5' width='7' height='7' rx='1'/>
+                        <rect x='3.5' y='13.5' width='7' height='7' rx='1'/>
+                        <rect x='13.5' y='13.5' width='7' height='7' rx='1'/>
+                    </svg>
+                </span>
                 <span className='ControlMachineIdentity'>
                     <strong>{zh ? '总览' : 'Overview'}</strong>
                     <small>{zh ? '地图 / 图谱' : 'Map / graph'}</small>
@@ -1144,6 +1184,36 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </span>
                 <span className={`ControlMachineState ${error ? 'offline' : 'healthy'}`}>
                     {toneLabel(error ? 'offline' : 'healthy', zh)}
+                </span>
+            </button>
+            <button
+                type='button'
+                className={`ControlMachineItem ${workspace === 'files' ? 'selected' : ''}`}
+                aria-pressed={workspace === 'files'}
+                onClick={() => setWorkspace('files')}
+            >
+                <span className='ControlMachineIcon files' aria-hidden='true'>▤</span>
+                <span className='ControlMachineIdentity'>
+                    <strong>{zh ? '文件管理' : 'File manager'}</strong>
+                    <small>{zh ? '只读浏览 · 复制路径' : 'Read-only browsing · copy paths'}</small>
+                </span>
+                <span className={`ControlMachineState ${filesAvailable ? 'healthy' : 'offline'}`}>
+                    {toneLabel(filesAvailable ? 'healthy' : 'offline', zh)}
+                </span>
+            </button>
+            <button
+                type='button'
+                className={`ControlMachineItem ${workspace === 'utilities' ? 'selected' : ''}`}
+                aria-pressed={workspace === 'utilities'}
+                onClick={() => setWorkspace('utilities')}
+            >
+                <span className='ControlMachineIcon files' aria-hidden='true'>◎</span>
+                <span className='ControlMachineIdentity'>
+                    <strong>{zh ? '实用工具' : 'Utilities'}</strong>
+                    <small>{zh ? '存储分析' : 'Storage analysis'}</small>
+                </span>
+                <span className={`ControlMachineState ${utilitiesAvailable ? 'healthy' : 'offline'}`}>
+                    {toneLabel(utilitiesAvailable ? 'healthy' : 'offline', zh)}
                 </span>
             </button>
             <button
@@ -1694,6 +1764,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                         ? (zh ? '网络资产' : 'Network assets')
                         : workspace === 'terminal'
                             ? (zh ? '终端连接' : 'Terminal connection')
+                            : workspace === 'files'
+                                ? (zh ? '文件管理' : 'File manager')
+                            : workspace === 'utilities'
+                                ? (zh ? '实用工具' : 'Utilities')
                             : selectedNode?.name || activeGroupResources?.group.group_name || (overviewView === 'map'
                                 ? (zh ? '边缘集群地图' : 'Edge cluster map')
                                 : (zh ? '边缘集群图谱' : 'Edge cluster graph'))}</strong>
@@ -1701,7 +1775,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                         ? <small>{zh ? '本机群成员关系' : 'Local group memberships'}</small>
                         : workspace === 'network'
                         ? <small>{zh ? '计算群资产台账' : 'Compute-cluster inventory'}</small>
-                        : selectedNode && <small>{workspace === 'terminal'
+                        : selectedNode && workspace !== 'files' && <small>{workspace === 'terminal'
                             ? selectedNode.name
                             : selectedNode.node_id}</small>}
                 </div>
@@ -1945,6 +2019,19 @@ export const ControlCenterView: React.FC<IProps> = ({
                         preferredNodeId={selectedNodeId}
                     />
                 </div>}
+                {workspace === 'files' && <div className='ControlFeatureWorkspace'>
+                    <ComputeFilePanel nodes={overviewNodes} zh={zh}/>
+                </div>}
+                <div className='ControlFeatureWorkspace' hidden={workspace !== 'utilities'}>
+                    {!selectedNode && <StorageAnalysisPanel node={null} zh={zh} visible={workspace === 'utilities'}/>}
+                    {overviewNodes.map(candidate => <div key={candidate.node_id} hidden={candidate.node_id !== selectedNodeId}>
+                        <StorageAnalysisPanel
+                            node={candidate}
+                            zh={zh}
+                            visible={workspace === 'utilities' && candidate.node_id === selectedNodeId}
+                        />
+                    </div>)}
+                </div>
                 {workspace === 'terminal' && <div className='ControlFeatureWorkspace'>
                     <ComputeTerminalPanel
                         key={selectedNodeId || 'terminal'}
@@ -1986,6 +2073,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             ? <ResourceKnowledgeGraph
                                 graph={overviewResourceGraph}
                                 nodes={overviewNodes}
+                                tasks={computeTasks}
                                 zh={zh}
                                 fitWindow
                                 onSelectWorkAgent={() => undefined}

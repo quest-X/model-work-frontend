@@ -3,6 +3,7 @@ import {connect} from 'react-redux';
 import {Language} from '../../../data/LanguageConfig';
 import {
     ComputeClusterNode,
+    computeNodeUpgradeAvailable,
     computeNodeState,
     computeNodeLabel,
     computeNodeNormal,
@@ -24,7 +25,7 @@ import {AppState} from '../../../store';
 import './ComputeClusterPopup.scss';
 import {ResourceKnowledgeGraph} from './ResourceKnowledgeGraph';
 import {ComputeTerminalPanel} from './ComputeTerminalPanel';
-import {ComputeUpgradePanel} from './ComputeUpgradePanel';
+import {ACTIVE_BATCH_KEY, ComputeUpgradePanel} from './ComputeUpgradePanel';
 
 interface IProps {
     language: Language;
@@ -34,7 +35,8 @@ interface IProps {
 }
 
 const AUTO_PLACEMENT = '__automatic__';
-type ComputeWorkspace = 'graph' | 'tasks' | 'network' | 'nodes' | 'terminal' | 'upgrade';
+type ComputeWorkspace = 'graph' | 'tasks' | 'network' | 'nodes' | 'terminal';
+type NodeFilter = 'all' | 'normal' | 'fault' | 'upgradeable';
 
 const bytes = (value: number | null, zh: boolean): string => {
     if (value === null || !Number.isFinite(value)) return zh ? '未知' : 'Unknown';
@@ -207,22 +209,44 @@ const TaskCard: React.FC<TaskCardProps> = ({task, zh, busy, onControl}) => {
 interface NodeCardProps {
     node: ComputeClusterNode;
     zh: boolean;
+    region?: string;
+    onUpgrade?: () => void;
 }
 
 // Resource, network, GPU, and device variants are one presentational node boundary.
 // eslint-disable-next-line complexity
-const NodeCard: React.FC<NodeCardProps> = ({node, zh}) => <article className={`ComputeNodeCard ${computeNodeState(node)}`}>
-    <div className='ComputeNodeHeading'>
+const NodeCard: React.FC<NodeCardProps> = ({node, zh, region, onUpgrade}) => <details className={`ComputeNodeCard ${computeNodeState(node)}`}>
+    <summary className='ComputeNodeHeading'>
         <div className='ComputeNodeIdentity'>
             <span className='ComputeNodeStatus'><i/>{computeNodeLabel(node, zh)}</span>
             <h3>{node.name}</h3>
-            <code>{node.node_id.slice(0, 8)}</code>
+            <span className='ComputeNodeRegion'>{region || (zh ? '未分组' : 'Unassigned')}</span>
         </div>
-        <div className='ComputeNodeHeartbeat'>
-            <span>{zh ? '最近心跳' : 'Last heartbeat'}</span>
-            <strong>{lastSeen(node.heartbeat_age_seconds, zh)}</strong>
+        <div className='ComputeNodeCompactStats'>
+            <span>CPU <strong>{node.resources.cpu_percent == null ? node.resources.cpu_logical : `${Math.round(node.resources.cpu_percent)}%`}</strong></span>
+            <span>MEM <strong>{percentUsed(node.resources.memory_total_bytes, node.resources.memory_available_bytes)}</strong></span>
+            <span>GPU <strong>{node.resources.gpus.length}</strong></span>
+            <span>DISK <strong>{percentUsed(node.resources.disk_total_bytes, node.resources.disk_free_bytes)}</strong></span>
+            <span>DEVICE <strong>{node.device_inventory.devices.length}</strong></span>
         </div>
-    </div>
+        <div className='ComputeNodeHeaderActions'>
+            <div className='ComputeNodeHeartbeat'>
+                <span>HEARTBEAT</span>
+                <strong>{lastSeen(node.heartbeat_age_seconds, zh)}</strong>
+            </div>
+            <span className='ComputeNodeVersion'>SERVICE <strong>v{node.agent_version}</strong></span>
+            {onUpgrade && <button
+                type='button'
+                disabled={!computeNodeUpgradeAvailable(node)}
+                aria-label={`${zh ? '管理' : 'Manage'} ${node.name} ${zh ? '节点升级' : 'node upgrade'}`}
+                onClick={onUpgrade}
+            >{computeNodeUpgradeAvailable(node)
+                ? (zh ? '升级节点' : 'Upgrade node')
+                : node.communication_state === 'abnormal'
+                    ? (zh ? '异常，暂不可升级' : 'Abnormal; upgrade unavailable')
+                    : (zh ? '无法联通，暂不可升级' : 'Unreachable; upgrade unavailable')}</button>}
+        </div>
+    </summary>
 
     <div className='ComputeNodeResourceGrid'>
         <div><span>CPU</span><strong>{node.resources.cpu_logical}</strong><small>{zh ? '逻辑核心' : 'logical cores'}</small></div>
@@ -241,12 +265,12 @@ const NodeCard: React.FC<NodeCardProps> = ({node, zh}) => <article className={`C
         </div>)}
     </div>}
 
-    <div className='ComputeNodeDeviceSection'>
-        <div className='ComputeNodeDeviceHeading'>
-            <strong>{zh ? '节点设备' : 'Node devices'}</strong>
+    <details className='ComputeNodeDeviceSection'>
+        <summary className='ComputeNodeDeviceHeading'>
+            <strong>{zh ? '相关设备' : 'Related devices'}</strong>
             <span>{node.device_inventory.devices.length}</span>
             <small>{zh ? '设备源：' : 'Device source: '}{healthLabel(node.device_inventory.state === 'ready', zh)}</small>
-        </div>
+        </summary>
         {node.device_inventory.devices.length > 0 && <div className='ComputeNodeDeviceList'>
             {node.device_inventory.devices.map(device => <div key={device.device_id}>
                 <span className='ComputeDeviceKind'>{device.kind === 'camera' ? (zh ? '相机' : 'Camera') : device.kind}</span>
@@ -264,17 +288,17 @@ const NodeCard: React.FC<NodeCardProps> = ({node, zh}) => <article className={`C
                 )}</span>
             </div>)}
         </div>}
-    </div>
+    </details>
 
     <footer>
+        <code>{node.node_id.slice(0, 8)}</code>
         <span>Tailscale: {healthLabel(node.network.online, zh)}</span>
         <span className={node.network.ssh_available ? 'ssh-ready' : ''}>SSH: {node.network.ssh_available
             ? healthLabel(true, zh)
             : healthLabel(false, zh)}</span>
-        <span>{zh ? '节点服务' : 'Node service'} v{node.agent_version}</span>
         <span>{node.capabilities.length} {zh ? '项能力' : 'capabilities'}</span>
     </footer>
-</article>;
+</details>;
 
 // This container intentionally owns the polling lifecycle and the complete modal state.
 // eslint-disable-next-line complexity
@@ -293,6 +317,9 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const [loading, setLoading] = useState(true);
     const [maximized, setMaximized] = useState(false);
     const [activeWorkspace, setActiveWorkspace] = useState<ComputeWorkspace>(initialWorkspace);
+    const [nodeFilter, setNodeFilter] = useState<NodeFilter>('all');
+    const [upgradeOpen, setUpgradeOpen] = useState(() => typeof window !== 'undefined'
+        && Boolean(window.localStorage.getItem(ACTIVE_BATCH_KEY)));
     const [error, setError] = useState('');
     const [taskError, setTaskError] = useState('');
     const [selectedNode, setSelectedNode] = useState(preferredNodeId || AUTO_PLACEMENT);
@@ -321,6 +348,12 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const refreshingRef = useRef(false);
     const heartbeats = useRef<Record<string, number>>({});
     const taskFormRef = useRef<HTMLDivElement | null>(null);
+    const upgradePanelRef = useRef<HTMLDivElement | null>(null);
+
+    const openUpgrade = () => {
+        setUpgradeOpen(true);
+        window.setTimeout(() => upgradePanelRef.current?.scrollIntoView?.({behavior: 'smooth', block: 'start'}));
+    };
 
     // The refresh is one atomic snapshot transaction: directory, tasks, and online leases.
     // eslint-disable-next-line complexity
@@ -564,23 +597,27 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
         online: nodes.filter(computeNodeNormal).length,
     }), [nodes, status]);
 
+    const regionByNode = useMemo(() => new Map(
+        (resourceGraph?.entities || [])
+            .filter(entity => entity.kind === 'compute_node' && entity.node_id)
+            .map(entity => [entity.node_id as string, entity])
+    ), [resourceGraph]);
     const sortedNodes = useMemo(() => {
-        const regionByNode = new Map(
-            (resourceGraph?.entities || [])
-                .filter(entity => entity.kind === 'compute_node' && entity.node_id)
-                .map(entity => [entity.node_id as string, entity.region_id || entity.region_name || 'unassigned'])
-        );
         const collator = new Intl.Collator('en', {numeric: true, sensitivity: 'base'});
         return [...nodes].sort((left, right) => {
+            const stateOrder = Number(computeNodeState(left) === 'normal') - Number(computeNodeState(right) === 'normal');
+            if (stateOrder !== 0) return stateOrder;
             const regionOrder = collator.compare(
-                regionByNode.get(left.node_id) || 'unassigned',
-                regionByNode.get(right.node_id) || 'unassigned',
+                regionByNode.get(left.node_id)?.region_id || regionByNode.get(left.node_id)?.region_name || 'unassigned',
+                regionByNode.get(right.node_id)?.region_id || regionByNode.get(right.node_id)?.region_name || 'unassigned',
             );
             if (regionOrder !== 0) return regionOrder;
-            if (left.online !== right.online) return left.online ? -1 : 1;
             return collator.compare(left.name, right.name);
         });
-    }, [nodes, resourceGraph]);
+    }, [nodes, regionByNode]);
+    const filteredNodes = useMemo(() => sortedNodes.filter(node => nodeFilter === 'all'
+        || (nodeFilter === 'upgradeable' && computeNodeUpgradeAvailable(node))
+        || computeNodeState(node) === nodeFilter), [nodeFilter, sortedNodes]);
 
     const taskControlEnabled = status?.task_control?.enabled === true;
     const orchestrationEnabled = taskControlEnabled
@@ -621,6 +658,10 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const operationsGraphEntityCount = resourceGraph?.entities.filter(entity =>
         entity.kind === 'compute_node' || entity.kind === 'managed_device',
     ).length ?? 0;
+    const totalNodeCount = resourceGraph?.entities.filter(entity =>
+        entity.kind === 'compute_node'
+        || (entity.kind === 'managed_device' && entity.device_kind === 'edge_compute'),
+    ).length ?? totals.total;
 
     return <div
         className={`ComputeClusterBackdrop${maximized ? ' maximized' : ''}${embedded ? ' embedded' : ''}`}
@@ -659,9 +700,10 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
 
             <div className='ComputeClusterSummary'>
                 <div><span>{zh ? '地域' : 'Regions'}</span><strong>{resourceGraph?.summary.regions ?? 0}</strong></div>
+                <div><span>{zh ? '节点总数' : 'Total nodes'}</span><strong>{totalNodeCount}</strong></div>
                 <div><span>{zh ? '主节点' : 'Main nodes'}</span><strong>{totals.total}</strong></div>
-                <div><span>{zh ? '正常' : 'Normal'}</span><strong className='online'>{totals.online}</strong></div>
-                <div><span>{zh ? '故障' : 'Fault'}</span><strong>{nodes.filter(node => computeNodeState(node) === 'fault').length}</strong></div>
+                <div><span>{zh ? '正常节点' : 'Normal nodes'}</span><strong className='online'>{totals.online}</strong></div>
+                <div><span>{zh ? '故障节点' : 'Fault nodes'}</span><strong>{nodes.filter(node => computeNodeState(node) === 'fault').length}</strong></div>
             </div>
             </>}
 
@@ -673,9 +715,8 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                     ['graph', zh ? '节点与传感器' : 'Nodes & sensors', operationsGraphEntityCount],
                     ['tasks', zh ? '工作调度' : 'Work scheduling', tasks.length],
                     ['network', zh ? '网络资产' : 'Network assets', lanAssets?.summary.total ?? 0],
-                    ['nodes', zh ? '节点详情' : 'Node details', nodes.length],
+                    ['nodes', zh ? '节点管理' : 'Node management', nodes.length],
                     ['terminal', zh ? '终端连接' : 'Terminal', nodes.filter(node => node.online && node.network.ssh_available).length],
-                    ['upgrade', zh ? '节点升级' : 'Node upgrade', nodes.filter(node => node.capabilities.includes('control.node.upgrade.v1')).length],
                 ] as Array<[ComputeWorkspace, string, number]>).map(([workspace, label, count]) => <button
                     type='button'
                     key={workspace}
@@ -721,6 +762,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                     {resourceGraph && <ResourceKnowledgeGraph
                         graph={resourceGraph}
                         nodes={nodes}
+                        tasks={tasks}
                         zh={zh}
                         fitWindow
                         selectedTaskType={graphSelection?.taskType}
@@ -936,16 +978,47 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                         </article>)}
                     </div>}
                 </section>}
-                {!loading && activeWorkspace === 'terminal' && status?.task_control?.terminal_sessions && <ComputeTerminalPanel zh={zh}/>}
+                {!loading && activeWorkspace === 'terminal' && status?.task_control?.terminal_sessions && <ComputeTerminalPanel zh={zh} focusKey={maximized}/>}
                 {!loading && activeWorkspace === 'terminal' && !status?.task_control?.terminal_sessions && <div className='ComputeTaskDisabled'>
                     {zh ? 'Mac Client 尚未启用终端控制。' : 'Terminal control is not enabled on the Mac Client.'}
                 </div>}
                 {!loading && activeWorkspace === 'nodes' && nodes.length > 0 && <div className='ComputeNodeSectionTitle'>
-                    <strong>{zh ? '节点资源' : 'Node resources'}</strong>
-                    <span>{nodes.length}</span>
+                    <div><strong>{zh ? '节点资源与版本' : 'Node resources and versions'}</strong><span>{nodes.length}</span></div>
+                    <div className='ComputeNodeToolbar'>
+                        <div className='ComputeNodeFilters' role='group' aria-label={zh ? '节点筛选' : 'Node filters'}>
+                            {([
+                                ['all', zh ? '全部' : 'All', nodes.length],
+                                ['normal', zh ? '正常' : 'Normal', nodes.filter(node => computeNodeState(node) === 'normal').length],
+                                ['fault', zh ? '故障' : 'Fault', nodes.filter(node => computeNodeState(node) === 'fault').length],
+                                ['upgradeable', zh ? '可升级' : 'Upgradeable', nodes.filter(computeNodeUpgradeAvailable).length],
+                            ] as Array<[NodeFilter, string, number]>).map(([filter, label, count]) => <button
+                                type='button'
+                                key={filter}
+                                aria-pressed={nodeFilter === filter}
+                                onClick={() => setNodeFilter(filter)}
+                            >{label} <strong>{count}</strong></button>)}
+                        </div>
+                        <button
+                            type='button'
+                            className='ComputeBatchUpgradeButton'
+                            aria-expanded={upgradeOpen}
+                            onClick={() => setUpgradeOpen(current => !current)}
+                        >{upgradeOpen ? (zh ? '收起节点升级' : 'Hide node upgrade') : (zh ? '批量升级' : 'Batch upgrade')}</button>
+                    </div>
                 </div>}
-                {!loading && activeWorkspace === 'nodes' && sortedNodes.map(node => <NodeCard key={node.node_id} node={node} zh={zh}/>)}
-                {!loading && activeWorkspace === 'upgrade' && <ComputeUpgradePanel nodes={nodes} zh={zh}/>}
+                {!loading && activeWorkspace === 'nodes' && upgradeOpen && <div className='ComputeNodeUpgradeArea' ref={upgradePanelRef}>
+                    <ComputeUpgradePanel nodes={nodes} zh={zh}/>
+                </div>}
+                {!loading && activeWorkspace === 'nodes' && filteredNodes.length === 0 && <div className='ComputeNodeFilterEmpty'>
+                    {zh ? '没有符合当前筛选条件的节点。' : 'No nodes match the current filter.'}
+                </div>}
+                {!loading && activeWorkspace === 'nodes' && filteredNodes.map(node => <NodeCard
+                    key={node.node_id}
+                    node={node}
+                    zh={zh}
+                    region={regionByNode.get(node.node_id)?.region_name || regionByNode.get(node.node_id)?.region_id}
+                    onUpgrade={node.capabilities.includes('control.node.upgrade.v1') ? openUpgrade : undefined}
+                />)}
             </div>
         </section>
     </div>;

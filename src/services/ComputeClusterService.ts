@@ -114,6 +114,11 @@ export const computeSshAvailability = (node: ComputeClusterNode): {lan: boolean;
     };
 };
 
+export const computeNodeUpgradeAvailable = (node: ComputeClusterNode): boolean =>
+    node.enabled && node.communication_state !== 'abnormal'
+    && node.capabilities.includes('control.node.upgrade.v1')
+    && Object.values(computeSshAvailability(node)).some(Boolean);
+
 export type ComputeCommunicationState = 'normal' | 'fault' | 'abnormal';
 
 export const aggregateCommunicationStates = (states: ComputeCommunicationState[]): 'normal' | 'fault' =>
@@ -328,8 +333,12 @@ export type ComputeFilesystemOperation = 'filesystem.stat' | 'filesystem.list';
 export type ComputeFilesystemTarget = {
     kind: 'path';
     path: string;
-    source: {kind: 'known_folder'; id: 'public_desktop'};
+    source?: {kind: 'known_folder'; id: 'public_desktop'};
 };
+
+export type ComputeFilesystemRequestTarget =
+    | {kind: 'known_folder'; id: 'public_desktop'}
+    | {kind: 'path'; path: string};
 
 export type ComputeFilesystemAuthorization = {
     version: 1;
@@ -371,7 +380,7 @@ export type ComputeFilesystemResult = {
 
 export type ComputeFilesystemAuthorizationRequest = {
     operation: ComputeFilesystemOperation;
-    target: {kind: 'known_folder'; id: 'public_desktop'};
+    target: ComputeFilesystemRequestTarget;
     parameters: {limit?: number};
     user: {user_id: string; user_name: string; user_public_key: string};
     ttl_seconds: number;
@@ -380,6 +389,98 @@ export type ComputeFilesystemAuthorizationRequest = {
 export type ComputeFilesystemDecision = {
     authorization: ComputeFilesystemAuthorization & {state: 'succeeded'};
     result: ComputeFilesystemResult;
+};
+
+export type ComputeStorageRoot = {kind: 'path'; path: string};
+
+export type ComputeStorageRequest = {
+    schema_version: 'agentos.capability-request.v1';
+    request_id: string;
+    idempotency_key: string;
+    tool: 'agentos.storage.scan';
+    node_id: string;
+    arguments: {
+        roots: ComputeStorageRoot[];
+        min_file_bytes: number;
+        max_results: number;
+    };
+};
+
+export type ComputeStorageAuthorization = ApprovalRequest & {
+    operation: 'agentos.storage.scan';
+    target: {
+        kind: 'storage_roots';
+        roots: ComputeStorageRoot[];
+        request_id: string;
+        idempotency_key: string;
+    };
+    parameters: {min_file_bytes: number; max_results: number};
+    state: 'pending' | 'approved' | 'executing' | 'succeeded' | 'failed' | 'rejected' | 'expired';
+    error_code: string | null;
+    node_name?: string;
+};
+
+export type ComputeStorageResult = {
+    schema_version: 'storage.scan-result.v1';
+    summary: {
+        file_count: number;
+        large_file_count: number;
+        directory_count: number;
+        total_bytes: number;
+        inaccessible_count: number;
+        skipped_link_count: number;
+        warning_count: number;
+        elapsed_ms: number;
+    };
+    largest_files: {
+        root_index: number; relative_path: string; size: number; modified_at: number;
+    }[];
+    largest_directories: {
+        root_index: number; relative_path: string; size: number;
+        classification: 'dataset_candidate' | 'cache_candidate' | null;
+    }[];
+    categories: {
+        category: 'model_weight' | 'image' | 'video' | 'archive' | 'log' | 'other';
+        file_count: number;
+        total_bytes: number;
+    }[];
+    truncated: boolean;
+    warnings: {
+        code: 'entry_changed' | 'entry_unavailable' | 'link_skipped' | 'overlapping_root'
+            | 'root_unavailable' | 'unsupported_entry';
+        root_index: number;
+        relative_path: string;
+    }[];
+};
+
+export type ComputeStorageResponse = {
+    schema_version: 'agentos.capability-response.v1';
+    request_id: string;
+    tool: 'agentos.storage.scan';
+    node_id: string;
+    state: 'authorization_required' | ComputeTaskState;
+    task_id: string | null;
+    progress: {
+        phase: 'walking' | 'grouping' | 'hashing' | 'finalizing';
+        roots_completed: number;
+        roots_total: number;
+        files_scanned: number;
+        bytes_scanned: number;
+    } | null;
+    result: ComputeStorageResult | null;
+    authorization: {
+        authorization_id: string;
+        operation: 'agentos.storage.scan';
+        target_summary: string;
+        parameters_summary: string;
+        expires_at: number;
+    } | null;
+    error: {code: string; message: string; retryable: boolean} | null;
+};
+
+export type ComputeStorageAuthorizationResult = {
+    authorization: ComputeStorageAuthorization;
+    response: ComputeStorageResponse;
 };
 
 export type ComputeUpgradeManifest = {
@@ -476,6 +577,7 @@ export type ComputeTaskType = 'system.wait'
     | 'information.web_fetch'
     | 'network.lan_discovery'
     | 'network.peer_probe'
+    | 'storage.scan'
     | 'camera.connect';
 
 export type ComputeLanScanTarget = {
@@ -680,11 +782,12 @@ export type ComputeTask = {
         | ComputeWebFetchResult
         | ComputeLanDiscoveryResult
         | ComputePeerProbeResult
+        | ComputeStorageResult
         | CameraConnectResult
         | null;
     error?: string | null;
     attempt: number;
-    parameters: {seconds?: number; url?: string; cidr?: string; peer_id?: string};
+    parameters: {seconds?: number; url?: string; cidr?: string; peer_id?: string; request_id?: string};
     resources?: Partial<ComputeResourceRequest>;
     placement?: {
         mode: 'automatic' | 'manual';
@@ -959,6 +1062,49 @@ export class ComputeClusterService {
             `/filesystem/authorizations/${encodeURIComponent(authorizationId)}/reject`,
             signal,
             {method: 'POST', body: '{}'},
+        );
+    }
+
+    public static createStorageAuthorization(
+        input: {request: ComputeStorageRequest; user: ComputeFilesystemAuthorizationRequest['user']; ttl_seconds: number},
+        signal?: AbortSignal,
+    ): Promise<ComputeStorageAuthorizationResult> {
+        return request('/agentos/storage/authorizations', signal, {
+            method: 'POST', body: JSON.stringify(input),
+        });
+    }
+
+    public static approveStorageAuthorization(
+        authorizationId: string,
+        signature: string,
+        signal?: AbortSignal,
+    ): Promise<ComputeStorageAuthorizationResult> {
+        return request(
+            `/agentos/storage/authorizations/${encodeURIComponent(authorizationId)}/approve`,
+            signal,
+            {method: 'POST', body: JSON.stringify({signature})},
+        );
+    }
+
+    public static rejectStorageAuthorization(
+        authorizationId: string,
+        signal?: AbortSignal,
+    ): Promise<ComputeStorageAuthorization & {state: 'rejected'}> {
+        return request(
+            `/agentos/storage/authorizations/${encodeURIComponent(authorizationId)}/reject`,
+            signal,
+            {method: 'POST', body: '{}'},
+        );
+    }
+
+    public static storageStatus(
+        nodeId: string,
+        taskId: string,
+        signal?: AbortSignal,
+    ): Promise<ComputeStorageResponse> {
+        return request(
+            `/agentos/storage/tasks/${encodeURIComponent(nodeId)}/${encodeURIComponent(taskId)}`,
+            signal,
         );
     }
 

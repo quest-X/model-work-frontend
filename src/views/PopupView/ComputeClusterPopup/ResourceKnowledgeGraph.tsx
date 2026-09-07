@@ -3,6 +3,7 @@ import {
     ComputeClusterNode,
     ComputeResourceGraph,
     ComputeResourceGraphEntity,
+    ComputeTask,
     computeNodeState,
     computeNodeLabel,
     aggregateCommunicationStates,
@@ -11,6 +12,7 @@ import {
 interface ResourceKnowledgeGraphProps {
     graph: ComputeResourceGraph;
     nodes: ComputeClusterNode[];
+    tasks?: ComputeTask[];
     zh: boolean;
     fitWindow?: boolean;
     selectedTaskType?: string;
@@ -157,9 +159,17 @@ const operationsTopology = (
         const regionalPoints = new Map<string, GraphPoint>();
         const centerX = region.left + region.width / 2;
         const centerY = 52;
-        const nodeCount = region.nodeIds.length;
+        const directOwnerIndex = region.nodeIds.findIndex(nodeId =>
+            (childrenByOwner.get(nodeId) || []).some(child => child.device_kind !== 'edge_compute'));
+        const orderedNodeIds = directOwnerIndex > 0
+            ? [...region.nodeIds.slice(directOwnerIndex), ...region.nodeIds.slice(0, directOwnerIndex)]
+            : region.nodeIds;
+        const nodeCount = orderedNodeIds.length;
         const sectorSize = Math.PI * 2 / Math.max(1, nodeCount);
-        region.nodeIds.forEach((nodeId, nodeIndex) => {
+        const directSensors = orderedNodeIds.flatMap(nodeId =>
+            (childrenByOwner.get(nodeId) || []).filter(child => child.device_kind !== 'edge_compute'));
+        let directSensorIndex = 0;
+        orderedNodeIds.forEach((nodeId, nodeIndex) => {
             const nodeAngle = -Math.PI / 2 + sectorSize * nodeIndex;
             regionalPoints.set(nodeId, nodeCount === 1
                 ? {x: centerX, y: centerY}
@@ -173,13 +183,12 @@ const operationsTopology = (
                     ? -Math.PI / 2 + Math.PI * 2 * (usedWeight + weight / 2) / childrenWeight
                     : nodeAngle - sectorSize * .38 + sectorSize * .76 * (usedWeight + weight / 2) / childrenWeight;
                 const isEdgeDevice = child.device_kind === 'edge_compute';
-                regionalPoints.set(child.entity_id, radialPoint(
-                    centerX,
-                    centerY,
-                    region.width * (isEdgeDevice ? .24 : .4),
-                    isEdgeDevice ? 21 : 38,
-                    childAngle,
-                ));
+                regionalPoints.set(child.entity_id, isEdgeDevice
+                    ? radialPoint(centerX, centerY, region.width * .24, 21, childAngle)
+                    : {
+                        x: centerX + region.width * .8 * ((directSensorIndex++ + .5) / directSensors.length - .5),
+                        y: 24,
+                    });
                 const grandchildren = childrenByOwner.get(child.entity_id) || [];
                 const branchArc = (nodeCount === 1 ? Math.PI * 2 : sectorSize * .76) * weight / childrenWeight;
                 grandchildren.forEach((grandchild, index) => regionalPoints.set(
@@ -262,10 +271,13 @@ const deviceStatusLabel = (status: string | null | undefined, zh: boolean): stri
 export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     graph,
     nodes: clusterNodes,
+    tasks = [],
     zh,
     fitWindow = false,
 }) => {
     const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
+    const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
+    const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
     const [pinnedEntityId, setPinnedEntityId] = useState<string | null>(null);
     const index = useMemo(
         () => new Map(graph.entities.map(entity => [entity.entity_id, entity])),
@@ -298,6 +310,17 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     const points = topology.points;
     const codes = useMemo(() => displayCodes(graph.entities), [graph.entities]);
     const graphNodes = visibleEntities.filter(entity => entity.kind === 'compute_node');
+    const nodeEntityByNodeId = new Map(graphNodes
+        .filter(entity => entity.node_id)
+        .map(entity => [entity.node_id as string, entity]));
+    const activeTaskFlows = tasks.flatMap(task => {
+        const targetNodeId = task.task_type === 'network.peer_probe' ? task.parameters.peer_id : undefined;
+        const source = nodeEntityByNodeId.get(task.node_id);
+        const target = targetNodeId ? nodeEntityByNodeId.get(targetNodeId) : undefined;
+        return (task.state === 'queued' || task.state === 'running') && source && target && source !== target
+            ? [{task, source, target}]
+            : [];
+    });
     const edgeDevices = visibleEntities.filter(entity =>
         entity.kind === 'managed_device' && entity.device_kind === 'edge_compute',
     );
@@ -308,10 +331,17 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         const node = entity.node_id ? nodeIndex.get(entity.node_id) : undefined;
         return [entity.entity_id, computeNodeState(node) === 'normal' ? 'online' : 'warning'];
     }));
-    const nodeToneCounts = [...nodeTones.values()];
     const inspectedEntityId = pinnedEntityId || hoveredEntityId;
     const inspectedEntity = inspectedEntityId ? index.get(inspectedEntityId) : undefined;
     const inspectedPoint = inspectedEntityId ? points.get(inspectedEntityId) : undefined;
+    const hoveredRelation = visibleRelations.find(relation => relation.relation_id === hoveredRelationId);
+    const hoveredRelationSource = hoveredRelation ? index.get(hoveredRelation.source_id) : undefined;
+    const hoveredRelationTarget = hoveredRelation ? index.get(hoveredRelation.target_id) : undefined;
+    const hoveredRelationSourcePoint = hoveredRelation ? points.get(hoveredRelation.source_id) : undefined;
+    const hoveredRelationTargetPoint = hoveredRelation ? points.get(hoveredRelation.target_id) : undefined;
+    const hoveredTaskFlow = activeTaskFlows.find(({task}) => task.task_id === hoveredTaskId);
+    const hoveredTaskSourcePoint = hoveredTaskFlow ? points.get(hoveredTaskFlow.source.entity_id) : undefined;
+    const hoveredTaskTargetPoint = hoveredTaskFlow ? points.get(hoveredTaskFlow.target.entity_id) : undefined;
 
     const dependencyFor = (nodeEntity: ComputeResourceGraphEntity, dependencyId: string): boolean => {
         const relation = graph.relations.find(item =>
@@ -342,19 +372,16 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     return <section className='ComputeKnowledgePanel' aria-label={zh ? '主节点、边缘设备与摄像头拓扑' : 'Main node, edge device, and camera topology'}>
         <div className='ComputeKnowledgeHeading'>
             <div>
-                <span>{zh ? '地域拓扑 · 悬浮查看 / 双击固定' : 'Regional topology · Hover / double-click to pin'}</span>
+                <span>{zh ? '地域拓扑 (悬浮查看 / 双击固定)' : 'Regional topology · Hover / double-click to pin'}</span>
                 <h3>{zh ? '计算群地域 Graph' : 'Compute cluster regional graph'}</h3>
                 <p>{zh
                     ? '计算群按地域归组主节点，主节点连接边缘计算设备，边缘设备再连接对应摄像头。'
                     : 'The cluster groups main nodes by region, then links them to edge devices and each edge device to its cameras.'}</p>
             </div>
             <div className='ComputeKnowledgeStats graph-summary'>
-                <div className='edge-devices'><strong>{edgeDevices.length}</strong><span>{zh ? '边缘计算设备' : 'Edge devices'}</span></div>
-                <div className='cameras'><strong>{sensors.length}</strong><span>{zh ? '摄像头' : 'Cameras'}</span></div>
-                <div><strong>{visibleEntities.length}</strong><span>{zh ? '总数' : 'Total'}</span></div>
-                <div><strong>{graphNodes.length}</strong><span>{zh ? '主节点' : 'Main nodes'}</span></div>
-                <div className='online'><strong>{nodeToneCounts.filter(tone => tone === 'online').length}</strong><span>{zh ? '正常' : 'Normal'}</span></div>
-                <div className='warning'><strong>{nodeToneCounts.filter(tone => tone === 'warning').length}</strong><span>{zh ? '故障' : 'Fault'}</span></div>
+                <div><strong>{edgeDevices.length + sensors.length}</strong><span>{zh ? '设备总数' : 'Total devices'}</span></div>
+                <div><strong>{edgeDevices.length}</strong><span>{zh ? '计算节点' : 'Compute nodes'}</span></div>
+                <div><strong>{sensors.length}</strong><span>{zh ? '摄像头' : 'Cameras'}</span></div>
             </div>
         </div>
 
@@ -363,12 +390,13 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
             <span><i className='entity-shape circle'/>{zh ? '主节点' : 'Main node'}</span>
             <span><i className='entity-shape rounded-rectangle edge-device'/>{zh ? '边缘计算设备' : 'Edge device'}</span>
             <span><i className='entity-shape rounded-rectangle sensor'/>{zh ? '摄像头' : 'Camera'}</span>
+            <span><i className='entity-shape task-flow'/>{zh ? '数据包' : 'Packet'}</span>
         </div>
 
         <div className={`ComputeGraphViewport${fitWindow ? ' fit-window' : ''}`}>
             <div className='ComputeGraphFit'>
             <div
-                className='ComputeGraphScene operations-only'
+                className={`ComputeGraphScene operations-only${hoveredRelation || hoveredTaskFlow ? ' has-relation-focus' : ''}`}
                 data-layout='radial'
                 style={{
                     minWidth: fitWindow ? 0 : topology.minWidth,
@@ -393,35 +421,94 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         <small>{region.nodeIds.filter(id => nodeTones.get(id) === 'online').length}/{region.nodeIds.length} {zh ? '正常节点' : 'Normal nodes'}</small>
                     </div>)}
                 </div>
-                <svg className='ComputeGraphEdges' viewBox='0 0 1000 440' preserveAspectRatio='none' data-testid='resource-node-link-graph' aria-hidden='true'>
+                <svg
+                    className='ComputeGraphEdges'
+                    viewBox='0 0 1000 440'
+                    preserveAspectRatio='none'
+                    data-testid='resource-node-link-graph'
+                    aria-label={zh ? '设备连接线' : 'Device connections'}
+                >
                     {visibleRelations.map(relation => {
                         const source = points.get(relation.source_id);
                         const target = points.get(relation.target_id);
+                        const sourceEntity = index.get(relation.source_id);
                         const targetEntity = index.get(relation.target_id);
-                        if (!source || !target || !targetEntity) return null;
+                        if (!source || !target || !sourceEntity || !targetEntity) return null;
                         const x1 = source.x * 10;
                         const y1 = source.y * 4.4;
                         const x2 = target.x * 10;
                         const y2 = target.y * 4.4;
+                        const focused = hoveredRelationId === relation.relation_id;
+                        const muted = Boolean(hoveredRelationId || hoveredTaskId) && !focused;
                         return <React.Fragment key={relation.relation_id}>
                             <line
                                 x1={x1}
                                 y1={y1}
                                 x2={x2}
                                 y2={y2}
-                                className={`ComputeGraphEdge manages ${deviceClass(targetEntity)} ${relation.active ? 'active' : 'inactive'}`}
+                                className={`ComputeGraphEdge manages ${deviceClass(targetEntity)} ${relation.active ? 'active' : 'inactive'} ${focused ? 'focused' : ''} ${muted ? 'muted' : ''}`}
                                 data-testid='resource-graph-edge'
                                 data-relation-kind='manages'
+                                data-relation-id={relation.relation_id}
+                                aria-hidden='true'
                             />
                             {!relation.active && <g
-                                className='ComputeGraphEdgeUnavailable'
+                                className={`ComputeGraphEdgeUnavailable ${focused ? 'focused' : ''} ${muted ? 'muted' : ''}`}
                                 transform={`translate(${(x1 + x2) / 2} ${(y1 + y2) / 2})`}
                                 data-testid='resource-graph-unavailable-marker'
+                                aria-hidden='true'
                             >
                                 <line x1='-5' y1='-5' x2='5' y2='5'/>
                                 <line x1='5' y1='-5' x2='-5' y2='5'/>
                             </g>}
+                            <line
+                                x1={x1}
+                                y1={y1}
+                                x2={x2}
+                                y2={y2}
+                                className='ComputeGraphEdgeHit'
+                                data-testid='resource-graph-edge-hit'
+                                data-relation-id={relation.relation_id}
+                                tabIndex={0}
+                                aria-label={`${zh ? '连接' : 'Connection'} ${sourceEntity.label} ↔ ${targetEntity.label}`}
+                                onMouseEnter={() => setHoveredRelationId(relation.relation_id)}
+                                onMouseLeave={() => setHoveredRelationId(current => current === relation.relation_id ? null : current)}
+                                onFocus={() => setHoveredRelationId(relation.relation_id)}
+                                onBlur={() => setHoveredRelationId(current => current === relation.relation_id ? null : current)}
+                            />
                         </React.Fragment>;
+                    })}
+                    {activeTaskFlows.map(({task, source, target}) => {
+                        const sourcePoint = points.get(source.entity_id);
+                        const targetPoint = points.get(target.entity_id);
+                        if (!sourcePoint || !targetPoint) return null;
+                        const path = `M ${sourcePoint.x * 10} ${sourcePoint.y * 4.4} L ${targetPoint.x * 10} ${targetPoint.y * 4.4}`;
+                        const focused = hoveredTaskId === task.task_id;
+                        const muted = Boolean(hoveredRelationId) || Boolean(hoveredTaskId && !focused);
+                        return <g
+                            key={task.task_id}
+                            className={`ComputeGraphTaskFlow ${focused ? 'focused' : ''} ${muted ? 'muted' : ''}`}
+                            data-testid='resource-graph-task-flow'
+                            data-source-node-id={task.node_id}
+                            data-target-node-id={task.parameters.peer_id}
+                            role='img'
+                            aria-label={`${zh ? '任务流' : 'Task flow'} ${source.label} → ${target.label}`}
+                        >
+                            <path className='ComputeGraphTaskPath' d={path}/>
+                            {[0, .55, 1.1].map(begin => <circle key={begin} r='4'>
+                                <animateMotion path={path} dur='1.65s' begin={`${begin}s`} repeatCount='indefinite'/>
+                            </circle>)}
+                            <path
+                                className='ComputeGraphTaskFlowHit'
+                                d={path}
+                                tabIndex={0}
+                                aria-label={`${zh ? '查看任务流' : 'Inspect task flow'} ${source.label} → ${target.label}`}
+                                onMouseEnter={() => setHoveredTaskId(task.task_id)}
+                                onMouseLeave={() => setHoveredTaskId(current => current === task.task_id ? null : current)}
+                                onFocus={() => setHoveredTaskId(task.task_id)}
+                                onBlur={() => setHoveredTaskId(current => current === task.task_id ? null : current)}
+                            />
+                        </g>;
                     })}
                 </svg>
 
@@ -436,12 +523,16 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     const classification = entity.kind === 'managed_device' ? deviceClass(entity) : '';
                     const isHovered = hoveredEntityId === entity.entity_id;
                     const isPinned = pinnedEntityId === entity.entity_id;
+                    const isRelationEndpoint = hoveredRelation?.source_id === entity.entity_id
+                        || hoveredRelation?.target_id === entity.entity_id
+                        || hoveredTaskFlow?.source.entity_id === entity.entity_id
+                        || hoveredTaskFlow?.target.entity_id === entity.entity_id;
                     return <button
                         type='button'
                         key={entity.entity_id}
                         className={`ComputeGraphNode ${entity.kind} ${classification} ${entity.device_kind === 'edge_compute' ? 'edge-device' : ''} state-${entity.state} ${isNode
                             ? `node-${nodeTones.get(entity.entity_id)}`
-                            : 'sensor-node'} ${isHovered || isPinned ? 'focused' : ''} ${isPinned ? 'pinned' : ''}`}
+                            : 'sensor-node'} ${isHovered || isPinned ? 'focused' : ''} ${isPinned ? 'pinned' : ''} ${isRelationEndpoint ? 'relation-focused' : ''} ${(hoveredRelation || hoveredTaskFlow) && !isRelationEndpoint ? 'muted' : ''}`}
                         style={{left: `${point.x}%`, top: `${point.y}%`}}
                         onMouseEnter={() => setHoveredEntityId(entity.entity_id)}
                         onMouseLeave={() => setHoveredEntityId(current => current === entity.entity_id ? null : current)}
@@ -472,6 +563,33 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     </button>;
                     },
                 )}
+
+                {hoveredRelation && hoveredRelationSource && hoveredRelationTarget
+                    && hoveredRelationSourcePoint && hoveredRelationTargetPoint && <aside
+                    className='ComputeGraphEdgeLabel'
+                    style={{
+                        left: `${(hoveredRelationSourcePoint.x + hoveredRelationTargetPoint.x) / 2}%`,
+                        top: `${(hoveredRelationSourcePoint.y + hoveredRelationTargetPoint.y) / 2}%`,
+                    }}
+                    role='status'
+                    aria-label={`${hoveredRelationSource.label} ${zh ? '与' : 'and'} ${hoveredRelationTarget.label} ${zh ? '连接' : 'connection'}`}
+                >
+                    <span>{zh ? '设备连接' : 'Device connection'}</span>
+                    <strong>{hoveredRelationSource.label}<b>↔</b>{hoveredRelationTarget.label}</strong>
+                </aside>}
+
+                {hoveredTaskFlow && hoveredTaskSourcePoint && hoveredTaskTargetPoint && <aside
+                    className='ComputeGraphEdgeLabel task-flow'
+                    style={{
+                        left: `${(hoveredTaskSourcePoint.x + hoveredTaskTargetPoint.x) / 2}%`,
+                        top: `${(hoveredTaskSourcePoint.y + hoveredTaskTargetPoint.y) / 2}%`,
+                    }}
+                    role='status'
+                    aria-label={`${hoveredTaskFlow.source.label} ${zh ? '向' : 'to'} ${hoveredTaskFlow.target.label} ${zh ? '任务流' : 'task flow'}`}
+                >
+                    <span>{zh ? '实时任务流' : 'Live task flow'}</span>
+                    <strong>{hoveredTaskFlow.source.label}<b>→</b>{hoveredTaskFlow.target.label}</strong>
+                </aside>}
 
                 {inspectedEntity && <aside
                     className={`ComputeGraphHoverCard anchored ${pinnedEntityId === inspectedEntity.entity_id ? 'pinned' : ''}`}
