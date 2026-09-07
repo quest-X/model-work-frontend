@@ -545,8 +545,6 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [selectedGroupId, zh]);
 
     useEffect(() => {
-        const refreshDevices = () => void refresh();
-    useEffect(() => {
         if (!selectedGroupId) return undefined;
         if (groupMemberships.find(group => group.group_id === selectedGroupId)?.scope === 'central') {
             setSelectedGroupResources(null);
@@ -577,6 +575,8 @@ export const ControlCenterView: React.FC<IProps> = ({
         return () => controller.abort();
     }, [groupMemberships, selectedGroupId, zh]);
 
+    useEffect(() => {
+        const refreshDevices = () => void refresh();
         window.addEventListener('opensight:edge-device-updated', refreshDevices);
         window.addEventListener('opensight:camera-resource-updated', refreshDevices);
         return () => {
