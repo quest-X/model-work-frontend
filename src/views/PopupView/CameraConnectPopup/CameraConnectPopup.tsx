@@ -57,7 +57,7 @@ const startCameraScan = (key: string, nodeId: string | null): CameraScan => {
         progress,
         listeners,
         promise: nodeId
-            ? ComputeClusterService.discoverCameras(nodeId, 0.35, controller.signal)
+            ? CameraResourceService.discoverOnNode(nodeId, 0.35, controller.signal, reportProgress)
             : CameraResourceService.discover(0.35, controller.signal, reportProgress),
     };
     activeCameraScans.set(key, scan);

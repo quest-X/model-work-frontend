@@ -33,6 +33,7 @@ jest.mock('../../../../services/CameraResourceService', () => ({
         connect: jest.fn(),
         snapshot: jest.fn(),
         discover: jest.fn(),
+        discoverOnNode: jest.fn(),
         list: jest.fn(),
         create: jest.fn(),
         credentials: jest.fn(),
@@ -44,7 +45,6 @@ jest.mock('../../../../services/CameraResourceService', () => ({
 
 jest.mock('../../../../services/ComputeClusterService', () => ({
     ComputeClusterService: {
-        discoverCameras: jest.fn(),
         connectCamera: jest.fn(),
         snapshotCamera: jest.fn(),
         createCameraResource: jest.fn(),
@@ -283,7 +283,7 @@ describe('CameraConnectPopup LAN discovery', () => {
 
     it('runs discovery on the selected remote node instead of this computer', async () => {
         (CameraResourceService.list as jest.Mock).mockResolvedValue([]);
-        (ComputeClusterService.discoverCameras as jest.Mock).mockResolvedValue({
+        (CameraResourceService.discoverOnNode as jest.Mock).mockResolvedValue({
             networks: ['192.168.50.0/24'],
             scanned_hosts: 253,
             duration_ms: 1500,
@@ -321,15 +321,18 @@ describe('CameraConnectPopup LAN discovery', () => {
         expect(await screen.findByText('remote-camera')).toBeInTheDocument();
         expect(screen.getByText('dahua-camera')).toBeInTheDocument();
         expect(screen.queryByText('web-server')).not.toBeInTheDocument();
-        expect(ComputeClusterService.discoverCameras).toHaveBeenCalledWith(
-            'remote-node', 0.35, expect.any(AbortSignal),
+        expect(CameraResourceService.discoverOnNode).toHaveBeenCalledWith(
+            'remote-node', 0.35, expect.any(AbortSignal), expect.any(Function),
         );
         expect(CameraResourceService.discover).not.toHaveBeenCalled();
     });
 
     it('shows progress while scanning a selected remote node', async () => {
-        (ComputeClusterService.discoverCameras as jest.Mock).mockImplementation(() =>
-            new Promise(() => undefined),
+        (CameraResourceService.discoverOnNode as jest.Mock).mockImplementation(
+            (_nodeId, _timeout, _signal, onProgress) => {
+                onProgress(42, 106, 253);
+                return new Promise(() => undefined);
+            },
         );
         render(<CameraConnectPopup
             language={Language.CHINESE}
@@ -339,7 +342,8 @@ describe('CameraConnectPopup LAN discovery', () => {
 
         fireEvent.click(screen.getByRole('button', {name: '开始扫描'}));
 
-        expect(await screen.findByRole('progressbar', {name: '扫描进度'})).not.toHaveAttribute('value');
+        expect(await screen.findByRole('progressbar', {name: '扫描进度'})).toHaveValue(42);
+        expect(screen.getByText('海康、大华相机发现 (106/253)')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '停止'}));
     });
 
@@ -376,7 +380,7 @@ describe('CameraConnectPopup LAN discovery', () => {
                 height: 360, frame_rate: 25, rtsp_url: 'rtsp://192.168.50.12/102',
             }],
         };
-        (ComputeClusterService.discoverCameras as jest.Mock).mockResolvedValue({
+        (CameraResourceService.discoverOnNode as jest.Mock).mockResolvedValue({
             networks: ['192.168.50.0/24'], scanned_hosts: 253, duration_ms: 1000,
             devices: [{
                 host: '192.168.50.12', name: 'remote-camera', manufacturer: 'Hikvision',

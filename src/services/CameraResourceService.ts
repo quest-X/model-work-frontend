@@ -91,8 +91,11 @@ export type CameraDiscoveryProgressHandler = (
 
 type CameraDiscoveryProgressResponse = {
     state: 'idle' | 'running' | 'succeeded' | 'failed';
-    completed_hosts: number;
-    total_hosts: number;
+    completed?: number;
+    total?: number;
+    percent?: number;
+    completed_hosts?: number;
+    total_hosts?: number;
 };
 
 export type CameraImageMetrics = {
@@ -181,8 +184,33 @@ export class CameraResourceService {
         return response.blob();
     }
 
-    public static async discover(
+    public static discover(
         timeoutSeconds: number = 0.35,
+        signal?: AbortSignal,
+        onProgress?: CameraDiscoveryProgressHandler,
+    ): Promise<CameraDiscoveryResponse> {
+        return this.discoverAt(
+            `${cameraBaseUrl()}/discovery`, timeoutSeconds, signal, onProgress,
+        );
+    }
+
+    public static discoverOnNode(
+        nodeId: string,
+        timeoutSeconds: number = 0.35,
+        signal?: AbortSignal,
+        onProgress?: CameraDiscoveryProgressHandler,
+    ): Promise<CameraDiscoveryResponse> {
+        return this.discoverAt(
+            `${getExtensionEngineBaseUrl()}/extensions/compute-cluster/nodes/${encodeURIComponent(nodeId)}/cameras/discovery`,
+            timeoutSeconds,
+            signal,
+            onProgress,
+        );
+    }
+
+    private static async discoverAt(
+        discoveryUrl: string,
+        timeoutSeconds: number,
         signal?: AbortSignal,
         onProgress?: CameraDiscoveryProgressHandler,
     ): Promise<CameraDiscoveryResponse> {
@@ -190,14 +218,16 @@ export class CameraResourceService {
         let timer: ReturnType<typeof setTimeout> | undefined;
         const pollProgress = async (): Promise<void> => {
             try {
-                const response = await fetch(`${cameraBaseUrl()}/discovery/progress`, {signal});
+                const response = await fetch(`${discoveryUrl}/progress`, {signal});
                 if (response.ok && !finished) {
                     const progress = await response.json() as CameraDiscoveryProgressResponse;
-                    if (progress.state === 'running' && progress.total_hosts > 0) {
+                    const completed = progress.completed ?? progress.completed_hosts ?? 0;
+                    const total = progress.total ?? progress.total_hosts ?? 0;
+                    if (progress.state === 'running' && total > 0) {
                         onProgress?.(
-                            Math.round(progress.completed_hosts / progress.total_hosts * 100),
-                            progress.completed_hosts,
-                            progress.total_hosts,
+                            Math.round(progress.percent ?? completed / total * 100),
+                            completed,
+                            total,
                         );
                     }
                 }
@@ -209,7 +239,7 @@ export class CameraResourceService {
         };
         if (onProgress) void pollProgress();
         try {
-            const response = await fetch(`${cameraBaseUrl()}/discovery`, {
+            const response = await fetch(discoveryUrl, {
                 method: 'POST',
                 signal,
                 headers: {'Content-Type': 'application/json'},

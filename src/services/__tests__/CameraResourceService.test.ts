@@ -79,6 +79,29 @@ describe('camera discovery progress', () => {
         expect(onProgress).toHaveBeenLastCalledWith(100, 253, 253);
     });
 
+    it('polls signed progress for a selected node', async () => {
+        global.fetch = jest.fn()
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({state: 'running', completed: 106, total: 253, percent: 41.9}),
+            } as Response)
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    networks: ['192.168.50.0/24'], scanned_hosts: 253, duration_ms: 1000, devices: [],
+                }),
+            } as Response);
+        const onProgress = jest.fn();
+
+        await CameraResourceService.discoverOnNode('node/1', 0.35, undefined, onProgress);
+
+        expect(String((global.fetch as jest.Mock).mock.calls[0][0])).toMatch(
+            /\/extension_service\/extensions\/compute-cluster\/nodes\/node%2F1\/cameras\/discovery\/progress$/,
+        );
+        expect(onProgress).toHaveBeenCalledWith(42, 106, 253);
+        expect(onProgress).toHaveBeenLastCalledWith(100, 253, 253);
+    });
+
 });
 
 describe('CameraResourceService persistence', () => {
