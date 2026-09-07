@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {loginAccount, logoutAccount, refreshAccountSession} from '../../services/AccountService';
 import {useAccountApprovalIdentity} from '../../services/ApprovalIdentityService';
+import {isDemoMode} from '../../demo/DemoMode';
 import './AuthPreview.scss';
 
 export const AUTH_PREVIEW_SIGN_OUT_EVENT = 'opensight:auth-preview-sign-out';
@@ -49,8 +50,10 @@ interface IProps {
 
 export const AuthPreview: React.FC<IProps> = ({children}) => {
     const [initialPreferences] = useState(loadPreferences);
-    const [username, setUsername] = useState(initialPreferences.rememberPassword ? initialPreferences.username : '');
-    const [password, setPassword] = useState('');
+    const [username, setUsername] = useState(isDemoMode
+        ? 'admin'
+        : initialPreferences.rememberPassword ? initialPreferences.username : '');
+    const [password, setPassword] = useState(isDemoMode ? 'admin' : '');
     const [rememberPassword, setRememberPassword] = useState(initialPreferences.rememberPassword);
     const [autoLogin, setAutoLogin] = useState(initialPreferences.autoLogin);
     const [signedIn, setSignedIn] = useState(false);
@@ -105,6 +108,7 @@ export const AuthPreview: React.FC<IProps> = ({children}) => {
                 <div className='AuthPreviewDevice'><span aria-hidden='true'/>本地边缘计算集群后台</div>
                 <h1 id='auth-preview-title'>登录到 OpenSight</h1>
                 <p>进入设备工作台，管理视觉任务、模型与边缘节点。</p>
+                {isDemoMode && <p className='AuthPreviewDemoHint'>演示账号已填充，直接登录即可。</p>}
             </div>
             <form className='AuthPreviewForm' onSubmit={async event => {
                 event.preventDefault();

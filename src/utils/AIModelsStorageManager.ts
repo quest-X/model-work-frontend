@@ -1,5 +1,6 @@
 import { AIModel } from '../store/aimodels/types';
 import {normalizeEngineBaseUrl, ServiceEngineType} from './DefaultBackendUrl';
+import {demoEngines, isDemoMode} from '../demo/DemoMode';
 
 type StoredEngine = Omit<AIModel, 'modelType' | 'createdAt'> & {
     modelType?: string;
@@ -56,6 +57,7 @@ export class AIModelsStorageManager {
     }
     
     public static loadModels(): AIModel[] {
+        if (isDemoMode) return demoEngines();
         try {
             const stored = localStorage.getItem(this.STORAGE_KEY);
             if (stored) {
@@ -72,10 +74,11 @@ export class AIModelsStorageManager {
             console.error('读取AI模型数据失败:', error);
         }
         
-        return []; // 返回空数组作为默认值
+        return [];
     }
     
     public static hasStoredModels(): boolean {
+        if (isDemoMode) return true;
         try {
             const stored = localStorage.getItem(this.STORAGE_KEY);
             if (!stored) return false;

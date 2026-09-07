@@ -1,0 +1,19 @@
+{
+  "classes": [
+    {"id": "bird", "name": "bird", "color": "#5cc980"}
+  ],
+  "images": [
+    {"index": 0, "regions": [{"label_id": "bird", "shape": "rect", "bbox": [1147, 673, 508, 542]}]},
+    {"index": 1, "regions": [{"label_id": "bird", "shape": "rect", "bbox": [1200, 615, 500, 520]}]},
+    {"index": 2, "regions": [{"label_id": "bird", "shape": "rect", "bbox": [1250, 595, 500, 500]}]},
+    {"index": 3, "regions": [{"label_id": "bird", "shape": "rect", "bbox": [1270, 560, 490, 500]}]},
+    {"index": 4, "regions": [{"label_id": "bird", "shape": "rect", "bbox": [1240, 540, 480, 500]}]},
+    {"index": 5, "regions": [{"label_id": "bird", "shape": "rect", "bbox": [1200, 520, 470, 500]}]},
+    {"index": 6, "regions": [{"label_id": "bird", "shape": "rect", "bbox": [1150, 500, 450, 500]}]},
+    {"index": 7, "regions": [{"label_id": "bird", "shape": "rect", "bbox": [1070, 450, 430, 530]}]},
+    {"index": 8, "regions": [{"label_id": "bird", "shape": "rect", "bbox": [1000, 410, 420, 550]}]},
+    {"index": 9, "regions": [{"label_id": "bird", "shape": "rect", "bbox": [850, 350, 420, 570]}]},
+    {"index": 10, "regions": [{"label_id": "bird", "shape": "rect", "bbox": [720, 300, 450, 580]}]},
+    {"index": 11, "regions": [{"label_id": "bird", "shape": "rect", "bbox": [700, 180, 470, 540]}]}
+  ]
+}

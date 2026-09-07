@@ -7,6 +7,7 @@ import {AppState} from '../../../store';
 import {Language} from '../../../data/LanguageConfig';
 import {getEngineBaseUrl, getExtensionEngineBaseUrl} from '../../../utils/DefaultBackendUrl';
 import {consumeSimilaritySearchPreset} from '../../../ai/SimilaritySearchPresetStore';
+import {isDemoMode} from '../../../demo/DemoMode';
 import './L2GRetrievalPopup.scss';
 
 type RetrievalEngine = 'dino' | 'l2g';
@@ -374,6 +375,18 @@ export const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
         setL2GSearch(emptySearchSnapshot());
     }, []);
 
+    useEffect(() => {
+        if (!isDemoMode || queryFile) return undefined;
+        const controller = new AbortController();
+        fetch('/demo/images/000001.webp', {signal: controller.signal})
+            .then(response => response.ok
+                ? response.blob()
+                : Promise.reject(new Error('Demo query image is unavailable')))
+            .then(blob => onDrop([new File([blob], '000001.webp', {type: blob.type})]))
+            .catch(() => undefined);
+        return () => controller.abort();
+    }, [onDrop, queryFile]);
+
     const queryDropzone = useDropzone({
         onDrop,
         accept: {'image/*': ['.jpg', '.jpeg', '.png', '.bmp', '.webp']},
@@ -729,11 +742,11 @@ export const L2GRetrievalPopup: React.FC<IProps> = ({language}) => {
                     <span>{t('DINO 向量检索', 'DINO vector search')}</span>
                     <i className={dinoReady ? 'ready' : 'pending'}/>
                 </button>
-                <button type='button' role='tab' aria-selected={engine === 'l2g'} className={engine === 'l2g' ? 'active' : ''} onClick={() => changeEngine('l2g')}>
+                {!isDemoMode && <button type='button' role='tab' aria-selected={engine === 'l2g'} className={engine === 'l2g' ? 'active' : ''} onClick={() => changeEngine('l2g')}>
                     <strong>{t('高精度模式', 'High-precision Mode')}</strong>
                     <span>{t('L2G 局部到全局重排', 'L2G local-to-global reranking')}</span>
                     <i className={l2gReady ? 'ready' : 'pending'}/>
-                </button>
+                </button>}
             </div>
             {engine === 'dino' ? renderDinoBanner() : renderL2GBanner()}
             {similarityPreset && <div className='Hint'>

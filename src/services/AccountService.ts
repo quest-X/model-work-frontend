@@ -1,3 +1,5 @@
+import {DEMO_SESSION_KEY, isDemoMode} from '../demo/DemoMode';
+
 export type AccountApproval = {user_id: string; user_name: string; user_public_key: string};
 export type AccountUser = {
     account_id: string;
@@ -54,6 +56,7 @@ const validateSession = (session: AccountSession): AccountSession => {
 
 export const refreshAccountSession = async (): Promise<AccountSession | null> => {
     const generation = ++sessionGeneration;
+    if (isDemoMode && !window.localStorage.getItem(DEMO_SESSION_KEY)) return publish(null);
     try {
         const session = validateSession(await request<AccountSession>('/session'));
         return generation === sessionGeneration ? publish(session) : activeSession;
@@ -68,11 +71,14 @@ export const loginAccount = async (username: string, password: string, remember:
         method: 'POST', body: JSON.stringify({username, password, remember}),
     }));
     if (generation !== sessionGeneration) throw new Error('Login superseded');
-    return publish(session)!;
+    if (isDemoMode) window.localStorage.setItem(DEMO_SESSION_KEY, '1');
+    publish(session);
+    return session;
 };
 
 export const logoutAccount = async (): Promise<void> => {
     sessionGeneration += 1;
+    if (isDemoMode) window.localStorage.removeItem(DEMO_SESSION_KEY);
     const pending = request<void>('/logout', {method: 'POST', body: '{}'});
     publish(null);
     await pending;

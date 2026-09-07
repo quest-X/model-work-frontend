@@ -33,6 +33,7 @@ export default ({ mode }: UserConfig): UserConfigExport => {
       __OPENSIGHT_HOST_SYSTEM__: JSON.stringify(
         process.env.VITE_OPENSIGHT_HOST_SYSTEM || '',
       ),
+      __OPENSIGHT_DEMO__: JSON.stringify(process.env.VITE_OPENSIGHT_DEMO === '1'),
     },
     server: {
       proxy: {
