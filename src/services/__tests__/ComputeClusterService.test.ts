@@ -199,6 +199,45 @@ describe('ComputeClusterService remote camera management', () => {
     });
 });
 
+describe('ComputeClusterService field group lifecycle', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+        global.fetch = originalFetch;
+        jest.restoreAllMocks();
+    });
+
+    it('uses the protected group collection and exact group id', async () => {
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({}),
+        } as Response);
+        const input = {
+            installation_id: '00000000-0000-4000-8000-000000000014',
+            name: 'new-field-main',
+            ssh_user: 'field-user',
+            control_host: 'fd7a:115c:a1e0::14',
+            lan_host: null,
+        };
+
+        await ComputeClusterService.admitFieldGroup(input);
+        await ComputeClusterService.removeFieldGroup('field/group');
+
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            1,
+            expect.stringMatching(/\/groups$/),
+            expect.objectContaining({
+                method: 'POST', body: JSON.stringify({...input, role: 'main'}),
+            }),
+        );
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            2,
+            expect.stringMatching(/\/groups\/field%2Fgroup$/),
+            expect.objectContaining({method: 'DELETE'}),
+        );
+    });
+});
+
 describe('computeSshAvailability', () => {
     const node = (transport: 'lan' | 'tailscale'): ComputeClusterNode => ({
         control_transport: transport,

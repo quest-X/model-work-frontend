@@ -298,6 +298,31 @@ export type ComputeGroupResources = {
     resource_graph: ComputeResourceGraph;
 };
 
+export type ComputeFieldGroupAdmissionInput = {
+    installation_id: string;
+    name: string;
+    ssh_user: string;
+    control_host: string;
+    lan_host?: string | null;
+};
+
+export type ComputeFieldGroupAdmission = {
+    schema_version: 'field-group-admission.v1';
+    status: 'registered' | 'updated' | 'unchanged';
+    reporting_installation_id: string;
+    name: string;
+    invitation: Record<string, unknown>;
+};
+
+export type ComputeFieldGroupRemoval = {
+    schema_version: 'field-group-removal.v1';
+    status: 'revoked' | 'locally_fenced';
+    reporting_installation_id: string;
+    remote_revoked: boolean;
+    pending_remote_revocation: boolean;
+    group_id: string;
+};
+
 export type ComputeFilesystemOperation = 'filesystem.stat' | 'filesystem.list';
 
 export type ComputeFilesystemTarget = {
@@ -865,6 +890,23 @@ export class ComputeClusterService {
 
     public static groupResources(groupId: string, signal?: AbortSignal): Promise<ComputeGroupResources> {
         return request(`/groups/${encodeURIComponent(groupId)}/resource-graph`, signal);
+    }
+
+    public static admitFieldGroup(
+        input: ComputeFieldGroupAdmissionInput,
+        signal?: AbortSignal,
+    ): Promise<ComputeFieldGroupAdmission> {
+        return request('/groups', signal, {
+            method: 'POST',
+            body: JSON.stringify({...input, role: 'main'}),
+        });
+    }
+
+    public static removeFieldGroup(
+        groupId: string,
+        signal?: AbortSignal,
+    ): Promise<ComputeFieldGroupRemoval> {
+        return request(`/groups/${encodeURIComponent(groupId)}`, signal, {method: 'DELETE'});
     }
 
     public static runtime(nodeId: string, signal?: AbortSignal): Promise<ComputeRuntimeSnapshot> {
