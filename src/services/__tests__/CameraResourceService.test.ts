@@ -1,4 +1,7 @@
-import {CameraResource, CameraResourceService} from '../CameraResourceService';
+import {
+    CameraResource,
+    CameraResourceService,
+} from '../CameraResourceService';
 import {AutoSaveService} from '../AutoSaveService';
 import {QueueActions} from '../../logic/actions/QueueActions';
 import {QueueItemType} from '../../store/queue/types';
@@ -38,6 +41,45 @@ const resource: CameraResource = {
     created_at: '2026-08-10T00:00:00Z',
     updated_at: '2026-08-10T00:00:00Z',
 };
+
+describe('camera discovery progress', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+        global.fetch = originalFetch;
+    });
+
+    it('polls completed addresses while local discovery is running', async () => {
+        let resolveDiscovery!: (response: Response) => void;
+        global.fetch = jest.fn((input: RequestInfo | URL) => {
+            if (String(input).endsWith('/discovery/progress')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: async () => ({state: 'running', completed_hosts: 106, total_hosts: 253}),
+                } as Response);
+            }
+            return new Promise<Response>(resolve => {
+                resolveDiscovery = resolve;
+            });
+        });
+        const onProgress = jest.fn();
+        const discovery = CameraResourceService.discover(0.35, undefined, onProgress);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(onProgress).toHaveBeenCalledWith(42, 106, 253);
+
+        resolveDiscovery({
+            ok: true,
+            json: async () => ({
+                networks: ['192.168.10.0/24'], scanned_hosts: 253, duration_ms: 1000, devices: [],
+            }),
+        } as Response);
+        await expect(discovery).resolves.toMatchObject({scanned_hosts: 253});
+        expect(onProgress).toHaveBeenLastCalledWith(100, 253, 253);
+    });
+
+});
 
 describe('CameraResourceService persistence', () => {
     beforeEach(() => {

@@ -1,7 +1,11 @@
 import React from 'react';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {Language} from '../../../../data/LanguageConfig';
-import {CameraDiscoveryResponse, CameraResourceService} from '../../../../services/CameraResourceService';
+import {
+    CameraDiscoveryProgressHandler,
+    CameraDiscoveryResponse,
+    CameraResourceService,
+} from '../../../../services/CameraResourceService';
 import {ComputeClusterService} from '../../../../services/ComputeClusterService';
 import {CameraConnectPopup} from '../CameraConnectPopup';
 
@@ -220,22 +224,27 @@ describe('CameraConnectPopup LAN discovery', () => {
     it('keeps scanning when closed and reattaches when reopened', async () => {
         let resolveScan: ((result: CameraDiscoveryResponse) => void) | undefined;
         let signal: AbortSignal | undefined;
+        let reportProgress: CameraDiscoveryProgressHandler | undefined;
         (CameraResourceService.list as jest.Mock).mockResolvedValue([]);
-        (CameraResourceService.discover as jest.Mock).mockImplementation((_timeout, nextSignal) => {
+        (CameraResourceService.discover as jest.Mock).mockImplementation((_timeout, nextSignal, nextProgress) => {
             signal = nextSignal;
+            reportProgress = nextProgress;
             return new Promise(resolve => {
                 resolveScan = resolve;
             });
         });
         const firstOpen = render(<CameraConnectPopup language={Language.CHINESE} imagesData={[]} />);
         fireEvent.click(screen.getByRole('button', {name: '开始扫描'}));
+        act(() => reportProgress?.(42, 106, 253));
         expect(await screen.findByText('后台扫描中；关闭窗口不会停止。')).toBeInTheDocument();
-        expect(screen.getByRole('progressbar', {name: '扫描进度'})).toBeInTheDocument();
+        expect(screen.getByRole('progressbar', {name: '扫描进度'})).toHaveValue(42);
+        expect(screen.getByText('海康、大华相机发现 (106/253)')).toBeInTheDocument();
 
         firstOpen.unmount();
         render(<CameraConnectPopup language={Language.CHINESE} imagesData={[]} />);
 
         expect(await screen.findByRole('button', {name: '停止'})).toBeInTheDocument();
+        expect(screen.getByRole('progressbar', {name: '扫描进度'})).toHaveValue(42);
         expect(CameraResourceService.discover).toHaveBeenCalledTimes(1);
         expect(signal?.aborted).toBe(false);
         await act(async () => resolveScan?.({

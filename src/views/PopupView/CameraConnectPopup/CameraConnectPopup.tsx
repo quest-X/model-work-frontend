@@ -8,6 +8,7 @@ import {
     CameraChannel,
     CameraConnectResult,
     CameraDiscoveryDevice,
+    CameraDiscoveryProgressHandler,
     CameraDiscoveryResponse,
     CameraResource,
     CameraResourceService,
@@ -30,7 +31,13 @@ interface IProps {
 const discoveryStorageKey = (nodeId: string | null): string =>
     `opensight.camera-discovery.${nodeId || 'local'}`;
 
-type CameraScan = {controller: AbortController; promise: Promise<CameraDiscoveryResponse>};
+type CameraScanProgress = {percent: number; completed?: number; total?: number};
+type CameraScan = {
+    controller: AbortController;
+    promise: Promise<CameraDiscoveryResponse>;
+    progress: CameraScanProgress;
+    listeners: Set<(progress: CameraScanProgress) => void>;
+};
 
 // ponytail: survives popup remounts only; use a durable backend task if page-reload recovery becomes necessary.
 const activeCameraScans = new Map<string, CameraScan>();
@@ -39,11 +46,19 @@ const startCameraScan = (key: string, nodeId: string | null): CameraScan => {
     const current = activeCameraScans.get(key);
     if (current) return current;
     const controller = new AbortController();
+    const progress: CameraScanProgress = {percent: 0};
+    const listeners = new Set<(next: CameraScanProgress) => void>();
+    const reportProgress: CameraDiscoveryProgressHandler = (percent, completed, total) => {
+        Object.assign(progress, {percent: Math.max(0, Math.min(100, percent)), completed, total});
+        listeners.forEach(listener => listener({...progress}));
+    };
     const scan = {
         controller,
+        progress,
+        listeners,
         promise: nodeId
             ? ComputeClusterService.discoverCameras(nodeId, 0.35, controller.signal)
-            : CameraResourceService.discover(0.35, controller.signal),
+            : CameraResourceService.discover(0.35, controller.signal, reportProgress),
     };
     activeCameraScans.set(key, scan);
     void scan.promise.then(
@@ -96,25 +111,36 @@ export const CameraConnectPopup: React.FC<IProps> = (
     const [scanning, setScanning] = useState(() => activeCameraScans.has(storageKey));
     const [scanError, setScanError] = useState('');
     const [discovery, setDiscovery] = useState<CameraDiscoveryResponse | null>(() => loadDiscovery(storageKey));
+    const [scanProgress, setScanProgress] = useState<CameraScanProgress>(
+        () => activeCameraScans.get(storageKey)?.progress || {percent: 0},
+    );
     const [savedResources, setSavedResources] = useState<CameraResource[]>([]);
     const [savedResource, setSavedResource] = useState<CameraResource | null>(null);
     const [loadingCredentials, setLoadingCredentials] = useState(false);
 
     const showDiscovery = (nextDiscovery: CameraDiscoveryResponse) => {
-        const visibleDiscovery = {
+        const visible = {
             ...nextDiscovery,
             devices: nextDiscovery.devices.filter(({manufacturer}) =>
                 /^(?:(?:hikvision|dahua)(?:\b|-)|海康|大华)/i.test(manufacturer),
             ),
         };
-        setDiscovery(visibleDiscovery);
-        window.localStorage.setItem(storageKey, JSON.stringify(visibleDiscovery));
+        setDiscovery(visible);
+        window.localStorage.setItem(storageKey, JSON.stringify(visible));
     };
 
     useEffect(() => {
         const activeScan = activeCameraScans.get(storageKey);
-        if (!activeScan) return undefined;
+        if (!activeScan) {
+            setScanProgress({percent: 0});
+            return undefined;
+        }
         let mounted = true;
+        const updateProgress = (next: CameraScanProgress) => {
+            if (mounted) setScanProgress(next);
+        };
+        activeScan.listeners.add(updateProgress);
+        updateProgress({...activeScan.progress});
         setScanning(true);
         setScanError('');
         void activeScan.promise.then(
@@ -131,6 +157,7 @@ export const CameraConnectPopup: React.FC<IProps> = (
         });
         return () => {
             mounted = false;
+            activeScan.listeners.delete(updateProgress);
         };
     }, [storageKey]);
 
@@ -191,6 +218,9 @@ export const CameraConnectPopup: React.FC<IProps> = (
     const scanCameras = async () => {
         if (scanning) return;
         const scan = startCameraScan(storageKey, nodeId);
+        const updateProgress = (next: CameraScanProgress) => setScanProgress(next);
+        scan.listeners.add(updateProgress);
+        setScanProgress({...scan.progress});
         setScanning(true);
         setScanError('');
         try {
@@ -200,6 +230,7 @@ export const CameraConnectPopup: React.FC<IProps> = (
                 setScanError(scanFailure instanceof Error ? scanFailure.message : String(scanFailure));
             }
         } finally {
+            scan.listeners.delete(updateProgress);
             setScanning(false);
         }
     };
@@ -435,7 +466,12 @@ export const CameraConnectPopup: React.FC<IProps> = (
                     : (chinese ? '扫描范围：当前服务器所在的本地局域网' : 'Scan scope: the current server local LAN')}</div>
                 <div className='CameraDiscoveryHeader'>
                     <div>
-                        <strong>{chinese ? '海康、大华相机发现' : 'Hikvision and Dahua camera discovery'}</strong>
+                        <strong>
+                            {chinese ? '海康、大华相机发现' : 'Hikvision and Dahua camera discovery'}
+                            {scanning && scanProgress.total
+                                ? ` (${scanProgress.completed || 0}/${scanProgress.total})`
+                                : ''}
+                        </strong>
                         <span>{scanning
                             ? (chinese ? '后台扫描中；关闭窗口不会停止。' : 'Scanning in the background; closing this window will not stop it.')
                             : discovery
@@ -457,7 +493,11 @@ export const CameraConnectPopup: React.FC<IProps> = (
                     </button>
                 </div>
                 {scanning && <div className='JetsonScanProgress'>
-                    <progress aria-label={chinese ? '扫描进度' : 'Scan progress'}/>
+                    <progress
+                        aria-label={chinese ? '扫描进度' : 'Scan progress'}
+                        max={100}
+                        {...scanProgress.total ? {value: scanProgress.percent} : {}}
+                    />
                 </div>}
                 {scanError && <div className='CameraDiscoveryError'>{scanError}</div>}
                 {discovery && <>

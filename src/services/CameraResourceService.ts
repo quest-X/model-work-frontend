@@ -83,6 +83,18 @@ export type CameraDiscoveryResponse = {
     devices: CameraDiscoveryDevice[];
 };
 
+export type CameraDiscoveryProgressHandler = (
+    percent: number,
+    completed?: number,
+    total?: number,
+) => void;
+
+type CameraDiscoveryProgressResponse = {
+    state: 'idle' | 'running' | 'succeeded' | 'failed';
+    completed_hosts: number;
+    total_hosts: number;
+};
+
 export type CameraImageMetrics = {
     luma: number;
     saturation_ratio: number;
@@ -172,15 +184,45 @@ export class CameraResourceService {
     public static async discover(
         timeoutSeconds: number = 0.35,
         signal?: AbortSignal,
+        onProgress?: CameraDiscoveryProgressHandler,
     ): Promise<CameraDiscoveryResponse> {
-        const response = await fetch(`${cameraBaseUrl()}/discovery`, {
-            method: 'POST',
-            signal,
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({timeout_seconds: timeoutSeconds}),
-        });
-        if (!response.ok) throw new Error(await errorDetail(response));
-        return response.json();
+        let finished = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const pollProgress = async (): Promise<void> => {
+            try {
+                const response = await fetch(`${cameraBaseUrl()}/discovery/progress`, {signal});
+                if (response.ok && !finished) {
+                    const progress = await response.json() as CameraDiscoveryProgressResponse;
+                    if (progress.state === 'running' && progress.total_hosts > 0) {
+                        onProgress?.(
+                            Math.round(progress.completed_hosts / progress.total_hosts * 100),
+                            progress.completed_hosts,
+                            progress.total_hosts,
+                        );
+                    }
+                }
+            } catch {
+                // The discovery request remains authoritative when progress polling is unavailable.
+            } finally {
+                if (!finished && !signal?.aborted) timer = setTimeout(() => void pollProgress(), 500);
+            }
+        };
+        if (onProgress) void pollProgress();
+        try {
+            const response = await fetch(`${cameraBaseUrl()}/discovery`, {
+                method: 'POST',
+                signal,
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({timeout_seconds: timeoutSeconds}),
+            });
+            if (!response.ok) throw new Error(await errorDetail(response));
+            const discovery = await response.json() as CameraDiscoveryResponse;
+            onProgress?.(100, discovery.scanned_hosts, discovery.scanned_hosts);
+            return discovery;
+        } finally {
+            finished = true;
+            if (timer) clearTimeout(timer);
+        }
     }
 
     public static async list(): Promise<CameraResource[]> {
