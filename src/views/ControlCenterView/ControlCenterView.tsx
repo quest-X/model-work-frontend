@@ -41,6 +41,7 @@ import {ComputeTerminalPanel} from '../PopupView/ComputeClusterPopup/ComputeTerm
 import {ResourceKnowledgeGraph} from '../PopupView/ComputeClusterPopup/ResourceKnowledgeGraph';
 import {ComputeFilePanel} from './ComputeFilePanel';
 import {StorageAnalysisPanel} from './StorageAnalysisPanel';
+import {DuplicateAnalysisPanel} from './DuplicateAnalysisPanel';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
@@ -2041,9 +2042,14 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <ComputeFilePanel nodes={overviewNodes} zh={zh}/>
                 </div>}
                 <div className='ControlFeatureWorkspace' hidden={workspace !== 'utilities'}>
-                    {!selectedNode && <StorageAnalysisPanel node={null} zh={zh} visible={workspace === 'utilities'}/>}
+                    {!selectedNode && <><StorageAnalysisPanel node={null} zh={zh} visible={workspace === 'utilities'}/><DuplicateAnalysisPanel node={null} zh={zh} visible={workspace === 'utilities'}/></>}
                     {overviewNodes.map(candidate => <div key={candidate.node_id} hidden={candidate.node_id !== selectedNodeId}>
                         <StorageAnalysisPanel
+                            node={candidate}
+                            zh={zh}
+                            visible={workspace === 'utilities' && candidate.node_id === selectedNodeId}
+                        />
+                        <DuplicateAnalysisPanel
                             node={candidate}
                             zh={zh}
                             visible={workspace === 'utilities' && candidate.node_id === selectedNodeId}

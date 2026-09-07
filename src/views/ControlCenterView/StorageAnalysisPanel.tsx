@@ -24,7 +24,7 @@ type SuccessfulScan = {result: ComputeStorageResult; roots: string[]; completedA
 const ACTIVE_STATES = new Set(['queued', 'running', 'paused']);
 const MIB = 1024 * 1024;
 
-const formatBytes = (bytes: number): string => {
+export const formatBytes = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     const units = ['KiB', 'MiB', 'GiB', 'TiB'];
     let value = bytes / 1024;
@@ -36,7 +36,7 @@ const formatBytes = (bytes: number): string => {
     return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
 };
 
-const absolutePath = (path: string, windows: boolean): boolean => windows
+export const absolutePath = (path: string, windows: boolean): boolean => windows
     ? /^(?:[a-z]:[\\/]|\\\\[^\\])/i.test(path)
     : path.startsWith('/');
 

@@ -20,6 +20,8 @@ type SessionRow = {current: boolean; created_at: number; expires_at: number; las
 type AuditRow = {action: string; detail: string; created_at: number};
 
 const permissionNames: Record<string, [string, string]> = {
+    'agentos.duplicate.scan': ['查找重复文件', 'Find duplicate files'],
+    'agentos.storage.scan': ['存储分析', 'Analyze storage'],
     'camera.connect': ['连接摄像头', 'Connect cameras'],
     'camera.request': ['摄像头操作', 'Camera operations'],
     'filesystem.list': ['浏览文件', 'Browse files'],

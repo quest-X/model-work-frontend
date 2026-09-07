@@ -414,6 +414,19 @@ export type ComputeStorageRequest = {
     };
 };
 
+export type ComputeDuplicateRequest = {
+    schema_version: 'agentos.capability-request.v1';
+    request_id: string;
+    idempotency_key: string;
+    tool: 'agentos.duplicate.scan';
+    node_id: string;
+    arguments: {
+        roots: ComputeStorageRoot[];
+        min_file_bytes: number;
+        max_groups: number;
+    };
+};
+
 export type ComputeStorageAuthorization = ApprovalRequest & {
     operation: 'agentos.storage.scan';
     target: {
@@ -423,6 +436,20 @@ export type ComputeStorageAuthorization = ApprovalRequest & {
         idempotency_key: string;
     };
     parameters: {min_file_bytes: number; max_results: number};
+    state: 'pending' | 'approved' | 'executing' | 'succeeded' | 'failed' | 'rejected' | 'expired';
+    error_code: string | null;
+    node_name?: string;
+};
+
+export type ComputeDuplicateAuthorization = ApprovalRequest & {
+    operation: 'agentos.duplicate.scan';
+    target: {
+        kind: 'duplicate_roots';
+        roots: ComputeStorageRoot[];
+        request_id: string;
+        idempotency_key: string;
+    };
+    parameters: {min_file_bytes: number; max_groups: number};
     state: 'pending' | 'approved' | 'executing' | 'succeeded' | 'failed' | 'rejected' | 'expired';
     error_code: string | null;
     node_name?: string;
@@ -461,6 +488,35 @@ export type ComputeStorageResult = {
     }[];
 };
 
+export type ComputeDuplicateResult = {
+    schema_version: 'duplicate.scan-result.v1';
+    summary: {
+        file_count: number;
+        candidate_file_count: number;
+        duplicate_file_count: number;
+        group_count: number;
+        total_bytes: number;
+        reclaimable_bytes: number;
+        bytes_hashed: number;
+        inaccessible_count: number;
+        skipped_link_count: number;
+        skipped_hardlink_count: number;
+        changed_count: number;
+        warning_count: number;
+        elapsed_ms: number;
+    };
+    groups: {
+        sha256: string;
+        size: number;
+        file_count: number;
+        reclaimable_bytes: number;
+        files: {root_index: number; relative_path: string; modified_at: number}[];
+        truncated: boolean;
+    }[];
+    truncated: boolean;
+    warnings: ComputeStorageResult['warnings'];
+};
+
 export type ComputeStorageResponse = {
     schema_version: 'agentos.capability-response.v1';
     request_id: string;
@@ -489,6 +545,19 @@ export type ComputeStorageResponse = {
 export type ComputeStorageAuthorizationResult = {
     authorization: ComputeStorageAuthorization;
     response: ComputeStorageResponse;
+};
+
+export type ComputeDuplicateResponse = Omit<ComputeStorageResponse, 'tool' | 'result' | 'authorization'> & {
+    tool: 'agentos.duplicate.scan';
+    result: ComputeDuplicateResult | null;
+    authorization: (Omit<NonNullable<ComputeStorageResponse['authorization']>, 'operation'> & {
+        operation: 'agentos.duplicate.scan';
+    }) | null;
+};
+
+export type ComputeDuplicateAuthorizationResult = {
+    authorization: ComputeDuplicateAuthorization;
+    response: ComputeDuplicateResponse;
 };
 
 export type ComputeUpgradeManifest = {
@@ -585,6 +654,7 @@ export type ComputeTaskType = 'system.wait'
     | 'information.web_fetch'
     | 'network.lan_discovery'
     | 'network.peer_probe'
+    | 'duplicate.scan'
     | 'storage.scan'
     | 'camera.connect';
 
@@ -790,6 +860,7 @@ export type ComputeTask = {
         | ComputeWebFetchResult
         | ComputeLanDiscoveryResult
         | ComputePeerProbeResult
+        | ComputeDuplicateResult
         | ComputeStorageResult
         | CameraConnectResult
         | null;
@@ -1110,6 +1181,38 @@ export class ComputeClusterService {
         taskId: string,
         signal?: AbortSignal,
     ): Promise<ComputeStorageResponse> {
+        return request(
+            `/agentos/storage/tasks/${encodeURIComponent(nodeId)}/${encodeURIComponent(taskId)}`,
+            signal,
+        );
+    }
+
+    public static createDuplicateAuthorization(
+        input: {request: ComputeDuplicateRequest; user: ComputeFilesystemAuthorizationRequest['user']; ttl_seconds: number},
+        signal?: AbortSignal,
+    ): Promise<ComputeDuplicateAuthorizationResult> {
+        return request('/agentos/storage/authorizations', signal, {
+            method: 'POST', body: JSON.stringify(input),
+        });
+    }
+
+    public static approveDuplicateAuthorization(
+        authorizationId: string,
+        signature: string,
+        signal?: AbortSignal,
+    ): Promise<ComputeDuplicateAuthorizationResult> {
+        return request(
+            `/agentos/storage/authorizations/${encodeURIComponent(authorizationId)}/approve`,
+            signal,
+            {method: 'POST', body: JSON.stringify({signature})},
+        );
+    }
+
+    public static duplicateStatus(
+        nodeId: string,
+        taskId: string,
+        signal?: AbortSignal,
+    ): Promise<ComputeDuplicateResponse> {
         return request(
             `/agentos/storage/tasks/${encodeURIComponent(nodeId)}/${encodeURIComponent(taskId)}`,
             signal,
