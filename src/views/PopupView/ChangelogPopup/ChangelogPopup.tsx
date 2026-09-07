@@ -16,6 +16,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.8.3',
+        date: '2026-07-22',
+        changes: [
+            { zh: '【功能】完善数据集编辑、推理、导出与版本历史工作流', en: '[Feat] Completed dataset editing, inference, export, and version-history workflows' },
+            { zh: '【功能】新增向量集合、DINO 索引、目标版本与查询生命周期管理', en: '[Feat] Added vector collections, DINO indexing, target versions, and query lifecycle management' },
+            { zh: '【功能】新增 L2G 检索缩略图与结果预览', en: '[Feat] Added L2G retrieval thumbnails and result previews' },
+            { zh: '【体验】统一引擎导航、编辑手势与模型透视界面', en: '[UX] Unified engine navigation, editor gestures, and the model-inspection interface' },
+        ],
+    },
+    {
         version: '2.8.2',
         date: '2026-07-20',
         changes: [
