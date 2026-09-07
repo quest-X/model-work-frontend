@@ -28,6 +28,7 @@ import DataCenterPopup from './DataCenterPopup/DataCenterPopup';
 import DatasetExportPopup from './DatasetExportPopup/DatasetExportPopup';
 import DatasetInferencePopup from './DatasetInferencePopup/DatasetInferencePopup';
 import TrainingTaskPopup from './TrainingTaskPopup/TrainingTaskPopup';
+import TaskCenterPopup from './TaskCenterPopup/TaskCenterPopup';
 import VectorDbPopup from './VectorDbPopup/VectorDbPopup';
 import L2GRetrievalPopup from './L2GRetrievalPopup/L2GRetrievalPopup';
 import ModelInspectorPopup, {MODEL_INSPECTOR_ESCAPE_EVENT} from './ModelInspectorPopup/ModelInspectorPopup';
@@ -107,6 +108,7 @@ export const PopupView: React.FC<IProps> = (
         [PopupWindowType.DATASET_EXPORT]: () => <DatasetExportPopup />,
         [PopupWindowType.DATASET_INFERENCE]: () => <DatasetInferencePopup />,
         [PopupWindowType.TRAINING_TASK]: () => <TrainingTaskPopup />,
+        [PopupWindowType.TASK_CENTER]: () => <TaskCenterPopup />,
         [PopupWindowType.VECTOR_DB]: () => <VectorDbPopup />,
         [PopupWindowType.L2G_RETRIEVAL]: () => <L2GRetrievalPopup />,
         [PopupWindowType.VISUAL_SEARCH]: () => <VisualSearchPopup />,

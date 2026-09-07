@@ -15,8 +15,7 @@ interface EngineServiceDescriptor {
     id: string;
     name: string;
     servicePath: string;
-    popupType?: PopupWindowType;
-    eventName?: string;
+    popupType: PopupWindowType;
 }
 
 export interface IProps {
@@ -119,7 +118,7 @@ export const ManageAIModelsPopup: React.FC<IProps> = ({
             id: 'task-center',
             name: currentTexts.modelManagement.taskCenter,
             servicePath: 'core/task-center',
-            eventName: 'opensight:open-task-center'
+            popupType: PopupWindowType.TASK_CENTER
         }
     ];
 
@@ -157,17 +156,7 @@ export const ManageAIModelsPopup: React.FC<IProps> = ({
     ];
 
     const openProvidedService = (service: EngineServiceDescriptor) => {
-        if (service.popupType) {
-            updateActivePopupTypeAction(service.popupType);
-            return;
-        }
-
-        if (service.eventName) {
-            updateActivePopupTypeAction(null);
-            window.setTimeout(() => {
-                window.dispatchEvent(new Event(service.eventName));
-            }, 0);
-        }
+        updateActivePopupTypeAction(service.popupType);
     };
 
     const renderProvidedServices = () => {

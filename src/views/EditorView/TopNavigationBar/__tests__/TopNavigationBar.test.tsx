@@ -84,22 +84,13 @@ describe('TopNavigationBar core-engine change badge', () => {
         expect(screen.queryByText('文字识别 OCR')).not.toBeInTheDocument();
     });
 
-    it('closes the current popup before opening task center', () => {
-        jest.useFakeTimers();
+    it('opens task center as a popup', () => {
         const updatePopup = jest.fn();
-        const taskCenterHandler = jest.fn();
-        window.addEventListener('opensight:open-task-center', taskCenterHandler);
         renderNavigation([], Language.CHINESE, {updateActivePopupTypeAction: updatePopup});
 
         fireEvent.click(screen.getByText('核心引擎'));
         fireEvent.click(screen.getByText('任务中心'));
-        expect(updatePopup).toHaveBeenCalledWith(null);
-        expect(taskCenterHandler).not.toHaveBeenCalled();
-        jest.runOnlyPendingTimers();
-        expect(taskCenterHandler).toHaveBeenCalledTimes(1);
-
-        window.removeEventListener('opensight:open-task-center', taskCenterHandler);
-        jest.useRealTimers();
+        expect(updatePopup).toHaveBeenCalledWith(PopupWindowType.TASK_CENTER);
     });
     it('shows the number of dirty datasets only', () => {
         renderNavigation([

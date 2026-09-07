@@ -133,15 +133,6 @@ const EditorContainer: React.FC<IProps> = (
         }
     }, []);
 
-    useEffect(() => {
-        const openTaskCenter = () => {
-            setTaskPanelOpen(true);
-            setTaskPanelPinned(true);
-        };
-        window.addEventListener('opensight:open-task-center', openTaskCenter);
-        return () => window.removeEventListener('opensight:open-task-center', openTaskCenter);
-    }, []);
-
     // 手动保存
     const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
     const [isSaving, setIsSaving] = useState(false);

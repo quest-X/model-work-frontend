@@ -69,18 +69,10 @@ describe('ManageAIModelsPopup provided services', () => {
         expect(updatePopup).toHaveBeenCalledWith(PopupWindowType.COMPUTE_CLUSTER);
     });
 
-    it('closes engine management before opening task center', () => {
-        jest.useFakeTimers();
+    it('opens task center as a popup', () => {
         const updatePopup = renderPopup(createEngine('core'));
-        const taskCenterHandler = jest.fn();
-        window.addEventListener('opensight:open-task-center', taskCenterHandler);
 
         fireEvent.click(screen.getByRole('button', {name: '任务中心'}));
-        expect(updatePopup).toHaveBeenCalledWith(null);
-        jest.runOnlyPendingTimers();
-        expect(taskCenterHandler).toHaveBeenCalledTimes(1);
-
-        window.removeEventListener('opensight:open-task-center', taskCenterHandler);
-        jest.useRealTimers();
+        expect(updatePopup).toHaveBeenCalledWith(PopupWindowType.TASK_CENTER);
     });
 });

@@ -488,3 +488,19 @@
     }
   }
 }
+
+@media (max-width: 1000px) {
+  .TopNavigationBar .TopNavigationBarWrapper {
+    .ProjectNameContainer {
+      position: static;
+      min-width: 0;
+      flex: 1;
+      justify-content: flex-start;
+      overflow: hidden;
+      margin-left: 12px;
+    }
+
+    .ProjectName { flex: 0 0 auto; }
+    .ProjectNameInputWrapper { max-width: 100%; overflow: hidden; }
+  }
+}

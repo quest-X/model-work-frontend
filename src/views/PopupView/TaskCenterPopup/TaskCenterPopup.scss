@@ -1,0 +1,84 @@
+.TaskCenterPopupContent {
+  color: white;
+
+  .TaskCenterWarning {
+    margin: 0;
+    border: 1px solid rgba(224, 168, 92, 0.24);
+    border-radius: 5px;
+    background: rgba(224, 168, 92, 0.06);
+    padding: 8px 10px;
+    color: #e0a85c;
+    font-size: 10px;
+  }
+
+  .TaskCenterEmpty {
+    display: flex;
+    min-height: 180px;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.38);
+    font-size: 12px;
+  }
+
+  .TaskCenterRow {
+    min-height: 66px;
+    padding: 11px 12px;
+    box-sizing: border-box;
+  }
+
+  .TaskCenterRowHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+
+    strong {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span {
+      flex: 0 0 auto;
+      border-radius: 9px;
+      background: rgba(91, 201, 126, 0.14);
+      padding: 2px 7px;
+      color: #7ddc9b;
+      font-size: 10px;
+    }
+  }
+
+  .TaskCenterDetail {
+    margin-top: 5px;
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .TaskCenterProgress {
+    position: relative;
+    height: 5px;
+    margin-top: 11px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+
+    > div {
+      height: 100%;
+      border-radius: inherit;
+      background: #5bc97e;
+    }
+
+    small {
+      position: absolute;
+      top: -16px;
+      right: 0;
+      color: rgba(255, 255, 255, 0.42);
+      font-size: 9px;
+    }
+  }
+}

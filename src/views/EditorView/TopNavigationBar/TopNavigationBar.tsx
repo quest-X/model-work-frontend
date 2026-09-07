@@ -149,10 +149,7 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
 
     const openTaskCenter = () => {
         setActiveServicesDropdown(null);
-        props.updateActivePopupTypeAction(null);
-        window.setTimeout(() => {
-            window.dispatchEvent(new Event('opensight:open-task-center'));
-        }, 0);
+        props.updateActivePopupTypeAction(PopupWindowType.TASK_CENTER);
     };
 
     const openVectorDb = () => {
