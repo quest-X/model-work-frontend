@@ -54,8 +54,9 @@ export const AuthPreview: React.FC<IProps> = ({children}) => {
         ? 'admin'
         : initialPreferences.rememberPassword ? initialPreferences.username : '');
     const [password, setPassword] = useState(isDemoMode ? 'admin' : '');
-    const [rememberPassword, setRememberPassword] = useState(initialPreferences.rememberPassword);
-    const [autoLogin, setAutoLogin] = useState(initialPreferences.autoLogin);
+    const [passwordVisible, setPasswordVisible] = useState(false);
+    const [rememberPassword, setRememberPassword] = useState(isDemoMode || initialPreferences.rememberPassword);
+    const [autoLogin, setAutoLogin] = useState(isDemoMode ? false : initialPreferences.autoLogin);
     const [signedIn, setSignedIn] = useState(false);
     const [checking, setChecking] = useState(true);
     const [busy, setBusy] = useState(false);
@@ -138,16 +139,26 @@ export const AuthPreview: React.FC<IProps> = ({children}) => {
                     required
                 />
                 <label htmlFor='auth-preview-password'>密码</label>
-                <input
-                    id='auth-preview-password'
-                    name='password'
-                    type='password'
-                    autoComplete={rememberPassword ? 'current-password' : 'off'}
-                    placeholder='请输入密码'
-                    value={password}
-                    onChange={event => { setPassword(event.currentTarget.value); setLoginError(''); }}
-                    required
-                />
+                <div className='AuthPreviewPasswordField'>
+                    <input
+                        id='auth-preview-password'
+                        name='password'
+                        type={passwordVisible ? 'text' : 'password'}
+                        autoComplete={rememberPassword ? 'current-password' : 'off'}
+                        placeholder='请输入密码'
+                        value={password}
+                        onChange={event => { setPassword(event.currentTarget.value); setLoginError(''); }}
+                        required
+                    />
+                    <button
+                        type='button'
+                        aria-label={passwordVisible ? '隐藏密码' : '显示密码'}
+                        aria-pressed={passwordVisible}
+                        onClick={() => setPasswordVisible(visible => !visible)}
+                    >
+                        {passwordVisible ? '隐藏' : '显示'}
+                    </button>
+                </div>
                 {loginError && <span className='AuthPreviewError' role='alert'>{loginError}</span>}
                 {/* Keep both user-requested preferences when updating account authentication. */}
                 <div className='AuthPreviewPreferences'>

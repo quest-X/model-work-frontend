@@ -75,6 +75,15 @@ describe('AuthPreview', () => {
         expect(await screen.findByText('workspace preview')).toBeInTheDocument();
         expect(loginAccount).not.toHaveBeenCalled();
     });
+    it('shows and hides the password', async () => {
+        render(<AuthPreview><div>workspace preview</div></AuthPreview>);
+        const password = await screen.findByLabelText('密码');
+        expect(password).toHaveAttribute('type', 'password');
+        fireEvent.click(screen.getByRole('button', {name: '显示密码'}));
+        expect(password).toHaveAttribute('type', 'text');
+        fireEvent.click(screen.getByRole('button', {name: '隐藏密码'}));
+        expect(password).toHaveAttribute('type', 'password');
+    });
     it('keeps both login options using browser passwords and persistent sessions', async () => {
         const view = render(<AuthPreview><div>workspace preview</div></AuthPreview>);
         await screen.findByLabelText('记住密码');

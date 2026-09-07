@@ -107,7 +107,7 @@
       font-weight: 600;
     }
     > input[type='text'],
-    > input[type='password'] {
+    .AuthPreviewPasswordField > input {
       box-sizing: border-box;
       width: 100%;
       height: 43px;
@@ -123,6 +123,22 @@
       transition: border-color 0.15s ease, box-shadow 0.15s ease;
       &::placeholder { color: rgba(255, 255, 255, 0.24); }
       &:focus { border-color: rgba(0, 158, 253, 0.68); box-shadow: 0 0 0 3px rgba(0, 158, 253, 0.1); }
+    }
+    .AuthPreviewPasswordField {
+      position: relative;
+      > input { padding-right: 60px; }
+      > button {
+        position: absolute;
+        top: 0;
+        right: 4px;
+        height: 43px;
+        border: 0;
+        background: transparent;
+        color: #8cd3ff;
+        font: inherit;
+        font-size: 11px;
+        cursor: pointer;
+      }
     }
     > button {
       height: 43px;
