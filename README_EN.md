@@ -23,13 +23,15 @@ OpenSight continues to evolve from Skalski's [make-sense](https://github.com/Ska
 
 ## Core Capabilities
 
-- **Image and Video Annotation** — image management, frame extraction, timeline navigation, and frame-level annotation
-- **Intelligent Inference** — detection, batch detection, and OCR with YOLO-family and custom `.pt`/`.onnx` models
-- **Segmentation and Tracking** — SAM, SAM 2, SAM 3, MobileSAM, FastSAM, YOLO-seg, and cross-frame propagation
-- **Data and Training** — dataset management, batch inference, and training jobs
-- **Retrieval and Model Inspection** — similar-image search, model-stage heatmaps, and target attribution
-- **Control Center** — inspect compute groups, nodes, resources, cameras, and governed tasks
-- **Annotation Exchange** — import COCO, YOLO, VOC, LabelMe, and VGG; export YOLO, COCO, VOC, CSV, LabelMe, VGG, and JSON
+| Capability | Description |
+|------------|-------------|
+| Image and Video Annotation | Image management, frame extraction, timeline navigation, and frame-level annotation |
+| Intelligent Inference | YOLO-family and custom `.pt` / `.onnx` models<br>Detection, batch detection, and OCR |
+| Segmentation and Tracking | SAM, SAM 2, SAM 3, MobileSAM, FastSAM, and YOLO-seg<br>Cross-frame propagation |
+| Data and Training | Dataset management, batch inference, and training jobs |
+| Retrieval and Model Inspection | Similar-image search, model-stage heatmaps, and target attribution |
+| Control Center | Compute groups, nodes, resources, cameras, and governed tasks |
+| Annotation Exchange | Import: COCO, YOLO, VOC, LabelMe, VGG<br>Export: YOLO, COCO, VOC, CSV, LabelMe, VGG, JSON |
 
 ## Quick Start
 
@@ -63,9 +65,11 @@ The main source tree is under `src/`: `views/` contains the UI, `services/` conn
 
 ## Current Boundaries
 
-- This repository does not contain model weights, training data, or the Python inference environment.
-- Browser project state becomes available to the Backend, Monitor, and Node only after export or upload.
-- Extension availability depends on Backend installation and runtime switches.
+| Area | Boundary |
+|------|----------|
+| Models and runtime | This repository does not contain model weights, training data, or the Python inference environment |
+| Browser project state | Becomes available to the Backend, Monitor, and Node only after export or upload |
+| Extensions | Availability depends on Backend installation and runtime switches |
 
 ## License
 

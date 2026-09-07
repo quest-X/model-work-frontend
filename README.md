@@ -23,13 +23,15 @@ OpenSight 基于 Skalski 的 [make-sense](https://github.com/SkalskiP/make-sense
 
 ## 核心能力
 
-- **图片与视频标注** — 图片管理、视频抽帧、时间线导航和逐帧标注
-- **智能推理** — YOLO 系列及自定义 `.pt`/`.onnx` 模型的检测、批量检测和文字识别
-- **实例分割与跟踪** — SAM、SAM 2、SAM 3、MobileSAM、FastSAM、YOLO-seg 及跨帧传播
-- **数据与训练** — 数据集管理、批量推理和训练任务
-- **检索与模型透视** — 相似图像检索、模型阶段热图和目标归因
-- **控制中心** — 查看计算群、节点、资源、相机和受控任务
-- **标注交换** — 导入 COCO、YOLO、VOC、LabelMe、VGG；导出 YOLO、COCO、VOC、CSV、LabelMe、VGG、JSON
+| 能力 | 说明 |
+|------|------|
+| 图片与视频标注 | 图片管理、视频抽帧、时间线导航和逐帧标注 |
+| 智能推理 | YOLO 系列及自定义 `.pt` / `.onnx` 模型<br>检测、批量检测和文字识别 |
+| 实例分割与跟踪 | SAM、SAM 2、SAM 3、MobileSAM、FastSAM、YOLO-seg<br>跨帧传播 |
+| 数据与训练 | 数据集管理、批量推理和训练任务 |
+| 检索与模型透视 | 相似图像检索、模型阶段热图和目标归因 |
+| 控制中心 | 计算群、节点、资源、相机和受控任务 |
+| 标注交换 | 导入：COCO、YOLO、VOC、LabelMe、VGG<br>导出：YOLO、COCO、VOC、CSV、LabelMe、VGG、JSON |
 
 ## 快速开始
 
@@ -63,9 +65,11 @@ npm run lint       # TypeScript 代码检查
 
 ## 当前边界
 
-- 本仓库不包含模型权重、训练数据或 Python 推理环境。
-- 浏览器端保存的项目状态只有导出或上传后才能被后端、Monitor 和 Node 使用。
-- 各扩展是否可用取决于 Backend 的安装状态和运行开关。
+| 范围 | 边界 |
+|------|------|
+| 模型与运行环境 | 本仓库不包含模型权重、训练数据或 Python 推理环境 |
+| 浏览器项目状态 | 只有导出或上传后才能被 Backend、Monitor 和 Node 使用 |
+| 扩展能力 | 是否可用取决于 Backend 的安装状态和运行开关 |
 
 ## 许可证
 
