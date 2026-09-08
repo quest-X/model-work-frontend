@@ -298,7 +298,7 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText('图形处理器')).not.toBeInTheDocument();
     });
 
-    it('shows a disconnected path and mixed paths as faulty', async () => {
+    it('keeps the node normal when one explicit control path remains healthy', async () => {
         const remoteNode = node('山东节点', true, false, null, 'Windows', 'tailscale');
         remoteNode.network.lan_ssh_available = false;
         remoteNode.network.tailscale_ssh_available = true;
@@ -313,10 +313,10 @@ describe('ControlCenterView', () => {
         expect(remote.querySelector('.ControlStatusDot')).toHaveClass('healthy');
         const machineState = screen.getByRole('button', {name: /山东节点/})
             .querySelector('.ControlMachineState');
-        expect(machineState).toHaveTextContent('故障');
-        expect(machineState).toHaveClass('warning');
+        expect(machineState).toHaveTextContent('正常');
+        expect(machineState).toHaveClass('healthy');
         expect(screen.getByRole('button', {name: /总览/}).querySelector('.ControlMachineState'))
-            .toHaveClass('warning');
+            .toHaveClass('healthy');
     });
 
     it('does not guess a version when the node reports unknown', async () => {
