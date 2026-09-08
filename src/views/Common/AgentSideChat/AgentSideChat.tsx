@@ -223,13 +223,14 @@ const nodeChatMessage = (message: string, nodeOrNodes: ComputeClusterNode | Comp
             device_inventory: node.device_inventory ? {
                 state: node.device_inventory.state,
                 device_count: devices.length,
-                devices: devices.slice(0, 8).map(device => ({
+                devices: devices.map(device => ({
                     name: device.name,
+                    ip_address: device.ip_address ?? null,
                     model: device.model,
                     status: device.status,
                     channels: device.channels,
                 })),
-                truncated: devices.length > 8,
+                truncated: false,
                 error: node.device_inventory.error,
             } : undefined,
         };

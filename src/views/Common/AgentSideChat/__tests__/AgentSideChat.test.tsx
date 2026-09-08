@@ -506,8 +506,9 @@ describe('AgentSideChat', () => {
                 node_id: 'node-166', name: 'baoxin-166-windows', online: true,
                 device_inventory: {
                     state: 'ready',
-                    devices: Array.from({length: 9}, (_, index) => ({
+                    devices: Array.from({length: 29}, (_, index) => ({
                         device_id: `camera-${index}`,
+                        ip_address: index === 28 ? undefined : `192.168.10.${index + 1}`,
                         kind: 'camera', provider: 'camera-connect', name: `Camera ${index}`,
                         status: 'online', channels: 3, capabilities: ['camera.stream.v1'],
                     })),
@@ -543,11 +544,21 @@ describe('AgentSideChat', () => {
         await screen.findByText(/已汇总全部设备。/);
         expect(send.mock.calls[0][0]).toContain('"node_id":"node-166"');
         expect(send.mock.calls[0][0]).toContain('"node_id":"node-151"');
-        expect(send.mock.calls[0][0]).toContain('"device_count":9');
+        expect(send.mock.calls[0][0]).toContain('"device_count":29');
         expect(send.mock.calls[0][0]).toContain('"name":"Camera 7"');
-        expect(send.mock.calls[0][0]).not.toContain('"name":"Camera 8"');
+        const inventory = JSON.parse(send.mock.calls[0][0].split('\n')[1])[0].device_inventory;
+        expect(inventory.devices.map(device => device.name)).toEqual(nodes[0].device_inventory.devices.map(device => device.name));
+        expect(inventory.devices.map(device => device.ip_address)).toEqual(
+            nodes[0].device_inventory.devices.map(device => device.ip_address ?? null),
+        );
+        expect(inventory.truncated).toBe(false);
         expect(send.mock.calls[0][0]).not.toContain('camera.stream.v1');
         expect(send.mock.calls[0][0]).toContain('用户消息：@全部节点 汇总状态');
+
+        fireEvent.change(composer, {target: {value: '@baoxin-166-windows 输出完整的相关设备表格'}});
+        fireEvent.click(screen.getByRole('button', {name: '发送'}));
+        await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+        expect(JSON.parse(send.mock.calls[1][0].split('\n')[1]).device_inventory).toEqual(inventory);
     });
 
     it('quick scans services and basic resources for every device', async () => {

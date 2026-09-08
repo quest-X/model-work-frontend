@@ -38,6 +38,7 @@ export type ComputeNodeResources = {
 };
 
 export type ComputeManagedDevice = {
+    ip_address?: string | null;
     device_id: string;
     kind: 'camera';
     provider: 'camera-connect';
