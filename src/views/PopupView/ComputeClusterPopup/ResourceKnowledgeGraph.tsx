@@ -310,13 +310,9 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     const points = topology.points;
     const codes = useMemo(() => displayCodes(graph.entities), [graph.entities]);
     const graphNodes = visibleEntities.filter(entity => entity.kind === 'compute_node');
-    const nodeEntityByNodeId = new Map(graphNodes
-        .filter(entity => entity.node_id)
-        .map(entity => [entity.node_id as string, entity]));
     const activeTaskFlows = tasks.flatMap(task => {
-        const targetNodeId = task.task_type === 'network.peer_probe' ? task.parameters.peer_id : undefined;
-        const source = nodeEntityByNodeId.get(task.node_id);
-        const target = targetNodeId ? nodeEntityByNodeId.get(targetNodeId) : undefined;
+        const source = task.source_entity_id ? index.get(task.source_entity_id) : undefined;
+        const target = task.target_entity_id ? index.get(task.target_entity_id) : undefined;
         return (task.state === 'queued' || task.state === 'running') && source && target && source !== target
             ? [{task, source, target}]
             : [];
@@ -489,8 +485,8 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                             key={task.task_id}
                             className={`ComputeGraphTaskFlow ${focused ? 'focused' : ''} ${muted ? 'muted' : ''}`}
                             data-testid='resource-graph-task-flow'
-                            data-source-node-id={task.node_id}
-                            data-target-node-id={task.parameters.peer_id}
+                            data-source-entity-id={task.source_entity_id}
+                            data-target-entity-id={task.target_entity_id}
                             role='img'
                             aria-label={`${zh ? '任务流' : 'Task flow'} ${source.label} → ${target.label}`}
                         >

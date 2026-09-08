@@ -495,10 +495,24 @@ describe('ComputeClusterPopup', () => {
             }],
         });
         service.tasks.mockResolvedValue({
-            version: 1, group_id: 'group-1', total: 1, counts: {running: 1}, nodes: [],
+            version: 1, group_id: 'group-1', total: 3, counts: {running: 2, succeeded: 1}, nodes: [],
             tasks: [{
                 task_id: 'peer-probe-1', node_id: 'node-12345678', node_name: 'edge-01',
+                source_entity_id: 'node:node-12345678',
+                target_entity_id: 'node:node-offline-87654321',
                 task_type: 'network.peer_probe', mode: 'online', state: 'running',
+                created_at: 1, updated_at: 2, lease_seconds: 60, attempt: 1,
+                parameters: {peer_id: 'node-offline-87654321'},
+            }, {
+                task_id: 'legacy-peer-probe', node_id: 'node-12345678', node_name: 'edge-01',
+                task_type: 'network.peer_probe', mode: 'online', state: 'running',
+                created_at: 1, updated_at: 2, lease_seconds: 60, attempt: 1,
+                parameters: {peer_id: 'node-offline-87654321'},
+            }, {
+                task_id: 'finished-peer-probe', node_id: 'node-12345678', node_name: 'edge-01',
+                source_entity_id: 'node:node-12345678',
+                target_entity_id: 'node:node-offline-87654321',
+                task_type: 'network.peer_probe', mode: 'online', state: 'succeeded',
                 created_at: 1, updated_at: 2, lease_seconds: 60, attempt: 1,
                 parameters: {peer_id: 'node-offline-87654321'},
             }],
@@ -559,8 +573,9 @@ describe('ComputeClusterPopup', () => {
         const onlineNode = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
 
         const taskFlow = screen.getByLabelText('任务流 edge-01 → edge-offline');
-        expect(taskFlow).toHaveAttribute('data-source-node-id', 'node-12345678');
-        expect(taskFlow).toHaveAttribute('data-target-node-id', 'node-offline-87654321');
+        expect(screen.getAllByTestId('resource-graph-task-flow')).toHaveLength(1);
+        expect(taskFlow).toHaveAttribute('data-source-entity-id', 'node:node-12345678');
+        expect(taskFlow).toHaveAttribute('data-target-entity-id', 'node:node-offline-87654321');
         expect(taskFlow.querySelectorAll('animateMotion')).toHaveLength(3);
         const taskFlowHit = screen.getByLabelText('查看任务流 edge-01 → edge-offline');
         await user.hover(taskFlowHit);

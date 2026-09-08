@@ -961,6 +961,8 @@ export type ComputeTask = {
     task_id: string;
     node_id: string;
     node_name: string;
+    source_entity_id?: string | null;
+    target_entity_id?: string | null;
     task_type: ComputeTaskType;
     mode: ComputeTaskMode;
     state: ComputeTaskState;
