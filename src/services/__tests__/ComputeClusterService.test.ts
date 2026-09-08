@@ -313,15 +313,15 @@ describe('computeNodeUpgradeAvailable', () => {
 
 describe('node communication state', () => {
     const node = (online = true): ComputeClusterNode => ({
-        online,
+        online, communication_state: online ? 'normal' : 'fault',
         network: {online: false, lan_ssh_available: true, tailscale_ssh_available: false},
         network_dependencies: [{dependency_id: 'control_ssh', state: 'healthy'}],
         device_inventory: {state: 'unavailable', devices: [{status: 'offline'}]},
     } as ComputeClusterNode);
     it.each([
-        [true, false, 'normal', 'fault', 'fault'],
-        [false, true, 'fault', 'normal', 'fault'],
-        [false, false, 'fault', 'fault', 'fault'],
+        [true, false, 'normal', 'fault', 'normal'],
+        [false, true, 'fault', 'normal', 'normal'],
+        [false, false, 'fault', 'fault', 'normal'],
         [true, true, 'normal', 'normal', 'normal'],
     ] as const)('maps LAN %s and Tailscale %s to binary health', (lan, tailscale, lanState, tailscaleState, state) => {
         const current = {...node(), network: {...node().network, lan_ssh_available: lan, tailscale_ssh_available: tailscale}};

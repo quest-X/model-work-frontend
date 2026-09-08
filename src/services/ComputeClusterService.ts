@@ -138,7 +138,10 @@ export const computeLinkStates = (node?: ComputeClusterNode): {lan: ComputeCommu
 };
 
 export const computeNodeState = (node?: ComputeClusterNode): 'normal' | 'fault' =>
-    aggregateCommunicationStates(Object.values(computeLinkStates(node)));
+    node?.online && !node.network.error
+        && (node.communication_state == null || node.communication_state === 'normal')
+        ? 'normal'
+        : 'fault';
 
 export const communicationStateLabel = (state: ComputeCommunicationState, zh: boolean): string =>
     state === 'normal' ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
