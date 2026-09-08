@@ -30,9 +30,10 @@ let sessionGeneration = 0;
 
 const errorMessage = async (response: Response): Promise<string> => {
     if (response.status === 404) return '登录服务尚未就绪，请检查后台服务';
-    if (response.status === 502 || response.status === 503) return '后台服务暂时不可用，请稍后重试';
     const body = await response.json().catch(() => ({}));
     const detail = body?.detail?.message || body?.detail;
+    if (detail === 'node_admission_required') return '当前机器未通过 OpenSight Master/Main 准入';
+    if (response.status === 502 || response.status === 503) return '后台服务暂时不可用，请稍后重试';
     return typeof detail === 'string' ? detail : `HTTP ${response.status}`;
 };
 
