@@ -187,6 +187,8 @@ export const DuplicateAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) =>
             setResponse(decision.response);
             setPending(undefined);
         } catch (reason) {
+            setPending(undefined);
+            startButton.current?.focus();
             setError(friendlyError(reason, zh));
         } finally {
             setBusy(false);

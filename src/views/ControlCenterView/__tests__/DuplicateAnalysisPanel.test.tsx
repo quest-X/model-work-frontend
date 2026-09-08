@@ -106,6 +106,8 @@ const response = (state: ComputeDuplicateResponse['state']): ComputeDuplicateRes
 });
 
 describe('DuplicateAnalysisPanel', () => {
+    afterEach(() => jest.restoreAllMocks());
+
     it('authorizes an exact read-only scan and reports confirmed groups', async () => {
         (ApprovalIdentity.getApprovalIdentity as jest.Mock).mockReturnValue({privateKey: {}, user});
         (ApprovalIdentity.signAuthorization as jest.Mock).mockResolvedValue('signed');
@@ -134,5 +136,23 @@ describe('DuplicateAnalysisPanel', () => {
         expect(screen.getAllByText('10 B')).toHaveLength(3);
         expect(screen.queryByRole('button', {name: /删除/})).not.toBeInTheDocument();
         await waitFor(() => expect(ComputeClusterService.duplicateStatus).toHaveBeenCalled());
+    });
+
+    it('closes a failed authorization so it cannot be submitted again', async () => {
+        (ApprovalIdentity.getApprovalIdentity as jest.Mock).mockReturnValue({privateKey: {}, user});
+        (ApprovalIdentity.signAuthorization as jest.Mock).mockResolvedValue('signed');
+        jest.spyOn(ComputeClusterService, 'createDuplicateAuthorization').mockResolvedValue({
+            authorization: authorization('pending'), response: response('authorization_required'),
+        });
+        jest.spyOn(ComputeClusterService, 'approveDuplicateAuthorization')
+            .mockRejectedValue(new Error('authorization_scope_denied'));
+
+        render(<DuplicateAnalysisPanel node={node} zh visible/>);
+        fireEvent.change(screen.getByRole('textbox', {name: '重复文件扫描目录'}), {target: {value: 'C:\\Data'}});
+        fireEvent.click(screen.getByRole('button', {name: '查找重复文件'}));
+        fireEvent.click(await screen.findByRole('button', {name: '授权并扫描'}));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('本次授权无效，请重新开始扫描。');
+        expect(screen.queryByRole('dialog', {name: '确认只读重复文件扫描'})).not.toBeInTheDocument();
     });
 });
