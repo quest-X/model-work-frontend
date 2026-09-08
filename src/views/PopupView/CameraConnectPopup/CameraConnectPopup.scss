@@ -324,6 +324,12 @@
 
   }
 
+  input:is(:autofill, :-webkit-autofill) {
+    box-shadow: 0 0 0 1000px #222 inset;
+    -webkit-text-fill-color: white;
+    caret-color: white;
+  }
+
   .CameraCheckbox {
     display: flex;
     flex-direction: row;
