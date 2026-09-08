@@ -1431,7 +1431,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     node.name,
                                     remoteLan,
                                 )}
-                            >＋</button>}
+                            >{cameras.length} ＋</button>}
                         </div>
                         <div className='ControlCameraGrid'>
                             {cameras.map(camera => <button
@@ -1493,7 +1493,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     node.name,
                                     remoteLan,
                                 )}
-                            >＋</button>}
+                            >{edgeDevices.length} ＋</button>}
                         </div>
                         <div className='ControlCameraGrid'>
                             {edgeDevices.map(device => <button
