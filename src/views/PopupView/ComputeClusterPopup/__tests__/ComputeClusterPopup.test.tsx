@@ -495,7 +495,7 @@ describe('ComputeClusterPopup', () => {
             }],
         });
         service.tasks.mockResolvedValue({
-            version: 1, group_id: 'group-1', total: 3, counts: {running: 2, succeeded: 1}, nodes: [],
+            version: 1, group_id: 'group-1', total: 4, counts: {running: 3, succeeded: 1}, nodes: [],
             tasks: [{
                 task_id: 'peer-probe-1', node_id: 'node-12345678', node_name: 'edge-01',
                 source_entity_id: 'node:node-12345678',
@@ -515,6 +515,13 @@ describe('ComputeClusterPopup', () => {
                 task_type: 'network.peer_probe', mode: 'online', state: 'succeeded',
                 created_at: 1, updated_at: 2, lease_seconds: 60, attempt: 1,
                 parameters: {peer_id: 'node-offline-87654321'},
+            }, {
+                task_id: 'camera-connect-1', node_id: 'node-12345678', node_name: 'edge-01',
+                source_entity_id: 'managed-device:node-12345678:edge-1',
+                target_entity_id: 'managed-device:node-12345678:camera-1',
+                task_type: 'camera.connect', mode: 'background', state: 'running',
+                created_at: 1, updated_at: 2, lease_seconds: 60, attempt: 1,
+                parameters: {},
             }],
         });
 
@@ -573,7 +580,7 @@ describe('ComputeClusterPopup', () => {
         const onlineNode = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
 
         const taskFlow = screen.getByLabelText('任务流 edge-01 → edge-offline');
-        expect(screen.getAllByTestId('resource-graph-task-flow')).toHaveLength(1);
+        expect(screen.getAllByTestId('resource-graph-task-flow')).toHaveLength(2);
         expect(taskFlow).toHaveAttribute('data-source-entity-id', 'node:node-12345678');
         expect(taskFlow).toHaveAttribute('data-target-entity-id', 'node:node-offline-87654321');
         expect(taskFlow.querySelectorAll('animateMotion')).toHaveLength(3);
@@ -585,6 +592,9 @@ describe('ComputeClusterPopup', () => {
         expect(offlineNode).toHaveClass('relation-focused');
         expect(camera).toHaveClass('muted');
         await user.unhover(taskFlowHit);
+        expect(screen.getByLabelText('任务流 AIPACK-01 → IP CAMERA')).toHaveAttribute(
+            'data-target-entity-id', 'managed-device:node-12345678:camera-1',
+        );
 
         const edgeConnection = screen.getByLabelText('连接 edge-01 ↔ AIPACK-01');
         await user.hover(edgeConnection);
@@ -837,6 +847,32 @@ describe('ComputeClusterPopup', () => {
                 resources: expect.objectContaining({cpu_cores: 1, memory_bytes: 1024 ** 3}),
             }),
         ));
+    });
+
+    it('shows direct camera tasks without unsupported lifecycle controls', async () => {
+        const user = userEvent.setup();
+        service.status.mockResolvedValue({
+            state: 'ready', version: '0.1.0', protocol_version: 1,
+            admin_configured: true,
+            task_control: {enabled: true, allowed_task_types: ['system.wait']},
+            nodes: {total: 1, online: 1, gpu_total: 1, device_total: 1},
+        });
+        service.tasks.mockResolvedValue({
+            version: 1, group_id: 'group-1', total: 1, counts: {running: 1}, nodes: [],
+            tasks: [{
+                task_id: 'camera-task', node_id: 'node-12345678', node_name: 'edge-01',
+                task_type: 'camera.connect', mode: 'background', state: 'running',
+                created_at: 1, updated_at: 2, lease_seconds: 60, attempt: 1,
+                parameters: {},
+            }],
+        });
+
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+
+        await user.click(await screen.findByRole('button', {name: '工作调度 1'}));
+        expect(screen.getByText('摄像头连接 · edge-01')).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '暂停'})).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '取消'})).not.toBeInTheDocument();
     });
 
     it('dispatches the information work agent and renders redacted evidence metadata', async () => {

@@ -77,6 +77,21 @@ const taskState = (state: ComputeTask['state'], zh: boolean): string => {
     return labels[state][zh ? 0 : 1];
 };
 
+const TASK_NAMES: Record<ComputeTask['task_type'], [string, string]> = {
+    'system.wait': ['等待测试', 'Wait test'],
+    'information.web_fetch': ['公开信息抓取', 'Public information fetch'],
+    'network.lan_discovery': ['局域网设备发现', 'LAN device discovery'],
+    'network.peer_probe': ['节点连通测试', 'Peer connectivity test'],
+    'model.infer': ['模型推理', 'Model inference'],
+    'duplicate.scan': ['重复文件扫描', 'Duplicate file scan'],
+    'storage.scan': ['存储分析', 'Storage analysis'],
+    'camera.discover': ['摄像头发现', 'Camera discovery'],
+    'camera.connect': ['摄像头连接', 'Camera connection'],
+};
+
+const taskName = (task: ComputeTask, zh: boolean): string =>
+    TASK_NAMES[task.task_type][zh ? 0 : 1];
+
 const taskProgress = (task: ComputeTask): number => {
     if (task.state === 'succeeded') return 100;
     const reported = task.progress?.percent;
@@ -139,17 +154,14 @@ const TaskCard: React.FC<TaskCardProps> = ({task, zh, busy, onControl}) => {
     const finished = ['succeeded', 'failed', 'cancelled'].includes(task.state);
     const informationTask = task.task_type === 'information.web_fetch';
     const discoveryTask = task.task_type === 'network.lan_discovery';
+    const cameraTask = task.task_type === 'camera.connect' || task.task_type === 'camera.discover';
     const evidence = webFetchResult(task);
     const discovery = lanDiscoveryResult(task);
     return <article className={`ComputeTaskCard ${task.state}`}>
         <div className='ComputeTaskIdentity'>
             <span className={`ComputeTaskState ${task.state}`}>{taskState(task.state, zh)}</span>
             <div>
-                <strong>{informationTask
-                    ? (zh ? '公开信息抓取' : 'Public information fetch')
-                    : discoveryTask
-                        ? (zh ? '局域网设备发现' : 'LAN device discovery')
-                        : (zh ? '等待测试' : 'Wait test')} · {task.node_name}</strong>
+                <strong>{taskName(task, zh)} · {task.node_name}</strong>
                 <small>{task.mode === 'online' ? (zh ? '在线任务' : 'Online') : (zh ? '后台任务' : 'Background')} · {task.task_id.slice(0, 8)}</small>
                 {task.placement && <small className='ComputeTaskPlacement'>
                     {task.placement.mode === 'automatic'
@@ -171,9 +183,9 @@ const TaskCard: React.FC<TaskCardProps> = ({task, zh, busy, onControl}) => {
                     : `${Number(task.progress?.completed ?? task.checkpoint?.elapsed_seconds ?? 0).toFixed(1)} / ${Number(task.parameters.seconds ?? task.progress?.total ?? 0).toFixed(1)} s`}</small>
         </div>
         <div className='ComputeTaskActions'>
-            {active && !informationTask && !discoveryTask && <button type='button' disabled={busy} onClick={() => onControl(task, 'pause')}>{zh ? '暂停' : 'Pause'}</button>}
-            {task.state === 'paused' && !informationTask && !discoveryTask && <button type='button' disabled={busy} onClick={() => onControl(task, 'resume')}>{zh ? '恢复' : 'Resume'}</button>}
-            {!finished && <button type='button' className='danger' disabled={busy} onClick={() => onControl(task, 'cancel')}>{zh ? '取消' : 'Cancel'}</button>}
+            {active && !informationTask && !discoveryTask && !cameraTask && <button type='button' disabled={busy} onClick={() => onControl(task, 'pause')}>{zh ? '暂停' : 'Pause'}</button>}
+            {task.state === 'paused' && !informationTask && !discoveryTask && !cameraTask && <button type='button' disabled={busy} onClick={() => onControl(task, 'resume')}>{zh ? '恢复' : 'Resume'}</button>}
+            {!finished && !cameraTask && <button type='button' className='danger' disabled={busy} onClick={() => onControl(task, 'cancel')}>{zh ? '取消' : 'Cancel'}</button>}
         </div>
         {informationTask && <div className='ComputeTaskEvidence'>
             <span className={`ComputeEvidenceState ${evidence?.status || 'pending'}`}>

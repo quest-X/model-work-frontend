@@ -770,8 +770,10 @@ export type ComputeTaskType = 'system.wait'
     | 'information.web_fetch'
     | 'network.lan_discovery'
     | 'network.peer_probe'
+    | 'model.infer'
     | 'duplicate.scan'
     | 'storage.scan'
+    | 'camera.discover'
     | 'camera.connect';
 
 export type ComputeLanScanTarget = {
@@ -944,6 +946,12 @@ export type ComputeWebFetchResult = {
     attempt_count: number;
 };
 
+export type ComputeModelResult = {
+    model_id: string;
+    model_sha256: string;
+    outputs: Record<string, unknown>;
+};
+
 export type ComputeResourceRequest = {
     cpu_cores: number;
     memory_bytes: number;
@@ -981,6 +989,7 @@ export type ComputeTask = {
         | ComputeDuplicateResult
         | ComputeStorageResult
         | CameraConnectResult
+        | ComputeModelResult
         | null;
     error?: string | null;
     attempt: number;
