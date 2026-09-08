@@ -128,4 +128,22 @@ describe('StartupItemsPanel', () => {
             item_id: item.item_id, enabled: true, expected_enabled: false,
         });
     });
+
+    it('closes a terminal failed authorization before retry', async () => {
+        (ApprovalIdentity.getApprovalIdentity as jest.Mock).mockReturnValue({privateKey: {}, user});
+        (ApprovalIdentity.signAuthorization as jest.Mock).mockResolvedValue('signed');
+        jest.spyOn(ComputeClusterService, 'startupItems').mockResolvedValue({
+            schema_version: 'startup.list-result.v1', platform: 'windows', available: true, items: [item],
+        });
+        jest.spyOn(ComputeClusterService, 'createStartupAuthorization').mockResolvedValue(challenge(false));
+        jest.spyOn(ComputeClusterService, 'approveStartupAuthorization')
+            .mockRejectedValue(new Error('operation_failed'));
+
+        render(<StartupItemsPanel node={node} zh visible/>);
+        fireEvent.click(await screen.findByRole('button', {name: '禁用'}));
+        fireEvent.click(await screen.findByRole('button', {name: '授权并执行'}));
+
+        expect(await screen.findByText('启动项操作失败，请刷新后重试。')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByRole('dialog', {name: '确认禁用启动项'})).not.toBeInTheDocument());
+    });
 });

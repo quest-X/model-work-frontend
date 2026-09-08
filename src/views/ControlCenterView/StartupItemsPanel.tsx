@@ -163,7 +163,9 @@ export const StartupItemsPanel: React.FC<IProps> = ({node, zh, visible}) => {
             } : current);
             setPending(undefined);
         } catch (reason) {
+            setPending(undefined);
             setError(friendlyError(reason, zh));
+            lastAction.current?.focus();
         } finally {
             setLoading(false);
         }
