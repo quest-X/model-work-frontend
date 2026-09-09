@@ -4,10 +4,10 @@ import {EditorViewportContent} from '../EditorViewportContent';
 import {Language} from '../../../../data/LanguageConfig';
 import {QueueItemStatus, QueueItemType} from '../../../../store/queue/types';
 
-jest.mock('../../CameraPlayer/CameraPlayer', () => () => <div>camera viewport</div>);
-jest.mock('../../VideoEditor/VideoEditor', () => () => <div>video viewport</div>);
-jest.mock('../../Editor/Editor', () => () => <div>image viewport</div>);
-jest.mock('../../EditorBottomNavigationBar/EditorBottomNavigationBar', () => () => <div>image navigation</div>);
+jest.mock('../../CameraPlayer/CameraPlayer', () => function MockViewport() { return <div>camera viewport</div>; });
+jest.mock('../../VideoEditor/VideoEditor', () => function MockViewport() { return <div>video viewport</div>; });
+jest.mock('../../Editor/Editor', () => function MockViewport() { return <div>image viewport</div>; });
+jest.mock('../../EditorBottomNavigationBar/EditorBottomNavigationBar', () => function MockViewport() { return <div>image navigation</div>; });
 
 it('preserves camera precedence, video fallback, progress and empty-state import', () => {
     const onOpen = jest.fn();

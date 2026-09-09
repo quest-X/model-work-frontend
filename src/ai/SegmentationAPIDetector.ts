@@ -198,12 +198,22 @@ export class SegmentationAPIDetector {
     }
 
     private static appendPipelineParams(formData: FormData) {
-        // 按 PipelineStore 阶段激活 + 各参数独立 enabled 标志双重过滤。
+        this.appendPreprocessParams(formData);
+        this.appendInferenceParams(formData);
+        this.appendPostprocessParams(formData);
+        this.appendScriptParams(formData);
+    }
+
+    private static appendPreprocessParams(formData: FormData) {
         const ip = this.inferenceParams;
         if (PipelineStore.isActivated('preprocess')) {
             if (ip.imgsz_enabled !== false)  formData.append('imgsz',   String(ip.imgsz));
             if (ip.augment_enabled !== false) formData.append('augment', ip.augment ? '1' : '0');
         }
+    }
+
+    private static appendInferenceParams(formData: FormData) {
+        const ip = this.inferenceParams;
         if (PipelineStore.isActivated('inference')) {
             if (ip.conf_enabled !== false)          formData.append('conf',         String(ip.conf));
             if (ip.iou_enabled !== false)           formData.append('iou',          String(ip.iou));
@@ -213,6 +223,9 @@ export class SegmentationAPIDetector {
                 formData.append('classes', ip.classes.trim());
             if (ip.retina_masks_enabled !== false)  formData.append('retina_masks', ip.retina_masks ? '1' : '0');
         }
+    }
+
+    private static appendPostprocessParams(formData: FormData) {
         if (PipelineStore.isActivated('postprocess')) {
             const pp = this.postprocessParams;
             if (pp.polygon_epsilon_enabled !== false)  formData.append('polygon_epsilon', String(pp.polygon_epsilon));
@@ -226,6 +239,9 @@ export class SegmentationAPIDetector {
                 formData.append('mask_iou_threshold', String(pp.mask_iou_threshold));
         }
 
+    }
+
+    private static appendScriptParams(formData: FormData) {
         // ── 自定义脚本 ──
         const sel = ScriptStore.get();
         if (PipelineStore.isActivated('preprocess') && sel.preprocess)
@@ -235,7 +251,6 @@ export class SegmentationAPIDetector {
         if ((sel.preprocess || sel.postprocess) && sel.params.trim())
             formData.append('script_params', sel.params);
     }
-
     /**
      * 从 store 读取 activeModel 并同步到 config。
      * 检测、分割和 OCR 都由 core engine 暴露为 capability。

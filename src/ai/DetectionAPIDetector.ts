@@ -300,6 +300,81 @@ export class DetectionAPIDetector {
         }
     }
 
+    private static captureFrame(source: CanvasImageSource, width: number, height: number, message: string): Promise<Blob> {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(source, 0, 0, width, height);
+        return new Promise((resolve, reject) => {
+            canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error(message)), 'image/jpeg', 0.9);
+        });
+    }
+
+    private static captureDecodedFrame(img: HTMLImageElement): Promise<Blob> {
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
+        if (!width || !height) throw new Error('Frame image has no dimensions');
+        return this.captureFrame(img, width, height, 'Failed to capture frame image');
+    }
+
+    private static async appendSessionFrame(formData: FormData, imageData: ImageData): Promise<void> {
+        // Fetch the frame directly from the backend — same path as batch detection.
+        // Avoids canvas capture entirely (videoFrameImage may not be ready yet).
+        const match = imageData.fileData.name?.match(/frame_(\d+)/);
+        if (!match) throw new Error('Cannot determine frame index from filename');
+        const frameIdx = parseInt(match[1], 10);
+        const frames = await FrameExtractorService.fetchFrameRange(EditorModel.videoSessionId, frameIdx, 1);
+        if (!frames || frames.length === 0) throw new Error('Failed to fetch frame from backend');
+        formData.append('file', frames[0] as Blob, imageData.fileData.name || 'frame.jpg');
+    }
+
+    private static async appendImageSource(formData: FormData, imageData: ImageData): Promise<void> {
+        // Determine capture strategy based on the active playback mode.
+        const isVideoFile = imageData.fileData && imageData.fileData.type.startsWith('video/');
+        // on-demand mode: 0-byte placeholder + backend session
+        const isOnDemandFrame = imageData.fileData && imageData.fileData.size === 0 && !!EditorModel.videoSessionId;
+
+        if (isOnDemandFrame) {
+            await this.appendSessionFrame(formData, imageData);
+        } else if (isVideoFile) {
+            // raw_browser_mode: capture current frame at full resolution from <video> element
+            const video = EditorModel.videoElement;
+            if (!video || video.readyState < 2) {
+                throw new Error('Video not ready. Please wait for the video to load.');
+            }
+            const blob = await this.captureFrame(video, video.videoWidth, video.videoHeight, 'Failed to capture video frame');
+            formData.append('file', blob, 'video_frame.jpg');
+        } else if (EditorModel.videoFrameImage) {
+            // fast_ffmpeg_mode with pre-extracted frames: capture pixels from the decoded frame Image
+            const blob = await this.captureDecodedFrame(EditorModel.videoFrameImage);
+            formData.append('file', blob, 'frame.jpg');
+        } else if (imageData.fileData && imageData.fileData.size > 0) {
+            // 图像模式：直接发送原始文件
+            formData.append('file', imageData.fileData, imageData.fileData.name || 'image.jpg');
+        } else {
+            throw new Error('No image file data available');
+        }
+
+    }
+
+    private static requestErrorMessage(error: unknown): string {
+        let errorMessage = 'Network error';
+
+        if (axios.isAxiosError(error)) {
+            if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+                errorMessage = 'Cannot connect to detection server. Please check if the server is running.';
+            } else if (error.response) {
+                errorMessage = `Server error: ${error.response.status} ${error.response.statusText}`;
+            } else if (error.request) {
+                errorMessage = 'No response from server. Please check your network connection.';
+            }
+        } else if (error instanceof Error) {
+            errorMessage = error.message;
+        }
+
+        return errorMessage;
+    }
+
     /**
      * 调用检测API接口
      * @param imageData 当前图片数据
@@ -322,62 +397,7 @@ export class DetectionAPIDetector {
             // 准备form-data
             const formData = new FormData();
 
-            // Determine capture strategy based on the active playback mode.
-            const isVideoFile = imageData.fileData && imageData.fileData.type.startsWith('video/');
-            // on-demand mode: 0-byte placeholder + backend session
-            const isOnDemandFrame = imageData.fileData && imageData.fileData.size === 0 && !!EditorModel.videoSessionId;
-
-            if (isOnDemandFrame) {
-                // Fetch the frame directly from the backend — same path as batch detection.
-                // Avoids canvas capture entirely (videoFrameImage may not be ready yet).
-                const match = imageData.fileData.name?.match(/frame_(\d+)/);
-                if (!match) throw new Error('Cannot determine frame index from filename');
-                const frameIdx = parseInt(match[1], 10);
-                const frames = await FrameExtractorService.fetchFrameRange(EditorModel.videoSessionId, frameIdx, 1);
-                if (!frames || frames.length === 0) throw new Error('Failed to fetch frame from backend');
-                formData.append('file', frames[0] as Blob, imageData.fileData.name || 'frame.jpg');
-            } else if (isVideoFile) {
-                // raw_browser_mode: capture current frame at full resolution from <video> element
-                const video = EditorModel.videoElement;
-                if (!video || video.readyState < 2) {
-                    throw new Error('Video not ready. Please wait for the video to load.');
-                }
-                const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const blob: Blob = await new Promise((resolve, reject) => {
-                    canvas.toBlob((b) => {
-                        if (b) resolve(b);
-                        else reject(new Error('Failed to capture video frame'));
-                    }, 'image/jpeg', 0.9);
-                });
-                formData.append('file', blob, 'video_frame.jpg');
-            } else if (EditorModel.videoFrameImage) {
-                // fast_ffmpeg_mode with pre-extracted frames: capture pixels from the decoded frame Image
-                const img = EditorModel.videoFrameImage;
-                const w = img.naturalWidth || img.width;
-                const h = img.naturalHeight || img.height;
-                if (!w || !h) throw new Error('Frame image has no dimensions');
-                const canvas = document.createElement('canvas');
-                canvas.width = w;
-                canvas.height = h;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, w, h);
-                const blob: Blob = await new Promise((resolve, reject) => {
-                    canvas.toBlob((b) => {
-                        if (b) resolve(b);
-                        else reject(new Error('Failed to capture frame image'));
-                    }, 'image/jpeg', 0.9);
-                });
-                formData.append('file', blob, 'frame.jpg');
-            } else if (imageData.fileData && imageData.fileData.size > 0) {
-                // 图像模式：直接发送原始文件
-                formData.append('file', imageData.fileData, imageData.fileData.name || 'image.jpg');
-            } else {
-                throw new Error('No image file data available');
-            }
+            await this.appendImageSource(formData, imageData);
 
             this.appendInferenceParams(formData);
 
@@ -410,21 +430,8 @@ export class DetectionAPIDetector {
 
         } catch (error) {
             console.error('Detection API request failed:', error);
-            let errorMessage = 'Network error';
-            
-            if (axios.isAxiosError(error)) {
-                if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-                    errorMessage = 'Cannot connect to detection server. Please check if the server is running.';
-                } else if (error.response) {
-                    errorMessage = `Server error: ${error.response.status} ${error.response.statusText}`;
-                } else if (error.request) {
-                    errorMessage = 'No response from server. Please check your network connection.';
-                }
-            } else if (error instanceof Error) {
-                errorMessage = error.message;
-            }
 
-            if (onFailure) onFailure(new Error(errorMessage));
+            if (onFailure) onFailure(new Error(this.requestErrorMessage(error)));
         }
     }
 
