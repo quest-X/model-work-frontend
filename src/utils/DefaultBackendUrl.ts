@@ -8,6 +8,8 @@
  * Electron/file:// 没有可用 origin，保留直连 localhost backend 的兼容回退。
  */
 
+import type {AppState} from '../store';
+
 const DEFAULT_BACKEND_PORT = 58600;
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
@@ -86,10 +88,10 @@ export const resolveEngineBaseUrl = (url: string, type: ServiceEngineType): stri
 };
 
 // 由 index.tsx 在 store 初始化后注入,避免循环依赖 + require() 不可用的问题。
-let _storeRef: { getState: () => any } | null = null;
+let _storeRef: { getState: () => Pick<AppState, 'aimodels'> } | null = null;
 
 /** index.tsx 在 store 创建后调用一次,之后 getEngineBaseUrl() 就能读到正确的 store 状态。 */
-export const registerEngineStore = (s: { getState: () => any }): void => {
+export const registerEngineStore = (s: { getState: () => Pick<AppState, 'aimodels'> }): void => {
     _storeRef = s;
 };
 
@@ -107,14 +109,14 @@ const getRegisteredEngineBaseUrl = (type: ServiceEngineType): string | null => {
     try {
         if (_storeRef) {
             const state = _storeRef.getState();
-            const models: any[] = state.aimodels?.models ?? [];
-            const matchingModels = models.filter((m: any) => m.modelType === type && m.url);
+            const models = state.aimodels?.models ?? [];
+            const matchingModels = models.filter(m => m.modelType === type && m.url);
             const activeId = state.aimodels?.activeModelId;
             if (activeId) {
-                const active = matchingModels.find((m: any) => m.id === activeId);
+                const active = matchingModels.find(m => m.id === activeId);
                 if (active?.url) return resolveEngineBaseUrl(active.url, type);
             }
-            const enabled = matchingModels.find((m: any) => m.isActive);
+            const enabled = matchingModels.find(m => m.isActive);
             if (enabled?.url) return resolveEngineBaseUrl(enabled.url, type);
             if (matchingModels[0]?.url) return resolveEngineBaseUrl(matchingModels[0].url, type);
         }
