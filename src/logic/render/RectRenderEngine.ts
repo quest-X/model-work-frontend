@@ -962,8 +962,8 @@ export class RectRenderEngine extends BaseRenderEngine {
                 y: mousePositionSnapped.y - this.startMovePolygonPoint.y
             };
 
-            // 将移动增量转换为图像坐标系
-            const imageDelta: IPoint = RenderEngineUtil.transferPointFromViewPortContentToImage(moveDelta, data);
+            // 位移只按比例缩放，不减去视口中的图像原点。
+            const imageDelta: IPoint = PointUtil.multiply(moveDelta, RenderEngineUtil.calculateImageScale(data));
             
             // 获取当前多边形标签
             const imageData = LabelsSelector.getActiveImageData();

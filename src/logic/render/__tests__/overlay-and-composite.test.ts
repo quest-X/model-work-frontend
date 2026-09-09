@@ -1,3 +1,7 @@
+import {store} from '../../../index';
+import {updateImageData, updateActiveImageIndex, updateActiveLabelId, updateHighlightedLabelId} from '../../../store/labels/actionCreators';
+import {ViewPortHelper} from '../../helpers/ViewPortHelper';
+import {ViewPortActions} from '../../actions/ViewPortActions';
 import {EditorData} from '../../../data/EditorData';
 import {ImageData} from '../../../store/labels/types';
 import {LabelStatus} from '../../../data/enums/LabelStatus';
@@ -109,4 +113,73 @@ it('preserves the smart prompt click tolerance and ignores non-left clicks', () 
     engine.mouseUpHandler({...start, mousePositionOnViewPortContent: {x: 20, y: 30}});
     expect(bbox).toHaveBeenCalledWith({x: 10, y: 10, width: 10, height: 20});
     expect(engine.isInProgress()).toBe(false);
+});
+
+
+it('moves polygons by scaled displacement after restoring label drag mode', () => {
+    jest.spyOn(GeneralSelector, 'getImageDragModeStatus').mockReturnValue(true);
+    jest.spyOn(GeneralSelector, 'getSmartAnnotationActiveStatus').mockReturnValue(false);
+    jest.spyOn(LabelsSelector, 'getActiveLabelViewType').mockReturnValue(LabelType.ALL);
+    const polygon = {
+        id: 'polygon', labelId: null, isVisible: true, isCreatedByAI: false,
+        status: LabelStatus.ACCEPTED, suggestedLabel: '',
+        vertices: [{x: 20, y: 20}, {x: 60, y: 20}, {x: 20, y: 60}],
+    };
+    const previous = store.getState().labels;
+    const previousDisabled = EditorModel.viewPortActionsDisabled;
+    store.dispatch(updateImageData([{...image, labelPolygons: [polygon]}]));
+    store.dispatch(updateActiveImageIndex(0));
+    const engine = new RectRenderEngine(document.createElement('canvas'));
+    const shifted = {
+        ...data, realImageSize: {width: 200, height: 200},
+        viewPortContentImageRect: {x: 40, y: 30, width: 100, height: 100},
+    };
+    try {
+        engine.update({...shifted, mousePositionOnViewPortContent: {x: 50, y: 40},
+            event: new MouseEvent('mousedown', {button: 0})});
+        engine.update({...shifted, mousePositionOnViewPortContent: {x: 60, y: 45},
+            event: new MouseEvent('mousemove')});
+        expect(LabelsSelector.getActiveImageData().labelPolygons[0].vertices)
+            .toEqual([{x: 40, y: 30}, {x: 80, y: 30}, {x: 40, y: 70}]);
+        engine.update({...shifted, mousePositionOnViewPortContent: {x: 65, y: 50},
+            event: new MouseEvent('mousemove')});
+        const moved = LabelsSelector.getActiveImageData().labelPolygons[0].vertices;
+        expect(moved).toEqual([{x: 50, y: 40}, {x: 90, y: 40}, {x: 50, y: 80}]);
+        engine.update({...shifted, mousePositionOnViewPortContent: {x: 65, y: 50},
+            event: new MouseEvent('mouseup')});
+        engine.update({...shifted, mousePositionOnViewPortContent: {x: 70, y: 60},
+            event: new MouseEvent('mousemove')});
+        expect(LabelsSelector.getActiveImageData().labelPolygons[0].vertices).toEqual(moved);
+        expect(EditorModel.viewPortActionsDisabled).toBe(false);
+    } finally {
+        store.dispatch(updateImageData(previous.imagesData));
+        store.dispatch(updateActiveImageIndex(previous.activeImageIndex));
+        store.dispatch(updateActiveLabelId(previous.activeLabelId));
+        store.dispatch(updateHighlightedLabelId(previous.highlightedLabelId));
+        EditorModel.viewPortActionsDisabled = previousDisabled;
+    }
+});
+
+it('keeps ordinary ALL-view dragging routed to viewport panning', () => {
+    jest.spyOn(GeneralSelector, 'getSmartAnnotationActiveStatus').mockReturnValue(false);
+    jest.spyOn(GeneralSelector, 'getTrackingMode').mockReturnValue(false);
+    jest.spyOn(GeneralSelector, 'getEraserMode').mockReturnValue(false);
+    const scroll = jest.spyOn(ViewPortActions, 'setScrollPosition').mockImplementation(() => undefined);
+    const previousHelper = EditorModel.viewPortHelper;
+    const previousCanvas = EditorModel.canvas;
+    EditorModel.viewPortHelper = new ViewPortHelper();
+    EditorModel.canvas = document.createElement('canvas');
+    const engine = new AllLabelsRenderEngine(EditorModel.canvas);
+    const panning = {...data, absoluteViewPortContentScrollPosition: {x: 50, y: 60}};
+    try {
+        engine.update({...panning, event: new MouseEvent('mousedown', {screenX: 100, screenY: 100})});
+        engine.update({...panning, event: new MouseEvent('mousemove', {screenX: 110, screenY: 105})});
+        expect(scroll).toHaveBeenCalledWith({x: 40, y: 55});
+        engine.update({...panning, event: new MouseEvent('mouseup')});
+        engine.update({...panning, event: new MouseEvent('mousemove', {screenX: 120, screenY: 110})});
+        expect(scroll).toHaveBeenCalledTimes(1);
+    } finally {
+        EditorModel.viewPortHelper = previousHelper;
+        EditorModel.canvas = previousCanvas;
+    }
 });
