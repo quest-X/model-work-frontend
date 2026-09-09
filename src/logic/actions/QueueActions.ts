@@ -27,9 +27,15 @@ type VideoRuntime = {
 
 type PreparedVideoSwitch = {
     targetItem: QueueItem;
+    videoData: VideoData;
     sessionId?: string;
     queueUpdates?: Partial<QueueItem>;
 };
+
+type PreparedQueueSwitch =
+    | {kind: 'video'; video: PreparedVideoSwitch}
+    | {kind: 'images'; images: ImageData[]}
+    | {kind: 'camera'};
 
 type ResolvedVideoSession = {
     sessionId?: string;
@@ -162,14 +168,35 @@ export class QueueActions {
         return needsRuntime && hasDurableSource;
     }
 
-    private static createVideoData(targetItem: QueueItem, sessionId?: string): VideoData {
+    private static createVideoData(
+        targetItem: QueueItem, sessionId: string | undefined, cachedData: ImageData[] | null,
+    ): VideoData {
         const meta = targetItem.extractionMetadata;
+        let extractedFrames = targetItem.extractedFrames;
+        if (sessionId || !targetItem.file?.size) {
+            if (!meta || !Number.isInteger(meta.totalFrames) ||
+                ![meta.totalFrames, meta.fps, meta.width, meta.height, meta.duration]
+                    .every(value => Number.isFinite(value) && value > 0)) {
+                throw new Error('视频元信息缺失或无效，请重新打开视频');
+            }
+        }
+        if (!sessionId && !targetItem.file?.size) {
+            const candidates = [extractedFrames, cachedData?.map(image => image.fileData)];
+            extractedFrames = candidates.find(frames => frames && frames.length >= meta.totalFrames &&
+                Array.from({length: meta.totalFrames}, (_, index) => frames[index])
+                    .every(file => file?.size > 0));
+            if (!extractedFrames) {
+                throw new Error('视频源当前不可用，请重新选择原视频或恢复有效会话');
+            }
+        }
+        // Placeholder files represent confirmed sessions or complete frame sets.
+        const sourceFile = targetItem.file || new File([], targetItem.name, {type: 'video/mp4'});
         if (!meta?.fps) {
             console.warn('[QueueActions] fps 缺失，使用默认值 30');
         }
         return {
             id: targetItem.id,
-            fileData: targetItem.file!,
+            fileData: sourceFile,
             loadStatus: !!meta,
             duration: meta?.duration || 0,
             fps: meta?.fps || 30,
@@ -181,7 +208,7 @@ export class QueueActions {
             currentTime: 0,
             isPlaying: false,
             frames: new Map(),
-            preExtractedFrames: targetItem.extractedFrames,
+            preExtractedFrames: extractedFrames,
             sessionId,
         };
     }
@@ -227,23 +254,42 @@ export class QueueActions {
         }
     }
 
-    private static async prepareVideoSwitch(targetItem: QueueItem): Promise<PreparedVideoSwitch> {
+    private static resolveVideoSource(
+        targetItem: QueueItem, storedTarget: QueueItem | undefined, videoState: VideoState,
+    ): QueueItem {
+        const existing = videoState.videos.filter(video => video.id === targetItem.id).pop();
+        const sourceFiles = [targetItem.file, storedTarget?.file, existing?.fileData];
+        return {
+            ...targetItem,
+            file: sourceFiles.find(file => file?.size) || sourceFiles.find(Boolean),
+            extractedFrames: targetItem.extractedFrames || storedTarget?.extractedFrames || existing?.preExtractedFrames,
+            extractionMetadata: targetItem.extractionMetadata || storedTarget?.extractionMetadata || (existing ? {
+                fps: existing.fps, duration: existing.duration, totalFrames: existing.totalFrames,
+                width: existing.videoSize.width, height: existing.videoSize.height,
+            } : undefined),
+        };
+    }
+
+    private static async prepareVideoSwitch(
+        targetItem: QueueItem,
+        cachedData: ImageData[] | null,
+    ): Promise<PreparedVideoSwitch> {
         const state = store.getState();
         const storedTarget = state.queue.items.find(item => item.id === targetItem.id);
-        let runtimeTarget = targetItem;
+        let runtimeTarget = QueueActions.resolveVideoSource(targetItem, storedTarget, state.video);
         const resolvedSession = await QueueActions.resolveUsableVideoSession(
             targetItem,
             state.video,
         );
         let sessionId = resolvedSession.sessionId;
         let queueUpdates: Partial<QueueItem> | undefined;
-        if (!sessionId && QueueActions.shouldReopenVideo(targetItem, resolvedSession.stale)) {
-            const reopened = await QueueActions.reopenVideoRuntime(targetItem);
+        if (!sessionId && QueueActions.shouldReopenVideo(runtimeTarget, resolvedSession.stale)) {
+            const reopened = await QueueActions.reopenVideoRuntime(runtimeTarget);
             sessionId = reopened.sessionId;
             runtimeTarget = {
-                ...targetItem,
+                ...runtimeTarget,
                 videoSessionId: sessionId,
-                extractionMetadata: reopened.metadata || targetItem.extractionMetadata,
+                extractionMetadata: reopened.metadata || runtimeTarget.extractionMetadata,
             };
             if (sessionId) {
                 queueUpdates = {
@@ -257,53 +303,55 @@ export class QueueActions {
             queueUpdates = {videoSessionId: undefined};
             runtimeTarget = {...runtimeTarget, videoSessionId: undefined};
         }
-        if (sessionId && runtimeTarget === targetItem
+        if (sessionId && !queueUpdates
             && !targetItem.videoSessionId && !storedTarget?.videoSessionId) {
             queueUpdates = {videoSessionId: sessionId};
         }
 
-        return {targetItem: runtimeTarget, sessionId, queueUpdates};
+        const videoData = QueueActions.createVideoData(runtimeTarget, sessionId, cachedData);
+        return {
+            targetItem: {...runtimeTarget, extractedFrames: videoData.preExtractedFrames},
+            videoData, sessionId, queueUpdates,
+        };
     }
 
     private static commitVideoSwitch(
         prepared: PreparedVideoSwitch,
         cachedData: ImageData[] | null,
     ): void {
-        const {targetItem, sessionId, queueUpdates} = prepared;
+        const {targetItem, videoData, sessionId, queueUpdates} = prepared;
         if (queueUpdates) {
             store.dispatch(updateQueueItem(targetItem.id, queueUpdates));
         }
         QueueActions.setVideoRuntimeGlobals(sessionId, targetItem.extractedFrames);
-        const videoData = QueueActions.createVideoData(targetItem, sessionId);
         store.dispatch(updateVideoMode(true));
         QueueActions.activateVideoData(videoData, store.getState().video);
         ImageRepository.setActiveFileId(targetItem.id);
         QueueActions.restoreVideoImages(targetItem, cachedData);
     }
 
-    private static switchToNonVideo(targetItem: QueueItem, cachedData: ImageData[] | null): void {
+    private static prepareNonVideoSwitch(targetItem: QueueItem, cachedData: ImageData[] | null): PreparedQueueSwitch {
+        if (targetItem.type === QueueItemType.CAMERA) {
+            if (!targetItem.cameraResourceId) throw new Error('相机资源 ID 缺失');
+            return {kind: 'camera'};
+        }
+        if (cachedData) return {kind: 'images', images: cachedData};
+        const files = targetItem.type === QueueItemType.FOLDER
+            ? targetItem.files
+            : targetItem.file ? [targetItem.file] : undefined;
+        if (!files) throw new Error('队列源文件缺失，请重新选择图像或文件夹');
+        return {kind: 'images', images: files.map(file => ImageDataUtil.createImageDataFromFileData(file))};
+    }
+
+    private static switchToNonVideo(targetItem: QueueItem, imagesData: ImageData[]): void {
         QueueActions.setVideoRuntimeGlobals();
         store.dispatch(updateVideoMode(false));
         ImageRepository.setActiveFileId(targetItem.id);
-        if (cachedData) {
-            store.dispatch(updateImageData(cachedData));
-            store.dispatch(updateActiveImageIndex(0));
-            return;
-        }
-
-        const files = targetItem.type === QueueItemType.FOLDER
-            ? targetItem.files!
-            : [targetItem.file!];
-        store.dispatch(updateImageData(
-            files.map(f => ImageDataUtil.createImageDataFromFileData(f))
-        ));
+        store.dispatch(updateImageData(imagesData));
         store.dispatch(updateActiveImageIndex(0));
     }
 
     private static switchToCamera(targetItem: QueueItem): void {
-        if (!targetItem.cameraResourceId) {
-            throw new Error('相机资源 ID 缺失');
-        }
         QueueActions.setVideoRuntimeGlobals();
         store.dispatch(updateVideoMode(false));
         ImageRepository.setActiveFileId(targetItem.id);
@@ -333,14 +381,23 @@ export class QueueActions {
         try {
             // Slow video resources are prepared without touching the current editor.
             // The generation check makes the latest requested switch the sole committer.
-            const preparedVideo = targetItem.type === QueueItemType.VIDEO
-                ? await QueueActions.prepareVideoSwitch(targetItem)
-                : undefined;
+            const cachedSnapshot = ImageRepository.getActiveFileId() === targetItem.id && currentImagesData.length > 0
+                ? currentImagesData
+                : ImageRepository.getFileCacheSnapshot(targetItem.id);
+            const prepared: PreparedQueueSwitch = targetItem.type === QueueItemType.VIDEO
+                ? {kind: 'video', video: await QueueActions.prepareVideoSwitch(targetItem, cachedSnapshot)}
+                : QueueActions.prepareNonVideoSwitch(targetItem, cachedSnapshot);
             if (generation !== QueueActions.switchGeneration) return;
 
             const currentFileId = ImageRepository.getActiveFileId();
-            if (currentFileId && currentImagesData.length > 0) {
-                ImageRepository.saveFileCache(currentFileId, currentImagesData);
+            if (currentFileId) {
+                const commitState = store.getState();
+                const imagesToSave = commitState.queue.activeQueueItemId === currentFileId
+                    ? commitState.labels.imagesData
+                    : currentImagesData;
+                if (imagesToSave.length > 0) {
+                    ImageRepository.saveFileCache(currentFileId, imagesToSave);
+                }
             }
 
             // No await is allowed inside this commit block: the old editor remains
@@ -353,12 +410,12 @@ export class QueueActions {
 
             const cachedData = ImageRepository.restoreFileCache(targetItem.id);
 
-            if (preparedVideo) {
-                QueueActions.commitVideoSwitch(preparedVideo, cachedData);
-            } else if (targetItem.type === QueueItemType.CAMERA) {
+            if (prepared.kind === 'video') {
+                QueueActions.commitVideoSwitch(prepared.video, cachedData);
+            } else if (prepared.kind === 'camera') {
                 QueueActions.switchToCamera(targetItem);
             } else {
-                QueueActions.switchToNonVideo(targetItem, cachedData);
+                QueueActions.switchToNonVideo(targetItem, cachedData || prepared.images);
             }
 
             store.dispatch(updateQueueItem(targetItem.id, { status: QueueItemStatus.COMPLETED }));
