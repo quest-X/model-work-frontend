@@ -8,41 +8,64 @@ import {NotificationUtil} from '../../../utils/NotificationUtil';
 
 export type VideoImportProgress = {phase: string; progress: number; fileName: string};
 
+// A thumbnail is optional: unreadable images must still enter the queue.
+const generateImageThumbnail = (file: File): Promise<string | undefined> => new Promise((resolve) => {
+    let reader: FileReader | null = null;
+    let image: HTMLImageElement | null = null;
+    const finish = (thumbnail?: string) => {
+        if (reader) reader.onload = reader.onerror = reader.onabort = null;
+        if (image) {
+            image.onload = image.onerror = image.onabort = null;
+            image.removeAttribute('src');
+        }
+        resolve(thumbnail);
+    };
+
+    try {
+        reader = new FileReader();
+        image = new Image();
+        reader.onerror = () => finish();
+        reader.onabort = () => finish();
+        reader.onload = () => {
+            try {
+                if (typeof reader.result === 'string') image.src = reader.result;
+                else finish();
+            } catch {
+                finish();
+            }
+        };
+        image.onerror = () => finish();
+        image.onabort = () => finish();
+        image.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    finish();
+                    return;
+                }
+                const scale = Math.min(100 / image.width, 100 / image.height, 1);
+                const width = image.width * scale;
+                const height = image.height * scale;
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(image, 0, 0, width, height);
+                finish(canvas.toDataURL());
+            } catch {
+                finish();
+            }
+        };
+        reader.readAsDataURL(file);
+    } catch {
+        finish();
+    }
+});
+
 // 生成缩略图辅助函数
 const generateThumbnail = async (file: File): Promise<string | undefined> => {
+    if (file.type.startsWith('image/')) return generateImageThumbnail(file);
     return new Promise((resolve) => {
-        if (file.type.startsWith('image/')) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    const maxSize = 100;
-                    let width = img.width;
-                    let height = img.height;
-                    
-                    if (width > height) {
-                        if (width > maxSize) {
-                            height *= maxSize / width;
-                            width = maxSize;
-                        }
-                    } else {
-                        if (height > maxSize) {
-                            width *= maxSize / height;
-                            height = maxSize;
-                        }
-                    }
-                    
-                    canvas.width = width;
-                    canvas.height = height;
-                    ctx?.drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL());
-                };
-                img.src = e.target?.result as string;
-            };
-            reader.readAsDataURL(file);
-        } else if (file.type.startsWith('video/')) {
+        if (file.type.startsWith('video/')) {
             const video = document.createElement('video');
             video.preload = 'metadata';
             video.onloadedmetadata = () => {
