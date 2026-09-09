@@ -1,9 +1,11 @@
 import {
     ComputeClusterNode,
+    ComputeUpgradeManifest,
     ComputeClusterService,
     ComputeTask,
     computeSshAvailability,
     computeNodeUpgradeAvailable,
+    computeNodeUpgradeReady,
     computeNodeState,
     computeLinkStates,
     aggregateCommunicationStates,
@@ -273,17 +275,27 @@ describe('computeSshAvailability', () => {
 });
 
 describe('computeNodeUpgradeAvailable', () => {
-    const node = (communication_state: 'fault' | 'abnormal', tailscale: boolean): ComputeClusterNode => ({
+    const node = (communication_state: 'fault' | 'abnormal', tailscale: boolean, agent_version = '1.0.7'): ComputeClusterNode => ({
         enabled: true, online: false, communication_state,
+        agent_version, resources: {platform: 'windows', architecture: 'amd64'},
         capabilities: ['control.node.upgrade.v1'], control_transport: 'tailscale',
         network: {online: tailscale, ssh_available: tailscale, lan_ssh_available: false, tailscale_ssh_available: tailscale},
         network_dependencies: [],
     } as ComputeClusterNode);
+    const release = {
+        release_version: '1.1.1', minimum_node_version: '1.0.0',
+        platform: 'windows', architecture: 'x86_64',
+    } as ComputeUpgradeManifest;
 
     it('allows a fault node over remote SSH but blocks abnormal or unreachable nodes', () => {
-        expect(computeNodeUpgradeAvailable(node('fault', true))).toBe(true);
-        expect(computeNodeUpgradeAvailable(node('abnormal', true))).toBe(false);
-        expect(computeNodeUpgradeAvailable(node('fault', false))).toBe(false);
+        expect(computeNodeUpgradeReady(node('fault', true))).toBe(true);
+        expect(computeNodeUpgradeReady(node('abnormal', true))).toBe(false);
+        expect(computeNodeUpgradeReady(node('fault', false))).toBe(false);
+    });
+
+    it('only advertises a newer compatible release', () => {
+        expect(computeNodeUpgradeAvailable(node('fault', true), [release])).toBe(true);
+        expect(computeNodeUpgradeAvailable(node('fault', true, '1.1.1'), [release])).toBe(false);
     });
 });
 

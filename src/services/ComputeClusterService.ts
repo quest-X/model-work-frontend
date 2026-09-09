@@ -115,10 +115,29 @@ export const computeSshAvailability = (node: ComputeClusterNode): {lan: boolean;
     };
 };
 
-export const computeNodeUpgradeAvailable = (node: ComputeClusterNode): boolean =>
+export const computeNodeUpgradeReady = (node: ComputeClusterNode): boolean =>
     node.enabled && node.communication_state !== 'abnormal'
     && node.capabilities.includes('control.node.upgrade.v1')
     && Object.values(computeSshAvailability(node)).some(Boolean);
+
+export const compareNodeVersions = (left: string, right: string): number => {
+    const a = left.split('.').map(Number), b = right.split('.').map(Number);
+    if (a.length !== 3 || b.length !== 3 || [...a, ...b].some(Number.isNaN)) return NaN;
+    return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+};
+
+const nodeArchitecture = (value: string): string =>
+    ({amd64: 'x86_64', arm64: 'aarch64'}[value.toLowerCase()] || value.toLowerCase());
+
+export const computeNodeUpgradeAvailable = (
+    node: ComputeClusterNode,
+    releases: ComputeUpgradeManifest[],
+): boolean => computeNodeUpgradeReady(node) && releases.some(release =>
+    release.platform === node.resources.platform.toLowerCase()
+    && release.architecture === nodeArchitecture(node.resources.architecture)
+    && compareNodeVersions(node.agent_version, release.minimum_node_version) >= 0
+    && compareNodeVersions(node.agent_version, release.release_version) < 0
+);
 
 export type ComputeCommunicationState = 'normal' | 'fault' | 'abnormal';
 
