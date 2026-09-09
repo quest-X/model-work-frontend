@@ -422,30 +422,6 @@ export type ComputeGroupResources = {
     resource_graph: ComputeResourceGraph;
 };
 
-export type ComputeFieldGroupAdmissionInput = {
-    installation_id: string;
-    name: string;
-    ssh_user: string;
-    control_host: string;
-    lan_host?: string | null;
-    authority_subject: {
-        role: 'main';
-        installation_id: string;
-        owner_id: string;
-        group_id: string;
-        generation: number;
-        public_key: string;
-    };
-};
-
-export type ComputeFieldGroupAdmission = {
-    schema_version: 'field-group-admission.v1';
-    status: 'registered' | 'updated' | 'unchanged';
-    reporting_installation_id: string;
-    name: string;
-    invitation: Record<string, unknown>;
-};
-
 export type ComputeFieldGroupRemoval = {
     schema_version: 'field-group-removal.v1';
     status: 'revoked' | 'locally_fenced';
@@ -1202,16 +1178,6 @@ export class ComputeClusterService {
 
     public static groupResources(groupId: string, signal?: AbortSignal): Promise<ComputeGroupResources> {
         return request(`/groups/${encodeURIComponent(groupId)}/resource-graph`, signal);
-    }
-
-    public static admitFieldGroup(
-        input: ComputeFieldGroupAdmissionInput,
-        signal?: AbortSignal,
-    ): Promise<ComputeFieldGroupAdmission> {
-        return request('/groups', signal, {
-            method: 'POST',
-            body: JSON.stringify({...input, role: 'main'}),
-        });
     }
 
     public static removeFieldGroup(

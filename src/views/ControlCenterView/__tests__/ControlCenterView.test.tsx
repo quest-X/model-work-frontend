@@ -1509,59 +1509,9 @@ describe('ControlCenterView', () => {
 
         expect(await screen.findByText('当前没有可查询的群')).toBeInTheDocument();
         expect(screen.queryByText('mwn-cross-region-lab')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '加入现场群'})).not.toBeInTheDocument();
         expect(ComputeClusterService.group).not.toHaveBeenCalled();
         expect(ComputeClusterService.groupResources).not.toHaveBeenCalled();
-    });
-
-    it('registers a Main and exposes the signed invitation step', async () => {
-        const onlineNode = node('在线节点', true);
-        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([onlineNode]);
-        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(onlineNode));
-        const admit = jest.spyOn(ComputeClusterService, 'admitFieldGroup').mockResolvedValue({
-            schema_version: 'field-group-admission.v1',
-            status: 'registered',
-            reporting_installation_id: '00000000-0000-4000-8000-000000000014',
-            name: 'new-field-main',
-            invitation: {target_role: 'main'},
-        });
-        render(<ControlCenterView language={Language.CHINESE}/>);
-
-        await screen.findByRole('heading', {name: '在线节点'});
-        fireEvent.click(screen.getByText('相关功能'));
-        fireEvent.click(screen.getByRole('button', {name: /群查询/}));
-        fireEvent.click(await screen.findByRole('button', {name: '加入现场群'}));
-        const dialog = await screen.findByRole('dialog', {name: '加入现场群'});
-        fireEvent.change(within(dialog).getByLabelText(/Main 名称/), {target: {value: 'new-field-main'}});
-        fireEvent.change(within(dialog).getByLabelText(/安装 ID（UUID）/), {
-            target: {value: '00000000-0000-4000-8000-000000000014'},
-        });
-        fireEvent.change(within(dialog).getByLabelText(/SSH 用户/), {target: {value: 'field-user'}});
-        fireEvent.change(within(dialog).getByLabelText(/Tailscale 地址/), {target: {value: 'fd7a:115c:a1e0::14'}});
-        fireEvent.change(within(dialog).getByLabelText(/Main 公开身份 JSON/), {target: {value: JSON.stringify({
-            owner_id: '00000000-0000-4000-8000-000000000114',
-            group_id: '00000000-0000-4000-8000-000000000214',
-            generation: 1,
-            public_key: 'A'.repeat(43) + '=',
-        })}});
-        fireEvent.click(within(dialog).getByRole('button', {name: '登记并生成邀请'}));
-
-        expect(await screen.findByText(/model-work-node owner trust --invitation/)).toBeInTheDocument();
-        expect(screen.getByRole('button', {name: '下载配对邀请'})).toBeInTheDocument();
-        expect(admit).toHaveBeenCalledWith({
-            installation_id: '00000000-0000-4000-8000-000000000014',
-            name: 'new-field-main',
-            ssh_user: 'field-user',
-            control_host: 'fd7a:115c:a1e0::14',
-            lan_host: null,
-            authority_subject: {
-                role: 'main',
-                installation_id: '00000000-0000-4000-8000-000000000014',
-                owner_id: '00000000-0000-4000-8000-000000000114',
-                group_id: '00000000-0000-4000-8000-000000000214',
-                generation: 1,
-                public_key: 'A'.repeat(43) + '=',
-            },
-        });
     });
 
     it('removes only the selected field group after confirmation', async () => {

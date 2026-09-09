@@ -1,13 +1,12 @@
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {connect} from 'react-redux';
-import {Button, Dialog, DialogActions, DialogTitle, DialogContent, TextField} from '@mui/material';
+import {Button, Dialog, DialogActions, DialogTitle, DialogContent} from '@mui/material';
 import {Language} from '../../data/LanguageConfig';
 import {Direction} from '../../data/enums/Direction';
 import {PopupWindowType} from '../../data/enums/PopupWindowType';
 import {updateActivePopupType} from '../../store/general/actionCreators';
 import {
     ComputeClusterNode,
-    ComputeFieldGroupAdmission,
     ComputeGroupDetail,
     ComputeGroupMembership,
     ComputeGroupResources,
@@ -86,29 +85,6 @@ type TaskHistoryItem = {
     state: string;
     updatedAt: number;
 };
-type FieldGroupAdmissionDraft = {
-    installation_id: string;
-    name: string;
-    ssh_user: string;
-    control_host: string;
-    lan_host: string;
-    authority_identity: string;
-};
-
-const emptyFieldGroupAdmission: FieldGroupAdmissionDraft = {
-    installation_id: '',
-    name: '',
-    ssh_user: '',
-    control_host: '',
-    lan_host: '',
-    authority_identity: '',
-};
-const fieldGroupInputSx = {
-    '& .MuiInputBase-input': {color: '#eee'},
-    '& .MuiInputLabel-root': {color: '#aaa'},
-    '& .MuiOutlinedInput-notchedOutline': {borderColor: '#666'},
-};
-
 type ResourceMetricId = 'cpu' | 'memory' | 'gpu' | 'disk' | 'network';
 type ResourceSample = {
     nodeId: string;
@@ -387,9 +363,6 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [selectedGroupResources, setSelectedGroupResources] = useState<ComputeGroupResources | null>(null);
     const [groupResourceError, setGroupResourceError] = useState<{groupId: string; message: string} | null>(null);
     const [activeGroupResources, setActiveGroupResources] = useState<ComputeGroupResources | null>(null);
-    const [groupAdmissionOpen, setGroupAdmissionOpen] = useState(false);
-    const [groupAdmissionDraft, setGroupAdmissionDraft] = useState(emptyFieldGroupAdmission);
-    const [groupAdmission, setGroupAdmission] = useState<ComputeFieldGroupAdmission | null>(null);
     const [groupMutationBusy, setGroupMutationBusy] = useState(false);
     const [groupMutationMessage, setGroupMutationMessage] = useState('');
     const [lanAssets, setLanAssets] = useState<ComputeLanAsset[]>([]);
@@ -699,48 +672,6 @@ export const ControlCenterView: React.FC<IProps> = ({
     const selectedGroupResourceError = groupResourceError && groupResourceError.groupId === selectedGroup?.group_id
         ? groupResourceError.message
         : '';
-    const submitFieldGroupAdmission = async (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        setGroupMutationBusy(true);
-        setGroupMutationMessage('');
-        try {
-            const publicIdentity = JSON.parse(groupAdmissionDraft.authority_identity);
-            const installationId = groupAdmissionDraft.installation_id.trim();
-            const admission = await ComputeClusterService.admitFieldGroup({
-                installation_id: installationId,
-                name: groupAdmissionDraft.name.trim(),
-                ssh_user: groupAdmissionDraft.ssh_user.trim(),
-                control_host: groupAdmissionDraft.control_host.trim(),
-                lan_host: groupAdmissionDraft.lan_host.trim() || null,
-                authority_subject: {
-                    role: 'main',
-                    installation_id: installationId,
-                    owner_id: publicIdentity.owner_id,
-                    group_id: publicIdentity.group_id,
-                    generation: publicIdentity.generation,
-                    public_key: publicIdentity.public_key,
-                },
-            });
-            setGroupAdmission(admission);
-        } catch (reason) {
-            setGroupMutationMessage(reason instanceof Error ? reason.message : String(reason));
-        } finally {
-            setGroupMutationBusy(false);
-        }
-    };
-    const downloadFieldGroupInvitation = () => {
-        if (!groupAdmission) return;
-        const url = window.URL.createObjectURL(new Blob([
-            `${JSON.stringify(groupAdmission.invitation, null, 2)}\n`,
-        ], {type: 'application/json'}));
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${groupAdmission.name}.master-invitation.json`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(url);
-    };
     const removeSelectedFieldGroup = async () => {
         if (!selectedGroup || selectedGroup.scope === 'central' || !groupDetail) return;
         if (!window.confirm(zh
@@ -1771,14 +1702,6 @@ export const ControlCenterView: React.FC<IProps> = ({
                             <h1>{zh ? '群查询' : 'Groups'}</h1>
                             <p>{zh ? '查看当前安装能够确认的群成员关系' : 'Groups confirmed by this installation'}</p>
                         </div>
-                        <Button
-                            variant='outlined'
-                            onClick={() => {
-                                setGroupAdmission(null);
-                                setGroupMutationMessage('');
-                                setGroupAdmissionOpen(true);
-                            }}
-                        >{zh ? '加入现场群' : 'Add field group'}</Button>
                     </header>
                     {groupMutationMessage && <p role='status' className='ControlGroupRoleNotice'>
                         {groupMutationMessage}
@@ -1816,72 +1739,6 @@ export const ControlCenterView: React.FC<IProps> = ({
                             </div>
                             : <div className='ControlEmptyBlock'>{graphError || (zh ? '当前没有可查询的群' : 'No queryable groups')}</div>}
                     </section>
-                    <Dialog open={groupAdmissionOpen} onClose={() => {
-                        if (!groupMutationBusy) setGroupAdmissionOpen(false);
-                    }} fullWidth maxWidth='sm' aria-labelledby='group-admission-title'
-                    PaperProps={{sx: {backgroundColor: '#242424', color: '#eee'}}}>
-                        <form onSubmit={event => void submitFieldGroupAdmission(event)}>
-                            <DialogTitle id='group-admission-title' sx={{backgroundColor: '#171717', color: '#fff'}}>
-                                {zh ? '加入现场群' : 'Add field group'}
-                            </DialogTitle>
-                            <DialogContent sx={{pt: '24px !important', display: 'grid', gap: 2}}>
-                                {groupAdmission
-                                    ? <>
-                                        <p>{zh
-                                            ? `已登记 Main：${groupAdmission.name}。下载签名邀请并安全传到该 Main。`
-                                            : `Main ${groupAdmission.name} is registered. Download the signed invitation and transfer it securely.`}</p>
-                                        <code>model-work-node owner trust --invitation {groupAdmission.name}.master-invitation.json</code>
-                                        <small>{zh
-                                            ? '在 Main 上执行后重启节点服务，再返回刷新群列表。'
-                                            : 'Run it on the Main, restart its node service, then refresh the group list.'}</small>
-                                    </>
-                                    : <>
-                                        <p>{zh
-                                            ? '先在现场 Main 运行 model-work-node show 和 model-work-node owner show，再填写稳定身份和 SSH 连接信息。'
-                                            : 'Run model-work-node show and model-work-node owner show on the field Main, then enter its stable identity and SSH connection.'}</p>
-                                        <TextField required size='small' label={zh ? 'Main 名称' : 'Main name'}
-                                            sx={fieldGroupInputSx}
-                                            value={groupAdmissionDraft.name}
-                                            onChange={event => setGroupAdmissionDraft(current => ({...current, name: event.target.value}))}/>
-                                        <TextField required size='small' label={zh ? '安装 ID（UUID）' : 'Installation ID (UUID)'}
-                                            sx={fieldGroupInputSx}
-                                            value={groupAdmissionDraft.installation_id}
-                                            onChange={event => setGroupAdmissionDraft(current => ({...current, installation_id: event.target.value}))}/>
-                                        <TextField required size='small' label={zh ? 'SSH 用户' : 'SSH user'}
-                                            sx={fieldGroupInputSx}
-                                            value={groupAdmissionDraft.ssh_user}
-                                            onChange={event => setGroupAdmissionDraft(current => ({...current, ssh_user: event.target.value}))}/>
-                                        <TextField required size='small' label={zh ? 'Tailscale 地址' : 'Tailscale address'}
-                                            sx={fieldGroupInputSx}
-                                            value={groupAdmissionDraft.control_host}
-                                            onChange={event => setGroupAdmissionDraft(current => ({...current, control_host: event.target.value}))}/>
-                                        <TextField size='small' label={zh ? '局域网地址（可选）' : 'LAN address (optional)'}
-                                            sx={fieldGroupInputSx}
-                                            value={groupAdmissionDraft.lan_host}
-                                            onChange={event => setGroupAdmissionDraft(current => ({...current, lan_host: event.target.value}))}/>
-                                        <TextField required multiline minRows={3} size='small'
-                                            label={zh ? 'Main 公开身份 JSON' : 'Main public identity JSON'}
-                                            helperText={zh ? '粘贴 model-work-node owner show 的完整输出' : 'Paste the complete model-work-node owner show output'}
-                                            sx={fieldGroupInputSx}
-                                            value={groupAdmissionDraft.authority_identity}
-                                            onChange={event => setGroupAdmissionDraft(current => ({...current, authority_identity: event.target.value}))}/>
-                                    </>}
-                                {groupAdmissionOpen && groupMutationMessage && <span role='alert'>{groupMutationMessage}</span>}
-                            </DialogContent>
-                            <DialogActions sx={{px: 3, pb: 3}}>
-                                <Button onClick={() => setGroupAdmissionOpen(false)} disabled={groupMutationBusy}>
-                                    {groupAdmission ? (zh ? '完成' : 'Done') : (zh ? '取消' : 'Cancel')}
-                                </Button>
-                                {groupAdmission
-                                    ? <Button variant='contained' onClick={downloadFieldGroupInvitation}>
-                                        {zh ? '下载配对邀请' : 'Download invitation'}
-                                    </Button>
-                                    : <Button type='submit' variant='contained' disabled={groupMutationBusy}>
-                                        {groupMutationBusy ? (zh ? '正在登记…' : 'Registering…') : (zh ? '登记并生成邀请' : 'Register and create invitation')}
-                                    </Button>}
-                            </DialogActions>
-                        </form>
-                    </Dialog>
                     <Dialog open={Boolean(selectedGroup)} onClose={() => setSelectedGroupId('')}
                         fullWidth maxWidth='md' aria-labelledby='group-members-title'
                         PaperProps={{sx: {backgroundColor: '#242424', color: '#eee'}}}>
