@@ -2,10 +2,12 @@ export interface InferenceHistoryRecord {
     timestamp: number;
     detectedCount: number;
     success: boolean;
+    type: 'detection' | 'segmentation';
 }
 
 export interface ImageAIState {
     aiLabelsVisible: boolean;
+    segmentationLabelsVisible: boolean;
     inferenceHistory: InferenceHistoryRecord[];
 }
 
@@ -53,26 +55,27 @@ export class AIStateStorageManager {
                     statesData = Object.entries(data.imageAIStates);
                 }
                 
-                // 快速构建Map，减少迁移逻辑的性能开销
                 const result = new Map<string, ImageAIState>();
-                for (const [imageId, state] of statesData) {
-                    const stateObj = state as any;
-                    
-                    // 简化的格式处理
-                    if ('isInferred' in stateObj && !('inferenceHistory' in stateObj)) {
-                        // 旧格式快速转换
-                        result.set(imageId, {
-                            aiLabelsVisible: stateObj.aiLabelsVisible || false,
-                            inferenceHistory: stateObj.isInferred ? [{
-                                timestamp: Date.now() - 86400000,
-                                detectedCount: 1,
-                                success: true
-                            }] : []
-                        });
-                    } else {
-                        // 新格式直接使用
-                        result.set(imageId, stateObj);
-                    }
+                for (const entry of statesData) {
+                    if (!Array.isArray(entry) || typeof entry[0] !== 'string') continue;
+                    const [imageId, state] = entry;
+                    if (!state || typeof state !== 'object') continue;
+                    const stateObj = state as Record<string, unknown>;
+                    const inferenceHistory: InferenceHistoryRecord[] = Array.isArray(stateObj.inferenceHistory)
+                        ? this.restoreInferenceHistory(stateObj.inferenceHistory)
+                        : stateObj.isInferred === true ? [{
+                            timestamp: Date.now() - 86400000,
+                            detectedCount: 1,
+                            success: true,
+                            type: 'detection',
+                        }] : [];
+                    result.set(imageId, {
+                        ...stateObj,
+                        aiLabelsVisible: stateObj.aiLabelsVisible === true,
+                        // Match the editor's default without overriding an explicit hide.
+                        segmentationLabelsVisible: stateObj.segmentationLabelsVisible !== false,
+                        inferenceHistory,
+                    });
                 }
                 
                 return result;
@@ -82,6 +85,23 @@ export class AIStateStorageManager {
         }
         
         return new Map<string, ImageAIState>();
+    }
+
+    private static restoreInferenceHistory(records: unknown[]): InferenceHistoryRecord[] {
+        return records.flatMap((record): InferenceHistoryRecord[] => {
+            if (!record || typeof record !== 'object') return [];
+            const data = record as Record<string, unknown>;
+            if (typeof data.timestamp !== 'number' || typeof data.detectedCount !== 'number'
+                || typeof data.success !== 'boolean') return [];
+            return [{
+                ...data,
+                timestamp: data.timestamp,
+                detectedCount: data.detectedCount,
+                success: data.success,
+                // Records written before segmentation support were detections.
+                type: data.type === 'segmentation' ? 'segmentation' : 'detection',
+            }];
+        });
     }
     
     public static hasStoredAIState(): boolean {
@@ -115,10 +135,12 @@ export class AIStateStorageManager {
         return 0;
     }
     
-    // 获取指定图片的AI状态（默认为隐藏且无推理历史）
+    // 无检测状态时隐藏检测标签；分割标签沿用编辑器默认可见。
     public static getImageAIState(imageId: string): ImageAIState {
         const allStates = this.loadImageAIStates();
-        return allStates.get(imageId) || { aiLabelsVisible: false, inferenceHistory: [] };
+        return allStates.get(imageId) || {
+            aiLabelsVisible: false, segmentationLabelsVisible: true, inferenceHistory: [],
+        };
     }
     
     // 获取指定图片的最高检测数量
