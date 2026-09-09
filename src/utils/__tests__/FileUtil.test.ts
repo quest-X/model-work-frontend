@@ -1,5 +1,22 @@
 import {FileUtil} from "../FileUtil";
 
+describe('FileUtil readFile', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('reads text through the native FileReader', async () => {
+        await expect(FileUtil.readFile(new File(['标签\n'], 'labels.txt'))).resolves.toBe('标签\n');
+    });
+
+    it('rejects an aborted read instead of resolving null text', async () => {
+        const readAsText = FileReader.prototype.readAsText;
+        jest.spyOn(FileReader.prototype, 'readAsText').mockImplementation(function (this: FileReader, file: Blob) {
+            readAsText.call(this, file);
+            this.abort();
+        });
+        await expect(FileUtil.readFile(new File(['label'], 'labels.txt'))).rejects.toMatchObject({name: 'AbortError'});
+    });
+});
+
 describe('FileUtil extractFileExtension method', () => {
     it('should return file extension', () => {
         // given
