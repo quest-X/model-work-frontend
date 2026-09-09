@@ -160,6 +160,15 @@ describe('ControlCenterView', () => {
         });
         jest.spyOn(ComputeClusterService, 'group').mockRejectedValue(new Error('field group not found'));
         jest.spyOn(ComputeClusterService, 'groupResources').mockRejectedValue(new Error('field resources not found'));
+        jest.spyOn(ComputeClusterService, 'joinCode').mockResolvedValue({
+            schema_version: 'join-code.v1',
+            configured: false,
+        });
+        jest.spyOn(ComputeClusterService, 'joinRequests').mockResolvedValue({
+            schema_version: 'join-request-list.v1',
+            requests: [],
+            pending_count: 0,
+        });
         jest.spyOn(ComputeClusterService, 'runtime').mockImplementation(() => new Promise(() => undefined));
         jest.spyOn(ComputeClusterService, 'runtimeInventory').mockImplementation(() => new Promise(() => undefined));
         jest.spyOn(ComputeClusterService, 'runtimeEvents').mockImplementation(() => new Promise(() => undefined));
@@ -1512,6 +1521,68 @@ describe('ControlCenterView', () => {
         expect(screen.queryByRole('button', {name: '加入现场群'})).not.toBeInTheDocument();
         expect(ComputeClusterService.group).not.toHaveBeenCalled();
         expect(ComputeClusterService.groupResources).not.toHaveBeenCalled();
+    });
+
+    it('lets the Master approve CLI join requests and rotate the join code', async () => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([node('在线节点', true)]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(node('在线节点', true)));
+        jest.mocked(ComputeClusterService.joinCode).mockResolvedValue({
+            schema_version: 'join-code.v1',
+            configured: true,
+            code: 'mwn1.secret-code',
+            days: 30,
+            issued_at: 1,
+            expires_at: 2_000_000_000,
+            generation: 'generation-1',
+        });
+        jest.mocked(ComputeClusterService.joinRequests).mockResolvedValue({
+            schema_version: 'join-request-list.v1',
+            pending_count: 1,
+            requests: [{
+                schema_version: 'join-request.v1',
+                request_id: '00000000-0000-4000-8000-000000000123',
+                status: 'pending',
+                payload: {
+                    installation_id: '00000000-0000-4000-8000-000000000156',
+                    name: 'baoxin-156-windows',
+                    role: 'node',
+                    ssh_user: 'baoxin1',
+                    control_host: '100.64.0.156',
+                },
+                created_at: 1,
+                updated_at: 1,
+                expires_at: 2_000_000_000,
+            }],
+        });
+        const approve = jest.spyOn(ComputeClusterService, 'decideJoinRequest').mockResolvedValue({
+            ...(await ComputeClusterService.joinRequests()).requests[0],
+            status: 'approved',
+        });
+        const rotate = jest.spyOn(ComputeClusterService, 'rotateJoinCode').mockResolvedValue({
+            schema_version: 'join-code.v1',
+            configured: true,
+            code: 'mwn1.rotated-code',
+            days: 30,
+            issued_at: 2,
+            expires_at: 2_000_000_001,
+            generation: 'generation-2',
+        });
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByRole('heading', {name: '在线节点'});
+        fireEvent.click(screen.getByText('相关功能'));
+        fireEvent.click(screen.getByRole('button', {name: /群查询/}));
+
+        expect(await screen.findByDisplayValue('mwn1.secret-code')).toBeInTheDocument();
+        expect(screen.getByText('baoxin-156-windows')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '同意'}));
+        await waitFor(() => expect(approve).toHaveBeenCalledWith(
+            '00000000-0000-4000-8000-000000000123', 'approve',
+        ));
+        await screen.findByText(/已同意入群申请/);
+        fireEvent.click(screen.getByRole('button', {name: '立即更换'}));
+        await waitFor(() => expect(rotate).toHaveBeenCalledWith(30));
+        expect(await screen.findByDisplayValue('mwn1.rotated-code')).toBeInTheDocument();
     });
 
     it('removes only the selected field group after confirmation', async () => {

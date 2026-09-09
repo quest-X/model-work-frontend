@@ -431,6 +431,39 @@ export type ComputeFieldGroupRemoval = {
     group_id: string;
 };
 
+export type ComputeJoinCode = {
+    schema_version: 'join-code.v1';
+    configured: boolean;
+    code?: string;
+    issued_at?: number;
+    expires_at?: number;
+    days?: 7 | 30 | 180;
+    generation?: string;
+};
+
+export type ComputeJoinRequest = {
+    schema_version: 'join-request.v1';
+    request_id: string;
+    status: 'pending' | 'approved' | 'rejected' | 'expired';
+    payload: {
+        installation_id: string;
+        name: string;
+        role: 'node';
+        ssh_user: string;
+        control_host: string;
+        lan_host?: string | null;
+    };
+    created_at: number;
+    updated_at: number;
+    expires_at: number;
+};
+
+export type ComputeJoinRequests = {
+    schema_version: 'join-request-list.v1';
+    requests: ComputeJoinRequest[];
+    pending_count: number;
+};
+
 export type ComputeFilesystemOperation = 'filesystem.stat' | 'filesystem.list';
 
 export type ComputeFilesystemTarget = {
@@ -1185,6 +1218,29 @@ export class ComputeClusterService {
         signal?: AbortSignal,
     ): Promise<ComputeFieldGroupRemoval> {
         return request(`/groups/${encodeURIComponent(groupId)}`, signal, {method: 'DELETE'});
+    }
+
+    public static joinCode(signal?: AbortSignal): Promise<ComputeJoinCode> {
+        return request('/join-code', signal);
+    }
+
+    public static rotateJoinCode(days: 7 | 30 | 180): Promise<ComputeJoinCode> {
+        return request('/join-code/rotate', undefined, {
+            method: 'POST', body: JSON.stringify({days}),
+        });
+    }
+
+    public static joinRequests(signal?: AbortSignal): Promise<ComputeJoinRequests> {
+        return request('/join-requests', signal);
+    }
+
+    public static decideJoinRequest(
+        requestId: string,
+        action: 'approve' | 'reject',
+    ): Promise<ComputeJoinRequest> {
+        return request(`/join-requests/${encodeURIComponent(requestId)}/${action}`, undefined, {
+            method: 'POST', body: '{}',
+        });
     }
 
     public static runtime(nodeId: string, signal?: AbortSignal): Promise<ComputeRuntimeSnapshot> {
