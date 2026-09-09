@@ -119,20 +119,7 @@ const VideoTimeline: React.FC<IProps> = ({
         const minLabelSpacing = 40;
         const minTimeInterval = minLabelSpacing / pixelsPerSecond;
 
-        let labelInterval: number;
-        if (minTimeInterval <= 5) {
-            labelInterval = 5;
-        } else if (minTimeInterval <= 10) {
-            labelInterval = 10;
-        } else if (minTimeInterval <= 30) {
-            labelInterval = 30;
-        } else if (minTimeInterval <= 60) {
-            labelInterval = 60;
-        } else if (minTimeInterval <= 300) {
-            labelInterval = 300;
-        } else {
-            labelInterval = 600;
-        }
+        const labelInterval = [5, 10, 30, 60, 300].find(interval => minTimeInterval <= interval) ?? 600;
 
         const tickInterval = Math.max(1, labelInterval / 5);
 

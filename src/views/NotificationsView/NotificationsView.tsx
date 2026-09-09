@@ -149,42 +149,18 @@ export const NotificationsView: React.FC<IProps> = (props) => {
                                     />
                                 </div>
                                 <div className='steps-list'>
-                                    <div className={`step ${notification.currentStep > 1 ? 'completed' : notification.currentStep === 1 ? 'active' : 'pending'}`}>
-                                        <span className='step-name'>{(() => {
-                                            const language = store.getState().general.language;
-                                            const progressTexts = LanguageConfig[language];
-                                            return `1. ${progressTexts.aiInference.steps.preprocessing}`;
-                                        })()}</span>
-                                        {notification.stepTimes?.stepDurations && notification.stepTimes.stepDurations.length > 0 && (
-                                            <span className='step-time'>
-                                                {(notification.stepTimes.stepDurations[0] / 1000).toFixed(2)}s
+                                    {(['preprocessing', 'inference', 'postprocessing'] as const).map((step, index) => (
+                                        <div key={step} className={`step ${notification.currentStep > index + 1 ? 'completed' : notification.currentStep === index + 1 ? 'active' : 'pending'}`}>
+                                            <span className='step-name'>
+                                                {index + 1}. {LanguageConfig[store.getState().general.language].aiInference.steps[step]}
                                             </span>
-                                        )}
-                                    </div>
-                                    <div className={`step ${notification.currentStep > 2 ? 'completed' : notification.currentStep === 2 ? 'active' : 'pending'}`}>
-                                        <span className='step-name'>{(() => {
-                                            const language = store.getState().general.language;
-                                            const progressTexts = LanguageConfig[language];
-                                            return `2. ${progressTexts.aiInference.steps.inference}`;
-                                        })()}</span>
-                                        {notification.stepTimes?.stepDurations && notification.stepTimes.stepDurations.length > 1 && (
-                                            <span className='step-time'>
-                                                {(notification.stepTimes.stepDurations[1] / 1000).toFixed(2)}s
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className={`step ${notification.currentStep > 3 ? 'completed' : notification.currentStep === 3 ? 'active' : 'pending'}`}>
-                                        <span className='step-name'>{(() => {
-                                            const language = store.getState().general.language;
-                                            const progressTexts = LanguageConfig[language];
-                                            return `3. ${progressTexts.aiInference.steps.postprocessing}`;
-                                        })()}</span>
-                                        {notification.stepTimes?.stepDurations && notification.stepTimes.stepDurations.length > 2 && (
-                                            <span className='step-time'>
-                                                {(notification.stepTimes.stepDurations[2] / 1000).toFixed(2)}s
-                                            </span>
-                                        )}
-                                    </div>
+                                            {notification.stepTimes?.stepDurations && notification.stepTimes.stepDurations.length > index && (
+                                                <span className='step-time'>
+                                                    {(notification.stepTimes.stepDurations[index] / 1000).toFixed(2)}s
+                                                </span>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
                                 {notification.stepTimes?.totalObjects !== undefined && (
                                     <div className='summary-info'>
