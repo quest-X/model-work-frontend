@@ -41,7 +41,7 @@ export abstract class BaseRenderEngine {
 
     abstract isInProgress(): boolean;
 
-    protected static resolveLabelLineColor(labelId: string, isActive: boolean, isCreatedByAI?: boolean): string {
+    protected static resolveLabelLineColor(labelId: string): string {
         const perClassColor: boolean = GeneralSelector.getEnablePerClassColorationStatus();
 
         // 按类别着色开启时，所有标注框都用标签颜色

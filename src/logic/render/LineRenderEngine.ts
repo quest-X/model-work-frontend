@@ -113,7 +113,7 @@ export class LineRenderEngine extends BaseRenderEngine {
                 const isActive: boolean = labelLine.id === activeLabelId || labelLine.id === highlightedLabelId;
                 const lineOnCanvas = RenderEngineUtil.transferLineFromImageToViewPortContent(labelLine.line, data)
                 if (!(labelLine.id === activeLabelId && this.isResizeInProgress())) {
-                    this.drawLine(labelLine.labelId, lineOnCanvas, isActive, labelLine.isCreatedByAI)
+                    this.drawLine(labelLine.labelId, lineOnCanvas, isActive)
                 }
             }
         });
@@ -189,10 +189,10 @@ export class LineRenderEngine extends BaseRenderEngine {
                 this.drawLengthLabel(finalLineToDraw, RenderEngineSettings.LINE_SNAP_COLOR);
             } else {
                 // 正常状态：使用常规绘制
-                this.drawLine(activeLabelLine.labelId, finalLineToDraw, true, activeLabelLine.isCreatedByAI)
+                this.drawLine(activeLabelLine.labelId, finalLineToDraw, true)
                 
                 // 调整大小时也显示实时长度
-                const lineColor = BaseRenderEngine.resolveLabelLineColor(activeLabelLine.labelId, true, activeLabelLine.isCreatedByAI);
+                const lineColor = BaseRenderEngine.resolveLabelLineColor(activeLabelLine.labelId);
                 this.drawLengthLabel(finalLineToDraw, lineColor);
             }
         }
@@ -217,8 +217,8 @@ export class LineRenderEngine extends BaseRenderEngine {
         }
     }
 
-    private drawLine(labelId: string, line: ILine, isActive: boolean, isCreatedByAI: boolean = false) {
-        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelId, isActive, isCreatedByAI)
+    private drawLine(labelId: string, line: ILine, isActive: boolean) {
+        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelId)
         const anchorColor = BaseRenderEngine.resolveLabelAnchorColor(isActive)
         const standardizedLine: ILine = {
             start: RenderEngineUtil.setPointBetweenPixels(line.start),

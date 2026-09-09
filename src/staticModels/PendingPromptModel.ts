@@ -14,7 +14,7 @@ export interface PendingPrompt {
  * this module (or the renderer's module) reads the same array — Vite HMR can
  * otherwise create multiple module instances with divergent state.
  */
-interface WindowExt {
+export interface WindowExt {
     __openSightPendingPrompts?: PendingPrompt[];
     __openSightPendingPromptsRafId?: number | null;
     __openSightPromptInferring?: boolean;

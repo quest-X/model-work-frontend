@@ -10,6 +10,7 @@ import {IPoint} from '../../interfaces/IPoint';
 import {GeneralSelector} from '../../store/selectors/GeneralSelector';
 import {ProjectType} from '../../data/enums/ProjectType';
 import {PopupWindowType} from '../../data/enums/PopupWindowType';
+import type {WindowExt} from '../../staticModels/PendingPromptModel';
 
 export class PrimaryEditorRenderEngine extends BaseRenderEngine {
 
@@ -39,12 +40,7 @@ export class PrimaryEditorRenderEngine extends BaseRenderEngine {
         // Read from window global to avoid Vite HMR module-identity drift — the
         // action producer and the renderer can otherwise load different copies
         // of a module and end up with divergent in-module state.
-        const prompts = (window as any).__openSightPendingPrompts as Array<{
-            id: string;
-            kind: 'point' | 'bbox';
-            point?: IPoint;
-            bbox?: IRect;
-        }> | undefined;
+        const prompts = (window as Window & WindowExt).__openSightPendingPrompts;
         if (!prompts || prompts.length === 0) return;
         const ctx = this.canvas.getContext('2d');
         if (!ctx) return;

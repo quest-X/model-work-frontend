@@ -3,7 +3,7 @@ import {IRect} from '../../interfaces/IRect';
 import {RectUtil} from '../../utils/RectUtil';
 import {DrawUtil} from '../../utils/DrawUtil';
 import {store} from '../..';
-import {ImageData, LabelRect} from '../../store/labels/types';
+import {ImageData, LabelPolygon, LabelRect} from '../../store/labels/types';
 import {
     updateActiveLabelId,
     updateFirstLabelCreatedFlag,
@@ -22,6 +22,7 @@ import {RenderEngineUtil} from '../../utils/RenderEngineUtil';
 import {LabelType} from '../../data/enums/LabelType';
 import {EditorActions} from '../actions/EditorActions';
 import {EditorModel} from '../../staticModels/EditorModel';
+import type {WindowExt} from '../../staticModels/PendingPromptModel';
 import {GeneralSelector} from '../../store/selectors/GeneralSelector';
 import {LabelStatus} from '../../data/enums/LabelStatus';
 import {LabelUtil} from '../../utils/LabelUtil';
@@ -313,7 +314,7 @@ export class RectRenderEngine extends BaseRenderEngine {
                                        labelPoint.status === LabelStatus.ACCEPTED;
 
                     if (shouldShow) {
-                        const pointColor = BaseRenderEngine.resolveLabelLineColor(labelPoint.labelId, true, labelPoint.isCreatedByAI);
+                        const pointColor = BaseRenderEngine.resolveLabelLineColor(labelPoint.labelId);
                         const transformedPoint = RenderEngineUtil.transferPointFromImageToViewPortContent(labelPoint.point, data);
                         const standardizedPoint = RenderEngineUtil.setPointBetweenPixels(transformedPoint);
                         DrawUtil.drawCircleWithFill(this.canvas, standardizedPoint, Settings.RESIZE_HANDLE_DIMENSION_PX/2, pointColor);
@@ -330,7 +331,7 @@ export class RectRenderEngine extends BaseRenderEngine {
                                        labelLine.status === LabelStatus.ACCEPTED;
 
                     if (shouldShow) {
-                        const lineColor = BaseRenderEngine.resolveLabelLineColor(labelLine.labelId, true, labelLine.isCreatedByAI);
+                        const lineColor = BaseRenderEngine.resolveLabelLineColor(labelLine.labelId);
                         const transformedStart = RenderEngineUtil.transferPointFromImageToViewPortContent(labelLine.line.start, data);
                         const transformedEnd = RenderEngineUtil.transferPointFromImageToViewPortContent(labelLine.line.end, data);
                         const startPoint = RenderEngineUtil.setPointBetweenPixels(transformedStart);
@@ -368,7 +369,7 @@ export class RectRenderEngine extends BaseRenderEngine {
                     ctx.restore();
                 }
             } else {
-                const lineColor: string = BaseRenderEngine.resolveLabelLineColor(null, true, false)
+                const lineColor: string = BaseRenderEngine.resolveLabelLineColor(null)
                 DrawUtil.drawRect(this.canvas, activeRectBetweenPixels, lineColor, RenderEngineSettings.LINE_THICKNESS);
             }
         }
@@ -386,7 +387,7 @@ export class RectRenderEngine extends BaseRenderEngine {
         if (!ctx) return;
 
         // 推理中闪烁
-        const isInferring = (window as any).__openSightPromptInferring === true;
+        const isInferring = (window as Window & WindowExt).__openSightPromptInferring === true;
         let alpha = 1;
         if (isInferring) {
             const phase = (Math.sin(Date.now() / 150) + 1) / 2;
@@ -449,7 +450,7 @@ export class RectRenderEngine extends BaseRenderEngine {
         const rectOnImage: IRect = RenderEngineUtil.transferRectFromViewPortContentToImage(labelRect.rect, data)
         const highlightedLabelId: string = LabelsSelector.getHighlightedLabelId()
         const displayAsActive: boolean = labelRect.status === LabelStatus.ACCEPTED && labelRect.id === highlightedLabelId;
-        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelRect.labelId, displayAsActive, labelRect.isCreatedByAI)
+        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelRect.labelId)
         const anchorColor: string = BaseRenderEngine.resolveLabelAnchorColor(displayAsActive);
         this.renderRect(rectOnImage, displayAsActive, lineColor, anchorColor);
         
@@ -477,7 +478,7 @@ export class RectRenderEngine extends BaseRenderEngine {
         if (isTransforming) {
             publishRectLabelOverlayPosition(labelRect.id, {x: rectOnImage.x, y: rectOnImage.y});
         }
-        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelRect.labelId, true, labelRect.isCreatedByAI)
+        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelRect.labelId)
         const anchorColor: string = BaseRenderEngine.resolveLabelAnchorColor(true);
         this.renderRect(rectOnImage, true, lineColor, anchorColor);
         
@@ -923,14 +924,14 @@ export class RectRenderEngine extends BaseRenderEngine {
     // POLYGON SUPPORT (for ALL view)
     // =================================================================================================================
 
-    private getPolygonUnderMouse(data: EditorData): any | null {
+    private getPolygonUnderMouse(data: EditorData): LabelPolygon | null {
         const mouseOnCanvas = data.mousePositionOnViewPortContent;
         if (!mouseOnCanvas) return null;
 
         const imageData = LabelsSelector.getActiveImageData();
         if (!imageData || !imageData.labelPolygons) return null;
 
-        const labelPolygons = imageData.labelPolygons.filter((labelPolygon: any) => labelPolygon.isVisible);
+        const labelPolygons = imageData.labelPolygons.filter((labelPolygon) => labelPolygon.isVisible);
         const radius = RenderEngineSettings.anchorHoverSize.width / 2;
 
         for (const labelPolygon of labelPolygons) {
@@ -978,7 +979,7 @@ export class RectRenderEngine extends BaseRenderEngine {
                 // 更新多边形位置
                 const newImageData = {
                     ...imageData,
-                    labelPolygons: imageData.labelPolygons.map((labelPolygon: any) =>
+                    labelPolygons: imageData.labelPolygons.map((labelPolygon) =>
                         labelPolygon.id === this.movePolygonId ? { ...labelPolygon, vertices: newVertices } : labelPolygon
                     )
                 };

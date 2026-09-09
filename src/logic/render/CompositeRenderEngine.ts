@@ -156,10 +156,10 @@ export class CompositeRenderEngine extends BaseRenderEngine {
                 DrawUtil.drawLine(this.canvas, snapResult.snappedLine.start, snapResult.snappedLine.end, RenderEngineSettings.DEFAULT_LINE_COLOR, Settings.RESIZE_HANDLE_DIMENSION_PX > 0 ? 2 : 1);
                 store.dispatch(updateCustomCursorStyle(CustomCursorStyle.DEFAULT));
                 const standardizedLine = { start: snapResult.snappedLine.start, end: snapResult.snappedLine.end };
-                const length = LineUtil.getPixelLength(standardizedLine as any);
+                const length = LineUtil.getPixelLength(standardizedLine);
                 if (length >= 10) {
                     const lengthText = LineUtil.formatLengthText(length);
-                    const labelPosition = LineUtil.getLengthLabelPosition(standardizedLine as any, 20);
+                    const labelPosition = LineUtil.getLengthLabelPosition(standardizedLine, 20);
                     const ctx = this.canvas.getContext('2d');
                     ctx.font = '12px Arial';
                     const textWidth = ctx.measureText(lengthText).width;
@@ -205,7 +205,7 @@ export class CompositeRenderEngine extends BaseRenderEngine {
             const b = this.pathVerticesOnCanvas[i];
             DrawUtil.drawLine(this.canvas, a, b, color, Settings.RESIZE_HANDLE_DIMENSION_PX > 0 ? 2 : 1);
             DrawUtil.drawCircleWithFill(this.canvas, b, Settings.RESIZE_HANDLE_DIMENSION_PX/2, anchorColor);
-            const standardizedLine = { start: a, end: b } as any;
+            const standardizedLine = { start: a, end: b };
             const length = LineUtil.getPixelLength(standardizedLine);
             if (length >= 10) {
                 const lengthText = LineUtil.formatLengthText(length);
@@ -274,7 +274,7 @@ export class CompositeRenderEngine extends BaseRenderEngine {
         if (this.isClosed && this.pathVerticesOnCanvas.length >= 3) {
             if (!imageData.labelPolygons) return;
             const polygonOnImage = RenderEngineUtil.transferPolygonFromViewPortContentToImage(this.pathVerticesOnCanvas, data);
-            const labelPolygon = LabelUtil.createLabelPolygon(activeLabelNameId as any, polygonOnImage);
+            const labelPolygon = LabelUtil.createLabelPolygon(activeLabelNameId, polygonOnImage);
             imageData.labelPolygons.push(labelPolygon);
             store.dispatch(updateImageDataById(imageData.id, imageData));
             store.dispatch(updateActiveLabelId(labelPolygon.id));
@@ -282,8 +282,8 @@ export class CompositeRenderEngine extends BaseRenderEngine {
         } else if (this.pathVerticesOnCanvas.length === 2) {
             if (!imageData.labelLines) return;
             const lineVP = { start: this.pathVerticesOnCanvas[0], end: this.pathVerticesOnCanvas[1] };
-            const lineOnImage = RenderEngineUtil.transferLineFromViewPortContentToImage(lineVP as any, data);
-            const labelLine = LabelUtil.createLabelLine(activeLabelNameId as any, lineOnImage);
+            const lineOnImage = RenderEngineUtil.transferLineFromViewPortContentToImage(lineVP, data);
+            const labelLine = LabelUtil.createLabelLine(activeLabelNameId, lineOnImage);
             imageData.labelLines.push(labelLine);
             store.dispatch(updateImageDataById(imageData.id, imageData));
             store.dispatch(updateActiveLabelId(labelLine.id));
@@ -291,7 +291,7 @@ export class CompositeRenderEngine extends BaseRenderEngine {
         } else if (this.pathVerticesOnCanvas.length === 1) {
             if (!imageData.labelPoints) return;
             const pointOnImage = RenderEngineUtil.transferPointFromViewPortContentToImage(this.pathVerticesOnCanvas[0], data);
-            const labelPoint = LabelUtil.createLabelPoint(activeLabelNameId as any, pointOnImage);
+            const labelPoint = LabelUtil.createLabelPoint(activeLabelNameId, pointOnImage);
             imageData.labelPoints.push(labelPoint);
             store.dispatch(updateImageDataById(imageData.id, imageData));
             store.dispatch(updateActiveLabelId(labelPoint.id));
