@@ -1,39 +1,36 @@
 import { AIActionTypes, AIState } from './types';
 import { Action } from '../Actions';
-import { AIStateStorageManager } from '../../utils/AIStateStorageManager';
+import { AIStateStorageManager, ImageAIState } from '../../utils/AIStateStorageManager';
 
-// 激进的防抖保存：避免频繁的localStorage操作
-let saveTimeout: NodeJS.Timeout | null = null;
-let pendingStates: Map<string, any> | null = null;
+// 防抖结束后保存捕获的最新快照，不再等待第二层闲时回调。
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
-const debouncedSave = (imageAIStates: Map<string, any>) => {
-    pendingStates = imageAIStates; // 只保存最新状态的引用
-    
+const debouncedSave = (imageAIStates: AIState['imageAIStates']) => {
     if (saveTimeout) {
         clearTimeout(saveTimeout);
     }
     
     saveTimeout = setTimeout(() => {
-        if (pendingStates) {
-            // 使用requestIdleCallback在浏览器空闲时保存
-            if (typeof requestIdleCallback !== 'undefined') {
-                requestIdleCallback(() => {
-                    if (pendingStates) {
-                        AIStateStorageManager.saveImageAIStates(pendingStates);
-                    }
-                }, { timeout: 1500 }); // 减少超时时间
-            } else {
-                // 降级到requestAnimationFrame，避免阻塞主线程
-                requestAnimationFrame(() => {
-                    if (pendingStates) {
-                        AIStateStorageManager.saveImageAIStates(pendingStates);
-                    }
-                });
-            }
-        }
+        AIStateStorageManager.saveImageAIStates(imageAIStates);
         saveTimeout = null;
-        pendingStates = null;
-    }, 300); // 减少到300ms，提高响应性
+    }, 300);
+};
+
+const updateImageAIState = (
+    state: AIState,
+    imageId: string,
+    update: (current: ImageAIState) => ImageAIState,
+): AIState => {
+    const imageAIStates = new Map(state.imageAIStates);
+    // 默认可见：首次点击眼睛按钮隐藏对应类型。
+    const current = imageAIStates.get(imageId) || {
+        aiLabelsVisible: true,
+        segmentationLabelsVisible: true,
+        inferenceHistory: [],
+    };
+    imageAIStates.set(imageId, update(current));
+    debouncedSave(imageAIStates);
+    return {...state, imageAIStates};
 };
 
 // 从localStorage恢复AI状态
@@ -89,64 +86,14 @@ export function aiReducer(
                 isFullImageInferenceInProgress: action.payload.isFullImageInferenceInProgress
             }
         }
-        case Action.TOGGLE_IMAGE_AI_LABELS_VISIBILITY: {
-            const { imageId } = action.payload;
-            const currentState = state.imageAIStates.get(imageId) || {
-                // 默认可见：标签在没有被显式隐藏前应该显示（eye 按钮首次点击 → 切到隐藏）
-                aiLabelsVisible: true,
-                segmentationLabelsVisible: true,
-                inferenceHistory: []
-            };
-            
-            // 检查状态是否真的需要改变，避免不必要的更新
-            const newVisibility = !currentState.aiLabelsVisible;
-            if (currentState.aiLabelsVisible === newVisibility) {
-                return state; // 状态无变化，直接返回
-            }
-            
-            const newImageAIStates = new Map(state.imageAIStates);
-            // 只切换检测标签显示状态，不影响分割标签
-            newImageAIStates.set(imageId, {
-                ...currentState,
-                aiLabelsVisible: newVisibility
-            });
-            
-            const newState = {
-                ...state,
-                imageAIStates: newImageAIStates
-            };
-            
-            // 使用防抖保存，避免频繁IO操作
-            debouncedSave(newState.imageAIStates);
-            return newState;
-        }
+        case Action.TOGGLE_IMAGE_AI_LABELS_VISIBILITY:
         case Action.TOGGLE_IMAGE_SEGMENTATION_LABELS_VISIBILITY: {
-            const { imageId } = action.payload;
-            const currentState = state.imageAIStates.get(imageId) || {
-                // 默认可见：标签在没有被显式隐藏前应该显示（eye 按钮首次点击 → 切到隐藏）
-                aiLabelsVisible: true,
-                segmentationLabelsVisible: true,
-                inferenceHistory: []
-            };
-
-            const newVisibility = !currentState.segmentationLabelsVisible;
-            if (currentState.segmentationLabelsVisible === newVisibility) {
-                return state;
-            }
-
-            const newImageAIStates = new Map(state.imageAIStates);
-            newImageAIStates.set(imageId, {
-                ...currentState,
-                segmentationLabelsVisible: newVisibility
-            });
-
-            const newState = {
-                ...state,
-                imageAIStates: newImageAIStates
-            };
-
-            debouncedSave(newState.imageAIStates);
-            return newState;
+            const visibility = action.type === Action.TOGGLE_IMAGE_AI_LABELS_VISIBILITY
+                ? 'aiLabelsVisible' : 'segmentationLabelsVisible';
+            return updateImageAIState(state, action.payload.imageId, current => ({
+                ...current,
+                [visibility]: !current[visibility],
+            }));
         }
         case Action.UPDATE_SEGMENTATION_RESULTS: {
             const { segmentationResults, imageId } = action.payload;
@@ -191,41 +138,17 @@ export function aiReducer(
         }
         case Action.ADD_INFERENCE_HISTORY: {
             const { imageId, timestamp, detectedCount, success, type } = action.payload;
-            const newImageAIStates = new Map(state.imageAIStates);
-            const currentState = newImageAIStates.get(imageId) || {
-                aiLabelsVisible: true,
-                segmentationLabelsVisible: true,
-                inferenceHistory: []
-            };
-
-            // 添加新的推理记录
-            const newHistory = [...currentState.inferenceHistory, {
-                timestamp,
-                detectedCount,
-                success,
-                type
-            }];
-
-            const newState_inner = { ...currentState, inferenceHistory: newHistory };
-
-            if (success && detectedCount > 0) {
-                if (type === 'segmentation') {
-                    newState_inner.segmentationLabelsVisible = true;
-                } else {
-                    newState_inner.aiLabelsVisible = true;
+            return updateImageAIState(state, imageId, current => {
+                const updated = {
+                    ...current,
+                    inferenceHistory: [...current.inferenceHistory, {timestamp, detectedCount, success, type}],
+                };
+                if (success && detectedCount > 0) {
+                    const visibility = type === 'segmentation' ? 'segmentationLabelsVisible' : 'aiLabelsVisible';
+                    updated[visibility] = true;
                 }
-            }
-
-            newImageAIStates.set(imageId, newState_inner);
-            
-            const newState = {
-                ...state,
-                imageAIStates: newImageAIStates
-            };
-            
-            // 使用防抖保存，避免频繁IO操作
-            debouncedSave(newState.imageAIStates);
-            return newState;
+                return updated;
+            });
         }
         default:
             return state;
