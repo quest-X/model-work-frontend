@@ -107,7 +107,9 @@ describe('AuthPreview', () => {
         fireEvent.click(screen.getByRole('button', {name: '登录'}));
         await screen.findByText('workspace preview');
         expect(loginAccount).toHaveBeenCalledWith('admin', 'correct-password', true);
-        expect(JSON.parse(localStorage.getItem('opensight:auth-preview-preferences')!))
+        const preferences = localStorage.getItem('opensight:auth-preview-preferences');
+        if (preferences === null) throw new Error('Login preferences were not saved');
+        expect(JSON.parse(preferences))
             .toEqual({username: 'admin', rememberPassword: true, autoLogin: true});
         view.unmount();
         (refreshAccountSession as jest.Mock).mockResolvedValueOnce(session);
@@ -128,7 +130,9 @@ describe('AuthPreview', () => {
         expect(await screen.findByLabelText('账号')).toHaveValue('admin');
         expect(screen.getByLabelText('密码')).toHaveValue('');
         expect(localStorage.getItem('opensight:auth-preview-preferences')).not.toContain('legacy-secret');
-        expect(JSON.parse(localStorage.getItem('opensight:auth-preview-preferences')!)).not.toHaveProperty('password');
+        const preferences = localStorage.getItem('opensight:auth-preview-preferences');
+        if (preferences === null) throw new Error('Sanitized login preferences were not saved');
+        expect(JSON.parse(preferences)).not.toHaveProperty('password');
         expect(loginAccount).not.toHaveBeenCalled();
     });
 });

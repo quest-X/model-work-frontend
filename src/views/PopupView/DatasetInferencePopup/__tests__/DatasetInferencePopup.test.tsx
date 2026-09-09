@@ -3,9 +3,10 @@ import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {Language} from '../../../../data/LanguageConfig';
 import {DatasetInferenceSelection} from '../../../../services/DatasetActionSelection';
 import {DatasetInferencePopup} from '../DatasetInferencePopup';
+import type {GenericYesNoPopup} from '../../GenericYesNoPopup/GenericYesNoPopup';
 
 jest.mock('../../GenericYesNoPopup/GenericYesNoPopup', () => ({
-    GenericYesNoPopup: ({title, renderContent, rejectLabel, onReject}: any) => <div>
+    GenericYesNoPopup: ({title, renderContent, rejectLabel, onReject}: React.ComponentProps<typeof GenericYesNoPopup>) => <div>
         <h1>{title}</h1>
         {renderContent()}
         <button onClick={onReject}>{rejectLabel}</button>

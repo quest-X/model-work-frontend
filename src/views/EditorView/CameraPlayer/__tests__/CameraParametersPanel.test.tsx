@@ -113,7 +113,9 @@ describe('CameraParametersPanel', () => {
         const input = screen.getByLabelText('亮度当前值');
         fireEvent.input(input, {target: {value: '0.25'}});
         expect(input).toHaveValue(0.25);
-        fireEvent.submit(input.closest('form')!);
+        const form = input.closest('form');
+        if (!form) throw new Error('Brightness editor form is missing');
+        fireEvent.submit(form);
 
         await waitFor(() => expect(CameraPreviewService.update).toHaveBeenCalledWith('resource-1', {brightness: 0.25}));
         await waitFor(() => expect(onStreamChanged).toHaveBeenCalledTimes(1));
@@ -126,7 +128,8 @@ describe('CameraParametersPanel', () => {
         render(<CameraParametersPanel resourceId='resource-1' language={Language.CHINESE} onClose={onClose}/>);
 
         expect(await screen.findByText('当前为待下发的 1012 软件参数')).toBeInTheDocument();
-        const brightnessRow = screen.getByRole('button', {name: '编辑亮度'}).closest('.CameraParameterRow')!;
+        const brightnessRow = screen.getByRole('button', {name: '编辑亮度'}).closest('.CameraParameterRow');
+        if (!brightnessRow) throw new Error('Brightness parameter row is missing');
         expect(brightnessRow).toHaveTextContent('0.00');
         expect(brightnessRow).toHaveTextContent('0.25');
         expect(screen.queryByRole('button', {name: '关闭相机参数'})).not.toBeInTheDocument();
