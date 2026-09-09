@@ -1,27 +1,6 @@
 
-import { ImageData, LabelName, LabelRect} from '../../../../store/labels/types';
-import { AcceptedFileType } from '../../../../data/enums/AcceptedFileType';
-import { v4 as uuidv4 } from 'uuid';
+import { LabelName, LabelRect} from '../../../../store/labels/types';
 import { VOCImporter } from '../../../import/voc/VOCImporter';
-import { isEqual } from 'lodash';
-
-const getDummyImageData = (fileName: string): ImageData => {
-    return {
-        id: uuidv4(),
-        fileData: new File([''], fileName, { type: AcceptedFileType.IMAGE }),
-        loadStatus: true,
-        labelRects: [],
-        labelPoints: [],
-        labelLines: [],
-        labelPolygons: [],
-        labelNameIds: [],
-        isVisitedByRoboflowAPI: false
-    };
-};
-
-const getDummyFileData = (fileName: string): File => {
-    return new File([''], fileName, { type: AcceptedFileType.TEXT });
-};
 
 class TestableVOCImporter extends VOCImporter {
     public static testableParseAnnotationsFromFileString(document: Document, labelNames: Record<string, LabelName>)

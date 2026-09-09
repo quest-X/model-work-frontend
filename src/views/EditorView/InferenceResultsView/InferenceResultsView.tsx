@@ -223,7 +223,7 @@ interface IProps {
     updateActiveLabelId: (activeLabelId: string | null) => void;
 }
 
-const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, segmentationResults, activeImageData, labelNames, isVideoMode, updateSegmentationResults, updateActiveLabelId}) => {
+const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, segmentationResults, activeImageData, labelNames, updateSegmentationResults, updateActiveLabelId}) => {
     const currentTexts = LanguageConfig[language];
     const zh = language === Language.CHINESE;
 
@@ -343,11 +343,11 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         return bestRect.id;
     };
 
-    const handleClickSegmentationResult = (result: SegmentationResult, index: number) => {
+    const handleClickSegmentationResult = (result: SegmentationResult) => {
         updateActiveLabelId(findBestMatchingLabelId(result));
     };
 
-    const handleMouseEnterSegmentationResult = (result: SegmentationResult, index: number) => {
+    const handleMouseEnterSegmentationResult = (result: SegmentationResult) => {
         const id = findBestMatchingLabelId(result);
         if (id) updateActiveLabelId(id);
     };
@@ -538,8 +538,8 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
                             const thumbnailFailed = failedThumbnailKeys[thumbnailKey];
                             return (
                             <div key={`${thumbnailKey}:${index}`} className="SegmentationResultItem"
-                                onClick={() => handleClickSegmentationResult(result, index)}
-                                onMouseEnter={() => handleMouseEnterSegmentationResult(result, index)}
+                                onClick={() => handleClickSegmentationResult(result)}
+                                onMouseEnter={() => handleMouseEnterSegmentationResult(result)}
                                 onMouseLeave={handleMouseLeaveSegmentationResult}
                                 style={{ cursor: 'pointer' }}>
                                 <button className="DeleteButton"

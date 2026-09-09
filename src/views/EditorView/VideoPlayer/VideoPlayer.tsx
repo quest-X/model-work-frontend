@@ -43,12 +43,10 @@ const VideoPlayer: React.FC<IProps> = ({
     language,
     videoSrc,
     currentTime,
-    currentFrame,
     fps,
     size,
     onTimeUpdate,
     onLoadedMetadata,
-    onPlay,
     onPause,
     onPlayPause,
     isPlaying = false,
@@ -69,7 +67,7 @@ const VideoPlayer: React.FC<IProps> = ({
     const [detectedFps, setDetectedFps] = useState<number>(fps || 60);
     const videoFrameCallbackIdRef = useRef<number>();
     const playPromiseRef = useRef<Promise<void> | null>(null); // 跟踪 play() Promise
-    const [isVideoEnded, setIsVideoEnded] = useState(false); // 视频是否播放完毕
+    const [, setIsVideoEnded] = useState(false); // 视频是否播放完毕
     const isVideoEndedRef = useRef(false); // ref 版本，避免 play effect 因 state 变化双重触发
     const firstFrameDrawnRef = useRef<boolean>(false); // 跟踪第一帧是否已绘制
     const totalFramesRef = useRef<number>(0); // 整数总帧数，避免从 duration 浮点重算

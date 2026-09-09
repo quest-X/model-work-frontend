@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { store } from '../../index';
 import { ImageData, LabelName, LabelPolygon } from '../../store/labels/types';
 import { LabelStatus } from '../../data/enums/LabelStatus';
-import { SegmentationResult, SegmentationAPIDetector } from '../../ai/SegmentationAPIDetector';
+import { SegmentationAPIDetector } from '../../ai/SegmentationAPIDetector';
 import { PipelineStore } from '../../ai/PipelineStore';
 import { formatModelDisplay } from '../../ai/ActiveModel';
 import { TrackingAPIService } from '../../ai/TrackingAPIService';
@@ -363,7 +363,6 @@ export class ObjectTrackingActions {
         store.dispatch(submitNewNotification(progressNotification));
 
         const lang = store.getState().general.language;
-        const tmTexts = LanguageConfig[lang].taskManager;
         const task = TaskTracker.startTask({
             type: TaskType.TRACKING,
             priority: 'P1',

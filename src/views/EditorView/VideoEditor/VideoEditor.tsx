@@ -59,13 +59,12 @@ const VideoEditor: React.FC<IProps> = ({
     updateImageDataById,
     updateImageData,
     updateActiveImageIndex,
-    addImageData,
-    toggleImageSelection
+    addImageData
 }) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [videoUrl, setVideoUrl] = useState<string>('');
-    const [loadedThumbnailCount, setLoadedThumbnailCount] = useState(0);
-    const [totalFrameCount, setTotalFrameCount] = useState(0);
+    const [, setLoadedThumbnailCount] = useState(0);
+    const [, setTotalFrameCount] = useState(0);
     const [isMuted, setIsMuted] = useState<boolean>(true);
     const [canvasLayout, setCanvasLayout] = useState<CanvasViewLayout>(CanvasMultiViewStore.get().layout);
     const generationIdRef = React.useRef(0);

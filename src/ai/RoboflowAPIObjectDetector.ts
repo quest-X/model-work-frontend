@@ -7,7 +7,6 @@ import { updateRoboflowAPIDetails } from '../store/ai/actionCreators';
 import { updateActiveLabelType } from '../store/labels/actionCreators';
 import { LabelType } from '../data/enums/LabelType';
 import { LabelsSelector } from '../store/selectors/LabelsSelector';
-import { AIRoboflowAPIObjectDetectionActions } from '../logic/actions/AIRoboflowAPIObjectDetectionActions';
 import { AISelector } from '../store/selectors/AISelector';
 
 interface RoboflowPrediction {

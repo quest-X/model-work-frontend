@@ -9,7 +9,7 @@ export class PopupContext extends BaseContext {
     public static actions: HotKeyAction[] = [
         {
             keyCombo: ['Escape'],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 const popupType: PopupWindowType = GeneralSelector.getActivePopupType();
                 const canBeClosed: boolean = Settings.CLOSEABLE_POPUPS.includes(popupType);
                 if (canBeClosed) {

@@ -6,7 +6,6 @@ import {GeneralSelector} from '../../store/selectors/GeneralSelector';
 import {RenderEngineSettings} from '../../settings/RenderEngineSettings';
 import {LabelName} from '../../store/labels/types';
 import {LabelsSelector} from '../../store/selectors/LabelsSelector';
-import {AISelector} from '../../store/selectors/AISelector';
 
 export abstract class BaseRenderEngine {
     protected readonly canvas: HTMLCanvasElement;

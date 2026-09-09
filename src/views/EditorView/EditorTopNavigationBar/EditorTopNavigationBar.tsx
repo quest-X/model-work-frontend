@@ -978,7 +978,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
         }
     };
 
-    const runInference = useCallback(async (_mode?: string) => {
+    const runInference = useCallback(async () => {
         setShowInferenceMenu(false);
         if (isFullImageInferenceInProgress) {
             console.log('[Infer] skip: inference already in progress');
@@ -1465,7 +1465,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                     multiInferenceCancelledRef.current = true;
                     updateFullImageInferenceStatus(false);
                 } else {
-                    void runInference('detection');
+                    void runInference();
                 }
             }}
             style={{

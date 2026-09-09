@@ -31,7 +31,6 @@ export interface IProps {
 export const ManageAIModelsPopup: React.FC<IProps> = ({
     updateActivePopupTypeAction,
     addAIModelAction,
-    setActiveAIModelAction,
     deleteAIModelAction,
     aiModels,
     activeModelId,
@@ -47,13 +46,6 @@ export const ManageAIModelsPopup: React.FC<IProps> = ({
             setSelectedModelId(aiModels[0].id);
         }
     }, [aiModels, selectedModelId]);
-
-    const onAccept = () => {
-        if (selectedModelId) {
-            setActiveAIModelAction(selectedModelId);
-        }
-        updateActivePopupTypeAction(null);
-    };
 
     const onReject = () => {
         updateActivePopupTypeAction(null);

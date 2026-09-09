@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {CanvasMultiViewStore, CanvasMultiViewState, CanvasViewKind} from './CanvasMultiViewStore';
 import {ModelInspectorAPI} from '../../PopupView/ModelInspectorPopup/ModelInspectorAPI';
 import {resolveVisualSearchSource, ResolvedVisualSearchSource} from '../../PopupView/VisualSearchPopup/VisualSearchPopup';

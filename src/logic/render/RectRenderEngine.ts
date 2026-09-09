@@ -13,7 +13,6 @@ import {
 import {PointUtil} from '../../utils/PointUtil';
 import {RectAnchor} from '../../data/RectAnchor';
 import {RenderEngineSettings} from '../../settings/RenderEngineSettings';
-import {Direction} from '../../data/enums/Direction';
 import {updateCustomCursorStyle} from '../../store/general/actionCreators';
 import {CustomCursorStyle} from '../../data/enums/CustomCursorStyle';
 import {LabelsSelector} from '../../store/selectors/LabelsSelector';
@@ -273,13 +272,11 @@ export class RectRenderEngine extends BaseRenderEngine {
         
         // 获取当前图片的AI标签显示状态（默认可见）
         let aiLabelsVisible = true;
-        let segmentationLabelsVisible = true;
         let currentImageAIState = null;
         if (imageData) {
             const imageAIStates = store.getState().ai.imageAIStates;
             currentImageAIState = imageAIStates.get(imageData.id);
             aiLabelsVisible = currentImageAIState ? currentImageAIState.aiLabelsVisible : true;
-            segmentationLabelsVisible = currentImageAIState ? currentImageAIState.segmentationLabelsVisible : true;
         }
 
         // 渲染矩形框标签
@@ -457,7 +454,7 @@ export class RectRenderEngine extends BaseRenderEngine {
         this.renderRect(rectOnImage, displayAsActive, lineColor, anchorColor);
         
         // 为所有有标签的标注框添加标签文字
-        this.drawLabelText(labelRect, rectOnImage, data);
+        this.drawLabelText(labelRect, rectOnImage);
     }
 
     private drawActiveRect(labelRect: LabelRect, data: EditorData) {
@@ -485,7 +482,7 @@ export class RectRenderEngine extends BaseRenderEngine {
         this.renderRect(rectOnImage, true, lineColor, anchorColor);
         
         // 为活跃的标注框也显示标签文字
-        this.drawLabelText(labelRect, rectOnImage, data);
+        this.drawLabelText(labelRect, rectOnImage);
     }
 
     private renderRect(rectOnImage: IRect, isActive: boolean, lineColor: string, anchorColor: string) {
@@ -854,7 +851,7 @@ export class RectRenderEngine extends BaseRenderEngine {
     // AI LABEL TEXT DRAWING
     // =================================================================================================================
     
-    private drawLabelText(labelRect: LabelRect, rectOnImage: IRect, data: EditorData): void {
+    private drawLabelText(labelRect: LabelRect, rectOnImage: IRect): void {
         // Accepted rectangles use the interactive DOM dropdown rendered by Editor.
         // Drawing the legacy canvas label as well makes both labels overlap.
         if (labelRect.status === LabelStatus.ACCEPTED) return;

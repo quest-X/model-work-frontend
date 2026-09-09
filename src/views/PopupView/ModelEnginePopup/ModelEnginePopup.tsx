@@ -9,8 +9,6 @@ import { updateActivePopupType } from '../../../store/general/actionCreators';
 import { addAIModel } from '../../../store/aimodels/actionCreators';
 import { AIModel, EngineType } from '../../../store/aimodels/types';
 import { NotificationUtil } from '../../../utils/NotificationUtil';
-import { NotificationsDataMap } from '../../../data/info/NotificationsData';
-import { Notification } from '../../../data/enums/Notification';
 import { PopupWindowType } from '../../../data/enums/PopupWindowType';
 import './ModelEnginePopup.scss'
 import { StyledTextField } from '../../Common/StyledTextField/StyledTextField';

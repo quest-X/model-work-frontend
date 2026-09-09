@@ -1,7 +1,6 @@
 import {HotKeyAction} from "../../data/HotKeyAction";
 import {EditorModel} from "../../staticModels/EditorModel";
 import {LabelType} from "../../data/enums/LabelType";
-import {EditorData} from "../../data/EditorData";
 import {EditorActions} from "../actions/EditorActions";
 import {BaseContext} from "./BaseContext";
 import {ImageActions} from "../actions/ImageActions";
@@ -38,13 +37,13 @@ export class EditorContext extends BaseContext {
         },
         {
             keyCombo: ["Enter"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 EditorActions.fullRender();
             }
         },
         {
             keyCombo: ["Escape"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 if (EditorModel.supportRenderingEngine) {
                     switch (EditorModel.supportRenderingEngine.labelType) {
                         case LabelType.RECT:
@@ -63,25 +62,25 @@ export class EditorContext extends BaseContext {
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "ArrowLeft"] : ["Control", "ArrowLeft"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ImageActions.goToPreviousImage()
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "ArrowRight"] : ["Control", "ArrowRight"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ImageActions.goToNextImage();
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "+"] : ["Control", "+"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ViewPortActions.zoomIn();
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "-"] : ["Control", "-"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ViewPortActions.zoomOut();
             }
         },
@@ -115,82 +114,82 @@ export class EditorContext extends BaseContext {
         },
         {
             keyCombo: ["Backspace"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 LabelActions.deleteActiveLabel();
             }
         },
         {
             keyCombo: ["Delete"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 LabelActions.deleteActiveLabel();
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "0"] : ["Control", "0"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ImageActions.setActiveLabelOnActiveImage(0);
                 EditorActions.fullRender();
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "1"] : ["Control", "1"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ImageActions.setActiveLabelOnActiveImage(1);
                 EditorActions.fullRender();
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "2"] : ["Control", "2"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ImageActions.setActiveLabelOnActiveImage(2);
                 EditorActions.fullRender();
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "3"] : ["Control", "3"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ImageActions.setActiveLabelOnActiveImage(3);
                 EditorActions.fullRender();
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "4"] : ["Control", "4"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ImageActions.setActiveLabelOnActiveImage(4);
                 EditorActions.fullRender();
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "5"] : ["Control", "5"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ImageActions.setActiveLabelOnActiveImage(5);
                 EditorActions.fullRender();
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "6"] : ["Control", "6"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ImageActions.setActiveLabelOnActiveImage(6);
                 EditorActions.fullRender();
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "7"] : ["Control", "7"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ImageActions.setActiveLabelOnActiveImage(7);
                 EditorActions.fullRender();
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "8"] : ["Control", "8"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ImageActions.setActiveLabelOnActiveImage(8);
                 EditorActions.fullRender();
             }
         },
         {
             keyCombo: PlatformUtil.isMac(window.navigator.userAgent) ? ["Alt", "9"] : ["Control", "9"],
-            action: (event: KeyboardEvent) => {
+            action: () => {
                 ImageActions.setActiveLabelOnActiveImage(9);
                 EditorActions.fullRender();
             }

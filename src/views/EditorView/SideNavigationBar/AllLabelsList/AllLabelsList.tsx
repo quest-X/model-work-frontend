@@ -14,10 +14,8 @@ import LabelInputField from '../LabelInputField/LabelInputField';
 import EmptyLabelList from '../EmptyLabelList/EmptyLabelList';
 import {LabelActions} from '../../../../logic/actions/LabelActions';
 import {LabelStatus} from '../../../../data/enums/LabelStatus';
-import {findLast} from 'lodash';
 import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
 import {LabelType} from '../../../../data/enums/LabelType';
-import {AISelector} from '../../../../store/selectors/AISelector';
 
 interface IProps {
     size: ISize;

@@ -6,7 +6,6 @@ import { ImageLoadManager } from "../../../../logic/imageRepository/ImageLoadMan
 import { IRect } from "../../../../interfaces/IRect";
 import { ISize } from "../../../../interfaces/ISize";
 import { ImageRepository } from "../../../../logic/imageRepository/ImageRepository";
-import { AppState } from "../../../../store";
 import { updateImageDataById, deleteImageById, deleteSelectedImages } from "../../../../store/labels/actionCreators";
 import { ImageData } from "../../../../store/labels/types";
 import { FileUtil } from "../../../../utils/FileUtil";
@@ -313,7 +312,6 @@ export class ImagePreview extends React.Component<IProps, IState> {
 
     public render() {
         const {
-            isChecked,
             style,
             onClick
         } = this.props;
@@ -385,7 +383,7 @@ const mapDispatchToProps = {
     deleteSelectedImages
 };
 
-const mapStateToProps = (state: AppState) => ({});
+const mapStateToProps = () => ({});
 
 export default connect(
     mapStateToProps,

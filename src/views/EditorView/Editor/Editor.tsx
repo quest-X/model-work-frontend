@@ -21,7 +21,6 @@ import {ContextManager} from '../../../logic/hotkey/ContextManager';
 import {ContextType} from '../../../data/enums/ContextType';
 import Scrollbars from 'react-custom-scrollbars-2';
 import {ViewPortActions} from '../../../logic/actions/ViewPortActions';
-import {PlatformModel} from '../../../staticModels/PlatformModel';
 import LabelControlPanel from '../LabelControlPanel/LabelControlPanel';
 import {IPoint} from '../../../interfaces/IPoint';
 import {RenderEngineUtil} from '../../../utils/RenderEngineUtil';
