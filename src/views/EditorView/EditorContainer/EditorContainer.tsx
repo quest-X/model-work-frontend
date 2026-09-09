@@ -12,23 +12,16 @@ import LabelsToolkit from '../SideNavigationBar/LabelsToolkit/LabelsToolkit';
 import {SideNavigationBar} from '../SideNavigationBar/SideNavigationBar';
 import {VerticalEditorButton} from '../VerticalEditorButton/VerticalEditorButton';
 import './EditorContainer.scss';
-import Editor from '../Editor/Editor';
-import VideoEditor from '../VideoEditor/VideoEditor';
-import CameraPlayer from '../CameraPlayer/CameraPlayer';
 import {ContextManager} from '../../../logic/hotkey/ContextManager';
 import {ContextType} from '../../../data/enums/ContextType';
-import EditorBottomNavigationBar from '../EditorBottomNavigationBar/EditorBottomNavigationBar';
 import EditorTopNavigationBar from '../EditorTopNavigationBar/EditorTopNavigationBar';
 import {ProjectType} from '../../../data/enums/ProjectType';
 import {useDropzone, DropzoneOptions} from 'react-dropzone';
-import {addImageData, updateImageData, updateActiveImageIndex} from '../../../store/labels/actionCreators';
 import {updateActivePopupType} from '../../../store/general/actionCreators';
-import {addVideoData, updateVideoMode} from '../../../store/video/actionCreators';
-import {addQueueItems, setActiveQueueItem, updateQueueItem} from '../../../store/queue/actionCreators';
+import {addQueueItems, updateQueueItem} from '../../../store/queue/actionCreators';
 import {QueueActions} from '../../../logic/actions/QueueActions';
-import {QueueItem, QueueItemType, QueueItemStatus} from '../../../store/queue/types';
+import {QueueItem, QueueItemType} from '../../../store/queue/types';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
-import {ImageDataUtil} from '../../../utils/ImageDataUtil';
 import {sortBy} from 'lodash';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import InferenceResultsButton from '../InferenceResultsButton/InferenceResultsButton';
@@ -37,17 +30,13 @@ import BatchStatisticsView from '../BatchStatisticsView/BatchStatisticsView';
 import {AutoSaveService} from '../../../services/AutoSaveService';
 import {TaskManagerButton} from '../TaskManager/TaskManagerButton';
 import {TaskManagerPanel} from '../TaskManager/TaskManagerPanel';
-import {v4 as uuidv4} from 'uuid';
-import {ImageRepository} from '../../../logic/imageRepository/ImageRepository';
-import {FrameExtractorService} from '../../../services/FrameExtractorService';
 import {EditorModel} from '../../../staticModels/EditorModel';
 import {store} from '../../../index';
-import {submitNewNotification, updateNotificationById, deleteNotificationById} from '../../../store/notifications/actionCreators';
-import {NotificationUtil} from '../../../utils/NotificationUtil';
 import {PendingImportFiles} from '../../../utils/PendingImportFiles';
 import {DataBatchSyncService} from '../../../services/DataBatchSyncService';
+import {EditorViewportContent} from './EditorViewportContent';
 import {useDatasetDirtyTracking} from './useDatasetDirtyTracking';
-// import {inferenceEventEmitter, InferenceResultsEvent} from '../../../logic/actions/AISegmentationActions';
+import {createDroppedMediaQueueItems, VideoImportProgress} from './EditorFileImport';
 
 interface IProps {
     windowSize: ISize;
@@ -60,15 +49,9 @@ interface IProps {
     activeVideo: VideoData | null;
     queueItems: QueueItem[];
     activeQueueItemId: string | null;
-    addImageDataAction: (imageData: ImageData[]) => any;
-    updateImageDataAction: (imageData: ImageData[]) => any;
-    updateActiveImageIndexAction: (activeImageIndex: number) => any;
-    updateActivePopupTypeAction: (activePopupType: PopupWindowType) => any;
-    addVideoDataAction: (videoData: VideoData) => any;
-    updateVideoModeAction: (isVideoMode: boolean) => any;
-    addQueueItemsAction: (items: QueueItem[]) => any;
-    setActiveQueueItemAction: (itemId: string | null) => any;
-    updateQueueItemAction: (itemId: string, updates: Partial<QueueItem>) => any;
+    updateActivePopupTypeAction: (activePopupType: PopupWindowType) => void;
+    addQueueItemsAction: (items: QueueItem[]) => void;
+    updateQueueItemAction: (itemId: string, updates: Partial<QueueItem>) => void;
 }
 
 const EditorContainer: React.FC<IProps> = (
@@ -83,14 +66,8 @@ const EditorContainer: React.FC<IProps> = (
         activeVideo,
         queueItems,
         activeQueueItemId,
-        addImageDataAction,
-        updateImageDataAction,
-        updateActiveImageIndexAction,
         updateActivePopupTypeAction,
-        addVideoDataAction,
-        updateVideoModeAction,
         addQueueItemsAction,
-        setActiveQueueItemAction,
         updateQueueItemAction
     }) => {
     const [leftTabStatus, setLeftTabStatus] = useState(true);
@@ -99,7 +76,7 @@ const EditorContainer: React.FC<IProps> = (
     const [showBatchStatistics, setShowBatchStatistics] = useState<boolean>(false);
     const [showQueueList, setShowQueueList] = useState<boolean>(false);
     const [isWindowDragActive, setIsWindowDragActive] = useState(false);
-    const [videoProcessing, setVideoProcessing] = useState<{phase: string; progress: number; fileName: string} | null>(null);
+    const [videoProcessing, setVideoProcessing] = useState<VideoImportProgress | null>(null);
 
     // Task Manager 浮动面板开关 + 固定状态 + 按钮 ref
     const [taskPanelOpen, setTaskPanelOpen] = useState(false);
@@ -195,27 +172,6 @@ const EditorContainer: React.FC<IProps> = (
     
     const currentTexts = LanguageConfig[language];
     
-    // 监听推理完成事件，自动切换到推理结果视图
-    useEffect(() => {
-        const handleInferenceResults = (event: any) => {
-            if (event.type === 'SHOW_INFERENCE_RESULTS' && event.results.length > 0) {
-                // 自动切换到推理结果视图
-                setRightTabStatus(true);
-                setShowInferenceResults(true);
-                if (activeContext !== ContextType.RIGHT_NAVBAR) {
-                    ContextManager.switchCtx(ContextType.RIGHT_NAVBAR);
-                }
-                console.log('Auto-switched to inference results view with', event.results.length, 'objects');
-            }
-        };
-        
-        // inferenceEventEmitter.addListener(handleInferenceResults);
-        
-        return () => {
-            // inferenceEventEmitter.removeListener(handleInferenceResults);
-        };
-    }, [activeContext]);
-
     // 批量推理完成后自动弹出统计面板
     useEffect(() => {
         const handleBatchComplete = (e: Event) => {
@@ -256,92 +212,6 @@ const EditorContainer: React.FC<IProps> = (
         };
     }, [imagesData]);
 
-    // 生成缩略图辅助函数
-    const generateThumbnail = async (file: File): Promise<string | undefined> => {
-        return new Promise((resolve) => {
-            if (file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        const maxSize = 100;
-                        let width = img.width;
-                        let height = img.height;
-                        
-                        if (width > height) {
-                            if (width > maxSize) {
-                                height *= maxSize / width;
-                                width = maxSize;
-                            }
-                        } else {
-                            if (height > maxSize) {
-                                width *= maxSize / height;
-                                height = maxSize;
-                            }
-                        }
-                        
-                        canvas.width = width;
-                        canvas.height = height;
-                        ctx?.drawImage(img, 0, 0, width, height);
-                        resolve(canvas.toDataURL());
-                    };
-                    img.src = e.target?.result as string;
-                };
-                reader.readAsDataURL(file);
-            } else if (file.type.startsWith('video/')) {
-                const video = document.createElement('video');
-                video.preload = 'metadata';
-                video.onloadedmetadata = () => {
-                    video.currentTime = 0;
-                };
-                const videoUrl = URL.createObjectURL(file);
-                video.onseeked = () => {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    const maxSize = 100;
-                    let width = video.videoWidth;
-                    let height = video.videoHeight;
-
-                    if (width > height) {
-                        if (width > maxSize) {
-                            height *= maxSize / width;
-                            width = maxSize;
-                        }
-                    } else {
-                        if (height > maxSize) {
-                            width *= maxSize / height;
-                            height = maxSize;
-                        }
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
-                    ctx?.drawImage(video, 0, 0, width, height);
-                    URL.revokeObjectURL(videoUrl);
-                    resolve(canvas.toDataURL());
-                };
-                video.onerror = () => {
-                    URL.revokeObjectURL(videoUrl);
-                    resolve(undefined);
-                };
-                video.src = videoUrl;
-            } else {
-                resolve(undefined);
-            }
-        });
-    };
-
-    // 从文件路径提取文件夹名称
-    const getFolderName = (path: string): string | null => {
-        const parts = path.split('/');
-        if (parts.length > 1) {
-            return parts[parts.length - 2];
-        }
-        return null;
-    };
-
     // 拖拽上传功能 - 支持图片和视频（仅拖拽，不支持点击）
     // handleFileDrop 也被 QueueList 侧边栏的 opensight:drop-files 事件复用
     const handleFileDrop = useCallback(async (files: File[]) => {
@@ -359,151 +229,7 @@ const EditorContainer: React.FC<IProps> = (
                     return;
                 }
 
-                // 检查是否包含视频文件
-                const videoFiles = sortedFiles.filter(file => file.type.startsWith('video/'));
-                const imageFiles = sortedFiles.filter(file => file.type.startsWith('image/'));
-                
-                // 按照文件路径分组图像
-                const filesByFolder = new Map<string, File[]>();
-                for (const file of imageFiles) {
-                    const folderPath = (file as any).webkitRelativePath || file.name;
-                    const folderName = getFolderName(folderPath) || 'images';
-                    
-                    if (!filesByFolder.has(folderName)) {
-                        filesByFolder.set(folderName, []);
-                    }
-                    filesByFolder.get(folderName)!.push(file);
-                }
-
-                // 添加到队列
-                const newQueueItems: QueueItem[] = [];
-                
-                // Video files: backend FFmpeg extraction -> fast_ffmpeg_mode (FramePlayer)
-                for (const videoFile of videoFiles) {
-                    try {
-                        console.log(`[FFmpeg] 开始拆帧: ${videoFile.name}`);
-                        setVideoProcessing({ phase: '上传视频...', progress: 0, fileName: videoFile.name });
-
-                        const result = await FrameExtractorService.openSession(
-                            videoFile, 0,
-                            (phase, current, total) => {
-                                const pct = total > 0 ? Math.round((current / total) * 100) : 0;
-                                if (phase === '上传视频') {
-                                    setVideoProcessing({ phase: `上传中 ${pct >= 100 ? 99 : pct}%`, progress: pct, fileName: videoFile.name });
-                                } else if (phase === '解压帧') {
-                                    setVideoProcessing({ phase: `上传中 ${pct >= 100 ? 99 : pct}%`, progress: pct, fileName: videoFile.name });
-                                } else {
-                                    setVideoProcessing({ phase, progress: 0, fileName: videoFile.name });
-                                }
-                            }
-                        );
-                        const isOnDemand = !!result.sessionId;
-                        console.log(`[FFmpeg] Done: fast_ffmpeg_mode (${isOnDemand ? 'on-demand' : 'full-load'}), ${result.totalFrames} frames`);
-
-                        // Initialize global frame pool for fast_ffmpeg_mode (FramePlayer handles decoding)
-                        EditorModel.preloadedImageCache = new Map();
-                        if (isOnDemand) {
-                            EditorModel.videoSessionId = result.sessionId!;
-                        }
-                        EditorModel.videoFrameFiles = [];
-
-                        // 缩略图从第 0 帧文件生成
-                        let thumbnail: string | undefined;
-                        if (EditorModel.videoFrameFiles?.[0]) {
-                            thumbnail = await generateThumbnail(EditorModel.videoFrameFiles[0]);
-                        } else if (isOnDemand) {
-                            // 大视频：取第 0 帧生成缩略图
-                            try {
-                                const batch = await FrameExtractorService.fetchFrameRange(result.sessionId!, 0, 1);
-                                if (batch.length > 0) {
-                                    EditorModel.videoFrameFiles[0] = batch[0];
-                                    thumbnail = await generateThumbnail(batch[0]);
-                                }
-                            } catch { /* skip */ }
-                        }
-
-                        const item: QueueItem = {
-                            id: uuidv4(),
-                            name: videoFile.name,
-                            type: QueueItemType.VIDEO,
-                            file: videoFile,
-                            extractedFrames: undefined,
-                            videoSessionId: result.sessionId,
-                            extractionMetadata: {
-                                fps: result.fps,
-                                duration: result.duration,
-                                totalFrames: result.totalFrames,
-                                width: result.width,
-                                height: result.height,
-                            },
-                            status: QueueItemStatus.PENDING,
-                            uploadedAt: Date.now(),
-                            thumbnail
-                        };
-                        newQueueItems.push(item);
-                        setVideoProcessing(null);
-                    } catch (err) {
-                        console.error('[FFmpeg] Extraction failed, falling back to raw_browser_mode:', err);
-                        setVideoProcessing(null);
-                        // Surface the backend's real error (e.g. "磁盘空间不足") instead of
-                        // a generic "FFmpeg failed" — axios attaches it on .response.data.detail.
-                        const detail = (err as any)?.response?.data?.detail;
-                        const description = typeof detail === 'string' && detail.trim()
-                            ? `${detail}\n（已回退到 raw_browser_mode）`
-                            : '已回退到 raw_browser_mode';
-                        const errorNotification = NotificationUtil.createErrorNotification({
-                            header: `视频上传失败: ${videoFile.name}`,
-                            description,
-                        });
-                        store.dispatch(submitNewNotification(errorNotification));
-                        // Linger 12s for actionable error (disk message), 5s for generic.
-                        const ttl = typeof detail === 'string' && detail.trim() ? 12000 : 5000;
-                        setTimeout(() => store.dispatch(deleteNotificationById(errorNotification.id)), ttl);
-                        // Fallback: raw_browser_mode (browser-native <video> element, no pre-extracted frames)
-                        const thumbnail = await generateThumbnail(videoFile);
-                        const item: QueueItem = {
-                            id: uuidv4(),
-                            name: videoFile.name,
-                            type: QueueItemType.VIDEO,
-                            file: videoFile,
-                            status: QueueItemStatus.PENDING,
-                            uploadedAt: Date.now(),
-                            thumbnail
-                        };
-                        newQueueItems.push(item);
-                    }
-                }
-
-                // 添加图像文件（按文件夹分组）
-                for (const [folderName, folderFiles] of filesByFolder.entries()) {
-                    if (folderFiles.length === 1) {
-                        const file = folderFiles[0];
-                        const thumbnail = await generateThumbnail(file);
-                        const item: QueueItem = {
-                            id: uuidv4(),
-                            name: file.name,
-                            type: QueueItemType.IMAGE,
-                            file: file,
-                            status: QueueItemStatus.PENDING,
-                            uploadedAt: Date.now(),
-                            thumbnail
-                        };
-                        newQueueItems.push(item);
-                    } else {
-                        const sortedFolderFiles = folderFiles.sort((a, b) => a.name.localeCompare(b.name));
-                        const thumbnail = await generateThumbnail(sortedFolderFiles[0]);
-                        const item: QueueItem = {
-                            id: uuidv4(),
-                            name: folderName,
-                            type: QueueItemType.FOLDER,
-                            files: sortedFolderFiles,
-                            status: QueueItemStatus.PENDING,
-                            uploadedAt: Date.now(),
-                            thumbnail
-                        };
-                        newQueueItems.push(item);
-                    }
-                }
+                const newQueueItems = await createDroppedMediaQueueItems(sortedFiles, setVideoProcessing);
 
                 addQueueItemsAction(newQueueItems);
 
@@ -531,7 +257,7 @@ const EditorContainer: React.FC<IProps> = (
             }
     }, [imagesData, addQueueItemsAction, updateActivePopupTypeAction]);
 
-    const {acceptedFiles, getRootProps, getInputProps, isDragActive, open: openFileDialog} = useDropzone({
+    const {getRootProps, getInputProps, isDragActive, open: openFileDialog} = useDropzone({
         noClick: true,
         noKeyboard: true,
         accept: {
@@ -712,7 +438,7 @@ const EditorContainer: React.FC<IProps> = (
         return <LabelsToolkit/>;
     };
 
-    const activeQueueItem = queueItems.find(item => item.id === activeQueueItemId) || null;
+    const activeQueueItem = queueItems.find(item => item.id === activeQueueItemId);
     const isCameraMode = activeQueueItem?.type === QueueItemType.CAMERA;
 
     return (
@@ -728,7 +454,7 @@ const EditorContainer: React.FC<IProps> = (
             <div 
                 {...getRootProps({
                     className: `EditorWrapper ${isVideoMode ? 'VideoMode' : ''} ${isCameraMode ? 'CameraMode' : ''} ${isDragActive ? 'drag-active' : ''}`,
-                    onMouseDown: (e) => {
+                    onMouseDown: () => {
                         // 只有在非拖拽状态下才切换上下文
                         if (!isDragActive) {
                             ContextManager.switchCtx(ContextType.EDITOR);
@@ -753,56 +479,17 @@ const EditorContainer: React.FC<IProps> = (
                 {projectType === ProjectType.OBJECT_DETECTION && <EditorTopNavigationBar
                     key='editor-top-navigation-bar'
                 />}
-                {isCameraMode && activeQueueItem ? (
-                    <CameraPlayer
-                        item={activeQueueItem}
-                        language={language}
-                        key={activeQueueItem.id}
-                    />
-                ) : isVideoMode && activeVideo ? (
-                    // 视频编辑模式
-                    <VideoEditor
-                        editorSize={calculateEditorSize()}
-                        key='video-editor'
-                    />
-                ) : imagesData.length > 0 && activeImageIndex < imagesData.length && imagesData[activeImageIndex] ? (
-                    // 图片编辑模式
-                    <>
-                        <Editor
-                            size={calculateEditorSize()}
-                            imageData={imagesData[activeImageIndex]}
-                            key='editor'
-                        />
-                        <EditorBottomNavigationBar
-                            imageData={imagesData[activeImageIndex]}
-                            size={calculateEditorSize()}
-                            totalImageCount={imagesData.length}
-                            key='editor-bottom-navigation-bar'
-                        />
-                    </>
-                ) : videoProcessing ? (
-                    <div className='EmptyProjectView' style={{cursor: 'default'}}>
-                        <div className='EmptyProjectContent'>
-                            <div className='VideoProcessingOverlay'>
-                                <div className='ProcessingSpinner'></div>
-                                <h2>{videoProcessing.fileName}</h2>
-                                <p>{videoProcessing.phase}</p>
-                            </div>
-                        </div>
-                    </div>
-                ) : (
-                    <div className={`EmptyProjectView ${isDragActive ? 'drag-active' : ''}`} onClick={openFileDialog} style={{cursor: 'pointer'}}>
-                        <div className='EmptyProjectContent'>
-                            <img
-                                draggable={false}
-                                alt={'empty-project'}
-                                src={'ico/box-opened.png'}
-                            />
-                            <h2>{currentTexts.welcomeTitle}</h2>
-                            <p>{isDragActive ? currentTexts.dragActiveMessage : currentTexts.welcomeDescription}</p>
-                        </div>
-                    </div>
-                )}
+                <EditorViewportContent
+                    activeQueueItem={activeQueueItem}
+                    language={language}
+                    isVideoMode={isVideoMode && !!activeVideo}
+                    imageData={imagesData[activeImageIndex]}
+                    totalImageCount={imagesData.length}
+                    size={calculateEditorSize()}
+                    videoProcessing={videoProcessing}
+                    isDragActive={isDragActive}
+                    openFileDialog={openFileDialog}
+                />
             </div>
             <SideNavigationBar
                 direction={Direction.RIGHT}
@@ -825,14 +512,8 @@ const EditorContainer: React.FC<IProps> = (
 };
 
 const mapDispatchToProps = {
-    addImageDataAction: addImageData,
-    updateImageDataAction: updateImageData,
-    updateActiveImageIndexAction: updateActiveImageIndex,
     updateActivePopupTypeAction: updateActivePopupType,
-    addVideoDataAction: addVideoData,
-    updateVideoModeAction: updateVideoMode,
     addQueueItemsAction: addQueueItems,
-    setActiveQueueItemAction: setActiveQueueItem,
     updateQueueItemAction: updateQueueItem
 };
 
