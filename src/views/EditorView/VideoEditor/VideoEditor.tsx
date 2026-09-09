@@ -1,3 +1,4 @@
+import {createVideoFramePlaceholders, getPlaybackFrame} from './VideoFrameState';
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { connect } from 'react-redux';
 import './VideoEditor.scss';
@@ -397,14 +398,7 @@ const VideoEditor: React.FC<IProps> = ({
                         }));
                         updateImageData(frameImageDataArray);
                     } else {
-                        for (let i = 0; i < frames; i++) {
-                            const frameImageData = ImageDataUtil.createImageDataFromFileData(activeVideo.fileData);
-                            frameImageData.loadStatus = false;
-                            if (i === 0) {
-                                frameImageData.isSelected = true;
-                            }
-                            frameImageDataArray.push(frameImageData);
-                        }
+                        frameImageDataArray = createVideoFramePlaceholders(activeVideo.fileData, frames);
                         addImageData(frameImageDataArray);
                     }
 
@@ -442,14 +436,7 @@ const VideoEditor: React.FC<IProps> = ({
             if (frameNumber === activeVideo.currentFrame) return;
             const timestamp = frameNumber / activeVideo.fps;
             // 同步设置 playbackImageData，确保标签与帧一致（fallback 到 latestImagesData 以抗 AI 批量推理时的 ref 滞后）
-            let frameImageData = imagesDataRef.current[frameNumber];
-            if (frameImageData && frameImageData.labelRects.length === 0 && EditorModel.latestImagesData) {
-                const latestData = EditorModel.latestImagesData[frameNumber];
-                if (latestData && latestData.labelRects.length > 0) {
-                    frameImageData = latestData;
-                }
-            }
-            EditorModel.playbackImageData = frameImageData || null;
+            EditorModel.playbackImageData = getPlaybackFrame(imagesDataRef.current, EditorModel.latestImagesData, frameNumber);
             updateVideoCurrentFrame(activeVideo.id, frameNumber, timestamp);
             updateActiveImageIndex(frameNumber);
         },
@@ -538,14 +525,7 @@ const VideoEditor: React.FC<IProps> = ({
                 updateVideoCurrentFrame(currentActiveVideo.id, frame, time);
 
                 // 2. 设置播放时的标注数据（绕过 Redux selector，直接读 ref）
-                let frameImageData = imagesDataRef.current[frame];
-                if (frameImageData && frameImageData.labelRects.length === 0 && EditorModel.latestImagesData) {
-                    const latestData = EditorModel.latestImagesData[frame];
-                    if (latestData && latestData.labelRects.length > 0) {
-                        frameImageData = latestData;
-                    }
-                }
-                EditorModel.playbackImageData = frameImageData || null;
+                EditorModel.playbackImageData = getPlaybackFrame(imagesDataRef.current, EditorModel.latestImagesData, frame);
 
                 // 3. 侧边栏高亮更新：节流到 ~5fps
                 const sidebarTimeSince = now - lastSidebarUpdateRef.current;
