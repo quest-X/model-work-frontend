@@ -11,6 +11,7 @@ import {AllLabelsRenderEngine} from '../AllLabelsRenderEngine';
 import {OverlayRenderEngine} from '../OverlayRenderEngine';
 import {RectRenderEngine} from '../RectRenderEngine';
 import {PolygonRenderEngine} from '../PolygonRenderEngine';
+import {SmartAnnotationActions} from '../../actions/SmartAnnotationActions';
 
 const data: EditorData = {
     viewPortContentSize: {width: 100, height: 100}, viewPortSize: {width: 100, height: 100},
@@ -82,4 +83,30 @@ it('preserves label filtering, smart-mode drawing and drag-only fine erasing', (
     engine.update({...data, event: new MouseEvent('mouseup')});
     engine.update({...data, event: new MouseEvent('mousemove')});
     expect(erase).toHaveBeenCalledTimes(2);
+});
+
+
+it('preserves the smart prompt click tolerance and ignores non-left clicks', () => {
+    jest.spyOn(GeneralSelector, 'getImageDragModeStatus').mockReturnValue(false);
+    jest.spyOn(GeneralSelector, 'getSmartAnnotationActiveStatus').mockReturnValue(true);
+    jest.spyOn(GeneralSelector, 'getSamNegativeMode').mockReturnValue(true);
+    jest.spyOn(LabelsSelector, 'getActiveImageData').mockReturnValue({...image, labelRects: []});
+    jest.spyOn(LabelsSelector, 'getActiveRectLabel').mockReturnValue(null);
+    jest.spyOn(RenderEngineUtil, 'isMouseOverImage').mockReturnValue(true);
+    jest.spyOn(RenderEngineUtil, 'isMouseOverCanvas').mockReturnValue(true);
+    jest.spyOn(RenderEngineUtil, 'transferPointFromViewPortContentToImage').mockImplementation(point => point);
+    const point = jest.spyOn(SmartAnnotationActions, 'addPoint').mockImplementation(() => undefined);
+    const bbox = jest.spyOn(SmartAnnotationActions, 'addBbox').mockImplementation(() => undefined);
+    const engine = new RectRenderEngine(document.createElement('canvas'));
+    const start = {...data, mousePositionOnViewPortContent: {x: 10, y: 10}};
+    engine.mouseDownHandler({...start, event: new MouseEvent('mousedown', {button: 2})});
+    engine.mouseUpHandler(start);
+    expect(point).not.toHaveBeenCalled();
+    engine.mouseDownHandler({...start, event: new MouseEvent('mousedown', {button: 0})});
+    engine.mouseUpHandler({...start, mousePositionOnViewPortContent: {x: 13, y: 10}});
+    expect(point).toHaveBeenCalledWith({x: 10, y: 10}, true);
+    engine.mouseDownHandler({...start, event: new MouseEvent('mousedown', {button: 0})});
+    engine.mouseUpHandler({...start, mousePositionOnViewPortContent: {x: 20, y: 30}});
+    expect(bbox).toHaveBeenCalledWith({x: 10, y: 10, width: 10, height: 20});
+    expect(engine.isInProgress()).toBe(false);
 });
