@@ -33,10 +33,11 @@ export class VOCImporter extends AnnotationImporter {
     public import(
         filesData: File[],
         onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => void,
-        onFailure: (error?:Error) => void
+        onFailure: (error?:Error) => void,
+        sourceImages?: ImageData[]
     ): void {
         try {
-            const inputImagesData: Record<string, ImageData> = VOCImporter.mapImageData();
+            const inputImagesData: Record<string, ImageData> = VOCImporter.mapImageData(sourceImages);
 
             this.loadAndParseFiles(filesData).then(results => {
                 for (const result of results.fileParseResults) {
@@ -135,8 +136,8 @@ export class VOCImporter extends AnnotationImporter {
         }), newLabelNames];
     }
 
-    private static mapImageData(): Record<string, ImageData> {
-        return LabelsSelector.getImagesData().reduce(
+    private static mapImageData(sourceImages?: ImageData[]): Record<string, ImageData> {
+        return (sourceImages ?? LabelsSelector.getImagesData()).reduce(
             (imageDataMap: Record<string, ImageData>, imageData: ImageData) => {
                 imageDataMap[imageData.fileData.name] = imageData;
                 return imageDataMap;

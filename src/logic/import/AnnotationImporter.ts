@@ -16,6 +16,7 @@ export abstract class AnnotationImporter {
     public abstract import(
         filesData: File[],
         onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => void,
-        onFailure: (error?:Error) => void
+        onFailure: (error?:Error) => void,
+        sourceImages?: ImageData[]
     ): void;
 }

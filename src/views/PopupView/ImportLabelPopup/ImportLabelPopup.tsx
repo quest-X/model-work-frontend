@@ -277,13 +277,14 @@ const ImportLabelPopup: React.FC<IProps> = ({
         });
     };
 
-    const importGenericAsync = (files: File[], format: AnnotationFormatType): Promise<ImportResult> => {
+    const importGenericAsync = (files: File[], format: AnnotationFormatType, sourceImages?: ImageData[]): Promise<ImportResult> => {
         if (!ImporterSpecData[format]) return Promise.reject(new Error('Unsupported file format'));
         return new Promise((resolve, reject) => {
             const importer = new (ImporterSpecData[format])([labelType]);
             importer.import(files,
                 (imageData: ImageData[], labelNames: LabelName[]) => resolve({ imageData, labelNames }),
-                (error?: Error) => reject(error || new Error('Import failed'))
+                (error?: Error) => reject(error || new Error('Import failed')),
+                sourceImages
             );
         });
     };
@@ -341,10 +342,7 @@ const ImportLabelPopup: React.FC<IProps> = ({
                             const newImageData = imgFiles.map(f => ImageDataUtil.createImageDataFromFileData(f));
                             const format = zipFormat || detectFormatFromFiles(annFiles);
                             if (!format) return Promise.reject(new Error('Cannot detect annotation format'));
-                            return importGenericAsync(annFiles, format).then(r => ({
-                                imageData: [...newImageData, ...r.imageData],
-                                labelNames: r.labelNames,
-                            }));
+                            return importGenericAsync(annFiles, format, newImageData);
                         } else {
                             const format = zipFormat || detectFormatFromFiles(annFiles);
                             if (!format) return Promise.reject(new Error('Cannot detect annotation format'));

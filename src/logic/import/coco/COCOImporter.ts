@@ -26,7 +26,8 @@ export class COCOImporter extends AnnotationImporter {
     public import(
         filesData: File[],
         onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => void,
-        onFailure: (error?:Error) => void
+        onFailure: (error?:Error) => void,
+        sourceImages?: ImageData[]
     ): void {
         if (filesData.length > 1) {
             onFailure(new COCOAnnotationFileCountError());
@@ -37,7 +38,7 @@ export class COCOImporter extends AnnotationImporter {
         reader.readAsText(filesData[0]);
         reader.onload = () => {
             try {
-                const inputImagesData: ImageData[] = LabelsSelector.getImagesData();
+                const inputImagesData = sourceImages ?? LabelsSelector.getImagesData();
                 const annotations = COCOImporter.deserialize(String(reader.result))
                 const {imagesData, labelNames} = this.applyLabels(inputImagesData, annotations);
                 onSuccess(imagesData,labelNames);

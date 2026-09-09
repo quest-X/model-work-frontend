@@ -14,7 +14,8 @@ export class VGGImporter extends AnnotationImporter {
     public import(
         filesData: File[],
         onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => void,
-        onFailure: (error?: Error) => void
+        onFailure: (error?: Error) => void,
+        sourceImages?: ImageData[]
     ): void {
         const jsonFiles = filesData.filter(f => f.name.toLowerCase().endsWith('.json'));
         if (jsonFiles.length === 0) {
@@ -42,7 +43,7 @@ export class VGGImporter extends AnnotationImporter {
                 // Merge all split JSONs (train/val/test) into one map
                 const merged: VGGObject = Object.assign({}, ...vggObjects);
                 try {
-                    const result = this.applyLabels(LabelsSelector.getImagesData(), merged);
+                    const result = this.applyLabels(sourceImages ?? LabelsSelector.getImagesData(), merged);
                     onSuccess(result.imagesData, result.labelNames);
                 } catch (e) {
                     onFailure(e as Error);
