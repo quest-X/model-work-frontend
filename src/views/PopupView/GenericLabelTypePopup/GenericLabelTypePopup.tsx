@@ -13,14 +13,14 @@ interface IProps {
     title: string,
     activeLabelType: LabelType,
     projectType: ProjectType;
-    onLabelTypeChange?: (labelType: LabelType) => any;
+    onLabelTypeChange?: (labelType: LabelType) => void;
     acceptLabel: string;
-    onAccept: (labelType: LabelType) => any;
+    onAccept: (labelType: LabelType) => void;
     skipAcceptButton?: boolean;
     disableAcceptButton?: boolean;
     rejectLabel: string;
-    onReject: (labelType: LabelType) => any;
-    renderInternalContent: (labelType: LabelType) => any;
+    onReject: (labelType: LabelType) => void;
+    renderInternalContent: (labelType: LabelType) => React.ReactNode;
     language: Language;
     allowedLabelTypes?: LabelType[];
 }

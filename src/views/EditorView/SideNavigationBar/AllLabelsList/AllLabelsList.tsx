@@ -20,14 +20,14 @@ import {LabelType} from '../../../../data/enums/LabelType';
 interface IProps {
     size: ISize;
     imageData: ImageData;
-    updateImageDataByIdAction: (id: string, newImageData: ImageData) => any;
+    updateImageDataByIdAction: typeof updateImageDataById;
     activeLabelId: string;
     highlightedLabelId: string;
-    updateActiveLabelNameIdAction: (activeLabelId: string) => any;
+    updateActiveLabelNameIdAction: typeof updateActiveLabelNameId;
     labelNames: LabelName[];
-    updateActiveLabelIdAction: (activeLabelId: string) => any;
+    updateActiveLabelIdAction: typeof updateActiveLabelId;
     language: Language;
-    imageAIStates: Map<string, { aiLabelsVisible: boolean; segmentationLabelsVisible: boolean; inferenceHistory: Array<any> }>;
+    imageAIStates: AppState['ai']['imageAIStates'];
 }
 
 interface LabelItem {

@@ -15,9 +15,9 @@ import {Language, LanguageConfig} from "../../../../data/LanguageConfig";
 interface IProps {
     size: ISize;
     imageData: ImageData;
-    updateImageDataById: (id: string, newImageData: ImageData) => any;
+    updateImageDataById: typeof updateImageDataByIdAction;
     labelNames: LabelName[];
-    updateActivePopupType: (activePopupType: PopupWindowType) => any;
+    updateActivePopupType: typeof updateActivePopupTypeAction;
     language: Language;
 }
 

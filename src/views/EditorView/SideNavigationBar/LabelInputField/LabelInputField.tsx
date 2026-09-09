@@ -27,12 +27,12 @@ interface IProps {
     id: string;
     value?: LabelName;
     options: LabelName[];
-    onDelete: (id: string) => any;
-    onSelectLabel: (labelRectId: string, labelNameId: string) => any;
-    updateHighlightedLabelId: (highlightedLabelId: string) => any;
-    updateActiveLabelId: (highlightedLabelId: string) => any;
-    updateActivePopupType: (activePopupType: PopupWindowType) => any;
-    toggleLabelVisibility?: (labelNameId: string) => any;
+    onDelete: (id: string) => void;
+    onSelectLabel: (labelRectId: string, labelNameId: string) => void;
+    updateHighlightedLabelId: typeof updateHighlightedLabelId;
+    updateActiveLabelId: typeof updateActiveLabelId;
+    updateActivePopupType: typeof updateActivePopupType;
+    toggleLabelVisibility?: (labelNameId: string) => void;
     language: Language;
 }
 
@@ -64,7 +64,7 @@ class LabelInputField extends React.Component<IProps, IState> {
     private dropdownLabel: HTMLDivElement;
     private dropdown: HTMLDivElement;
 
-    public constructor(props) {
+    public constructor(props: IProps) {
         super(props);
         this.state = {
             animate: false,
