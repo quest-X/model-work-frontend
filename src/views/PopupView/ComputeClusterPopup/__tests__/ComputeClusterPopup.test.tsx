@@ -273,7 +273,8 @@ describe('ComputeClusterPopup', () => {
         expect(nodeCard.querySelector('.ComputeNodeHeartbeat strong')).toHaveTextContent('刚刚');
         expect(nodeCard.querySelector('.ComputeNodeVersion')).toHaveTextContent('SERVICE v0.1.0');
         expect(screen.queryByRole('button', {name: '节点升级 1'})).not.toBeInTheDocument();
-        await user.click(screen.getByRole('button', {name: '管理 edge-01 节点升级'}));
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toBeDisabled();
+        await user.click(screen.getByRole('button', {name: '批量升级'}));
         expect(await screen.findByRole('heading', {name: '一键升级节点'})).toBeInTheDocument();
         expect(screen.getByText('统一查看资源关系、工作调度、网络资产、节点状态与终端连接。')).toBeInTheDocument();
         expect(nodeCard.querySelector('.ComputeNodeResourceGrid')).toHaveTextContent('16');
@@ -363,7 +364,7 @@ describe('ComputeClusterPopup', () => {
         await user.click(screen.getByRole('button', {name: '正常 2'}));
         expect(Array.from(container.querySelectorAll('.ComputeNodeCard h3')).map(element => element.textContent))
             .toEqual(['shandong-a', 'shanghai-a']);
-        expect(screen.getByRole('button', {name: '可升级 3'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '可升级 0'})).toBeInTheDocument();
     });
 
     it('maximizes and restores the compute cluster workspace', async () => {
@@ -1300,6 +1301,36 @@ describe('ComputeClusterPopup', () => {
         await user.click(screen.getByRole('button', {name: '刷新版本'}));
         expect(await screen.findByText('当前控制端尚未发布可用安装包。请先发布目标版本，再刷新列表。')).toBeInTheDocument();
         expect(screen.getByRole('button', {name: '创建升级批次'})).toBeDisabled();
+    });
+
+    it('does not advertise a node already on the published target version', async () => {
+        const user = userEvent.setup();
+        const manifest = {
+            version: 1 as const,
+            purpose: 'model-work-node.ota-release.v1' as const,
+            release_version: '1.1.1', minimum_node_version: '1.0.0', source_revision: 'b'.repeat(40),
+            platform: 'windows' as const, architecture: 'x86_64' as const,
+            artifact_url: 'https://releases.example/model-work-node-1.1.1-windows-x86_64.zip',
+            sha256: 'c'.repeat(64), size_bytes: 4096, signature: `${'A'.repeat(86)}==`,
+        };
+        const nodes = await service.nodes();
+        service.nodes.mockResolvedValue(nodes.map(node => ({
+            ...node,
+            agent_version: '1.1.1',
+            resources: {...node.resources, platform: 'windows', architecture: 'amd64'},
+        })));
+        service.upgradeReleases.mockResolvedValue({source: 'main', releases: [manifest]});
+
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await user.click(await screen.findByRole('button', {name: '节点管理 1'}));
+        await waitFor(() => expect(service.upgradeReleases).toHaveBeenCalledTimes(1));
+        expect(screen.getByRole('button', {name: '可升级 0'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toBeDisabled();
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toHaveTextContent('暂无可用升级');
+
+        await user.click(screen.getByRole('button', {name: '批量升级'}));
+        await user.selectOptions(screen.getByLabelText('当前控制端的升级版本'), '1.1.1');
+        expect(screen.getByText('已是目标版本，无需升级')).toBeInTheDocument();
     });
 
     it('creates an OTA batch from a Main version without uploading a manifest', async () => {
