@@ -35,7 +35,7 @@ export class COCOImporter extends AnnotationImporter {
 
         const reader = new FileReader();
         reader.readAsText(filesData[0]);
-        reader.onloadend = () => {
+        reader.onload = () => {
             try {
                 const inputImagesData: ImageData[] = LabelsSelector.getImagesData();
                 const annotations = COCOImporter.deserialize(String(reader.result))
