@@ -5,6 +5,9 @@ import {NotificationContent} from "../data/info/NotificationsData";
 import {LanguageConfig} from "../data/LanguageConfig";
 import {store} from "../index";
 
+type InferenceProgressNotification = INotification & Required<Pick<INotification,
+    'startTime' | 'currentStep' | 'totalSteps' | 'stepTimes'>>;
+
 export class NotificationUtil {
     public static createErrorNotification(content: NotificationContent): INotification {
         return {
@@ -42,7 +45,7 @@ export class NotificationUtil {
         }
     }
 
-    public static createInferenceProgressNotification(): INotification {
+    public static createInferenceProgressNotification(): InferenceProgressNotification {
         const now = Date.now();
         const language = store.getState().general.language;
         const texts = LanguageConfig[language];
@@ -65,7 +68,7 @@ export class NotificationUtil {
         }
     }
 
-    public static updateInferenceProgress(notification: INotification, step: number, description: string): INotification {
+    public static updateInferenceProgress(notification: InferenceProgressNotification, step: number, description: string): InferenceProgressNotification {
         const now = Date.now();
         const newStepTimes = { ...notification.stepTimes };
         const language = store.getState().general.language;
@@ -90,10 +93,10 @@ export class NotificationUtil {
         }
     }
 
-    public static completeInferenceProgress(notification: INotification, objectCount: number): INotification {
+    public static completeInferenceProgress(notification: InferenceProgressNotification, objectCount: number): InferenceProgressNotification {
         const now = Date.now();
-        const finalStepDuration = now - notification.stepTimes!.stepStartTime;
-        const allStepDurations = [...notification.stepTimes!.stepDurations, finalStepDuration];
+        const finalStepDuration = now - notification.stepTimes.stepStartTime;
+        const allStepDurations = [...notification.stepTimes.stepDurations, finalStepDuration];
         
         console.log(`📊 记录最后步骤 ${notification.currentStep} 耗时: ${(finalStepDuration / 1000).toFixed(2)}s`);
         console.log(`📊 所有步骤耗时: [${allStepDurations.map(d => (d / 1000).toFixed(2) + 's').join(', ')}]`);
@@ -108,7 +111,7 @@ export class NotificationUtil {
             stepDescription: texts.aiInference.completedStep,
             description: `${texts.aiInference.detectedObjects.replace('：', '')} ${objectCount}`,
             stepTimes: {
-                ...notification.stepTimes!,
+                ...notification.stepTimes,
                 stepDurations: allStepDurations,
                 totalObjects: objectCount
             }

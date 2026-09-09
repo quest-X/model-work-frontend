@@ -41,19 +41,15 @@ const pendingImageUpdates: Map<string, ImageData> = new Map();
 let flushScheduled = false;
 let flushIdleHandle: number | null = null;
 
-type IdleDeadline = { didTimeout: boolean; timeRemaining: () => number; };
-type RIC = (cb: (d: IdleDeadline) => void, opts?: { timeout?: number }) => number;
-type CIC = (handle: number) => void;
-
-const ric: RIC = (typeof (globalThis as any).requestIdleCallback === 'function')
-    ? (globalThis as any).requestIdleCallback.bind(globalThis)
-    : ((cb: (d: IdleDeadline) => void) => setTimeout(
+const ric: typeof requestIdleCallback = (typeof globalThis.requestIdleCallback === 'function')
+    ? globalThis.requestIdleCallback.bind(globalThis)
+    : (cb => window.setTimeout(
         () => cb({ didTimeout: true, timeRemaining: () => 0 }), 16
-    ) as unknown as number);
+    ));
 
-const cic: CIC = (typeof (globalThis as any).cancelIdleCallback === 'function')
-    ? (globalThis as any).cancelIdleCallback.bind(globalThis)
-    : ((h: number) => clearTimeout(h));
+const cic: typeof cancelIdleCallback = (typeof globalThis.cancelIdleCallback === 'function')
+    ? globalThis.cancelIdleCallback.bind(globalThis)
+    : (h => window.clearTimeout(h));
 
 function flushPendingImageUpdates(): void {
     flushScheduled = false;
@@ -173,7 +169,7 @@ export class AIDetectionActions {
                             // 删除进度通知
                             store.dispatch(deleteNotificationById(progressNotification.id));
 
-                            const totalTime = ((Date.now() - progressNotification.startTime!) / 1000).toFixed(2);
+                            const totalTime = ((Date.now() - progressNotification.startTime) / 1000).toFixed(2);
 
                             // 显示成功通知（重新读语言 — 推理期间用户可能切换了）
                             const langNow = store.getState().general.language;
@@ -929,41 +925,4 @@ export class AIDetectionActions {
         // 创建了AI标签，跳过重复标签（性能优化：移除日志）
     }
 
-    /**
-     * 单帧检测用 seek — 使用 rVFC 获得最高精度（视频可见时使用）
-     */
-    private static seekVideoToTime(video: HTMLVideoElement, time: number): Promise<void> {
-        return new Promise<void>((resolve) => {
-            if (Math.abs(video.currentTime - time) < 0.001 && video.readyState >= 2) {
-                resolve();
-                return;
-            }
-
-            let settled = false;
-            let globalTimer: ReturnType<typeof setTimeout> | null = null;
-            const settle = () => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(globalTimer);
-                resolve();
-            };
-
-            globalTimer = setTimeout(settle, 5000);
-
-            const onSeeked = () => {
-                if ('requestVideoFrameCallback' in video) {
-                    (video as any).requestVideoFrameCallback(() => settle());
-                } else {
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            setTimeout(settle, 20);
-                        });
-                    });
-                }
-            };
-
-            video.addEventListener('seeked', onSeeked, { once: true });
-            video.currentTime = time;
-        });
-    }
 }
