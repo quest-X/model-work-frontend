@@ -111,8 +111,8 @@ describe('image thumbnail failures', () => {
             });
             return image;
         });
-        const drawImage = jest.fn();
-        if (failure === 'canvas throw') drawImage.mockImplementationOnce(() => {throw new Error('Cannot draw');});
+        const drawImage: CanvasRenderingContext2D['drawImage'] = jest.fn();
+        if (failure === 'canvas throw') jest.mocked(drawImage).mockImplementationOnce(() => {throw new Error('Cannot draw');});
         const context = jest.spyOn(HTMLCanvasElement.prototype, 'getContext')
             .mockReturnValue({drawImage} as CanvasRenderingContext2D);
         if (failure === 'missing canvas context') context.mockReturnValueOnce(null);

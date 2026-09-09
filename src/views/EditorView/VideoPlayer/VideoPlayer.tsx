@@ -40,7 +40,7 @@ interface IProps {
 }
 
 const isAbortError = (cause: unknown): boolean =>
-    typeof cause === 'object' && cause !== null && 'name' in cause && cause.name === 'AbortError';
+    typeof cause === 'object' && cause !== null && Reflect.get(cause, 'name') === 'AbortError';
 
 const VideoPlayer: React.FC<IProps> = ({
     language,
