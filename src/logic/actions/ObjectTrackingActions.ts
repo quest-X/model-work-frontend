@@ -67,19 +67,15 @@ const pendingTrackingUpdates: Map<string, ImageData> = new Map();
 let trackingFlushScheduled = false;
 let trackingFlushHandle: number | null = null;
 
-type IdleDeadline = { didTimeout: boolean; timeRemaining: () => number };
-type RIC = (cb: (d: IdleDeadline) => void, opts?: { timeout?: number }) => number;
-type CIC = (handle: number) => void;
-
-const ric: RIC = (typeof (globalThis as any).requestIdleCallback === 'function')
-    ? (globalThis as any).requestIdleCallback.bind(globalThis)
-    : ((cb: (d: IdleDeadline) => void) => setTimeout(
+const ric: typeof requestIdleCallback = (typeof globalThis.requestIdleCallback === 'function')
+    ? globalThis.requestIdleCallback.bind(globalThis)
+    : (cb => window.setTimeout(
         () => cb({ didTimeout: true, timeRemaining: () => 0 }), 16
-    ) as unknown as number);
+    ));
 
-const cic: CIC = (typeof (globalThis as any).cancelIdleCallback === 'function')
-    ? (globalThis as any).cancelIdleCallback.bind(globalThis)
-    : ((h: number) => clearTimeout(h));
+const cic: typeof cancelIdleCallback = (typeof globalThis.cancelIdleCallback === 'function')
+    ? globalThis.cancelIdleCallback.bind(globalThis)
+    : (h => window.clearTimeout(h));
 
 function flushTrackingUpdates(): void {
     trackingFlushScheduled = false;
@@ -307,7 +303,7 @@ export class ObjectTrackingActions {
                         suggestedLabel: labelId ? null : className,
                         confidence: f.confidence || 0,
                         trackingGroupId,
-                    } as LabelPolygon;
+                    };
 
                     const updated: ImageData = {
                         ...baseImg,
@@ -493,7 +489,7 @@ export class ObjectTrackingActions {
                         suggestedLabel: labelId ? null : className,
                         confidence: f.confidence || 0,
                         trackingGroupId,
-                    } as LabelPolygon;
+                    };
 
                     const updated: ImageData = {
                         ...baseImg,
