@@ -14,7 +14,7 @@ export class AIActions {
         }, [])
     }
 
-    public static detect(imageId: string, image: HTMLImageElement): void {
+    public static detect(imageId: string): void {
         const imageData =  LabelsSelector.getImageDataById(imageId)
         const activeLabelType: LabelType = LabelsSelector.getActiveLabelType();
         const isRoboflowAPIModelLoaded = AISelector.isRoboflowAPIModelLoaded();

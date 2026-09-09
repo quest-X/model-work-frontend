@@ -135,7 +135,8 @@ export class Editor extends React.Component<IProps, IState> {
         if (prevProps.activeLabelType !== activeLabelType) {
             // 绘制工具改变时，始终切换渲染引擎到对应的工具类型
             EditorActions.swapSupportRenderingEngine(activeLabelType);
-            AIActions.detect(imageData.id, ImageRepository.getById(imageData.id));
+            ImageRepository.getById(imageData.id); // Retain the active-image LRU touch.
+            AIActions.detect(imageData.id);
         }
 
         // loadImage renders only after it has a valid full-resolution image.
@@ -203,7 +204,7 @@ export class Editor extends React.Component<IProps, IState> {
             const cachedImage = ImageRepository.getById(imageData.id);
             if (cachedImage) {
                 EditorActions.setActiveImage(cachedImage);
-                AIActions.detect(imageData.id, cachedImage);
+                AIActions.detect(imageData.id);
                 this.updateModelAndRender();
             } else {
                 this.loadMissingImage(imageData, generation);
@@ -241,7 +242,7 @@ export class Editor extends React.Component<IProps, IState> {
         this.props.updateImageDataById(imageData.id, updatedImageData);
         ImageRepository.storeImage(imageData.id, image);
         EditorActions.setActiveImage(image);
-        AIActions.detect(imageData.id, image);
+        AIActions.detect(imageData.id);
         EditorActions.setLoadingStatus(false);
         this.updateModelAndRender();
     };
