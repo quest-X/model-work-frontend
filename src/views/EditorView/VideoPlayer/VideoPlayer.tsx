@@ -39,6 +39,9 @@ interface IProps {
     processingProgress?: number; // 视频处理进度 (0-100)
 }
 
+const isAbortError = (cause: unknown): boolean =>
+    typeof cause === 'object' && cause !== null && 'name' in cause && cause.name === 'AbortError';
+
 const VideoPlayer: React.FC<IProps> = ({
     language,
     videoSrc,
@@ -148,7 +151,7 @@ const VideoPlayer: React.FC<IProps> = ({
                 video.play().then(() => {
                     video.requestVideoFrameCallback(callback);
                 }).catch((err: unknown) => {
-                    if (!(err instanceof Error) || err.name !== 'AbortError') {
+                    if (!isAbortError(err)) {
                         console.error('帧率检测播放失败:', err);
                     }
                     setIsFpsDetecting(false);
@@ -344,7 +347,7 @@ const VideoPlayer: React.FC<IProps> = ({
                     }
                 } catch (err: unknown) {
                     // 忽略 AbortError，这是正常的暂停行为
-                    if (!(err instanceof Error) || err.name !== 'AbortError') {
+                    if (!isAbortError(err)) {
                         console.error('视频播放失败:', err);
                     }
                 } finally {
@@ -559,4 +562,3 @@ const VideoPlayer: React.FC<IProps> = ({
 };
 
 export default VideoPlayer;
-
