@@ -247,10 +247,11 @@ const FramePlayer: React.FC<IProps> = ({
             }
 
             // 驱逐由 evictOldFrames 统一处理，此处不做
+            const sourceFile = frameFile;
 
             return new Promise<HTMLImageElement>((resolve, reject) => {
                 const img = new Image();
-                const url = URL.createObjectURL(frameFile!);
+                const url = URL.createObjectURL(sourceFile);
                 blobUrls.set(frameIdx, url);
                 img.onload = () => {
                     if (!isCurrent()) {
@@ -359,10 +360,11 @@ const FramePlayer: React.FC<IProps> = ({
             if (!thumbnailCanvasRef.current) {
                 thumbnailCanvasRef.current = document.createElement('canvas');
             }
+            const thumbnailCanvas = thumbnailCanvasRef.current;
             const thumbnailSize = getVideoThumbnailSize(videoSize.width, videoSize.height);
-            thumbnailCanvasRef.current.width = thumbnailSize.width;
-            thumbnailCanvasRef.current.height = thumbnailSize.height;
-            const ctx = thumbnailCanvasRef.current.getContext('2d');
+            thumbnailCanvas.width = thumbnailSize.width;
+            thumbnailCanvas.height = thumbnailSize.height;
+            const ctx = thumbnailCanvas.getContext('2d');
             if (!ctx) return;
 
             ctx.clearRect(0, 0, thumbnailSize.width, thumbnailSize.height);
@@ -370,7 +372,7 @@ const FramePlayer: React.FC<IProps> = ({
 
             // Use async toBlob instead of synchronous toDataURL to avoid blocking
             // the main thread (~512ms total savings per Gemini/DevTools analysis).
-            const blob: Blob | null = await new Promise(r => thumbnailCanvasRef.current!.toBlob(r, 'image/jpeg', 0.5));
+            const blob: Blob | null = await new Promise(r => thumbnailCanvas.toBlob(r, 'image/jpeg', 0.5));
             if (!blob || !isCurrent()) return;
             const thumbUrl = URL.createObjectURL(blob);
             await new Promise<void>(resolve => {
@@ -591,7 +593,7 @@ const FramePlayer: React.FC<IProps> = ({
                 // 预拉所有 batch：每个 batch 的第一帧并发触发 loadFrameImage，
                 // 让网络 fetch / ZIP 解压与后续的 canvas+thumbnail 主线程工作流水线重叠
                 if (sessionId) {
-                    const warms: Promise<any>[] = [];
+                    const warms: Promise<HTMLImageElement | null>[] = [];
                     for (let start = 0; start < initEnd; start += BATCH_SIZE) {
                         warms.push(loadFrameImage(start).catch(() => null));
                     }
