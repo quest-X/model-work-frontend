@@ -81,8 +81,8 @@ it('holds the flag during inference, preserves all progress steps and clears onl
         labelRects: [expect.objectContaining({id: 'manual'})]}), [], 'smart');
     expect(testStore.getState().notifications.queue).toEqual([]);
     const actions = jest.mocked(store.dispatch).mock.calls.map(([action]) => action);
-    expect(actions.filter(action => action.type === Action.UPDATE_NOTIFICATION_BY_ID)
-        .map(action => action.payload.notification.currentStep)).toEqual([1, 2, 3]);
+    expect(actions.flatMap(action => action.type === Action.UPDATE_NOTIFICATION_BY_ID
+        ? [action.payload.notification.currentStep] : [])).toEqual([1, 2, 3]);
     expect(actions.filter(action => action.type === Action.DELETE_NOTIFICATION_BY_ID)).toHaveLength(1);
 });
 

@@ -1,6 +1,7 @@
 import {applyMiddleware, createStore, Store} from 'redux';
 import {LabelStatus} from '../../../data/enums/LabelStatus';
 import {rootReducer, AppState} from '../../../store';
+import {updateVideoMode} from '../../../store/video/actionCreators';
 import {
     acceptVisualSearchBBox,
     acceptVisualSearchMask,
@@ -58,6 +59,14 @@ describe('undoMiddleware restore snapshots', () => {
         jest.restoreAllMocks();
     });
 
+    it('passes a non-label action through to its reducer without changing the dispatch result', () => {
+        const reduxStore = createStore(rootReducer, applyMiddleware(undoMiddleware));
+        const action = updateVideoMode(true);
+        expect(reduxStore.dispatch(action)).toBe(action);
+        expect(reduxStore.getState().video.isVideoMode).toBe(true);
+        expect(UndoStack.size()).toBe(0);
+    });
+
     it('does not resurrect an accepted result after immediate undo, edit, and undo', () => {
         jest.spyOn(performance, 'now').mockReturnValue(100);
         const file = new File(['pixels'], 'goose.jpg', {
@@ -75,7 +84,7 @@ describe('undoMiddleware restore snapshots', () => {
             labelNameIds: ['goose'],
             isVisitedByRoboflowAPI: false,
         };
-        const initial = rootReducer(undefined, {type: '@@INIT'});
+        const initial = createStore(rootReducer).getState();
         const preloaded: AppState = {
             ...initial,
             labels: {
@@ -278,7 +287,7 @@ describe('undoMiddleware restore snapshots', () => {
             labelNameIds: ['goose'],
             isVisitedByRoboflowAPI: false,
         };
-        const initial = rootReducer(undefined, {type: '@@INIT'});
+        const initial = createStore(rootReducer).getState();
         const preloaded: AppState = {
             ...initial,
             labels: {

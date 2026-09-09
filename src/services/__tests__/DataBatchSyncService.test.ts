@@ -168,7 +168,7 @@ describe('DataBatchSyncService', () => {
             0,
             [{x: 1, y: 1}, {x: 5, y: 1}, {x: 3, y: 4}],
         );
-        malformed.extra.visualSearch.componentCount = undefined as unknown as number;
+        malformed.extra.visualSearch.componentCount = undefined;
 
         expect(() => DataBatchSyncService.buildMetadata(
             [file],

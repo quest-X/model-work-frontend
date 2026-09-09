@@ -1,4 +1,4 @@
-import { VideoState, VideoData } from './types';
+import { VideoState, VideoData, VideoActionTypes } from './types';
 import {
     UPDATE_VIDEO_MODE,
     ADD_VIDEO_DATA,
@@ -41,7 +41,7 @@ const removeVideo = (state: VideoState, videoId: string): VideoState => {
     };
 };
 
-export function videoReducer(state = initialState, action: any): VideoState {
+export function videoReducer(state = initialState, action: VideoActionTypes): VideoState {
     switch (action.type) {
         case UPDATE_VIDEO_MODE:
             return {
