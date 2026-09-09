@@ -119,7 +119,6 @@ export class AISegmentationActions {
         const isVideo = videoState.isVideoMode;
         const allImagesData: ImageData[] = store.getState().labels.imagesData;
         const activeVideo = isVideo ? videoState.activeVideo : null;
-        const fps = activeVideo?.fps || 30;
 
         // 通知辅助（节流 150ms）
         let lastNotifyTime = 0;
@@ -141,17 +140,54 @@ export class AISegmentationActions {
         const preFrames = activeVideo?.preExtractedFrames;
         const sessionId = activeVideo?.sessionId || EditorModel.videoSessionId;
 
+        const segmentImages = async () => {
+            // ======== 普通图像模式：4路并发流式分割 ========
+            // 批量模式跳过已推理过的图;单图模式允许重复推理
+            const imageQueue = isBatch
+                ? imagesToSegment.filter(img => !img.labelPolygons.some(p => p.isCreatedByAI))
+                : imagesToSegment;
+            successCount = total - imageQueue.length;
+
+            // 批量推理前统一设置标签视图（避免对每帧 dispatch 一次）
+            this.showSegmentationLabels();
+
+            const imageTasks = imageQueue.map((imageData) => async (): Promise<SegmentationResult[] | null> => {
+                try {
+                    const blob = imageData.fileData;
+                    const results = await SegmentationAPIDetector.predictFromBlob(blob, imageData.fileData?.name || 'image.jpg');
+                    this.applySingleResult(imageData, results);
+                    totalObjects += results.length;
+                    successCount++;
+                    return results;
+                } catch (err) {
+                    console.error(`[Segment] Image ${imageData.fileData?.name} FAILED:`, (err as Error).message);
+                    failCount++;
+                    store.dispatch(addInferenceHistory(imageData.id, 0, false, 'segmentation'));
+                    return null;
+                }
+            });
+
+            await this.withConcurrency(imageTasks, 4, (done, ttl) => {
+                const pct = Math.round((done / ttl) * 100);
+                notify(2, `${t().aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${imageQueue[done - 1]?.fileData?.name || `Image ${done}`}`);
+            });
+        };
+
         if (isVideo && (preFrames || sessionId || EditorModel.videoElement)) {
             // ======== Video mode: 帧捕获 + 分割 ========
             // 批量模式跳过已有 AI 多边形的帧；单图模式允许重复推理
-            const selectedIds = new Set(imagesToSegment.map(img => img.id));
-            const frameQueue: { frameIdx: number; imageData: ImageData }[] = [];
-            for (let frameIdx = 0; frameIdx < allImagesData.length; frameIdx++) {
-                const img = allImagesData[frameIdx];
-                if (!selectedIds.has(img.id)) continue;
-                if (isBatch && img.labelPolygons.some(p => p.isCreatedByAI)) continue;
-                frameQueue.push({ frameIdx, imageData: img });
-            }
+            const selectFrames = () => {
+                const selectedIds = new Set(imagesToSegment.map(img => img.id));
+                const frameQueue: { frameIdx: number; imageData: ImageData }[] = [];
+                for (let frameIdx = 0; frameIdx < allImagesData.length; frameIdx++) {
+                    const img = allImagesData[frameIdx];
+                    if (!selectedIds.has(img.id)) continue;
+                    if (isBatch && img.labelPolygons.some(p => p.isCreatedByAI)) continue;
+                    frameQueue.push({ frameIdx, imageData: img });
+                }
+                return frameQueue;
+            };
+            const frameQueue = selectFrames();
             successCount = total - frameQueue.length;
 
             const captureTotal = frameQueue.length;
@@ -164,49 +200,50 @@ export class AISegmentationActions {
                 return;
             }
 
-            let capturedBlobs: Array<Blob | null>;
+            const captureFrames = async (): Promise<Array<Blob | null>> => {
+                let capturedBlobs: Array<Blob | null>;
 
-            if (preFrames) {
-                // fast_ffmpeg_mode (full-load)
-                capturedBlobs = frameQueue.map(({ frameIdx }) =>
-                    frameIdx < preFrames.length ? (preFrames[frameIdx] as Blob) : null
-                );
-            } else if (sessionId) {
-                // fast_ffmpeg_mode (on-demand): 按真实帧索引逐帧取帧
-                // 注意：必须用 frameQueue[i].frameIdx（视频中的真实位置），
-                // 而不是循环变量 i（frameQueue 的下标）——跳帧推理时两者不同！
-                capturedBlobs = new Array(captureTotal).fill(null);
-                for (let i = 0; i < captureTotal; i++) {
-                    if (this.isCancelled()) { console.log('[Segment/Capture] 用户取消,中止按需取帧'); break; }
-                    const { frameIdx } = frameQueue[i];
-                    const pct = Math.round((i / captureTotal) * 33);
-                    notify(1,
-                        `${t().aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`,
-                        `${pct}% — frame ${frameIdx}`
+                if (preFrames) {
+                    // fast_ffmpeg_mode (full-load)
+                    capturedBlobs = frameQueue.map(({ frameIdx }) =>
+                        frameIdx < preFrames.length ? (preFrames[frameIdx] as Blob) : null
                     );
-                    try {
-                        const [frame] = await FrameExtractorService.fetchFrameRange(sessionId, frameIdx, 1);
-                        capturedBlobs[i] = frame as Blob;
-                    } catch (err) {
-                        console.warn(`[Segment/Capture] fetch frame ${frameIdx} failed:`, err);
+                } else if (sessionId) {
+                    // fast_ffmpeg_mode (on-demand): 按真实帧索引逐帧取帧
+                    // 注意：必须用 frameQueue[i].frameIdx（视频中的真实位置），
+                    // 而不是循环变量 i（frameQueue 的下标）——跳帧推理时两者不同！
+                    capturedBlobs = new Array(captureTotal).fill(null);
+                    for (let i = 0; i < captureTotal; i++) {
+                        if (this.isCancelled()) { console.log('[Segment/Capture] 用户取消,中止按需取帧'); break; }
+                        const { frameIdx } = frameQueue[i];
+                        const pct = Math.round((i / captureTotal) * 33);
+                        notify(1,
+                            `${t().aiInference.steps.captureFrame} (${i + 1}/${captureTotal})`,
+                            `${pct}% — frame ${frameIdx}`
+                        );
+                        try {
+                            const [frame] = await FrameExtractorService.fetchFrameRange(sessionId, frameIdx, 1);
+                            capturedBlobs[i] = frame as Blob;
+                        } catch (err) {
+                            console.warn(`[Segment/Capture] fetch frame ${frameIdx} failed:`, err);
+                        }
+                        if (i % 10 === 0 && i > 0) await this.yieldToUI();
                     }
-                    if (i % 10 === 0 && i > 0) await this.yieldToUI();
+                } else {
+                    // raw_browser_mode: not implemented for segmentation (fallback)
+                    console.warn('[BatchSegment] raw_browser_mode not supported for segmentation');
+                    capturedBlobs = [];
                 }
-            } else {
-                // raw_browser_mode: not implemented for segmentation (fallback)
-                console.warn('[BatchSegment] raw_browser_mode not supported for segmentation');
-                capturedBlobs = [];
-            }
+                return capturedBlobs;
+            };
+            const capturedBlobs = await captureFrames();
 
             // === 流式分割推理：4路并发 ===
             const inferStartTime = Date.now();
             console.log('[Segment] Streaming start', { captureTotal, concurrency: 4 });
 
             // 批量推理前统一设置标签视图（避免对每帧 dispatch 一次）
-            store.dispatch(updateActiveLabelViewType(LabelType.POLYGON));
-            if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
-                store.dispatch(updateActiveLabelType(LabelType.POLYGON));
-            }
+            this.showSegmentationLabels();
 
             const tasks = capturedBlobs.map((blob, i) => {
                 return async (): Promise<SegmentationResult[] | null> => {
@@ -245,79 +282,57 @@ export class AISegmentationActions {
             });
 
         } else {
-            // ======== 普通图像模式：4路并发流式分割 ========
-            // 批量模式跳过已推理过的图;单图模式允许重复推理
-            const imageQueue = isBatch
-                ? imagesToSegment.filter(img => !img.labelPolygons.some(p => p.isCreatedByAI))
-                : imagesToSegment;
-            successCount = total - imageQueue.length;
+            await segmentImages();
+        }
 
-            // 批量推理前统一设置标签视图（避免对每帧 dispatch 一次）
-            store.dispatch(updateActiveLabelViewType(LabelType.POLYGON));
-            if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
-                store.dispatch(updateActiveLabelType(LabelType.POLYGON));
+        const finishBatch = () => {
+            // ── 完成 / 取消 ──
+            const wasCancelled = this.isCancelled();
+            store.dispatch(deleteNotificationById(progressNotification.id));
+            store.dispatch(updateFullImageInferenceStatus(false));
+            const allFailed = !wasCancelled && failCount > 0 && successCount === 0;
+            if (wasCancelled) {
+                task.cancel();
+            } else if (allFailed) {
+                task.fail(new Error('Batch segmentation failed for every image'));
+            } else {
+                task.complete();
             }
 
-            const imageTasks = imageQueue.map((imageData) => async (): Promise<SegmentationResult[] | null> => {
-                try {
-                    const blob = imageData.fileData;
-                    const results = await SegmentationAPIDetector.predictFromBlob(blob, imageData.fileData?.name || 'image.jpg');
-                    this.applySingleResult(imageData, results);
-                    totalObjects += results.length;
-                    successCount++;
-                    return results;
-                } catch (err) {
-                    console.error(`[Segment] Image ${imageData.fileData?.name} FAILED:`, (err as Error).message);
-                    failCount++;
-                    store.dispatch(addInferenceHistory(imageData.id, 0, false, 'segmentation'));
-                    return null;
-                }
-            });
+            const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+            console.log('[BatchSegment] Complete', { totalTime: totalTime + 's', successCount, failCount, totalObjects });
 
-            await this.withConcurrency(imageTasks, 4, (done, ttl) => {
-                const pct = Math.round((done / ttl) * 100);
-                notify(2, `${t().aiInference.steps.inferring} (${done}/${ttl})`, `${pct}% — ${imageQueue[done - 1]?.fileData?.name || `Image ${done}`}`);
-            });
+            const doneTexts = t();
+            const completionNotification = allFailed
+                ? NotificationUtil.createErrorNotification(doneTexts.notifications.modelInferenceError)
+                : NotificationUtil.createSuccessNotification({
+                    header: doneTexts.notifications.batchDetectionCompleted,
+                    description: doneTexts.notifications.batchDetectionCompletedMessage
+                        .replace('{total}', String(successCount))
+                        .replace('{count}', String(totalObjects))
+                        .replace('{time}', totalTime)
+                });
+            store.dispatch(submitNewNotification(completionNotification));
+
+            if (!store.getState().general.enablePerClassColoration) {
+                store.dispatch(updatePerClassColorationStatus(true));
+            }
+
+            if (successCount > 2) {
+                EditorModel.lastBatchInferenceImageCount = successCount;
+                window.dispatchEvent(new CustomEvent('batchInferenceComplete', { detail: { count: successCount } }));
+            }
+
+            EditorActions.fullRender();
+        };
+        finishBatch();
+    }
+
+    private static showSegmentationLabels(): void {
+        store.dispatch(updateActiveLabelViewType(LabelType.POLYGON));
+        if (!store.getState().general.smartAnnotationActive && !store.getState().general.eraserMode) {
+            store.dispatch(updateActiveLabelType(LabelType.POLYGON));
         }
-
-        // ── 完成 / 取消 ──
-        const wasCancelled = this.isCancelled();
-        store.dispatch(deleteNotificationById(progressNotification.id));
-        store.dispatch(updateFullImageInferenceStatus(false));
-        const allFailed = !wasCancelled && failCount > 0 && successCount === 0;
-        if (wasCancelled) {
-            task.cancel();
-        } else if (allFailed) {
-            task.fail(new Error('Batch segmentation failed for every image'));
-        } else {
-            task.complete();
-        }
-
-        const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
-        console.log('[BatchSegment] Complete', { totalTime: totalTime + 's', successCount, failCount, totalObjects });
-
-        const doneTexts = t();
-        const completionNotification = allFailed
-            ? NotificationUtil.createErrorNotification(doneTexts.notifications.modelInferenceError)
-            : NotificationUtil.createSuccessNotification({
-                header: doneTexts.notifications.batchDetectionCompleted,
-                description: doneTexts.notifications.batchDetectionCompletedMessage
-                    .replace('{total}', String(successCount))
-                    .replace('{count}', String(totalObjects))
-                    .replace('{time}', totalTime)
-            });
-        store.dispatch(submitNewNotification(completionNotification));
-
-        if (!store.getState().general.enablePerClassColoration) {
-            store.dispatch(updatePerClassColorationStatus(true));
-        }
-
-        if (successCount > 2) {
-            EditorModel.lastBatchInferenceImageCount = successCount;
-            window.dispatchEvent(new CustomEvent('batchInferenceComplete', { detail: { count: successCount } }));
-        }
-
-        EditorActions.fullRender();
     }
 
     /**
