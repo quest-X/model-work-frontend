@@ -39,7 +39,7 @@ interface IProps {
     size: ISize;
     imageData: ImageData;
     activeLabelType: LabelType;
-    updateImageDataById: (id: string, newImageData: ImageData) => any;
+    updateImageDataById: typeof updateImageDataById;
     activePopupType: PopupWindowType;
     activeLabelId: string;
     customCursorStyle: CustomCursorStyle;
@@ -49,8 +49,8 @@ interface IProps {
     activeLabelViewType?: LabelType;
     imageAIStates?: AIState['imageAIStates'];
     enablePerClassColoration?: boolean;
-    updateActiveLabelId?: (labelId: string) => any;
-    updatePreventCustomCursorStatus?: (preventCustomCursor: boolean) => any;
+    updateActiveLabelId?: typeof updateActiveLabelId;
+    updatePreventCustomCursorStatus?: typeof updatePreventCustomCursorStatus;
 }
 
 interface IState {
@@ -64,7 +64,7 @@ export class Editor extends React.Component<IProps, IState> {
     private requestGeneration: number = 0;
     private mounted: boolean = false;
 
-    constructor(props) {
+    constructor(props: IProps) {
         super(props);
         this.state = {
             viewPortSize: {
@@ -117,7 +117,7 @@ export class Editor extends React.Component<IProps, IState> {
         this.unmountEventListeners();
     }
 
-    public componentDidUpdate(prevProps: Readonly<IProps>, prevState: Readonly<IState>, snapshot?: unknown): void {
+    public componentDidUpdate(prevProps: Readonly<IProps>): void {
         const {imageData, activeLabelType} = this.props;
         const imageChanged = prevProps.imageData.id !== imageData.id;
 
@@ -186,7 +186,7 @@ export class Editor extends React.Component<IProps, IState> {
     // LOAD IMAGE
     // =================================================================================================================
 
-    private loadImage = async (imageData: ImageData): Promise<any> => {
+    private loadImage = async (imageData: ImageData): Promise<void> => {
         const generation = ++this.requestGeneration;
         if (imageData.loadStatus) {
             // 视频模式：复用缓存的 videoFrameImage（尺寸与视频一致），同步设置，零延迟
@@ -246,7 +246,7 @@ export class Editor extends React.Component<IProps, IState> {
         this.updateModelAndRender();
     };
 
-    private handleLoadImageError = (imageData: ImageData, generation: number, error?: any) => {
+    private handleLoadImageError = (imageData: ImageData, generation: number, error?: unknown) => {
         if (!this.isCurrentRequest(imageData.id, generation)) return;
         EditorActions.setLoadingStatus(false);
         console.error(`[Editor] 图像加载失败: ${imageData.fileData?.name} (size=${imageData.fileData?.size})`, error);

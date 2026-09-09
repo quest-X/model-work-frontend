@@ -229,7 +229,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
 
     const [activeTab, setActiveTab] = React.useState<'all' | 'detect' | 'segment'>('all');
 
-    const handleDeleteSegmentationResult = (result: SegmentationResult, index: number) => {
+    const handleDeleteSegmentationResult = (result: DisplayResult, index: number) => {
         const newSegmentationResults = segmentationResults.filter((_, i) => i !== index);
         updateSegmentationResults(newSegmentationResults, activeImageData?.id);
 
@@ -265,8 +265,8 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         }
 
         // ── 检测结果（_labelRectId 直接对应 labelRect）→ 直接删 ──
-        if ((result as any)._labelRectId) {
-            LabelActions.deleteRectLabelById(activeImageData.id, (result as any)._labelRectId);
+        if (result._labelRectId) {
+            LabelActions.deleteRectLabelById(activeImageData.id, result._labelRectId);
             return;
         }
 
@@ -292,7 +292,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
     };
 
     /** 返回与 result 最匹配的标注对象的 ID（labelPolygon 或 labelRect），找不到返回 null */
-    const findBestMatchingLabelId = (result: SegmentationResult): string | null => {
+    const findBestMatchingLabelId = (result: DisplayResult): string | null => {
         if (!activeImageData) return null;
         const resultName = (result.info?.name || result.class_name).toLowerCase();
         const resultCenterX = result.bbox.x1 + result.bbox.width / 2;
@@ -321,7 +321,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         }
 
         // 检测结果（_labelRectId 直接对应）
-        if ((result as any)._labelRectId) return (result as any)._labelRectId;
+        if (result._labelRectId) return result._labelRectId;
 
         // 普通检测结果 → 找 labelRect
         const candidateLabelRects = activeImageData.labelRects.filter(labelRect => {
@@ -343,11 +343,11 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         return bestRect.id;
     };
 
-    const handleClickSegmentationResult = (result: SegmentationResult) => {
+    const handleClickSegmentationResult = (result: DisplayResult) => {
         updateActiveLabelId(findBestMatchingLabelId(result));
     };
 
-    const handleMouseEnterSegmentationResult = (result: SegmentationResult) => {
+    const handleMouseEnterSegmentationResult = (result: DisplayResult) => {
         const id = findBestMatchingLabelId(result);
         if (id) updateActiveLabelId(id);
     };
@@ -618,7 +618,7 @@ const mapStateToProps = (state: AppState) => ({
     segmentationResults: (() => {
         const imageId = state.labels.imagesData[state.labels.activeImageIndex]?.id;
         if (imageId && state.ai.imageSegmentationResults.has(imageId)) {
-            return state.ai.imageSegmentationResults.get(imageId)!;
+            return state.ai.imageSegmentationResults.get(imageId) ?? [];
         }
         return [];
     })(),
