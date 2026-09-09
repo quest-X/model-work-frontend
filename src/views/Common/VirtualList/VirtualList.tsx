@@ -10,7 +10,7 @@ interface IProps {
     size: ISize;
     childCount: number;
     childSize: ISize;
-    childRender: (index: number, isScrolling: boolean, isVisible: boolean, style: React.CSSProperties) => any;
+    childRender: (index: number, isScrolling: boolean, isVisible: boolean, style: React.CSSProperties) => React.ReactNode;
     overScanHeight?: number;
 }
 
@@ -25,7 +25,7 @@ export class VirtualList extends React.Component<IProps, IState> {
     private childAnchors: IPoint[];
     private scrollbars: Scrollbars;
 
-    constructor(props) {
+    constructor(props: IProps) {
         super(props);
         this.state = {
             viewportRect: null,
@@ -46,7 +46,7 @@ export class VirtualList extends React.Component<IProps, IState> {
         });
     }
 
-    public UNSAFE_componentWillUpdate(nextProps: Readonly<IProps>, nextState: Readonly<IState>, nextContext: any): void {
+    public UNSAFE_componentWillUpdate(nextProps: Readonly<IProps>): void {
         const {size, childSize, childCount} = nextProps;
         if (this.props.size.height !== size.height || this.props.size.width !== size.width ||
             this.props.childCount !== childCount) {

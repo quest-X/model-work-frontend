@@ -19,10 +19,10 @@ interface EngineServiceDescriptor {
 }
 
 export interface IProps {
-    updateActivePopupTypeAction: (activePopupType: PopupWindowType | null) => any;
-    addAIModelAction: (model: AIModel) => any;
-    setActiveAIModelAction: (modelId: string | null) => any;
-    deleteAIModelAction: (modelId: string) => any;
+    updateActivePopupTypeAction: typeof updateActivePopupType;
+    addAIModelAction: typeof addAIModel;
+    setActiveAIModelAction: typeof setActiveAIModel;
+    deleteAIModelAction: typeof deleteAIModel;
     aiModels: AIModel[];
     activeModelId: string | null;
     language: Language;

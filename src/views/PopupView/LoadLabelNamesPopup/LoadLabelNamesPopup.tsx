@@ -14,13 +14,12 @@ import {NotificationUtil} from '../../../utils/NotificationUtil';
 import {NotificationsDataMap} from '../../../data/info/NotificationsData';
 import {Notification} from '../../../data/enums/Notification';
 import {submitNewNotification} from '../../../store/notifications/actionCreators';
-import {INotification} from '../../../store/notifications/types';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 interface IProps {
-    updateActivePopupTypeAction: (activePopupType: PopupWindowType) => any;
-    updateLabelNamesAction: (labels: LabelName[]) => any;
-    submitNewNotificationAction: (notification: INotification) => any;
+    updateActivePopupTypeAction: typeof updateActivePopupType;
+    updateLabelNamesAction: typeof updateLabelNames;
+    submitNewNotificationAction: typeof submitNewNotification;
     language: Language;
 }
 
@@ -28,7 +27,7 @@ const LoadLabelNamesPopup: React.FC<IProps> = (
     { updateActivePopupTypeAction, updateLabelNamesAction, submitNewNotificationAction, language }
 ) => {
     const texts = LanguageConfig[language];
-    const [labelsList, setLabelsList] = useState([]);
+    const [labelsList, setLabelsList] = useState<LabelName[]>([]);
     const [invalidFileLoadedStatus, setInvalidFileLoadedStatus] = useState(false);
 
     const onSuccess = (labels: LabelName[]) => {

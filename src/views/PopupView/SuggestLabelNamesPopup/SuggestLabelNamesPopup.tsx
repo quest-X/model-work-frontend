@@ -21,9 +21,9 @@ interface SelectableName {
 }
 
 interface IProps {
-    updateLabelNames: (labels: LabelName[]) => any,
-    updateSuggestedLabelList: (labelList: string[]) => any;
-    updateRejectedSuggestedLabelList: (labelList: string[]) => any;
+    updateLabelNames: typeof updateLabelNamesAction,
+    updateSuggestedLabelList: typeof updateSuggestedLabelListAction;
+    updateRejectedSuggestedLabelList: typeof updateRejectedSuggestedLabelListAction;
     language: Language;
 }
 

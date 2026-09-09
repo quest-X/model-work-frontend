@@ -81,7 +81,7 @@ export const PopupView: React.FC<IProps> = (
         PopupActions.close();
     }, Boolean(activePopupType));
 
-    const popupComponents: Partial<Record<PopupWindowType, () => any>> = {
+    const popupComponents: Partial<Record<PopupWindowType, () => React.ReactNode>> = {
         [PopupWindowType.LOAD_LABEL_NAMES]: () => <LoadLabelsPopup />,
         [PopupWindowType.EXPORT_ANNOTATIONS]: () => <ExportLabelPopup />,
         [PopupWindowType.IMPORT_ANNOTATIONS]: () => <ImportLabelPopup />,

@@ -10,8 +10,8 @@ export interface ImageButtonProps extends React.HTMLProps<HTMLDivElement> {
     image:string,
     imageAlt:string,
     href?:string
-    onClick?:() => any;
-    onDoubleClick?:() => any;
+    onClick?:() => void;
+    onDoubleClick?:() => void;
     style?:React.CSSProperties
     isActive?:boolean;
     isDisabled?:boolean;

@@ -8,13 +8,13 @@ import {LanguageConfig} from '../../../data/LanguageConfig';
 
 interface IProps {
     title: React.ReactNode;
-    renderContent: () => any;
+    renderContent: () => React.ReactNode;
     acceptLabel?: string;
-    onAccept?: () => any;
+    onAccept?: () => void;
     skipAcceptButton?: boolean;
     disableAcceptButton?: boolean;
     rejectLabel?: string;
-    onReject?: () => any;
+    onReject?: () => void;
     skipRejectButton?: boolean;
     disableRejectButton?: boolean;
     footerContent?: React.ReactNode;

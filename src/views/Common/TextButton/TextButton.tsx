@@ -5,7 +5,7 @@ import classNames from 'classnames';
 interface IProps {
     key?:string;
     label:string;
-    onClick?:() => any;
+    onClick?:() => void;
     style?:React.CSSProperties;
     isActive?:boolean;
     isDisabled?:boolean;

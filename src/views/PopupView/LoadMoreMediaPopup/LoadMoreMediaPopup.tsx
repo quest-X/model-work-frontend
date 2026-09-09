@@ -17,7 +17,7 @@ import {DataBatchSyncService} from '../../../services/DataBatchSyncService';
 import {LabelsSelector} from '../../../store/selectors/LabelsSelector';
 
 interface IProps {
-    addQueueItems: (items: QueueItem[]) => any;
+    addQueueItems: typeof addQueueItemsAction;
     imagesData: ImageData[];
     language: Language;
 }

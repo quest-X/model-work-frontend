@@ -25,8 +25,8 @@ import {
 
 interface IProps {
     submitNewNotificationAction: (notification: INotification) => NotificationsActionType;
-    updateActivePopupTypeAction: (popupType: PopupWindowType | null) => any;
-    addAIModelAction: (model: AIModel) => any;
+    updateActivePopupTypeAction: typeof updateActivePopupType;
+    addAIModelAction: typeof addAIModel;
     language: Language;
 }
 
