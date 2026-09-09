@@ -1488,6 +1488,31 @@ describe('ControlCenterView', () => {
         expect(ComputeClusterService.groupResources).toHaveBeenCalledWith('group-1', expect.any(AbortSignal));
     });
 
+    it('does not expose the resource graph group as a joined field group', async () => {
+        const onlineNode = node('在线节点', true);
+        const currentGraph = graph(onlineNode);
+        currentGraph.entities.unshift({
+            entity_id: 'group:stale-group',
+            kind: 'compute_group',
+            label: 'mwn-cross-region-lab',
+            state: 'available',
+            callable: false,
+            modes: [],
+        });
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([onlineNode]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(currentGraph);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByRole('heading', {name: '在线节点'});
+        fireEvent.click(screen.getByText('相关功能'));
+        fireEvent.click(screen.getByRole('button', {name: /群查询/}));
+
+        expect(await screen.findByText('当前没有可查询的群')).toBeInTheDocument();
+        expect(screen.queryByText('mwn-cross-region-lab')).not.toBeInTheDocument();
+        expect(ComputeClusterService.group).not.toHaveBeenCalled();
+        expect(ComputeClusterService.groupResources).not.toHaveBeenCalled();
+    });
+
     it('registers a Main and exposes the signed invitation step', async () => {
         const onlineNode = node('在线节点', true);
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([onlineNode]);

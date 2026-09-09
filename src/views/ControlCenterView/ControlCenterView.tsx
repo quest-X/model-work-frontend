@@ -684,18 +684,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const overviewResourceGraph = activeGroupResources?.resource_graph || resourceGraph;
     const overviewNodes = activeGroupResources?.nodes || nodes;
     const currentGroup = overviewResourceGraph?.entities.find(entity => entity.kind === 'compute_group') || null;
-    const visibleGroups: ComputeGroupMembership[] = groupMemberships.length
-        ? groupMemberships
-        : currentGroup ? [{
-            index: 1,
-            group_id: overviewResourceGraph?.group_id || currentGroup.entity_id,
-            group_name: currentGroup.label,
-            owner_name: null,
-            relationship: 'member',
-            scope: 'local',
-            joined_at: 0,
-            credential_types: [],
-        }] : [];
+    const visibleGroups = groupMemberships;
     const currentGroupTone: Tone = currentGroup?.state === 'available' ? 'healthy' : 'offline';
     const selectedGroup = visibleGroups.find(group => group.group_id === selectedGroupId);
     const groupDetail = selectedGroupDetail?.group.group_id === selectedGroup?.group_id
