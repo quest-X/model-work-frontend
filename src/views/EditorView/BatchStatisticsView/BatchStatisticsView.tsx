@@ -27,7 +27,64 @@ const getConfColor = (conf: number): string => {
     return '#f44336';
 };
 
-const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, activeImageIndex, updateActiveImageIndex}) => {
+const pct = (value: number): string => isNaN(value) ? '--' : `${(value * 100).toFixed(1)}%`;
+
+const ConfidenceRow: React.FC<{
+    label: string; confidence: number; imageIndex?: number; jumpTitle: string;
+    onSelect: (index: number) => void;
+}> = ({label, confidence, imageIndex, jumpTitle, onSelect}) => {
+    const clickable = imageIndex !== undefined;
+    return <div className="ConfidenceRow">
+        <span className="ConfLabel">{label}</span>
+        <span className={clickable ? 'ConfValue clickable' : 'ConfValue'}
+            style={{color: isNaN(confidence) ? '#666' : getConfColor(confidence),
+                ...(clickable ? {cursor: imageIndex >= 0 ? 'pointer' : 'default'} : {})}}
+            onClick={clickable ? () => imageIndex >= 0 && onSelect(imageIndex) : undefined}
+            title={clickable ? (imageIndex >= 0 ? jumpTitle : '') : undefined}>
+            {pct(confidence)}
+        </span>
+    </div>;
+};
+
+const DetectionOverview: React.FC<{
+    zh: boolean; detectionRate: number; detectedImages: number; totalImages: number; totalDetections: number;
+}> = ({zh, detectionRate, detectedImages, totalImages, totalDetections}) => (
+    <div className="SummarySection">
+        <div className="SummaryTitle">{zh ? '检出概况' : 'DETECTION OVERVIEW'}</div>
+        <div className="SummaryGrid">
+            <div className="StatItemWide">
+                <span className={`StatValue ${detectionRate >= 0.8 ? 'highlight' : ''}`}>
+                    {(detectionRate * 100).toFixed(1)}%
+                </span>
+                <span className="StatSub">
+                    {zh
+                        ? `${detectedImages}/${totalImages} 张检出`
+                        : `${detectedImages}/${totalImages} detected`}
+                </span>
+            </div>
+            <div className="StatItem">
+                <span className="StatLabel">{zh ? '总检出数' : 'Total Objects'}</span>
+                <span className="StatValue">{totalDetections}</span>
+            </div>
+            <div className="StatItem">
+                <span className="StatLabel">{zh ? '图均检出' : 'Avg/Image'}</span>
+                <span className="StatValue">
+                    {detectedImages > 0 ? (totalDetections / detectedImages).toFixed(1) : '0'}
+                </span>
+            </div>
+        </div>
+    </div>
+);
+
+function getConfidenceSummary(allConfs: number[]) {
+    const avgConf = allConfs.length > 0 ? allConfs.reduce((a, b) => a + b, 0) / allConfs.length : NaN;
+    const maxConf = allConfs.length > 0 ? Math.max(...allConfs) : NaN;
+    const minConf = allConfs.length > 0 ? Math.min(...allConfs) : NaN;
+
+    return {avgConf, maxConf, minConf};
+}
+
+export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, activeImageIndex, updateActiveImageIndex}) => {
     const zh = language === 'zh';
 
     const imageStats: ImageStat[] = useMemo(() => {
@@ -62,9 +119,7 @@ const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, activeImag
         return arr;
     }, [imageStats]);
 
-    const avgConf = allConfs.length > 0 ? allConfs.reduce((a, b) => a + b, 0) / allConfs.length : NaN;
-    const maxConf = allConfs.length > 0 ? Math.max(...allConfs) : NaN;
-    const minConf = allConfs.length > 0 ? Math.min(...allConfs) : NaN;
+    const {avgConf, maxConf, minConf} = getConfidenceSummary(allConfs);
 
     // 找到最高/最低置信度对应的图像索引
     const maxConfImageIdx = useMemo(() => {
@@ -87,7 +142,6 @@ const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, activeImag
         return best;
     }, [imageStats]);
 
-    const pct = (v: number) => isNaN(v) ? '--' : `${(v * 100).toFixed(1)}%`;
 
     if (totalDetections === 0) {
         return (
@@ -108,63 +162,19 @@ const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, activeImag
             <div className="Header">{zh ? '统计' : 'Statistics'}</div>
             <div className="Content">
                 {/* Detection rate */}
-                <div className="SummarySection">
-                    <div className="SummaryTitle">{zh ? '检出概况' : 'DETECTION OVERVIEW'}</div>
-                    <div className="SummaryGrid">
-                        <div className="StatItemWide">
-                            <span className={`StatValue ${detectionRate >= 0.8 ? 'highlight' : ''}`}>
-                                {(detectionRate * 100).toFixed(1)}%
-                            </span>
-                            <span className="StatSub">
-                                {zh
-                                    ? `${detectedImages}/${totalImages} ${zh ? '张检出' : ''}`
-                                    : `${detectedImages}/${totalImages} detected`}
-                            </span>
-                        </div>
-                        <div className="StatItem">
-                            <span className="StatLabel">{zh ? '总检出数' : 'Total Objects'}</span>
-                            <span className="StatValue">{totalDetections}</span>
-                        </div>
-                        <div className="StatItem">
-                            <span className="StatLabel">{zh ? '图均检出' : 'Avg/Image'}</span>
-                            <span className="StatValue">
-                                {detectedImages > 0 ? (totalDetections / detectedImages).toFixed(1) : '0'}
-                            </span>
-                        </div>
-                    </div>
-                </div>
+                <DetectionOverview zh={zh} detectionRate={detectionRate} detectedImages={detectedImages}
+                    totalImages={totalImages} totalDetections={totalDetections}/>
 
                 {/* Confidence stats */}
                 <div className="ConfidenceSection">
                     <div className="SummaryTitle">{zh ? '置信度' : 'CONFIDENCE'}</div>
-                    <div className="ConfidenceRow">
-                        <span className="ConfLabel">{zh ? '平均' : 'Average'}</span>
-                        <span className="ConfValue" style={{color: isNaN(avgConf) ? '#666' : getConfColor(avgConf)}}>
-                            {pct(avgConf)}
-                        </span>
-                    </div>
-                    <div className="ConfidenceRow">
-                        <span className="ConfLabel">{zh ? '最高' : 'Highest'}</span>
-                        <span
-                            className="ConfValue clickable"
-                            style={{color: isNaN(maxConf) ? '#666' : getConfColor(maxConf), cursor: maxConfImageIdx >= 0 ? 'pointer' : 'default'}}
-                            onClick={() => maxConfImageIdx >= 0 && updateActiveImageIndex(maxConfImageIdx)}
-                            title={maxConfImageIdx >= 0 ? (zh ? '跳转到该图像' : 'Jump to image') : ''}
-                        >
-                            {pct(maxConf)}
-                        </span>
-                    </div>
-                    <div className="ConfidenceRow">
-                        <span className="ConfLabel">{zh ? '最低' : 'Lowest'}</span>
-                        <span
-                            className="ConfValue clickable"
-                            style={{color: isNaN(minConf) ? '#666' : getConfColor(minConf), cursor: minConfImageIdx >= 0 ? 'pointer' : 'default'}}
-                            onClick={() => minConfImageIdx >= 0 && updateActiveImageIndex(minConfImageIdx)}
-                            title={minConfImageIdx >= 0 ? (zh ? '跳转到该图像' : 'Jump to image') : ''}
-                        >
-                            {pct(minConf)}
-                        </span>
-                    </div>
+                    <ConfidenceRow label={zh ? '平均' : 'Average'} confidence={avgConf}
+                        jumpTitle="" onSelect={updateActiveImageIndex}/>
+                    <ConfidenceRow label={zh ? '最高' : 'Highest'} confidence={maxConf} imageIndex={maxConfImageIdx}
+                        jumpTitle={zh ? '跳转到该图像' : 'Jump to image'} onSelect={updateActiveImageIndex}/>
+                    <ConfidenceRow label={zh ? '最低' : 'Lowest'} confidence={minConf} imageIndex={minConfImageIdx}
+                        jumpTitle={zh ? '跳转到该图像' : 'Jump to image'} onSelect={updateActiveImageIndex}/>
+
                 </div>
 
                 {/* Per-image distribution */}

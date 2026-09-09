@@ -43,6 +43,24 @@ interface IProps {
     onFrameReady?: (frameIdx: number, thumbnailImage: HTMLImageElement) => void;
 }
 
+export function getFrameAvailability(cache: ReadonlyMap<number, HTMLImageElement>, pos: number,
+    totalFrames: number, maxAvailable: number, minAhead: number) {
+    const searchEnd = Math.min(pos + maxAvailable, totalFrames);
+
+    // 找当前位置前方第一个未缓存帧
+    let target = -1;
+    for (let i = Math.max(0, pos); i < searchEnd; i++) {
+        if (!cache.has(i)) { target = i; break; }
+    }
+
+    // 更新后台加载 UI：minAhead 窗口内从 pos 起连续已缓存帧数
+    const posClamped = Math.max(0, pos);
+    const minEnd = Math.min(posClamped + minAhead, totalFrames);
+    const minRequired = Math.max(0, minEnd - posClamped);
+    const ahead = target < 0 ? minRequired : Math.max(0, target - posClamped);
+    return {target, backgroundLoad: ahead < minRequired ? {ahead, min: minRequired} : null};
+}
+
 const BATCH_SIZE = 100;
 
 // === available_frames 滑动窗口（基于秒数 × fps 动态计算） ===
@@ -407,20 +425,8 @@ const FramePlayer: React.FC<IProps> = ({
         while (loadGenRef.current === gen) {
             if (sessionExpiredRef.current) return;
             const pos = isPlayingRef.current ? playFrameRef.current : currentFrameRef.current;
-            const searchEnd = Math.min(pos + MAX_AVAILABLE, totalFrames);
-
-            // 找当前位置前方第一个未缓存帧
-            let target = -1;
-            for (let i = Math.max(0, pos); i < searchEnd; i++) {
-                if (!frameCacheRef.current.has(i)) { target = i; break; }
-            }
-
-            // 更新后台加载 UI：MIN_AHEAD 窗口内从 pos 起连续已缓存帧数
-            const posClamped = Math.max(0, pos);
-            const minEnd = Math.min(posClamped + MIN_AHEAD, totalFrames);
-            const minRequired = Math.max(0, minEnd - posClamped);
-            const ahead = target < 0 ? minRequired : Math.max(0, target - posClamped);
-            updateBgLoad(ahead < minRequired ? { ahead, min: minRequired } : null);
+            const {target, backgroundLoad} = getFrameAvailability(frameCacheRef.current, pos, totalFrames, MAX_AVAILABLE, MIN_AHEAD);
+            updateBgLoad(backgroundLoad);
 
             if (target < 0) {
                 // 窗口内全部已缓存：P3 兜底 —— 未播放时从头到尾补齐全视频缩略图
@@ -474,17 +480,22 @@ const FramePlayer: React.FC<IProps> = ({
 
         let cancelled = false;
 
+        const transferPreloadedFrames = () => {
+            // 移入解析阶段预加载缓存
+            const preloaded = EditorModel.preloadedImageCache;
+            if (preloaded.size > 0) {
+                for (const [idx, img] of preloaded) {
+                    frameCacheRef.current.set(idx, img);
+                }
+                console.log(`[FramePlayer] 从预加载缓存移入 ${preloaded.size} 帧到 LRU`);
+                preloaded.clear();
+            }
+
+        };
+
         const init = async () => {
             try {
-                // 移入解析阶段预加载缓存
-                const preloaded = EditorModel.preloadedImageCache;
-                if (preloaded.size > 0) {
-                    for (const [idx, img] of preloaded) {
-                        frameCacheRef.current.set(idx, img);
-                    }
-                    console.log(`[FramePlayer] 从预加载缓存移入 ${preloaded.size} 帧到 LRU`);
-                    preloaded.clear();
-                }
+                transferPreloadedFrames();
 
                 // 加载并绘制第 0 帧
                 await loadFrameImage(0);
