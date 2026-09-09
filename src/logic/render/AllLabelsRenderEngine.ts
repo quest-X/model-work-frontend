@@ -66,50 +66,54 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
 
         // 橡皮擦模式
         if (GeneralSelector.getEraserMode()) {
-            if (!data.event) return;
-            const type = (data.event as MouseEvent).type;
-            const isFineMod = GeneralSelector.getEraserFineMode();
-
-            if (type === 'mouseup') {
-                this.eraserMouseDown = false;
-                return;
-            }
-
-            // ── 局部擦除模式：拖拽笔刷擦除任意多边形的顶点
-            if (isFineMod) {
-                if (type === 'mousedown') {
-                    const me = data.event as MouseEvent;
-                    if (me.button !== 0) return;
-                    this.eraserMouseDown = true;
-                    this.polygonEngine.eraseVerticesNearPointAll(data, this.BRUSH_RADIUS);
-                } else if (type === 'mousemove' && this.eraserMouseDown) {
-                    this.polygonEngine.eraseVerticesNearPointAll(data, this.BRUSH_RADIUS);
-                }
-                return;
-            }
-
-            // ── 整体擦除模式：单击立即删除整个矩形或多边形
-            if (type === 'mousedown') {
-                const me = data.event as MouseEvent;
-                if (me.button !== 0) return;
-                const imageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
-                if (!imageData) return;
-
-                const erasedRect = this.rectEngine.eraserClick(data);
-                if (!erasedRect) {
-                    const polygonId = this.polygonEngine.getPolygonIdUnderMouse(data);
-                    if (polygonId) {
-                        LabelActions.deletePolygonLabelById(imageData.id, polygonId);
-                        EditorActions.fullRender();
-                    }
-                }
-            }
+            this.updateEraser(data);
             return;
         }
 
         // 普通 ALL 视图：鼠标事件交给 ViewPortHelper 做拖拽平移（hand 工具）
         if (EditorModel.viewPortHelper) {
             EditorModel.viewPortHelper.update(data);
+        }
+    }
+
+    private updateEraser(data: EditorData): void {
+        if (!data.event) return;
+        const type = (data.event as MouseEvent).type;
+        const isFineMod = GeneralSelector.getEraserFineMode();
+
+        if (type === 'mouseup') {
+            this.eraserMouseDown = false;
+            return;
+        }
+
+        // ── 局部擦除模式：拖拽笔刷擦除任意多边形的顶点
+        if (isFineMod) {
+            if (type === 'mousedown') {
+                const me = data.event as MouseEvent;
+                if (me.button !== 0) return;
+                this.eraserMouseDown = true;
+                this.polygonEngine.eraseVerticesNearPointAll(data, this.BRUSH_RADIUS);
+            } else if (type === 'mousemove' && this.eraserMouseDown) {
+                this.polygonEngine.eraseVerticesNearPointAll(data, this.BRUSH_RADIUS);
+            }
+            return;
+        }
+
+        // ── 整体擦除模式：单击立即删除整个矩形或多边形
+        if (type === 'mousedown') {
+            const me = data.event as MouseEvent;
+            if (me.button !== 0) return;
+            const imageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
+            if (!imageData) return;
+
+            const erasedRect = this.rectEngine.eraserClick(data);
+            if (!erasedRect) {
+                const polygonId = this.polygonEngine.getPolygonIdUnderMouse(data);
+                if (polygonId) {
+                    LabelActions.deletePolygonLabelById(imageData.id, polygonId);
+                    EditorActions.fullRender();
+                }
+            }
         }
     }
 
@@ -128,6 +132,18 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
             this.eraserMouseDown = false;
         }
 
+        this.renderLabels(data, isSmart, isTracking, isEraser);
+
+        // 局部擦除模式：在所有标签之上绘制笔刷圆圈
+        if (isEraser && isFineMod) {
+            this.polygonEngine.drawFineEraserBrush(data, this.BRUSH_RADIUS);
+        }
+
+        this.updateAllCursor(data, isSmart, isEraser, isFineMod);
+    }
+
+
+    private renderLabels(data: EditorData, isSmart: boolean, isTracking: boolean, isEraser: boolean): void {
         // 按 viewType 过滤：检测标签只画矩形，分割标签只画多边形，查看全部都画
         // 智能标注 / 橡皮擦 / 检索模式下强制显示全部，避免侧栏 tab 过滤导致标签"消失"
         const forceAll = isSmart || isEraser || isTracking;
@@ -153,11 +169,9 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
             this.polygonEngine.drawExistingLabels(data);
         }
 
-        // 局部擦除模式：在所有标签之上绘制笔刷圆圈
-        if (isEraser && isFineMod) {
-            this.polygonEngine.drawFineEraserBrush(data, this.BRUSH_RADIUS);
-        }
+    }
 
+    private updateAllCursor(data: EditorData, isSmart: boolean, isEraser: boolean, isFineMod: boolean): void {
         // 橡皮擦模式光标（走 CustomCursor overlay 系统，与 GRAB 光标同一套机制）：
         //   整体擦除 → ERASER（eraser.png 图标）
         //   局部擦除 → ERASER_FINE（eraser-fine.png 图标）
