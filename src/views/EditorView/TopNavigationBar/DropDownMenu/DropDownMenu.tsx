@@ -8,7 +8,7 @@ import {connect} from 'react-redux';
 import {Language} from '../../../../data/LanguageConfig';
 
 interface IProps {
-    updatePreventCustomCursorStatusAction: (preventCustomCursor: boolean) => any;
+    updatePreventCustomCursorStatusAction: typeof updatePreventCustomCursorStatus;
     language: Language;
     isVisible?: boolean;
 }

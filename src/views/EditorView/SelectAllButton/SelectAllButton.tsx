@@ -10,7 +10,7 @@ interface IProps {
     imagesData: ImageData[];
     activeImageIndex: number;
     language: Language;
-    selectAllImages: (selectAll: boolean) => any;
+    selectAllImages: typeof selectAllImagesAction;
 }
 
 const SelectAllButton: React.FC<IProps> = ({imagesData, language, selectAllImages}) => {

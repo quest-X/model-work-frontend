@@ -16,12 +16,12 @@ import {LabelsSelector} from "../../../store/selectors/LabelsSelector";
 
 interface IProps {
     position: IPoint;
-    updatePreventCustomCursorStatus: (preventCustomCursor: boolean) => any;
+    updatePreventCustomCursorStatus: typeof updatePreventCustomCursorStatusAction;
     activeLabelId: string;
     highlightedLabelId: string;
     labelData: LabelRect | LabelPoint;
     imageData: ImageData;
-    updateImageDataById: (id: string, newImageData: ImageData) => any;
+    updateImageDataById: typeof updateImageDataByIdAction;
 }
 
 const LabelControlPanel: React.FC<IProps> = ({position, updatePreventCustomCursorStatus, activeLabelId, highlightedLabelId, labelData, imageData, updateImageDataById}) => {

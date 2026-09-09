@@ -3,6 +3,7 @@ import './NotificationsView.scss';
 import {AppState} from '../../store';
 import {connect} from 'react-redux';
 import classNames from 'classnames';
+import {get} from 'lodash';
 import {deleteNotificationById} from '../../store/notifications/actionCreators';
 import {INotification} from '../../store/notifications/types';
 import {NotificationType} from '../../data/enums/NotificationType';
@@ -11,21 +12,19 @@ import {Language, LanguageConfig, LanguageTexts} from '../../data/LanguageConfig
 
 /** Resolve a dot-path like "notifications.detectionCompleted" from LanguageTexts */
 function resolveI18n(texts: LanguageTexts, path: string, params?: Record<string, string>): string {
-    let value: any = texts;
-    for (const key of path.split('.')) {
-        value = value?.[key];
-    }
+    const value: unknown = get(texts, path.split('.'));
     if (typeof value !== 'string') return path;
+    let translated = value;
     if (params) {
         for (const [k, v] of Object.entries(params)) {
-            value = value.replace(`{${k}}`, v);
+            translated = translated.replace(`{${k}}`, v);
         }
     }
-    return value;
+    return translated;
 }
 
 interface IProps {
-    deleteNotificationByIdAction: (id: string) => void
+    deleteNotificationByIdAction: typeof deleteNotificationById
     queue: INotification[]
     language: Language
 }

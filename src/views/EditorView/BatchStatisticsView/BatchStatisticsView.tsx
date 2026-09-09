@@ -18,7 +18,7 @@ interface IProps {
     language: Language;
     imagesData: ImageData[];
     activeImageIndex: number;
-    updateActiveImageIndex: (index: number) => any;
+    updateActiveImageIndex: typeof updateActiveImageIndexAction;
 }
 
 const getConfColor = (conf: number): string => {
