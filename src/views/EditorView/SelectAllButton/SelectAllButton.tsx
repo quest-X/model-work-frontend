@@ -5,7 +5,7 @@ import {AppState} from '../../../store';
 import {ImageData} from '../../../store/labels/types';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {ImageActions} from '../../../logic/actions/ImageActions';
-import {selectAllImages} from '../../../store/labels/actionCreators';
+import {selectAllImages as selectAllImagesAction} from '../../../store/labels/actionCreators';
 
 interface IProps {
     imagesData: ImageData[];
@@ -60,7 +60,7 @@ const mapStateToProps = (state: AppState) => ({
 });
 
 const mapDispatchToProps = {
-    selectAllImages
+    selectAllImages: selectAllImagesAction
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(SelectAllButton);

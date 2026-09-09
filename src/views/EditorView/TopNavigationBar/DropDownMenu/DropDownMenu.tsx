@@ -20,6 +20,15 @@ const DropDownMenu: React.FC<IProps> = ({updatePreventCustomCursorStatusAction, 
     const [activeTabIdx, setActiveTabIdx] = useState(null);
     const [activeDropDownAnchor, setDropDownAnchor] = useState(null);
 
+    const onMouseDownBeyondDropDown = (event) => {
+        if (event.target.classList.contains('DropDownMenuTab') || event.target.classList.contains('DropDownMenuContentOption')) {
+            return;
+        }
+        setActiveTabIdx(null);
+        document.removeEventListener(EventType.MOUSE_DOWN, onMouseDownBeyondDropDown);
+    }
+
+
     const onTabClick = (tabIdx: number, event) => {
         if (activeTabIdx === null) {
             document.addEventListener(EventType.MOUSE_DOWN, onMouseDownBeyondDropDown);
@@ -40,14 +49,6 @@ const DropDownMenu: React.FC<IProps> = ({updatePreventCustomCursorStatusAction, 
 
     const onMouseLeaveWindow = (event) => {
         updatePreventCustomCursorStatusAction(false);
-    }
-
-    const onMouseDownBeyondDropDown = (event) => {
-        if (event.target.classList.contains('DropDownMenuTab') || event.target.classList.contains('DropDownMenuContentOption')) {
-            return;
-        }
-        setActiveTabIdx(null);
-        document.removeEventListener(EventType.MOUSE_DOWN, onMouseDownBeyondDropDown);
     }
 
     const onMouseEnterTab = (tabIdx: number, event) => {
@@ -71,21 +72,6 @@ const DropDownMenu: React.FC<IProps> = ({updatePreventCustomCursorStatusAction, 
         );
     }
 
-    const getDropDownContent = () => {
-        const menuData = getDropDownMenuData(language);
-        return menuData.map((data: DropDownMenuNode, index: number) => getDropDownTab(data, index))
-    }
-
-    const wrapOnClick = (onClick?: () => void, disabled?: boolean): () => void => {
-        return () => {
-            if (disabled) return;
-            if (onClick) onClick();
-            setActiveTabIdx(null);
-            updatePreventCustomCursorStatusAction(false);
-            document.removeEventListener(EventType.MOUSE_DOWN, onMouseDownBeyondDropDown);
-        }
-    }
-
     const getDropDownTab = (data: DropDownMenuNode, index: number) => {
         return <div
             className={getDropDownMenuTabClassName(index)}
@@ -100,6 +86,22 @@ const DropDownMenu: React.FC<IProps> = ({updatePreventCustomCursorStatusAction, 
             />
             {data.name}
         </div>
+    }
+
+
+    const getDropDownContent = () => {
+        const menuData = getDropDownMenuData(language);
+        return menuData.map((data: DropDownMenuNode, index: number) => getDropDownTab(data, index))
+    }
+
+    const wrapOnClick = (onClick?: () => void, disabled?: boolean): () => void => {
+        return () => {
+            if (disabled) return;
+            if (onClick) onClick();
+            setActiveTabIdx(null);
+            updatePreventCustomCursorStatusAction(false);
+            document.removeEventListener(EventType.MOUSE_DOWN, onMouseDownBeyondDropDown);
+        }
     }
 
     const getDropDownWindow = (data: DropDownMenuNode) => {

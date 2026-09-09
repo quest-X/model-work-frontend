@@ -35,7 +35,7 @@ async function renderOnce(): Promise<void> {
     try {
         const {EditorActions} = await import('../logic/actions/EditorActions');
         EditorActions.fullRender();
-    } catch {}
+    } catch { /* Rendering can be unavailable while the editor is mounting. */ }
 }
 
 /** Continuous rAF loop for blinking animation during inference */
@@ -47,7 +47,7 @@ async function tick(): Promise<void> {
     try {
         const {EditorActions} = await import('../logic/actions/EditorActions');
         EditorActions.fullRender();
-    } catch {}
+    } catch { /* Rendering can be unavailable while the editor is mounting. */ }
     if (getPrompts().length > 0 && w.__openSightPromptInferring) {
         w.__openSightPendingPromptsRafId = requestAnimationFrame(() => { void tick(); });
     } else {

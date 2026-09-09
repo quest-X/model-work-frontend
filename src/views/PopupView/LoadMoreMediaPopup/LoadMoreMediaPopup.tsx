@@ -9,7 +9,7 @@ import { PopupActions } from '../../../logic/actions/PopupActions';
 import { ImageDataUtil } from '../../../utils/ImageDataUtil';
 import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { QueueItem, QueueItemType, QueueItemStatus } from '../../../store/queue/types';
-import { addQueueItems } from '../../../store/queue/actionCreators';
+import { addQueueItems as addQueueItemsAction } from '../../../store/queue/actionCreators';
 import { QueueActions } from '../../../logic/actions/QueueActions';
 import { v4 as uuidv4 } from 'uuid';
 import { sortBy } from 'lodash';
@@ -213,7 +213,7 @@ const LoadMoreMediaPopup: React.FC<IProps> = ({ addQueueItems, imagesData, langu
 };
 
 const mapDispatchToProps = {
-    addQueueItems
+    addQueueItems: addQueueItemsAction
 };
 
 const mapStateToProps = (state: AppState) => ({

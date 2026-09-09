@@ -10,11 +10,11 @@ import { VideoData } from '../../../store/video/types';
 import { ImageData } from '../../../store/labels/types';
 import { ISize } from '../../../interfaces/ISize';
 import {
-    updateVideoCurrentFrame,
-    updateVideoPlayingStatus,
-    updateVideoMetadata
+    updateVideoCurrentFrame as updateVideoCurrentFrameAction,
+    updateVideoPlayingStatus as updateVideoPlayingStatusAction,
+    updateVideoMetadata as updateVideoMetadataAction
 } from '../../../store/video/actionCreators';
-import { updateImageDataById, updateImageData, updateActiveImageIndex, addImageData, toggleImageSelection } from '../../../store/labels/actionCreators';
+import { updateImageDataById as updateImageDataByIdAction, updateImageData as updateImageDataAction, updateActiveImageIndex as updateActiveImageIndexAction, addImageData as addImageDataAction, toggleImageSelection as toggleImageSelectionAction } from '../../../store/labels/actionCreators';
 import { ImageDataUtil } from '../../../utils/ImageDataUtil';
 import { ImageRepository } from '../../../logic/imageRepository/ImageRepository';
 import { EditorActions } from '../../../logic/actions/EditorActions';
@@ -456,6 +456,12 @@ const VideoEditor: React.FC<IProps> = ({
         [activeVideo, updateVideoCurrentFrame, updateActiveImageIndex]
     );
 
+    // 处理视频时间更新
+    const lastFrameRef = React.useRef<number>(-1);
+    const frameSkipCountRef = React.useRef<number>(0);
+
+
+
     // 处理播放/暂停
     const handlePlayPause = useCallback(async () => {
         if (!activeVideo) return;
@@ -481,10 +487,6 @@ const VideoEditor: React.FC<IProps> = ({
     const handleToggleMute = useCallback(() => {
         setIsMuted(prev => !prev);
     }, []);
-
-    // 处理视频时间更新
-    const lastFrameRef = React.useRef<number>(-1);
-    const frameSkipCountRef = React.useRef<number>(0);
     const lastUpdateTimeRef = React.useRef<number>(0); // 记录上次更新时间，用于节流
     const lastSidebarUpdateRef = React.useRef<number>(0); // 侧边栏高亮节流
     const handleVideoTimeUpdate = useCallback(
@@ -715,14 +717,14 @@ const mapStateToProps = (state: AppState) => ({
 });
 
 const mapDispatchToProps = {
-    updateVideoCurrentFrame,
-    updateVideoPlayingStatus,
-    updateVideoMetadata,
-    updateImageDataById,
-    updateImageData,
-    updateActiveImageIndex,
-    addImageData,
-    toggleImageSelection
+    updateVideoCurrentFrame: updateVideoCurrentFrameAction,
+    updateVideoPlayingStatus: updateVideoPlayingStatusAction,
+    updateVideoMetadata: updateVideoMetadataAction,
+    updateImageDataById: updateImageDataByIdAction,
+    updateImageData: updateImageDataAction,
+    updateActiveImageIndex: updateActiveImageIndexAction,
+    addImageData: addImageDataAction,
+    toggleImageSelection: toggleImageSelectionAction
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(VideoEditor);

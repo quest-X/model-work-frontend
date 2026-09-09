@@ -219,18 +219,22 @@ const AllLabelsList: React.FC<IProps> = (
         
         // 根据标签类型获取实际的可见性状态
         switch (labelItem.type) {
-            case LabelType.RECT:
+            case LabelType.RECT: {
                 const rect = imageData.labelRects?.find(r => r.id === labelItem.id);
                 return rect ? rect.isVisible : false;
-            case LabelType.POINT:
+            }
+            case LabelType.POINT: {
                 const point = imageData.labelPoints?.find(p => p.id === labelItem.id);
                 return point ? point.isVisible : false;
-            case LabelType.POLYGON:
+            }
+            case LabelType.POLYGON: {
                 const polygon = imageData.labelPolygons?.find(p => p.id === labelItem.id);
                 return polygon ? polygon.isVisible : false;
-            case LabelType.LINE:
+            }
+            case LabelType.LINE: {
                 const line = imageData.labelLines?.find(l => l.id === labelItem.id);
                 return line ? line.isVisible : false;
+            }
             default:
                 return false;
         }

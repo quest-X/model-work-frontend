@@ -29,7 +29,7 @@ export function videoReducer(state = initialState, action: any): VideoState {
                 isVideoMode: action.payload.isVideoMode
             };
 
-        case ADD_VIDEO_DATA:
+        case ADD_VIDEO_DATA: {
             const newVideos = [...state.videos, action.payload.videoData];
             return {
                 ...state,
@@ -37,6 +37,7 @@ export function videoReducer(state = initialState, action: any): VideoState {
                 activeVideoIndex: newVideos.length - 1,
                 activeVideo: action.payload.videoData
             };
+        }
 
         case UPDATE_ACTIVE_VIDEO_INDEX:
             return {
@@ -199,7 +200,7 @@ export function videoReducer(state = initialState, action: any): VideoState {
                         : state.activeVideo
             };
 
-        case REMOVE_VIDEO_DATA:
+        case REMOVE_VIDEO_DATA: {
             const filteredVideos = state.videos.filter(video => video.id !== action.payload.videoId);
             return {
                 ...state,
@@ -213,6 +214,7 @@ export function videoReducer(state = initialState, action: any): VideoState {
                         ? filteredVideos[Math.min(state.activeVideoIndex, filteredVideos.length - 1)] || null
                         : state.activeVideo
             };
+        }
 
         case CLEAR_ALL_VIDEOS:
             return initialState;

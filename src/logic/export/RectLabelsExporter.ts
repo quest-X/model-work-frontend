@@ -113,7 +113,8 @@ export class RectLabelsExporter {
             rectSize.height / imageSize.height
         ]
 
-        let [x, y, width, height] = rawBBox.map((value: number) => parseFloat(snapAndFix(value)))
+        const [x, y, rawWidth, rawHeight] = rawBBox.map((value: number) => parseFloat(snapAndFix(value)))
+        let width = rawWidth, height = rawHeight;
 
         if (x + width / 2 > 1) { width = 2 * (1 - x) }
         if (x - width / 2 < 0) { width = 2 * x }

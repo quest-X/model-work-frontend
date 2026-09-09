@@ -1004,6 +1004,8 @@ export class AIDetectionActions {
             }
 
             let settled = false;
+            let emergencyTimer: ReturnType<typeof setTimeout> | null = null;
+            let onSeeked: (() => void) | null = null;
             const settle = () => {
                 if (settled) return;
                 settled = true;
@@ -1012,7 +1014,7 @@ export class AIDetectionActions {
                 resolve();
             };
 
-            const emergencyTimer = setTimeout(() => {
+            emergencyTimer = setTimeout(() => {
                 console.warn(`[Capture] Seek timeout for time=${time.toFixed(3)}, readyState=${video.readyState}, currentTime=${video.currentTime.toFixed(3)}`);
                 settle();
             }, 5000); // 5秒保护（H.264 极端情况）
@@ -1030,7 +1032,7 @@ export class AIDetectionActions {
                 check();
             };
 
-            const onSeeked = () => {
+            onSeeked = () => {
                 if (video.readyState >= 3) {
                     setTimeout(settle, 100);
                 } else {
@@ -1054,6 +1056,7 @@ export class AIDetectionActions {
             }
 
             let settled = false;
+            let globalTimer: ReturnType<typeof setTimeout> | null = null;
             const settle = () => {
                 if (settled) return;
                 settled = true;
@@ -1061,7 +1064,7 @@ export class AIDetectionActions {
                 resolve();
             };
 
-            const globalTimer = setTimeout(settle, 5000);
+            globalTimer = setTimeout(settle, 5000);
 
             const onSeeked = () => {
                 if ('requestVideoFrameCallback' in video) {

@@ -62,18 +62,6 @@ export const App: React.FC<IProps> = (
         return true;
     };
 
-    useEffect(() => {
-        initializeApp();
-    }, []);
-
-    useEffect(() => {
-        if (platformMode !== 'annotation'
-            || (!storedDataInfo?.hasProject && !storageUnavailable)) return;
-        AutoSaveService.suspend();
-        setShowRestorePrompt(true);
-        setIsRestoring(true);
-    }, [platformMode, storageUnavailable, storedDataInfo]);
-
     const initializeApp = async () => {
         try {
             // 初始化自动保存服务
@@ -113,6 +101,19 @@ export const App: React.FC<IProps> = (
             setIsRestoring(false);
         }
     };
+
+
+    useEffect(() => {
+        initializeApp();
+    }, []);
+
+    useEffect(() => {
+        if (platformMode !== 'annotation'
+            || (!storedDataInfo?.hasProject && !storageUnavailable)) return;
+        AutoSaveService.suspend();
+        setShowRestorePrompt(true);
+        setIsRestoring(true);
+    }, [platformMode, storageUnavailable, storedDataInfo]);
 
     const handleRestoreConfirm = async () => {
         setRestoreError(null);

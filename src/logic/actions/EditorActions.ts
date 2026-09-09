@@ -128,7 +128,7 @@ export class EditorActions {
     // HELPERS
     // =================================================================================================================
 
-    public static updateMousePositionIndicator(event: React.MouseEvent<HTMLCanvasElement, MouseEvent> | MouseEvent) {
+    public static updateMousePositionIndicator(event: React.MouseEvent<HTMLCanvasElement, MouseEvent> | MouseEvent) {
         if (!EditorModel.image || !EditorModel.canvas) {
             EditorModel.mousePositionIndicator.style.display = "none";
             EditorModel.cursor.style.display = "none";

@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import './LabelControlPanel.scss';
-import {updatePreventCustomCursorStatus} from "../../../store/general/actionCreators";
+import {updatePreventCustomCursorStatus as updatePreventCustomCursorStatusAction} from "../../../store/general/actionCreators";
 import {AppState} from "../../../store";
 import {connect} from "react-redux";
 import {IPoint} from "../../../interfaces/IPoint";
@@ -10,7 +10,7 @@ import {ImageButton} from "../../Common/ImageButton/ImageButton";
 import {LabelActions} from "../../../logic/actions/LabelActions";
 import {ImageData} from "../../../store/labels/types";
 import {LabelStatus} from "../../../data/enums/LabelStatus";
-import {updateImageDataById} from "../../../store/labels/actionCreators";
+import {updateImageDataById as updateImageDataByIdAction} from "../../../store/labels/actionCreators";
 import {findLast} from "lodash";
 import {LabelsSelector} from "../../../store/selectors/LabelsSelector";
 
@@ -74,16 +74,17 @@ const LabelControlPanel: React.FC<IProps> = ({position, updatePreventCustomCurso
         updatePreventCustomCursorStatus(false);
     };
 
+    const isPanelActive = () => {
+        return isActive || labelData.id === activeLabelId || labelData.id === highlightedLabelId
+    };
+
+
     const getClassName = () => {
         return classNames(
             "LabelControlPanel", {
                 "is-active": isPanelActive()
             }
         );
-    };
-
-    const isPanelActive = () => {
-        return isActive || labelData.id === activeLabelId || labelData.id === highlightedLabelId
     };
 
     return <div
@@ -118,8 +119,8 @@ const LabelControlPanel: React.FC<IProps> = ({position, updatePreventCustomCurso
 };
 
 const mapDispatchToProps = {
-    updatePreventCustomCursorStatus,
-    updateImageDataById
+    updatePreventCustomCursorStatus: updatePreventCustomCursorStatusAction,
+    updateImageDataById: updateImageDataByIdAction
 };
 
 const mapStateToProps = (state: AppState) => ({

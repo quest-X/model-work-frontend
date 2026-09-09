@@ -254,7 +254,7 @@ const EditorContainer: React.FC<IProps> = (
                 saveTimeoutRef.current = null;
             }
         };
-    }, [imagesData]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [imagesData]);
 
     // 生成缩略图辅助函数
     const generateThumbnail = async (file: File): Promise<string | undefined> => {
@@ -475,9 +475,9 @@ const EditorContainer: React.FC<IProps> = (
                 }
 
                 // 添加图像文件（按文件夹分组）
-                for (const [folderName, files] of filesByFolder.entries()) {
-                    if (files.length === 1) {
-                        const file = files[0];
+                for (const [folderName, folderFiles] of filesByFolder.entries()) {
+                    if (folderFiles.length === 1) {
+                        const file = folderFiles[0];
                         const thumbnail = await generateThumbnail(file);
                         const item: QueueItem = {
                             id: uuidv4(),
@@ -490,7 +490,7 @@ const EditorContainer: React.FC<IProps> = (
                         };
                         newQueueItems.push(item);
                     } else {
-                        const sortedFolderFiles = files.sort((a, b) => a.name.localeCompare(b.name));
+                        const sortedFolderFiles = folderFiles.sort((a, b) => a.name.localeCompare(b.name));
                         const thumbnail = await generateThumbnail(sortedFolderFiles[0]);
                         const item: QueueItem = {
                             id: uuidv4(),
@@ -529,7 +529,6 @@ const EditorContainer: React.FC<IProps> = (
                     AutoSaveService.saveCurrentState();
                 }, 500);
             }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [imagesData, addQueueItemsAction, updateActivePopupTypeAction]);
 
     const {acceptedFiles, getRootProps, getInputProps, isDragActive, open: openFileDialog} = useDropzone({

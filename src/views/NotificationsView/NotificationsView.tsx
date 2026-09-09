@@ -133,8 +133,8 @@ export const NotificationsView: React.FC<IProps> = (props) => {
                                     <div className='step-counter'>
                                         {(() => {
                                             const language = store.getState().general.language;
-                                            const texts = LanguageConfig[language];
-                                            return texts.aiInference.stepProgress
+                                            const progressTexts = LanguageConfig[language];
+                                            return progressTexts.aiInference.stepProgress
                                                 .replace('{current}', notification.currentStep?.toString() || '1')
                                                 .replace('{total}', notification.totalSteps?.toString() || '3');
                                         })()}
@@ -152,8 +152,8 @@ export const NotificationsView: React.FC<IProps> = (props) => {
                                     <div className={`step ${notification.currentStep > 1 ? 'completed' : notification.currentStep === 1 ? 'active' : 'pending'}`}>
                                         <span className='step-name'>{(() => {
                                             const language = store.getState().general.language;
-                                            const texts = LanguageConfig[language];
-                                            return `1. ${texts.aiInference.steps.preprocessing}`;
+                                            const progressTexts = LanguageConfig[language];
+                                            return `1. ${progressTexts.aiInference.steps.preprocessing}`;
                                         })()}</span>
                                         {notification.stepTimes?.stepDurations && notification.stepTimes.stepDurations.length > 0 && (
                                             <span className='step-time'>
@@ -164,8 +164,8 @@ export const NotificationsView: React.FC<IProps> = (props) => {
                                     <div className={`step ${notification.currentStep > 2 ? 'completed' : notification.currentStep === 2 ? 'active' : 'pending'}`}>
                                         <span className='step-name'>{(() => {
                                             const language = store.getState().general.language;
-                                            const texts = LanguageConfig[language];
-                                            return `2. ${texts.aiInference.steps.inference}`;
+                                            const progressTexts = LanguageConfig[language];
+                                            return `2. ${progressTexts.aiInference.steps.inference}`;
                                         })()}</span>
                                         {notification.stepTimes?.stepDurations && notification.stepTimes.stepDurations.length > 1 && (
                                             <span className='step-time'>
@@ -176,8 +176,8 @@ export const NotificationsView: React.FC<IProps> = (props) => {
                                     <div className={`step ${notification.currentStep > 3 ? 'completed' : notification.currentStep === 3 ? 'active' : 'pending'}`}>
                                         <span className='step-name'>{(() => {
                                             const language = store.getState().general.language;
-                                            const texts = LanguageConfig[language];
-                                            return `3. ${texts.aiInference.steps.postprocessing}`;
+                                            const progressTexts = LanguageConfig[language];
+                                            return `3. ${progressTexts.aiInference.steps.postprocessing}`;
                                         })()}</span>
                                         {notification.stepTimes?.stepDurations && notification.stepTimes.stepDurations.length > 2 && (
                                             <span className='step-time'>
@@ -191,8 +191,8 @@ export const NotificationsView: React.FC<IProps> = (props) => {
                                         <div className='summary-item'>
                                             <span className='summary-label'>{(() => {
                                                 const language = store.getState().general.language;
-                                                const texts = LanguageConfig[language];
-                                                return texts.aiInference.totalTime;
+                                                const progressTexts = LanguageConfig[language];
+                                                return progressTexts.aiInference.totalTime;
                                             })()}</span>
                                             <span className='summary-value'>
                                                 {(notification.stepTimes.stepDurations.reduce((sum, duration) => sum + duration, 0) / 1000).toFixed(2)}s
@@ -201,8 +201,8 @@ export const NotificationsView: React.FC<IProps> = (props) => {
                                         <div className='summary-item'>
                                             <span className='summary-label'>{(() => {
                                                 const language = store.getState().general.language;
-                                                const texts = LanguageConfig[language];
-                                                return texts.aiInference.detectedObjects;
+                                                const progressTexts = LanguageConfig[language];
+                                                return progressTexts.aiInference.detectedObjects;
                                             })()}</span>
                                             <span className='summary-value'>
                                                 {notification.stepTimes.totalObjects} 个

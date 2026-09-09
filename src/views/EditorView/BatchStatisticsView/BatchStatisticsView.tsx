@@ -3,7 +3,7 @@ import {connect} from 'react-redux';
 import {AppState} from '../../../store';
 import {ImageData} from '../../../store/labels/types';
 import {Language} from '../../../data/LanguageConfig';
-import {updateActiveImageIndex} from '../../../store/labels/actionCreators';
+import {updateActiveImageIndex as updateActiveImageIndexAction} from '../../../store/labels/actionCreators';
 import './BatchStatisticsView.scss';
 
 interface ImageStat {
@@ -217,7 +217,7 @@ const mapStateToProps = (state: AppState) => ({
 });
 
 const mapDispatchToProps = {
-    updateActiveImageIndex,
+    updateActiveImageIndex: updateActiveImageIndexAction,
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(BatchStatisticsView);

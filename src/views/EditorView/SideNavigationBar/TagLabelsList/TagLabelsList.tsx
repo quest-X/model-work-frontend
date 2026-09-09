@@ -2,7 +2,7 @@ import {ISize} from "../../../../interfaces/ISize";
 import {ImageData, LabelName} from "../../../../store/labels/types";
 import React from "react";
 import Scrollbars from "react-custom-scrollbars-2";
-import {updateImageDataById} from "../../../../store/labels/actionCreators";
+import {updateImageDataById as updateImageDataByIdAction} from "../../../../store/labels/actionCreators";
 import {AppState} from "../../../../store";
 import {connect} from "react-redux";
 import {remove} from "lodash";
@@ -10,7 +10,7 @@ import './TagLabelsList.scss';
 import classNames from "classnames";
 import {ImageButton} from "../../../Common/ImageButton/ImageButton";
 import {PopupWindowType} from "../../../../data/enums/PopupWindowType";
-import {updateActivePopupType} from "../../../../store/general/actionCreators";
+import {updateActivePopupType as updateActivePopupTypeAction} from "../../../../store/general/actionCreators";
 import {Language, LanguageConfig} from "../../../../data/LanguageConfig";
 interface IProps {
     size: ISize;
@@ -82,6 +82,7 @@ const TagLabelsList: React.FC<IProps> = (
                 </div>
             }),
             <ImageButton
+                key="add-label"
                 image={"ico/plus.png"}
                 imageAlt={"plus"}
                 buttonSize={{width: 32, height: 32}}
@@ -124,8 +125,8 @@ const TagLabelsList: React.FC<IProps> = (
 };
 
 const mapDispatchToProps = {
-    updateImageDataById,
-    updateActivePopupType
+    updateImageDataById: updateImageDataByIdAction,
+    updateActivePopupType: updateActivePopupTypeAction
 };
 
 const mapStateToProps = (state: AppState) => ({

@@ -157,7 +157,7 @@ const FramePlayer: React.FC<IProps> = ({
 
     // 稳定 ref
     const loadFrameFullRef = useRef<(frameIdx: number) => Promise<void>>(() => Promise.resolve());
-    const maintainRef = useRef<() => void>(() => {});
+    const maintainRef = useRef<() => void>(() => { /* Assigned once frame maintenance is initialized. */ });
 
     // 加载单帧图像（缓存 → 全局帧池 → 后端批量取）
     const loadFrameImage = useCallback(async (frameIdx: number): Promise<HTMLImageElement> => {
@@ -395,6 +395,11 @@ const FramePlayer: React.FC<IProps> = ({
         console.log(`[FramePlayer] JPEG 淘汰 ${toRemove} 帧, 池容量=${heldIndices.length - toRemove}/${maxFrames}`);
     }, [sessionId]);
 
+    // 播放帧 ref
+    const currentFrameRef = useRef(currentFrame);
+    currentFrameRef.current = currentFrame;
+
+
     // 持续维护 available_frames：保证当前位置前方始终有 MIN_AHEAD 帧可播放
     const maintainAvailableFrames = useCallback(async () => {
         const gen = ++loadGenRef.current;
@@ -427,7 +432,7 @@ const FramePlayer: React.FC<IProps> = ({
                     if (p3CursorRef.current < totalFrames) {
                         const idx = p3CursorRef.current;
                         p3CursorRef.current++; // 无论成败推进，避免失败帧无限重试
-                        try { await loadFrameFullRef.current(idx); } catch {}
+                        try { await loadFrameFullRef.current(idx); } catch { /* Background cache loading is best effort; foreground requests report failures. */ }
                         continue;
                     }
                 }
@@ -439,10 +444,10 @@ const FramePlayer: React.FC<IProps> = ({
 
             if (isUrgent) {
                 // 紧急：在 MIN_AHEAD 范围内有空缺 → 只缓存图片（快，即使播放中也加载）
-                try { await loadFrameImage(target); } catch {}
+                try { await loadFrameImage(target); } catch { /* Background cache loading is best effort; foreground requests report failures. */ }
             } else if (!isPlayingRef.current) {
                 // 非紧急 + 未播放 → 完整加载（含缩略图）
-                try { await loadFrameFullRef.current(target); } catch {}
+                try { await loadFrameFullRef.current(target); } catch { /* Background cache loading is best effort; foreground requests report failures. */ }
                 if (target % 10 === 0) await new Promise(r => setTimeout(r, 0));
             } else {
                 // 非紧急 + 播放中 → 缓冲充足，暂停加载
@@ -533,7 +538,7 @@ const FramePlayer: React.FC<IProps> = ({
                     Array.from({ length: FAST }, (_, i) =>
                         (async () => {
                             if (loadGenRef.current !== gen || cancelled) return;
-                            try { await loadFrameFullRef.current(i); } catch {}
+                            try { await loadFrameFullRef.current(i); } catch { /* Background cache loading is best effort; foreground requests report failures. */ }
                             tick();
                         })()
                     )
@@ -545,11 +550,11 @@ const FramePlayer: React.FC<IProps> = ({
                 let nextIdx = FAST;
                 await Promise.all(
                     Array.from({ length: CONCURRENCY }, async () => {
-                        while (true) {
+                        while (nextIdx < initEnd) {
                             if (loadGenRef.current !== gen || cancelled) return;
                             const i = nextIdx++;
                             if (i >= initEnd) return;
-                            try { await loadFrameFullRef.current(i); } catch {}
+                            try { await loadFrameFullRef.current(i); } catch { /* Background cache loading is best effort; foreground requests report failures. */ }
                             tick();
                         }
                     })
@@ -573,11 +578,7 @@ const FramePlayer: React.FC<IProps> = ({
 
         init();
         return () => { cancelled = true; };
-    }, [frames.length, sessionId, videoSize.width, videoSize.height]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // 播放帧 ref
-    const currentFrameRef = useRef(currentFrame);
-    currentFrameRef.current = currentFrame;
+    }, [frames.length, sessionId, videoSize.width, videoSize.height]);
 
     // === 播放/暂停控制（rAF + 时间驱动） ===
     useEffect(() => {

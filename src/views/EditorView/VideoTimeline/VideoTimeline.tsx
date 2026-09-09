@@ -241,6 +241,21 @@ const VideoTimeline: React.FC<IProps> = ({
 
     }, [duration, currentTime, frames, currentFrame, fps, hoverTime, keyframes, annotatedFrames, selectionRange]);
 
+    // 处理时间跳转
+    const handleSeek = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const time = (x / rect.width) * duration;
+        const clampedTime = Math.max(0, Math.min(duration, time));
+        const frame = Math.min(Math.round(clampedTime * fps), frames - 1);
+        if (frame === currentFrame) return;
+        onFrameChange(frame);
+    };
+
+
     // ===== 鼠标事件 =====
 
     const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -304,20 +319,6 @@ const VideoTimeline: React.FC<IProps> = ({
         }
         setIsDragging(false);
         setHoverTime(null);
-    };
-
-    // 处理时间跳转
-    const handleSeek = (e: React.MouseEvent<HTMLCanvasElement>) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const time = (x / rect.width) * duration;
-        const clampedTime = Math.max(0, Math.min(duration, time));
-        const frame = Math.min(Math.round(clampedTime * fps), frames - 1);
-        if (frame === currentFrame) return;
-        onFrameChange(frame);
     };
 
     // 键盘快捷键

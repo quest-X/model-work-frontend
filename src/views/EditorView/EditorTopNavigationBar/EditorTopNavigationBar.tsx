@@ -16,14 +16,14 @@ import { LabelsSelector } from '../../../store/selectors/LabelsSelector';
 import { ImageData } from '../../../store/labels/types';
 import { LabelType } from '../../../data/enums/LabelType';
 import { AISelector } from '../../../store/selectors/AISelector';
-import { updateActiveLabelType, updateActiveLabelViewType } from '../../../store/labels/actionCreators';
+import { updateActiveLabelType as updateActiveLabelTypeAction, updateActiveLabelViewType as updateActiveLabelViewTypeAction } from '../../../store/labels/actionCreators';
 import { ISize } from '../../../interfaces/ISize';
 import { AIActions } from '../../../logic/actions/AIActions';
 import { Fade, styled, Switch, Tooltip, tooltipClasses, TooltipProps } from '@mui/material';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 import {EditorModel} from '../../../staticModels/EditorModel';
 import { ImageUtil } from '../../../utils/ImageUtil';
-import { updateFullImageInferenceStatus, toggleImageAILabelsVisibility, toggleImageSegmentationLabelsVisibility, addInferenceHistory } from '../../../store/ai/actionCreators';
+import { updateFullImageInferenceStatus as updateFullImageInferenceStatusAction, toggleImageAILabelsVisibility as toggleImageAILabelsVisibilityAction, toggleImageSegmentationLabelsVisibility as toggleImageSegmentationLabelsVisibilityAction, addInferenceHistory as addInferenceHistoryAction } from '../../../store/ai/actionCreators';
 import { AIDetectionActions } from '../../../logic/actions/AIDetectionActions';
 import { AISegmentationActions } from '../../../logic/actions/AISegmentationActions';
 import { DetectionAPIDetector } from '../../../ai/DetectionAPIDetector';
@@ -202,7 +202,7 @@ interface IProps {
     updateActiveLabelViewType: (activeLabelViewType: LabelType) => any;
 }
 
-const EditorTopNavigationBar: React.FC<IProps> = React.memo((
+const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNavigationBarView(
     {
         activeContext,
         updateImageDragModeStatusAction,
@@ -234,7 +234,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         hasExtensionEngine,
         updateActiveLabelType,
         updateActiveLabelViewType,
-    }) => {
+    }: IProps) {
     const currentTexts = useMemo(() => LanguageConfig[language], [language]);
     
     
@@ -476,7 +476,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
                     body: JSON.stringify({ model: samModel }),
                 }).then(r => r.json()).then(() => {
                     setActiveModelName(samModel);
-                }).catch(() => {});
+                }).catch(() => { /* Keep the last model state when the engine is unavailable. */ });
             }
         }
     }, [smartAnnotationActive, loadedModels, activeModelName]);
@@ -561,7 +561,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
             // 磁盘上所有模型（供 slot 被自定义占用时选一个内置代表）
             fetch(`${baseUrl}/available-models`).then(r => r.json()).then(data => {
                 if (Array.isArray(data.models)) setAvailableModels(data.models);
-            }).catch(() => {});
+            }).catch(() => { /* Keep the last model state when the engine is unavailable. */ });
             return healthPromise;
         };
         fetchModelsRef.current = fetchModels;
@@ -572,23 +572,20 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo((
         const CONNECTED_INTERVAL = 30000;
         const DISCONNECTED_INTERVAL = 2000;
         let timer: ReturnType<typeof setInterval>;
-        const scheduleTick = (intervalMs: number) => {
-            clearInterval(timer);
-            timer = setInterval(tick, intervalMs);
-        };
         const tick = () => {
             if (document.hidden) return;
             const wasConnected = lastConnectedRef.current;
             fetchModels().then((connected) => {
                 if (connected !== wasConnected) {
                     lastConnectedRef.current = connected;
-                    scheduleTick(connected ? CONNECTED_INTERVAL : DISCONNECTED_INTERVAL);
+                    clearInterval(timer);
+                    timer = setInterval(tick, connected ? CONNECTED_INTERVAL : DISCONNECTED_INTERVAL);
                 }
             });
         };
         fetchModels().then((connected) => {
             lastConnectedRef.current = connected;
-            scheduleTick(connected ? CONNECTED_INTERVAL : DISCONNECTED_INTERVAL);
+            timer = setInterval(tick, connected ? CONNECTED_INTERVAL : DISCONNECTED_INTERVAL);
         });
         const onModelLoaded = () => fetchModels();
         window.addEventListener('opensight:model-loaded', onModelLoaded);
@@ -1692,12 +1689,12 @@ const mapDispatchToProps = {
     updateSmartAnnotationActiveStatusAction: updateSmartAnnotationActiveStatus,
     updateTrackingModeStatusAction: updateTrackingModeStatus,
     updateActivePopupTypeAction: updateActivePopupType,
-    updateFullImageInferenceStatus,
-    toggleImageAILabelsVisibility,
-    toggleImageSegmentationLabelsVisibility,
-    addInferenceHistory,
-    updateActiveLabelType,
-    updateActiveLabelViewType,
+    updateFullImageInferenceStatus: updateFullImageInferenceStatusAction,
+    toggleImageAILabelsVisibility: toggleImageAILabelsVisibilityAction,
+    toggleImageSegmentationLabelsVisibility: toggleImageSegmentationLabelsVisibilityAction,
+    addInferenceHistory: addInferenceHistoryAction,
+    updateActiveLabelType: updateActiveLabelTypeAction,
+    updateActiveLabelViewType: updateActiveLabelViewTypeAction,
     updateEraserModeAction: updateEraserMode,
     updateSamNegativeModeAction: updateSamNegativeMode,
 };

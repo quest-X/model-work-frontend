@@ -137,12 +137,12 @@ const VideoPlayer: React.FC<IProps> = ({
                     } else {
                         // 两帧时间差的倒数就是帧率
                         const frameDuration = metadata.mediaTime - firstMediaTime;
-                        const detectedFps = frameDuration > 0 ? Math.round(1 / frameDuration) : 30;
+                        const measuredFps = frameDuration > 0 ? Math.round(1 / frameDuration) : 30;
 
                         video.pause();
                         video.currentTime = 0;
                         setIsFpsDetecting(false);
-                        resolve(detectedFps);
+                        resolve(measuredFps);
                     }
                 };
 
@@ -268,8 +268,8 @@ const VideoPlayer: React.FC<IProps> = ({
         const video = videoRef.current;
         if (!video || !onTimeUpdateRef.current) return;
 
-        const currentTime = video.currentTime;
-        const currentFrame = Math.round(currentTime * detectedFps);
+        const videoTime = video.currentTime;
+        const videoFrame = Math.round(videoTime * detectedFps);
 
         // 关键优化：先立即请求下一帧，避免延迟累积
         // 如果视频还在播放，继续请求下一帧（必须在执行耗时操作之前）
@@ -284,7 +284,7 @@ const VideoPlayer: React.FC<IProps> = ({
 
         // 然后执行耗时操作（Redux 更新）
         // 这些操作不会阻塞下一帧的请求
-        onTimeUpdateRef.current(currentTime, currentFrame);
+        onTimeUpdateRef.current(videoTime, videoFrame);
         // Skip canvas drawFrame() during playback: the <video> element is shown
         // directly via CSS (display:block) so drawing to canvas is redundant overhead.
         // drawFrame() is still called on pause, seek, and first frame.
@@ -295,12 +295,16 @@ const VideoPlayer: React.FC<IProps> = ({
         const video = videoRef.current;
         if (!video || !onTimeUpdateRef.current || isPlaying) return; // 播放时不使用 timeupdate
 
-        const currentTime = video.currentTime;
-        const currentFrame = Math.round(currentTime * detectedFps);
+        const videoTime = video.currentTime;
+        const videoFrame = Math.round(videoTime * detectedFps);
 
-        onTimeUpdateRef.current(currentTime, currentFrame);
+        onTimeUpdateRef.current(videoTime, videoFrame);
         drawFrame();
     }, [detectedFps, drawFrame, isPlaying]);
+
+    // 处理视频播放完毕
+    const hasEndedRef = useRef<boolean>(false); // 防止重复触发
+
 
     // 播放控制 - 只有在视频加载完成且帧率检测完成后才允许播放
     useEffect(() => {
@@ -410,9 +414,6 @@ const VideoPlayer: React.FC<IProps> = ({
             seekToTime(currentTime);
         }
     }, [currentTime, isVideoLoaded, isPlaying, seekToTime]);
-
-    // 处理视频播放完毕
-    const hasEndedRef = useRef<boolean>(false); // 防止重复触发
     const handleVideoEnded = useCallback(() => {
         // 防止重复触发
         if (hasEndedRef.current) {

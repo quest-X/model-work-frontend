@@ -177,7 +177,7 @@ export class CompositeRenderEngine extends BaseRenderEngine {
         }
     }
 
-    protected mouseUpHandler(data: EditorData): void {}
+    protected mouseUpHandler(): void { /* Child engines finish editing in update(). */ }
 
     public render(data: EditorData): void {
         if (!data.viewPortContentImageRect || !data.realImageSize) {

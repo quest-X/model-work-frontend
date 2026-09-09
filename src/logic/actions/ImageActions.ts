@@ -70,7 +70,7 @@ export class ImageActions {
       ...imageData,
     };
     switch (labelType) {
-      case LabelType.POINT:
+      case LabelType.POINT: {
         const point = LabelsSelector.getActivePointLabel();
         newImageData.labelPoints = imageData.labelPoints.map(
           (labelPoint: LabelPoint) => {
@@ -86,7 +86,8 @@ export class ImageActions {
         );
         store.dispatch(updateActiveLabelId(point.id));
         break;
-      case LabelType.LINE:
+      }
+      case LabelType.LINE: {
         const line = LabelsSelector.getActiveLineLabel();
         newImageData.labelLines = imageData.labelLines.map(
           (labelLine: LabelLine) => {
@@ -102,7 +103,8 @@ export class ImageActions {
         );
         store.dispatch(updateActiveLabelId(line.id));
         break;
-      case LabelType.RECT:
+      }
+      case LabelType.RECT: {
         const rect = LabelsSelector.getActiveRectLabel();
         newImageData.labelRects = imageData.labelRects.map(
           (labelRectangle: LabelRect) => {
@@ -118,7 +120,8 @@ export class ImageActions {
         );
         store.dispatch(updateActiveLabelId(rect.id));
         break;
-      case LabelType.POLYGON:
+      }
+      case LabelType.POLYGON: {
         const polygon = LabelsSelector.getActivePolygonLabel();
         newImageData.labelPolygons = imageData.labelPolygons.map(
           (labelPolygon: LabelPolygon) => {
@@ -134,7 +137,8 @@ export class ImageActions {
         );
         store.dispatch(updateActiveLabelId(polygon.id));
         break;
-      case LabelType.IMAGE_RECOGNITION:
+      }
+      case LabelType.IMAGE_RECOGNITION: {
         const labelId: string = labelNames[labelIndex].id;
         if (imageData.labelNameIds.includes(labelId)) {
           newImageData.labelNameIds = remove(
@@ -145,6 +149,7 @@ export class ImageActions {
           newImageData.labelNameIds = imageData.labelNameIds.concat(labelId);
         }
         break;
+      }
     }
 
     return newImageData;

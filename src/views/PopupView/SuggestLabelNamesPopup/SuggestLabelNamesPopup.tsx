@@ -2,13 +2,13 @@ import React, {useState} from 'react'
 import './SuggestLabelNamesPopup.scss'
 import {AppState} from '../../../store';
 import {connect} from 'react-redux';
-import {updateRejectedSuggestedLabelList, updateSuggestedLabelList} from '../../../store/ai/actionCreators';
+import {updateRejectedSuggestedLabelList as updateRejectedSuggestedLabelListAction, updateSuggestedLabelList as updateSuggestedLabelListAction} from '../../../store/ai/actionCreators';
 import {GenericYesNoPopup} from '../GenericYesNoPopup/GenericYesNoPopup';
 import {PopupActions} from '../../../logic/actions/PopupActions';
 import {AISelector} from '../../../store/selectors/AISelector';
 import Scrollbars from 'react-custom-scrollbars-2';
 import {LabelName} from '../../../store/labels/types';
-import {updateLabelNames} from '../../../store/labels/actionCreators';
+import {updateLabelNames as updateLabelNamesAction} from '../../../store/labels/actionCreators';
 import {LabelsSelector} from '../../../store/selectors/LabelsSelector';
 import { v4 as uuidv4 } from 'uuid';
 import {ArrayUtil} from '../../../utils/ArrayUtil';
@@ -48,6 +48,26 @@ const SuggestLabelNamesPopup: React.FC<IProps> = (
     const [selectAllFlag, setSelectAllFlag] = useState(false);
     const [labelNames, setLabelNames] = useState(mapNamesToSelectableNames(AISelector.getSuggestedLabelList()));
 
+    const extractSelectedNames = (): string[] => {
+        return labelNames.reduce((acc: string[], entry: SelectableName) => {
+            if (entry.flag) {
+                acc.push(entry.name);
+            }
+            return acc;
+        }, [])
+    };
+
+    const extractUnselectedNames = (): string[] => {
+        return labelNames.reduce((acc: string[], entry: SelectableName) => {
+            if (!entry.flag) {
+                acc.push(entry.name);
+            }
+            return acc;
+        }, [])
+    };
+
+
+
     const onAccept = () => {
         updateLabelNames(extractSelectedNames().reduce((acc: LabelName[], entry: string, index: number) => {
             acc.push({
@@ -61,6 +81,11 @@ const SuggestLabelNamesPopup: React.FC<IProps> = (
         updateSuggestedLabelList([]);
         PopupActions.close();
     };
+
+    const extractNames = (): string[] => {
+        return labelNames.map((entry: SelectableName) => entry.name);
+    };
+
 
     const onReject = () => {
         updateRejectedSuggestedLabelList(AISelector.getRejectedSuggestedLabelList().concat(extractNames()));
@@ -104,28 +129,6 @@ const SuggestLabelNamesPopup: React.FC<IProps> = (
             return(acc && entry.flag)
         }, true);
         setSelectAllFlag(nextSelectAllFlag);
-    };
-
-    const extractSelectedNames = (): string[] => {
-        return labelNames.reduce((acc: string[], entry: SelectableName) => {
-            if (entry.flag) {
-                acc.push(entry.name);
-            }
-            return acc;
-        }, [])
-    };
-
-    const extractUnselectedNames = (): string[] => {
-        return labelNames.reduce((acc: string[], entry: SelectableName) => {
-            if (!entry.flag) {
-                acc.push(entry.name);
-            }
-            return acc;
-        }, [])
-    };
-
-    const extractNames = (): string[] => {
-        return labelNames.map((entry: SelectableName) => entry.name);
     };
 
     const getOptions = () => {
@@ -201,9 +204,9 @@ const SuggestLabelNamesPopup: React.FC<IProps> = (
 };
 
 const mapDispatchToProps = {
-    updateLabelNames,
-    updateSuggestedLabelList,
-    updateRejectedSuggestedLabelList
+    updateLabelNames: updateLabelNamesAction,
+    updateSuggestedLabelList: updateSuggestedLabelListAction,
+    updateRejectedSuggestedLabelList: updateRejectedSuggestedLabelListAction
 };
 
 const mapStateToProps = (state: AppState) => ({

@@ -21,9 +21,9 @@ export class PrimaryEditorRenderEngine extends BaseRenderEngine {
     // EVENT HANDLERS
     // =================================================================================================================
 
-    public mouseMoveHandler(data: EditorData): void {}
-    public mouseDownHandler(data: EditorData): void {}
-    public mouseUpHandler(data: EditorData): void {}
+    public mouseMoveHandler(): void { /* Primary engine draws the image without editing labels. */ }
+    public mouseDownHandler(): void { /* Primary engine draws the image without editing labels. */ }
+    public mouseUpHandler(): void { /* Primary engine draws the image without editing labels. */ }
 
     // =================================================================================================================
     // RENDERING

@@ -118,7 +118,7 @@ export class Editor extends React.Component<IProps, IState> {
         this.unmountEventListeners();
     }
 
-    public componentDidUpdate(prevProps: Readonly<IProps>, prevState: Readonly<{}>, snapshot?: any): void {
+    public componentDidUpdate(prevProps: Readonly<IProps>, prevState: Readonly<IState>, snapshot?: unknown): void {
         const {imageData, activeLabelType} = this.props;
         const imageChanged = prevProps.imageData.id !== imageData.id;
 
