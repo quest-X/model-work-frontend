@@ -165,7 +165,7 @@ const AllLabelsList: React.FC<IProps> = (
     const updateAllLabelById = (labelItem: LabelItem, labelNameId: string) => {
         if (!imageData?.id) return;
         
-        let newImageData = { ...imageData };
+        const newImageData = { ...imageData };
         
         switch (labelItem.type) {
             case LabelType.RECT:

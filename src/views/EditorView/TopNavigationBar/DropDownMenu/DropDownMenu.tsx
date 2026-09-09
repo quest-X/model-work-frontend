@@ -78,8 +78,8 @@ const DropDownMenu: React.FC<IProps> = ({updatePreventCustomCursorStatusAction, 
 
     const wrapOnClick = (onClick?: () => void, disabled?: boolean): () => void => {
         return () => {
-            if (!!disabled) return;
-            if (!!onClick) onClick();
+            if (disabled) return;
+            if (onClick) onClick();
             setActiveTabIdx(null);
             updatePreventCustomCursorStatusAction(false);
             document.removeEventListener(EventType.MOUSE_DOWN, onMouseDownBeyondDropDown);

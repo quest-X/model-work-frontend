@@ -53,11 +53,11 @@ export class EditorActions {
                 EditorModel.supportRenderingEngine = null;
                 break;
         }
-    };
+    }
 
     public static swapSupportRenderingEngine(activeLabelType: LabelType) {
         EditorActions.mountSupportRenderingEngine(activeLabelType);
-    };
+    }
 
     public static mountRenderEnginesAndHelpers(activeLabelType: LabelType) {
         EditorModel.viewPortHelper = new ViewPortHelper();
@@ -165,5 +165,5 @@ export class EditorActions {
             EditorModel.cursor.style.display = "none";
             EditorModel.mousePositionIndicator.style.display = "none";
         }
-    };
+    }
 }

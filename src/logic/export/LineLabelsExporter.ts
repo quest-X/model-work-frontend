@@ -35,7 +35,7 @@ export class LineLabelsExporter {
         const labelNames: LabelName[] = LabelsSelector.getLabelNames();
         const labelLinesString: string[] = imageData.labelLines.map((labelLine: LabelLine) => {
             const labelName: LabelName = findLast(labelNames, {id: labelLine.labelId});
-            const labelFields = !!labelName ? [
+            const labelFields = labelName ? [
                 labelName.name,
                 Math.round(labelLine.line.start.x).toString(),
                 Math.round(labelLine.line.start.y).toString(),

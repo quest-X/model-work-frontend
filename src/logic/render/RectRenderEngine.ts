@@ -77,7 +77,7 @@ export class RectRenderEngine extends BaseRenderEngine {
             if (isInLabelDragMode) {
                 // 标签拖拽模式：优先检查锚点，然后检查整个矩形区域
                 const rectUnderMouseEdge: LabelRect = this.getRectUnderMouse(data);
-                if (!!rectUnderMouseEdge) {
+                if (rectUnderMouseEdge) {
                     const rect: IRect = this.calculateRectRelativeToActiveImage(rectUnderMouseEdge.rect, data);
                     const anchorUnderMouse: RectAnchor = this.getAnchorUnderMouseByRect(rect, data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
 
@@ -120,7 +120,7 @@ export class RectRenderEngine extends BaseRenderEngine {
                 }
                 // 编辑模式：先检查锚点，然后只在边缘可以拖拽，内部可以创建新矩形
                 const rectUnderMouseEdge: LabelRect = this.getRectUnderMouse(data);
-                if (!!rectUnderMouseEdge) {
+                if (rectUnderMouseEdge) {
                     const rect: IRect = this.calculateRectRelativeToActiveImage(rectUnderMouseEdge.rect, data);
                     const anchorUnderMouse: RectAnchor = this.getAnchorUnderMouseByRect(rect, data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
 
@@ -142,7 +142,7 @@ export class RectRenderEngine extends BaseRenderEngine {
     };
 
     public mouseUpHandler = (data: EditorData) => {
-        if (!!data.viewPortContentImageRect) {
+        if (data.viewPortContentImageRect) {
             const mousePositionSnapped: IPoint = RectUtil.snapPointToRect(data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
             const activeLabelRect: LabelRect = LabelsSelector.getActiveRectLabel();
 
@@ -213,7 +213,7 @@ export class RectRenderEngine extends BaseRenderEngine {
                 const imageData = LabelsSelector.getActiveImageData();
                 if (imageData) {
                     const rectToMove = imageData.labelRects.find(rect => rect.id === this.moveRectId);
-                    if (!!rectToMove) {
+                    if (rectToMove) {
                         // prompt rect: 点击不移动时什么都不做（不再自动删除）
                         if (rectToMove.isPrompt && distSq < 25) {
                             // no-op：用户可通过橡皮擦或 Delete 键删除 prompt
@@ -391,7 +391,7 @@ export class RectRenderEngine extends BaseRenderEngine {
     }
 
     private drawCurrentlyCreatedRect(mousePosition: IPoint, imageRect: IRect) {
-        if (!!this.startCreateRectPoint) {
+        if (this.startCreateRectPoint) {
             const mousePositionSnapped: IPoint = RectUtil.snapPointToRect(mousePosition, imageRect);
             const activeRect: IRect = {
                 x: this.startCreateRectPoint.x,
@@ -508,7 +508,7 @@ export class RectRenderEngine extends BaseRenderEngine {
     private drawActiveRect(labelRect: LabelRect, data: EditorData) {
         let rect: IRect = this.calculateRectRelativeToActiveImage(labelRect.rect, data);
         
-        if (!!this.startResizeRectAnchor) {
+        if (this.startResizeRectAnchor) {
             const startAnchorPosition: IPoint = PointUtil.add(this.startResizeRectAnchor.position, data.viewPortContentImageRect);
             const endAnchorPositionSnapped: IPoint = RectUtil.snapPointToRect(data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
             const delta = PointUtil.subtract(endAnchorPositionSnapped, startAnchorPosition);
@@ -561,13 +561,13 @@ export class RectRenderEngine extends BaseRenderEngine {
                     store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
                 } else {
                     const rectForDrag: LabelRect = this.getRectUnderMouseForDrag(data);
-                    if (!!rectForDrag) {
+                    if (rectForDrag) {
                         store.dispatch(updateCustomCursorStyle(CustomCursorStyle.GRAB));
                     } else {
                         RenderEngineUtil.wrapDefaultCursorStyleInCancel(data);
                     }
                 }
-            } else if (!!this.startResizeRectAnchor) {
+            } else if (this.startResizeRectAnchor) {
                 store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
             } else if (!!this.startMoveRectPoint && !!this.moveRectId) {
                 // 编辑模式下的移动操作，使用 GRABBING
@@ -802,7 +802,7 @@ export class RectRenderEngine extends BaseRenderEngine {
             if (shouldShow) {
                 const rect: IRect = this.calculateRectRelativeToActiveImage(labelRect.rect, data);
                 const rectAnchor = this.getAnchorUnderMouseByRect(rect, data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
-                if (!!rectAnchor) return rectAnchor;
+                if (rectAnchor) return rectAnchor;
             }
         }
         return null;
@@ -945,7 +945,7 @@ export class RectRenderEngine extends BaseRenderEngine {
     }
 
     private updatePolygonMove(data: EditorData): void {
-        if (!!this.startMovePolygonPoint) {
+        if (this.startMovePolygonPoint) {
             const mousePositionSnapped: IPoint = RectUtil.snapPointToRect(data.mousePositionOnViewPortContent, data.viewPortContentImageRect);
             const moveDelta: IPoint = {
                 x: mousePositionSnapped.x - this.startMovePolygonPoint.x,

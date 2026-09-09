@@ -66,7 +66,7 @@ export class ImageActions {
   ): ImageData {
     const labelType: LabelType = LabelsSelector.getActiveLabelType();
     const labelNames = LabelsSelector.getLabelNames();
-    let newImageData: ImageData = {
+    const newImageData: ImageData = {
       ...imageData,
     };
     switch (labelType) {

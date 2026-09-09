@@ -14,7 +14,7 @@ export class ViewPortHelper {
     private mouseStartPosition: IPoint;
 
     public update(data: EditorData): void {
-        if (!!data.event) {
+        if (data.event) {
             switch (MouseEventUtil.getEventType(data.event)) {
                 case EventType.MOUSE_MOVE:
                     this.mouseMoveHandler(data);

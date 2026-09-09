@@ -133,7 +133,7 @@ export class RectLabelsExporter {
     ): string {
         const labelName: LabelName = findLast(labelNames, {id: labelRect.labelId});
         const labelFields = [
-            !!labelName ? labelName.name: '',
+            labelName ? labelName.name: '',
             Math.round(labelRect.rect.x).toString(),
             Math.round(labelRect.rect.y).toString(),
             Math.round(labelRect.rect.width).toString(),
@@ -221,7 +221,7 @@ export class RectLabelsExporter {
         const labelNamesList: LabelName[] = LabelsSelector.getLabelNames();
         const labelRectsString: string[] = imageData.labelRects.map((labelRect: LabelRect) => {
             const labelName: LabelName = findLast(labelNamesList, {id: labelRect.labelId});
-            const labelFields = !!labelName ? [
+            const labelFields = labelName ? [
                 `\t<object>`,
                 `\t\t<name>${labelName.name}</name>`,
                 `\t\t<pose>Unspecified</pose>`,

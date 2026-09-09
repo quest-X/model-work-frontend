@@ -105,7 +105,7 @@ export class VirtualList extends React.Component<IProps, IState> {
     private getChildren = () => {
         const {viewportRect, isScrolling} = this.state;
         const {overScanHeight, childSize} = this.props;
-        const overScan: number = !!overScanHeight ? overScanHeight : 0;
+        const overScan: number = overScanHeight ? overScanHeight : 0;
 
         const viewportRectWithOverScan:IRect = {
             x: viewportRect.x,

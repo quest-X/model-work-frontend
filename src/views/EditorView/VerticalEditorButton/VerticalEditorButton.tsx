@@ -30,7 +30,7 @@ export const VerticalEditorButton = (props:IProps) => {
     return(
         <div
             className={getClassName()}
-            onClick={!!onClick ? onClick : undefined}
+            onClick={onClick ? onClick : undefined}
             key={key}
             style={style}
         >

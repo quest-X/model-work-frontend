@@ -46,7 +46,7 @@ const LabelControlPanel: React.FC<IProps> = ({position, updatePreventCustomCurso
                     return {
                         ...labelRect,
                         status: LabelStatus.ACCEPTED,
-                        labelId: !!labelName ? labelName.id : labelRect.labelId
+                        labelId: labelName ? labelName.id : labelRect.labelId
                     }
                 } else {
                     return labelRect
@@ -58,7 +58,7 @@ const LabelControlPanel: React.FC<IProps> = ({position, updatePreventCustomCurso
                     return {
                         ...labelPoint,
                         status: LabelStatus.ACCEPTED,
-                        labelId: !!labelName ? labelName.id : labelPoint.labelId
+                        labelId: labelName ? labelName.id : labelPoint.labelId
                     }
                 } else {
                     return labelPoint

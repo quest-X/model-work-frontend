@@ -35,7 +35,7 @@ export class PointLabelsExporter {
         const labelNames: LabelName[] = LabelsSelector.getLabelNames();
         const labelPointsString: string[] = imageData.labelPoints.map((labelPoint: LabelPoint) => {
             const labelName: LabelName = findLast(labelNames, {id: labelPoint.labelId});
-            const labelFields = !!labelName ? [
+            const labelFields = labelName ? [
                 labelName.name,
                 Math.round(labelPoint.point.x).toString(),
                 Math.round(labelPoint.point.y).toString(),
