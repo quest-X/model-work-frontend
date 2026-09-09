@@ -16,24 +16,61 @@ const project = (): StoredProjectData => ({
     version: 'legacy',
 });
 
+// Private bracket access keeps these focused regression tests checked against
+// the actual implementation without widening the production API.
+const originalMethods = {
+    generateWorkspaceId: IndexedDBManager['generateWorkspaceId'],
+    resolveProjectLocation: IndexedDBManager['resolveProjectLocation'],
+    readProjectById: IndexedDBManager['readProjectById'],
+    readWorkspaceMeta: IndexedDBManager['readWorkspaceMeta'],
+    readLatestWorkspaceMeta: IndexedDBManager['readLatestWorkspaceMeta'],
+};
+const mockMethod = <K extends keyof typeof originalMethods>(name: K) => {
+    const mock = jest.fn<ReturnType<typeof originalMethods[K]>, Parameters<typeof originalMethods[K]>>();
+    Object.defineProperty(IndexedDBManager, name, {value: mock, writable: true, configurable: true});
+    return mock;
+};
+
+type StoredMeta = ReturnType<typeof IndexedDBManager['buildMeta']>;
+type StoredRecord = StoredProjectData | StoredMeta;
+type FakeRequest<T = unknown> = {
+    -readonly [K in 'result' | 'error']?: IDBRequest<T>[K];
+} & {
+    onsuccess?: () => void;
+    onerror?: () => void;
+    onblocked?: () => void;
+};
+// Only transaction operations reached by these tests are stubbed. Real commit
+// and abort notifications remain independently controlled by each test.
+const setDatabase = (transaction?: () => {
+    error: IDBTransaction['error'];
+    objectStore: (name: string) => object;
+}): void => {
+    // Install an intentionally partial browser fixture at the test boundary;
+    // do not claim it implements unrelated IDBDatabase methods.
+    Object.defineProperty(IndexedDBManager, 'db', {
+        value: {close: jest.fn(), transaction}, writable: true, configurable: true,
+    });
+};
+
 type FakeTransaction = {
-    error: Error | null;
+    error: IDBTransaction['error'];
     oncomplete?: () => void;
     onabort?: () => void;
     onerror?: () => void;
     objectStore: (name: string) => {
-        put: (value: any) => {onerror?: () => void};
+        put: (value: StoredRecord) => {onerror?: () => void};
         delete: (key: string) => {onerror?: () => void};
     };
 };
 
 const transactionHarness = () => {
-    const puts: Array<{store: string; value: any}> = [];
+    const puts: Array<{store: string; value: StoredRecord}> = [];
     const deletes: Array<{store: string; key: string}> = [];
     const transaction: FakeTransaction = {
         error: null,
         objectStore: (name: string) => ({
-            put: (value: any) => {
+            put: (value: StoredRecord) => {
                 puts.push({store: name, value});
                 return {};
             },
@@ -48,12 +85,12 @@ const transactionHarness = () => {
 
 describe('IndexedDBManager durability', () => {
     afterEach(() => {
-        (IndexedDBManager as any).workspaceLockRelease?.();
-        (IndexedDBManager as any).workspaceChannel?.close?.();
+        IndexedDBManager['workspaceLockRelease']?.();
+        IndexedDBManager['workspaceChannel']?.close?.();
         jest.restoreAllMocks();
         jest.useRealTimers();
         sessionStorage.clear();
-        Object.assign(IndexedDBManager as any, {
+        Object.assign(IndexedDBManager, originalMethods, {
             db: null,
             initializePromise: null,
             workspaceId: null,
@@ -87,14 +124,14 @@ describe('IndexedDBManager durability', () => {
         sessionStorage.setItem('opensight-recovery-workspace-id', 'tab-stable');
 
         try {
-            await (IndexedDBManager as any).initializeWorkspaceIdentity();
+            await IndexedDBManager['initializeWorkspaceIdentity']();
 
             expect(IndexedDBManager.getWorkspaceId()).toBe('tab-stable');
         } finally {
             if (originalLocks) {
                 Object.defineProperty(navigator, 'locks', originalLocks);
             } else {
-                delete (navigator as any).locks;
+                Reflect.deleteProperty(navigator, 'locks');
             }
             Object.defineProperty(globalThis, 'BroadcastChannel', {
                 configurable: true,
@@ -104,19 +141,19 @@ describe('IndexedDBManager durability', () => {
             if (originalGetEntries) {
                 Object.defineProperty(performance, 'getEntriesByType', originalGetEntries);
             } else {
-                delete (performance as any).getEntriesByType;
+                Reflect.deleteProperty(performance, 'getEntriesByType');
             }
         }
     });
 
     it('allocates a new workspace identity for an independent tab session', () => {
-        jest.spyOn(IndexedDBManager as any, 'generateWorkspaceId')
+        mockMethod('generateWorkspaceId')
             .mockReturnValueOnce('tab-a')
             .mockReturnValueOnce('tab-b');
 
         const firstTab = IndexedDBManager.getWorkspaceId();
         sessionStorage.clear();
-        (IndexedDBManager as any).workspaceId = null;
+        IndexedDBManager['workspaceId'] = null;
         const secondTab = IndexedDBManager.getWorkspaceId();
 
         expect(firstTab).toBe('tab-a');
@@ -127,7 +164,7 @@ describe('IndexedDBManager durability', () => {
         const originalLocks = Object.getOwnPropertyDescriptor(navigator, 'locks');
         const originalBroadcastChannel = globalThis.BroadcastChannel;
         class DelayedBroadcastChannel {
-            public onmessage: ((event: any) => void) | null = null;
+            public onmessage: BroadcastChannel['onmessage'] = null;
 
             public postMessage(): void {
                 // A frozen source tab never responds during initialization.
@@ -137,8 +174,8 @@ describe('IndexedDBManager durability', () => {
                 // Test channel owns no native resources.
             }
         }
-        const request = jest.fn((name: string, _options: LockOptions, callback: (lock: any) => any) =>
-            Promise.resolve(callback(name.endsWith('cloned-tab') ? null : {name})),
+        const request = jest.fn((name: string, _options: LockOptions, callback: (lock: Lock | null) => Promise<void>) =>
+            Promise.resolve(callback(name.endsWith('cloned-tab') ? null : {name, mode: 'exclusive'})),
         );
         Object.defineProperty(navigator, 'locks', {
             configurable: true,
@@ -150,11 +187,11 @@ describe('IndexedDBManager durability', () => {
             value: DelayedBroadcastChannel,
         });
         sessionStorage.setItem('opensight-recovery-workspace-id', 'cloned-tab');
-        jest.spyOn(IndexedDBManager as any, 'generateWorkspaceId')
+        mockMethod('generateWorkspaceId')
             .mockReturnValue('rotated-tab');
 
         try {
-            await (IndexedDBManager as any).initializeWorkspaceIdentity();
+            await IndexedDBManager['initializeWorkspaceIdentity']();
 
             expect(IndexedDBManager.getWorkspaceId()).toBe('rotated-tab');
             expect(sessionStorage.getItem('opensight-recovery-workspace-id'))
@@ -172,11 +209,11 @@ describe('IndexedDBManager durability', () => {
                 expect.any(Function),
             );
         } finally {
-            (IndexedDBManager as any).workspaceLockRelease?.();
+            IndexedDBManager['workspaceLockRelease']?.();
             if (originalLocks) {
                 Object.defineProperty(navigator, 'locks', originalLocks);
             } else {
-                delete (navigator as any).locks;
+                Reflect.deleteProperty(navigator, 'locks');
             }
             Object.defineProperty(globalThis, 'BroadcastChannel', {
                 configurable: true,
@@ -191,9 +228,9 @@ describe('IndexedDBManager durability', () => {
         const originalBroadcastChannel = globalThis.BroadcastChannel;
         const originalGetEntries = Object.getOwnPropertyDescriptor(performance, 'getEntriesByType');
         let grantLock: (() => void) | null = null;
-        const request = jest.fn((name: string, options: LockOptions, callback: (lock: any) => any) =>
+        const request = jest.fn((name: string, options: LockOptions, callback: (lock: Lock | null) => Promise<void>) =>
             new Promise((resolve, reject) => {
-                grantLock = () => resolve(callback({name}));
+                grantLock = () => resolve(callback({name, mode: 'exclusive'}));
                 options.signal?.addEventListener('abort', () => {
                     reject(new DOMException('handoff timed out', 'AbortError'));
                 });
@@ -213,12 +250,13 @@ describe('IndexedDBManager durability', () => {
             value: jest.fn(() => [{type: 'reload'} as PerformanceNavigationTiming]),
         });
         sessionStorage.setItem('opensight-recovery-workspace-id', 'reload-tab');
-        const generateWorkspaceId = jest.spyOn(IndexedDBManager as any, 'generateWorkspaceId');
+        const generateWorkspaceId = mockMethod('generateWorkspaceId');
 
         try {
-            const initializing = (IndexedDBManager as any).initializeWorkspaceIdentity();
+            const initializing = IndexedDBManager['initializeWorkspaceIdentity']();
             expect(grantLock).not.toBeNull();
-            grantLock!();
+            if (!grantLock) throw new Error('Expected the pending Web Lock request');
+            grantLock();
             await initializing;
 
             expect(IndexedDBManager.getWorkspaceId()).toBe('reload-tab');
@@ -233,11 +271,11 @@ describe('IndexedDBManager durability', () => {
             );
             expect(request.mock.calls[0][1]).not.toHaveProperty('ifAvailable');
         } finally {
-            (IndexedDBManager as any).workspaceLockRelease?.();
+            IndexedDBManager['workspaceLockRelease']?.();
             if (originalLocks) {
                 Object.defineProperty(navigator, 'locks', originalLocks);
             } else {
-                delete (navigator as any).locks;
+                Reflect.deleteProperty(navigator, 'locks');
             }
             Object.defineProperty(globalThis, 'BroadcastChannel', {
                 configurable: true,
@@ -247,7 +285,7 @@ describe('IndexedDBManager durability', () => {
             if (originalGetEntries) {
                 Object.defineProperty(performance, 'getEntriesByType', originalGetEntries);
             } else {
-                delete (performance as any).getEntriesByType;
+                Reflect.deleteProperty(performance, 'getEntriesByType');
             }
         }
     });
@@ -267,18 +305,18 @@ describe('IndexedDBManager durability', () => {
             value: jest.fn(() => [{type: 'navigate'} as PerformanceNavigationTiming]),
         });
         sessionStorage.setItem('opensight-recovery-workspace-id', 'cloned-tab');
-        jest.spyOn(IndexedDBManager as any, 'generateWorkspaceId')
+        mockMethod('generateWorkspaceId')
             .mockReturnValue('rotated-without-channel');
 
         try {
-            await (IndexedDBManager as any).initializeWorkspaceIdentity();
+            await IndexedDBManager['initializeWorkspaceIdentity']();
 
             expect(IndexedDBManager.getWorkspaceId()).toBe('rotated-without-channel');
         } finally {
             if (originalLocks) {
                 Object.defineProperty(navigator, 'locks', originalLocks);
             } else {
-                delete (navigator as any).locks;
+                Reflect.deleteProperty(navigator, 'locks');
             }
             Object.defineProperty(globalThis, 'BroadcastChannel', {
                 configurable: true,
@@ -288,7 +326,7 @@ describe('IndexedDBManager durability', () => {
             if (originalGetEntries) {
                 Object.defineProperty(performance, 'getEntriesByType', originalGetEntries);
             } else {
-                delete (performance as any).getEntriesByType;
+                Reflect.deleteProperty(performance, 'getEntriesByType');
             }
         }
     });
@@ -299,13 +337,13 @@ describe('IndexedDBManager durability', () => {
         jest.spyOn(console, 'error').mockImplementation(() => undefined);
         const originalIndexedDB = window.indexedDB;
         const lateDatabase = {close: jest.fn()};
-        const request: any = {result: lateDatabase};
+        const request: FakeRequest<typeof lateDatabase> = {result: lateDatabase};
         const open = jest.fn(() => request);
         Object.defineProperty(window, 'indexedDB', {
             configurable: true,
             value: {open},
         });
-        (IndexedDBManager as any).workspaceIdentityInitialized = true;
+        IndexedDBManager['workspaceIdentityInitialized'] = true;
 
         try {
             const initializing = IndexedDBManager.initialize();
@@ -314,9 +352,9 @@ describe('IndexedDBManager durability', () => {
             expect(open).toHaveBeenCalledTimes(1);
             request.onblocked?.();
 
-            jest.advanceTimersByTime((IndexedDBManager as any).OPEN_TIMEOUT_MS);
+            jest.advanceTimersByTime(IndexedDBManager['OPEN_TIMEOUT_MS']);
             await expect(initializing).resolves.toBe(false);
-            expect((IndexedDBManager as any).initializePromise).toBeNull();
+            expect(IndexedDBManager['initializePromise']).toBeNull();
             expect(IndexedDBManager.isReady()).toBe(false);
 
             request.onsuccess?.();
@@ -331,20 +369,18 @@ describe('IndexedDBManager durability', () => {
 
     it('exposes database readiness without mutating initialization state', () => {
         expect(IndexedDBManager.isReady()).toBe(false);
-        (IndexedDBManager as any).db = {close: jest.fn()};
+        setDatabase();
         expect(IndexedDBManager.isReady()).toBe(true);
     });
 
     it('reports success only after transaction commit and false on a later abort', async () => {
         jest.spyOn(console, 'error').mockImplementation(() => undefined);
         const harness = transactionHarness();
-        (IndexedDBManager as any).db = {
-            transaction: () => harness.transaction,
-        };
-        (IndexedDBManager as any).workspaceId = 'tab-a';
-        (IndexedDBManager as any).activeReadProjectId = 'workspace:tab-foreign';
-        (IndexedDBManager as any).activeReadWorkspaceId = 'tab-foreign';
-        (IndexedDBManager as any).activeReadLastModified = 41;
+        setDatabase(() => harness.transaction);
+        IndexedDBManager['workspaceId'] = 'tab-a';
+        IndexedDBManager['activeReadProjectId'] = 'workspace:tab-foreign';
+        IndexedDBManager['activeReadWorkspaceId'] = 'tab-foreign';
+        IndexedDBManager['activeReadLastModified'] = 41;
         let settled = false;
 
         const saving = IndexedDBManager.saveProject(project()).then(result => {
@@ -354,23 +390,21 @@ describe('IndexedDBManager durability', () => {
         await Promise.resolve();
         expect(settled).toBe(false);
 
-        harness.transaction.error = new Error('QuotaExceededError');
+        harness.transaction.error = new DOMException('QuotaExceededError', 'QuotaExceededError');
         harness.transaction.onabort?.();
         await expect(saving).resolves.toBe(false);
         expect(sessionStorage.getItem('opensight-recovery-dismissed-foreign-snapshot'))
             .toBeNull();
-        expect((IndexedDBManager as any).activeReadWorkspaceId).toBe('tab-foreign');
+        expect(IndexedDBManager['activeReadWorkspaceId']).toBe('tab-foreign');
     });
 
     it('dismisses the consumed foreign revision only after the first local save commits', async () => {
         const harness = transactionHarness();
-        (IndexedDBManager as any).db = {
-            transaction: () => harness.transaction,
-        };
-        (IndexedDBManager as any).workspaceId = 'tab-local';
-        (IndexedDBManager as any).activeReadProjectId = 'workspace:tab-foreign';
-        (IndexedDBManager as any).activeReadWorkspaceId = 'tab-foreign';
-        (IndexedDBManager as any).activeReadLastModified = 41;
+        setDatabase(() => harness.transaction);
+        IndexedDBManager['workspaceId'] = 'tab-local';
+        IndexedDBManager['activeReadProjectId'] = 'workspace:tab-foreign';
+        IndexedDBManager['activeReadWorkspaceId'] = 'tab-foreign';
+        IndexedDBManager['activeReadLastModified'] = 41;
 
         const saving = IndexedDBManager.saveProject(project());
         expect(sessionStorage.getItem('opensight-recovery-dismissed-foreign-snapshot'))
@@ -384,20 +418,18 @@ describe('IndexedDBManager durability', () => {
             workspaceId: 'tab-local',
             revisions: {'tab-foreign': 41},
         });
-        expect((IndexedDBManager as any).activeReadWorkspaceId).toBe('tab-local');
+        expect(IndexedDBManager['activeReadWorkspaceId']).toBe('tab-local');
     });
 
     it('does not mistake a failed metadata read for an empty recovery store', async () => {
-        const request: any = {error: new Error('temporary read failure')};
-        const transaction: any = {
+        const request: FakeRequest = {error: new DOMException('temporary read failure')};
+        const transaction = {
             error: null,
             objectStore: () => ({get: () => request}),
         };
-        (IndexedDBManager as any).db = {
-            transaction: () => transaction,
-        };
+        setDatabase(() => transaction);
 
-        const reading = (IndexedDBManager as any).readWorkspaceMeta('tab-a');
+        const reading = IndexedDBManager['readWorkspaceMeta']('tab-a');
         request.onerror?.();
 
         await expect(reading).rejects.toBeInstanceOf(RecoveryStorageReadError);
@@ -407,16 +439,18 @@ describe('IndexedDBManager durability', () => {
         const first = transactionHarness();
         const second = transactionHarness();
         const transactions = [first.transaction, second.transaction];
-        (IndexedDBManager as any).db = {
-            transaction: () => transactions.shift(),
-        };
+        setDatabase(() => {
+            const transaction = transactions.shift();
+            if (!transaction) throw new Error('Unexpected third transaction');
+            return transaction;
+        });
 
-        (IndexedDBManager as any).workspaceId = 'tab-a';
+        IndexedDBManager['workspaceId'] = 'tab-a';
         const saveA = IndexedDBManager.saveProject(project());
         first.transaction.oncomplete?.();
         await expect(saveA).resolves.toBe(true);
 
-        (IndexedDBManager as any).workspaceId = 'tab-b';
+        IndexedDBManager['workspaceId'] = 'tab-b';
         const saveB = IndexedDBManager.saveProject(project());
         second.transaction.oncomplete?.();
         await expect(saveB).resolves.toBe(true);
@@ -430,13 +464,11 @@ describe('IndexedDBManager durability', () => {
 
     it('clears only this workspace and legacy data after viewing another tab snapshot', async () => {
         const harness = transactionHarness();
-        (IndexedDBManager as any).db = {
-            transaction: () => harness.transaction,
-        };
-        (IndexedDBManager as any).workspaceId = 'tab-local';
-        (IndexedDBManager as any).activeReadProjectId = 'workspace:tab-foreign';
-        (IndexedDBManager as any).activeReadWorkspaceId = 'tab-foreign';
-        (IndexedDBManager as any).activeReadLastModified = 41;
+        setDatabase(() => harness.transaction);
+        IndexedDBManager['workspaceId'] = 'tab-local';
+        IndexedDBManager['activeReadProjectId'] = 'workspace:tab-foreign';
+        IndexedDBManager['activeReadWorkspaceId'] = 'tab-foreign';
+        IndexedDBManager['activeReadLastModified'] = 41;
 
         const clearing = IndexedDBManager.clearProject();
         harness.transaction.oncomplete?.();
@@ -466,9 +498,9 @@ describe('IndexedDBManager durability', () => {
             workspaceId: 'tab-local',
             revisions: {'tab-foreign': 41},
         }));
-        const readLatest = async (lastModified: number): Promise<any> => {
-            const request: any = {};
-            const cursor: any = {
+        const readLatest = async (lastModified: number): Promise<StoredMeta | null> => {
+            const request: FakeRequest<{value: StoredMeta; continue: () => void} | null> = {};
+            const cursor = {
                 value: {
                     id: 'tab-foreign',
                     projectId: 'workspace:tab-foreign',
@@ -484,16 +516,16 @@ describe('IndexedDBManager durability', () => {
                     request.onsuccess?.();
                 },
             };
-            const transaction: any = {
+            const transaction = {
                 error: null,
                 objectStore: () => ({
                     index: () => ({openCursor: () => request}),
                 }),
             };
-            (IndexedDBManager as any).db = {transaction: () => transaction};
-            (IndexedDBManager as any).dismissedForeignSnapshots = null;
+            setDatabase(() => transaction);
+            IndexedDBManager['dismissedForeignSnapshots'] = null;
 
-            const reading = (IndexedDBManager as any).readLatestWorkspaceMeta('tab-local');
+            const reading = IndexedDBManager['readLatestWorkspaceMeta']('tab-local');
             request.result = cursor;
             request.onsuccess?.();
             return reading;
@@ -508,13 +540,11 @@ describe('IndexedDBManager durability', () => {
 
     it('does not persist a foreign dismissal when clear aborts', async () => {
         const harness = transactionHarness();
-        (IndexedDBManager as any).db = {
-            transaction: () => harness.transaction,
-        };
-        (IndexedDBManager as any).workspaceId = 'tab-local';
-        (IndexedDBManager as any).activeReadProjectId = 'workspace:tab-foreign';
-        (IndexedDBManager as any).activeReadWorkspaceId = 'tab-foreign';
-        (IndexedDBManager as any).activeReadLastModified = 41;
+        setDatabase(() => harness.transaction);
+        IndexedDBManager['workspaceId'] = 'tab-local';
+        IndexedDBManager['activeReadProjectId'] = 'workspace:tab-foreign';
+        IndexedDBManager['activeReadWorkspaceId'] = 'tab-foreign';
+        IndexedDBManager['activeReadLastModified'] = 41;
 
         const clearing = IndexedDBManager.clearProject();
         harness.transaction.onabort?.();
@@ -526,14 +556,15 @@ describe('IndexedDBManager durability', () => {
 
     it('loads a foreign snapshot as copy-on-write without an eager durable copy', async () => {
         const foreignProject = {...project(), id: 'workspace:tab-foreign', workspaceId: 'tab-foreign'};
-        (IndexedDBManager as any).db = {};
-        (IndexedDBManager as any).workspaceId = 'tab-local';
-        jest.spyOn(IndexedDBManager as any, 'resolveProjectLocation').mockResolvedValue({
+        setDatabase();
+        IndexedDBManager['workspaceId'] = 'tab-local';
+        mockMethod('resolveProjectLocation').mockResolvedValue({
             projectId: 'workspace:tab-foreign',
             workspaceId: 'tab-foreign',
-            meta: {},
+            meta: {imageCount: 0, validImageCount: 0, labelCount: 0,
+                isVideoProject: false, hasRecoverableProject: false, lastModified: 1},
         });
-        jest.spyOn(IndexedDBManager as any, 'readProjectById').mockResolvedValue(foreignProject);
+        mockMethod('readProjectById').mockResolvedValue(foreignProject);
         const saveProject = jest.spyOn(IndexedDBManager, 'saveProject').mockResolvedValue(true);
 
         const loaded = await IndexedDBManager.loadProject();
@@ -545,11 +576,11 @@ describe('IndexedDBManager durability', () => {
 
     it('loads a legacy record as copy-on-write for the current workspace', async () => {
         const legacy = project();
-        (IndexedDBManager as any).db = {};
-        (IndexedDBManager as any).workspaceId = 'tab-new';
-        jest.spyOn(IndexedDBManager as any, 'readWorkspaceMeta').mockResolvedValue(null);
-        jest.spyOn(IndexedDBManager as any, 'readLatestWorkspaceMeta').mockResolvedValue(null);
-        jest.spyOn(IndexedDBManager as any, 'readProjectById').mockResolvedValue(legacy);
+        setDatabase();
+        IndexedDBManager['workspaceId'] = 'tab-new';
+        mockMethod('readWorkspaceMeta').mockResolvedValue(null);
+        mockMethod('readLatestWorkspaceMeta').mockResolvedValue(null);
+        mockMethod('readProjectById').mockResolvedValue(legacy);
         const saveProject = jest.spyOn(IndexedDBManager, 'saveProject').mockResolvedValue(true);
 
         const loaded = await IndexedDBManager.loadProject();
@@ -578,13 +609,12 @@ describe('IndexedDBManager durability', () => {
             meta: {...locationA.meta, lastModified: 20},
         };
         let latestLocation = locationA;
-        (IndexedDBManager as any).db = {};
-        (IndexedDBManager as any).workspaceId = 'tab-local';
-        const resolveLocation = jest.spyOn(IndexedDBManager as any, 'resolveProjectLocation')
+        setDatabase();
+        IndexedDBManager['workspaceId'] = 'tab-local';
+        const resolveLocation = mockMethod('resolveProjectLocation')
             .mockImplementation(async () => latestLocation);
-        const readProject = jest.spyOn(IndexedDBManager as any, 'readProjectById')
-            .mockImplementation(async (...args: unknown[]) => {
-                const projectId = String(args[0]);
+        const readProject = mockMethod('readProjectById')
+            .mockImplementation(async projectId => {
                 return projectId === locationA.projectId
                     ? {...project(), id: projectId, workspaceId: 'tab-a', lastModified: 10, version: 'A'}
                     : {...project(), id: projectId, workspaceId: 'tab-b', lastModified: 20, version: 'B'};
@@ -628,10 +658,10 @@ describe('IndexedDBManager durability', () => {
             }],
             activeQueueItemId: 'camera-resource-1',
         };
-        (IndexedDBManager as any).db = {};
-        (IndexedDBManager as any).workspaceId = 'tab-camera';
-        jest.spyOn(IndexedDBManager as any, 'resolveProjectLocation').mockResolvedValue(location);
-        const readProject = jest.spyOn(IndexedDBManager as any, 'readProjectById')
+        setDatabase();
+        IndexedDBManager['workspaceId'] = 'tab-camera';
+        mockMethod('resolveProjectLocation').mockResolvedValue(location);
+        const readProject = mockMethod('readProjectById')
             .mockResolvedValue(cameraProject);
 
         await expect(IndexedDBManager.getProjectMeta()).resolves.toEqual(expect.objectContaining({
@@ -656,11 +686,11 @@ describe('IndexedDBManager durability', () => {
                 lastModified: 10,
             },
         };
-        (IndexedDBManager as any).db = {};
-        (IndexedDBManager as any).workspaceId = 'tab-local';
-        jest.spyOn(IndexedDBManager as any, 'resolveProjectLocation')
+        setDatabase();
+        IndexedDBManager['workspaceId'] = 'tab-local';
+        mockMethod('resolveProjectLocation')
             .mockResolvedValue(pinnedLocation);
-        jest.spyOn(IndexedDBManager as any, 'readProjectById').mockResolvedValue({
+        mockMethod('readProjectById').mockResolvedValue({
             ...project(),
             id: pinnedLocation.projectId,
             workspaceId: pinnedLocation.workspaceId,
@@ -686,11 +716,11 @@ describe('IndexedDBManager durability', () => {
                 lastModified: 10,
             },
         };
-        (IndexedDBManager as any).db = {};
-        (IndexedDBManager as any).workspaceId = 'tab-local';
-        const resolveLocation = jest.spyOn(IndexedDBManager as any, 'resolveProjectLocation')
+        setDatabase();
+        IndexedDBManager['workspaceId'] = 'tab-local';
+        const resolveLocation = mockMethod('resolveProjectLocation')
             .mockResolvedValue(pinnedLocation);
-        jest.spyOn(IndexedDBManager as any, 'readProjectById').mockResolvedValue(null);
+        mockMethod('readProjectById').mockResolvedValue(null);
 
         await IndexedDBManager.getProjectMeta();
 
@@ -718,11 +748,11 @@ describe('IndexedDBManager durability', () => {
                 labelNameIds: ['steel'],
             }],
         };
-        (IndexedDBManager as any).db = {};
-        (IndexedDBManager as any).workspaceId = 'tab-video';
-        const buildMeta = (IndexedDBManager as any).buildMeta.bind(IndexedDBManager);
+        setDatabase();
+        IndexedDBManager['workspaceId'] = 'tab-video';
+        const buildMeta = IndexedDBManager['buildMeta'].bind(IndexedDBManager);
         const meta = buildMeta(videoProject, 'tab-video', 'workspace:tab-video', 10);
-        jest.spyOn(IndexedDBManager as any, 'resolveProjectLocation').mockResolvedValue({
+        mockMethod('resolveProjectLocation').mockResolvedValue({
             projectId: 'workspace:tab-video',
             workspaceId: 'tab-video',
             meta,
@@ -755,7 +785,7 @@ describe('IndexedDBManager durability', () => {
             },
         };
 
-        const meta = (IndexedDBManager as any).buildMeta(
+        const meta = IndexedDBManager['buildMeta'](
             videoProject,
             'tab-video',
             'workspace:tab-video',
@@ -782,7 +812,7 @@ describe('IndexedDBManager durability', () => {
             labelPolygons: [],
             labelNameIds: [],
         }];
-        const partialMeta = (IndexedDBManager as any).buildMeta(
+        const partialMeta = IndexedDBManager['buildMeta'](
             videoProject,
             'tab-video',
             'workspace:tab-video',
@@ -822,7 +852,7 @@ describe('IndexedDBManager durability', () => {
             }],
         };
 
-        const meta = (IndexedDBManager as any).buildMeta(
+        const meta = IndexedDBManager['buildMeta'](
             queueProject,
             'tab-queue',
             'workspace:tab-queue',
@@ -854,7 +884,7 @@ describe('IndexedDBManager durability', () => {
             activeQueueItemId: 'camera-resource-1',
         };
 
-        const meta = (IndexedDBManager as any).buildMeta(
+        const meta = IndexedDBManager['buildMeta'](
             cameraProject,
             'tab-camera',
             'workspace:tab-camera',
