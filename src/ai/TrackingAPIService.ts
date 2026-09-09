@@ -60,6 +60,15 @@ export class TrackingAPIService {
     ): AbortController {
         const controller = new AbortController();
         const url = `${getEngineBaseUrl()}/track`;
+        const reportError = (reason: unknown): void => {
+            const isObject = reason !== null &&
+                (typeof reason === 'object' || typeof reason === 'function');
+            if (isObject && Reflect.get(reason, 'name') === 'AbortError') return;
+            const message: unknown = isObject ? Reflect.get(reason, 'message') : undefined;
+            cb.onError(reason instanceof Error
+                ? reason
+                : new Error(typeof message === 'string' ? message : String(reason)));
+        };
 
         const run = async () => {
             let response: Response;
@@ -80,8 +89,8 @@ export class TrackingAPIService {
                         ...(params.postprocess ? { postprocess: params.postprocess } : {}),
                     }),
                 });
-            } catch (e: any) {
-                if (e?.name !== 'AbortError') cb.onError(e as Error);
+            } catch (e) {
+                reportError(e);
                 return;
             }
 
@@ -102,8 +111,8 @@ export class TrackingAPIService {
                     else if (typeof msg.frame_idx === 'number') cb.onFrame(msg as TrackFrameResult);
                     return false;
                 });
-            } catch (e: any) {
-                if (e?.name !== 'AbortError') cb.onError(e as Error);
+            } catch (e) {
+                reportError(e);
             }
         };
 
