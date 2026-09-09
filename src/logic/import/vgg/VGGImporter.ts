@@ -13,8 +13,8 @@ import { v4 as uuidv4 } from 'uuid';
 export class VGGImporter extends AnnotationImporter {
     public import(
         filesData: File[],
-        onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => any,
-        onFailure: (error?: Error) => any
+        onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => void,
+        onFailure: (error?: Error) => void
     ): void {
         const jsonFiles = filesData.filter(f => f.name.toLowerCase().endsWith('.json'));
         if (jsonFiles.length === 0) {
@@ -26,9 +26,9 @@ export class VGGImporter extends AnnotationImporter {
             new Promise<VGGObject>((resolve, reject) => {
                 const reader = new FileReader();
                 reader.readAsText(f);
-                reader.onloadend = (evt: any) => {
+                reader.onloadend = () => {
                     try {
-                        resolve(JSON.parse(evt.target.result) as VGGObject);
+                        resolve(JSON.parse(String(reader.result)) as VGGObject);
                     } catch {
                         reject(new Error(`Failed to parse ${f.name}`));
                     }

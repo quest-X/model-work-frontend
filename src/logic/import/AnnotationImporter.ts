@@ -15,9 +15,10 @@ export class AnnotationImporter {
 
     public import(
         filesData: File[],
-        onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => any,
-        onFailure: (error?:Error) => any
-    ): void {
+        onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => void,
+        onFailure: (error?:Error) => void
+    ): void;
+    public import(): void {
         throw new Error('Method not implemented.');
     }
 }

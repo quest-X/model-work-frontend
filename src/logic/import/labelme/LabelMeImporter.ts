@@ -17,7 +17,7 @@ interface LabelMeShape {
     mask: string | null;
 }
 
-interface LabelMeAnnotation {
+export interface LabelMeAnnotation {
     shapes: LabelMeShape[];
     imagePath: string;
     imageHeight: number;
@@ -27,8 +27,8 @@ interface LabelMeAnnotation {
 export class LabelMeImporter extends AnnotationImporter {
     public import(
         filesData: File[],
-        onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => any,
-        onFailure: (error?: Error) => any
+        onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => void,
+        onFailure: (error?: Error) => void
     ): void {
         const jsonFiles = filesData.filter(f => f.name.toLowerCase().endsWith('.json'));
         if (jsonFiles.length === 0) {
@@ -40,9 +40,9 @@ export class LabelMeImporter extends AnnotationImporter {
             new Promise<LabelMeAnnotation>((resolve, reject) => {
                 const reader = new FileReader();
                 reader.readAsText(f);
-                reader.onloadend = (evt: any) => {
+                reader.onloadend = () => {
                     try {
-                        resolve(JSON.parse(evt.target.result) as LabelMeAnnotation);
+                        resolve(JSON.parse(String(reader.result)) as LabelMeAnnotation);
                     } catch {
                         reject(new Error(`Failed to parse ${f.name}`));
                     }
