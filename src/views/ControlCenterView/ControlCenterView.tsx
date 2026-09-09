@@ -9,6 +9,8 @@ import {
     ComputeClusterNode,
     ComputeGroupDetail,
     ComputeGroupMembership,
+    ComputeJoinCode,
+    ComputeJoinRequest,
     ComputeGroupResources,
     ComputeLanAsset,
     ComputeManagedDevice,
@@ -365,6 +367,11 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [activeGroupResources, setActiveGroupResources] = useState<ComputeGroupResources | null>(null);
     const [groupMutationBusy, setGroupMutationBusy] = useState(false);
     const [groupMutationMessage, setGroupMutationMessage] = useState('');
+    const [joinCode, setJoinCode] = useState<ComputeJoinCode | null>(null);
+    const [joinRequests, setJoinRequests] = useState<ComputeJoinRequest[]>([]);
+    const [joinDays, setJoinDays] = useState<7 | 30 | 180>(30);
+    const [joinAdminBusy, setJoinAdminBusy] = useState(false);
+    const [joinAdminError, setJoinAdminError] = useState('');
     const [lanAssets, setLanAssets] = useState<ComputeLanAsset[]>([]);
     const [resourceGraph, setResourceGraph] = useState<ComputeResourceGraph | null>(null);
     const [computeTasks, setComputeTasks] = useState<ComputeTask[]>([]);
@@ -493,6 +500,22 @@ export const ControlCenterView: React.FC<IProps> = ({
         }
     }, []);
 
+    const refreshJoinAdmin = useCallback(async () => {
+        try {
+            const [code, requests] = await Promise.all([
+                ComputeClusterService.joinCode(),
+                ComputeClusterService.joinRequests(),
+            ]);
+            if (!mounted.current) return;
+            setJoinCode(code);
+            setJoinRequests(requests.requests);
+            if (code.days) setJoinDays(code.days);
+            setJoinAdminError('');
+        } catch (reason) {
+            if (mounted.current) setJoinAdminError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }, []);
+
     useEffect(() => {
         mounted.current = true;
         void refresh(true);
@@ -503,6 +526,13 @@ export const ControlCenterView: React.FC<IProps> = ({
             window.clearInterval(timer);
         };
     }, [refresh]);
+
+    useEffect(() => {
+        if (workspace !== 'groups') return undefined;
+        void refreshJoinAdmin();
+        const timer = window.setInterval(() => void refreshJoinAdmin(), 5000);
+        return () => window.clearInterval(timer);
+    }, [refreshJoinAdmin, workspace]);
 
     useEffect(() => {
         if (!selectedGroupId) return undefined;
@@ -672,6 +702,36 @@ export const ControlCenterView: React.FC<IProps> = ({
     const selectedGroupResourceError = groupResourceError && groupResourceError.groupId === selectedGroup?.group_id
         ? groupResourceError.message
         : '';
+    const pendingJoinRequests = joinRequests.filter(request => request.status === 'pending');
+    const rotateJoinCode = async () => {
+        setJoinAdminBusy(true);
+        try {
+            const code = await ComputeClusterService.rotateJoinCode(joinDays);
+            setJoinCode(code);
+            setJoinRequests(current => current.map(request => request.status === 'pending'
+                ? {...request, status: 'expired'} : request));
+            setJoinAdminError('');
+            setGroupMutationMessage(zh ? '已生成新群号，旧群号及其待审批申请已失效。' : 'New join code created; the old code and its pending requests expired.');
+        } catch (reason) {
+            setJoinAdminError(reason instanceof Error ? reason.message : String(reason));
+        } finally {
+            setJoinAdminBusy(false);
+        }
+    };
+    const decideJoinRequest = async (requestId: string, action: 'approve' | 'reject') => {
+        setJoinAdminBusy(true);
+        try {
+            await ComputeClusterService.decideJoinRequest(requestId, action);
+            await refreshJoinAdmin();
+            setGroupMutationMessage(action === 'approve'
+                ? (zh ? '已同意入群申请，节点将在下一次轮询时自动加入。' : 'Join approved; the node will join on its next poll.')
+                : (zh ? '已拒绝入群申请。' : 'Join request rejected.'));
+        } catch (reason) {
+            setJoinAdminError(reason instanceof Error ? reason.message : String(reason));
+        } finally {
+            setJoinAdminBusy(false);
+        }
+    };
     const removeSelectedFieldGroup = async () => {
         if (!selectedGroup || selectedGroup.scope === 'central' || !groupDetail) return;
         if (!window.confirm(zh
@@ -1707,6 +1767,63 @@ export const ControlCenterView: React.FC<IProps> = ({
                         {groupMutationMessage}
                     </p>}
                     <section className='ControlSection ControlSectionFirst'>
+                        <div className='ControlSectionHeading'>
+                            <h2>{zh ? '群号' : 'Join code'}</h2>
+                        </div>
+                        <div className='ControlJoinCode'>
+                            {joinCode?.configured && joinCode.code
+                                ? <>
+                                    <input aria-label={zh ? '群号' : 'Join code'} readOnly value={joinCode.code}/>
+                                    <button type='button' onClick={() => void navigator.clipboard.writeText(joinCode.code || '')}>
+                                        {zh ? '复制' : 'Copy'}
+                                    </button>
+                                </>
+                                : <span>{zh ? '尚未生成群号' : 'No join code yet'}</span>}
+                            <select aria-label={zh ? '群号自动更换周期' : 'Join-code rotation period'}
+                                value={joinDays} disabled={joinAdminBusy}
+                                onChange={event => setJoinDays(Number(event.target.value) as 7 | 30 | 180)}>
+                                {[7, 30, 180].map(days => <option value={days} key={days}>
+                                    {days} {zh ? '天' : 'days'}
+                                </option>)}
+                            </select>
+                            <button type='button' disabled={joinAdminBusy} onClick={() => void rotateJoinCode()}>
+                                {joinCode?.configured ? (zh ? '立即更换' : 'Rotate now') : (zh ? '生成群号' : 'Create code')}
+                            </button>
+                        </div>
+                        {joinCode?.expires_at && <small className='ControlJoinExpiry'>
+                            {zh ? '自动更换时间：' : 'Rotates at: '}
+                            {new Date(joinCode.expires_at * 1000).toLocaleString(zh ? 'zh-CN' : 'en-US')}
+                        </small>}
+                        {joinAdminError && <p role='alert' className='ControlJoinError'>{joinAdminError}</p>}
+                    </section>
+                    <section className='ControlSection'>
+                        <div className='ControlSectionHeading'>
+                            <h2>{zh ? '待审批入群申请' : 'Pending join requests'}</h2>
+                            <span>{pendingJoinRequests.length}</span>
+                        </div>
+                        {pendingJoinRequests.length
+                            ? <div className='ControlServiceGrid' aria-label={zh ? '待审批入群申请' : 'Pending join requests'}>
+                                {pendingJoinRequests.map(request => <article className='ControlServiceCard' key={request.request_id}>
+                                    <div>
+                                        <span>{request.payload.installation_id}</span>
+                                        <strong>{request.payload.name}</strong>
+                                        <small>{request.payload.ssh_user} · {request.payload.control_host}</small>
+                                        <div className='ControlJoinActions'>
+                                            <button type='button' disabled={joinAdminBusy}
+                                                onClick={() => void decideJoinRequest(request.request_id, 'approve')}>
+                                                {zh ? '同意' : 'Approve'}
+                                            </button>
+                                            <button type='button' disabled={joinAdminBusy}
+                                                onClick={() => void decideJoinRequest(request.request_id, 'reject')}>
+                                                {zh ? '拒绝' : 'Reject'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </article>)}
+                            </div>
+                            : <div className='ControlEmptyBlock'>{zh ? '当前没有待审批申请' : 'No pending requests'}</div>}
+                    </section>
+                    <section className='ControlSection'>
                         <div className='ControlSectionHeading'>
                             <h2>{zh ? '已加入的群' : 'Joined groups'}</h2>
                             <span>{visibleGroups.length}</span>
