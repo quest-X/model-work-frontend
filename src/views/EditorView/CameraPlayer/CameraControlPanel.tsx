@@ -169,21 +169,21 @@ const CameraControlPanel: React.FC<IProps> = ({
         );
     };
 
-    const autoCards: Array<{
+    const createAutoCards = (settings: CameraPreviewSettings): Array<{
         action: CameraPreviewAutoAction;
         label: string;
         badge: string;
         description: string;
         parameters: Array<{label: string; value: string}>;
-    }> = draft ? [
+    }> => [
         {
             action: 'exposure',
             label: chinese ? '自动曝光' : 'Auto exposure',
             badge: 'AEC',
             description: chinese ? '分析 1011 亮度，自动补偿 1012；不改物理快门与增益。' : 'Analyzes 1011 and compensates 1012 without changing camera exposure.',
             parameters: [
-                {label: chinese ? '亮度' : 'Brightness', value: draft.brightness.toFixed(2)},
-                {label: 'Gamma', value: draft.gamma.toFixed(2)},
+                {label: chinese ? '亮度' : 'Brightness', value: settings.brightness.toFixed(2)},
+                {label: 'Gamma', value: settings.gamma.toFixed(2)},
             ],
         },
         {
@@ -192,8 +192,8 @@ const CameraControlPanel: React.FC<IProps> = ({
             badge: 'AF',
             description: chinese ? '软件清晰增强，只改变 1012 锐度；不移动物理镜头。' : 'Software clarity enhancement on 1012; the physical lens does not move.',
             parameters: [
-                {label: chinese ? '锐度' : 'Sharpness', value: draft.sharpness.toFixed(1)},
-                {label: chinese ? '降噪' : 'Denoise', value: draft.denoise.toFixed(1)},
+                {label: chinese ? '锐度' : 'Sharpness', value: settings.sharpness.toFixed(1)},
+                {label: chinese ? '降噪' : 'Denoise', value: settings.denoise.toFixed(1)},
             ],
         },
         {
@@ -202,8 +202,8 @@ const CameraControlPanel: React.FC<IProps> = ({
             badge: 'WDR',
             description: chinese ? '分析 1011 高亮与暗部，为 1012 计算软件宽动态补偿。' : 'Analyzes highlights and shadows in 1011 for software WDR on 1012.',
             parameters: [
-                {label: chinese ? '对比度' : 'Contrast', value: draft.contrast.toFixed(2)},
-                {label: 'Gamma', value: draft.gamma.toFixed(2)},
+                {label: chinese ? '对比度' : 'Contrast', value: settings.contrast.toFixed(2)},
+                {label: 'Gamma', value: settings.gamma.toFixed(2)},
             ],
         },
         {
@@ -212,13 +212,13 @@ const CameraControlPanel: React.FC<IProps> = ({
             badge: 'D/N',
             description: chinese ? '按 1011 环境亮度切换 1012 软件日夜补偿；不切物理红外。' : 'Switches software day/night compensation without changing camera IR.',
             parameters: [
-                {label: chinese ? '饱和度' : 'Saturation', value: draft.saturation.toFixed(2)},
-                {label: chinese ? '降噪' : 'Denoise', value: draft.denoise.toFixed(1)},
+                {label: chinese ? '饱和度' : 'Saturation', value: settings.saturation.toFixed(2)},
+                {label: chinese ? '降噪' : 'Denoise', value: settings.denoise.toFixed(1)},
             ],
         },
-    ] : [];
+    ];
 
-    const busyText = runningAuto?.disabling
+    const getBusyText = () => runningAuto?.disabling
         ? (chinese ? '正在关闭该自动项…' : 'Disabling automatic control…')
         : runningAuto?.action === 'exposure'
         ? (chinese ? '正在分析画面并自动曝光…' : 'Analyzing automatic exposure…')
@@ -227,21 +227,77 @@ const CameraControlPanel: React.FC<IProps> = ({
             : runningAuto?.action === 'wdr'
                 ? (chinese ? '正在分析高亮与暗部…' : 'Analyzing software WDR…')
                 : (chinese ? '正在判断日夜场景…' : 'Detecting day/night scene…');
+    const busyText = getBusyText();
+
+    const renderMetrics = () => metrics && <div className='CameraMetricGrid'>
+        <div><span>{chinese ? '画面亮度' : 'Luma'}</span><strong>{percent(metrics.luma)}</strong></div>
+        <div><span>{chinese ? '过曝区域' : 'Clipped'}</span><strong>{percent(metrics.clipped_ratio)}</strong></div>
+        <div><span>{chinese ? '清晰度' : 'Sharpness'}</span><strong>{Math.round(metrics.focus_score)}</strong></div>
+        <div><span>{chinese ? '分析画面' : 'Control frame'}</span><strong>{metrics.width}×{metrics.height}</strong></div>
+    </div>;
+
+    const renderAdvancedControls = () => draft && advancedOpen && <div className='CameraAdvancedContent'>
+        <div className='CameraPreviewSliders'>
+            {FIELD_DEFINITIONS.map(definition => <label key={definition.field}>
+                <span>
+                    <strong>{chinese ? definition.chinese : definition.english}</strong>
+                    <code>{draft[definition.field].toFixed(definition.step < 0.1 ? 2 : 1)}</code>
+                </span>
+                <input
+                    type='range'
+                    aria-label={chinese ? definition.chinese : definition.english}
+                    min={definition.min}
+                    max={definition.max}
+                    step={definition.step}
+                    value={draft[definition.field]}
+                    disabled={saving}
+                    onChange={event => setDraft({
+                        ...draft,
+                        [definition.field]: Number(event.target.value),
+                    })}
+                    onPointerUp={updatePreview}
+                    onKeyUp={updatePreview}
+                    onBlur={updatePreview}
+                />
+            </label>)}
+        </div>
+        <div className='CameraPreviewActions'>
+            <button type='button' disabled={saving} onClick={() => void run(
+                () => CameraPreviewService.reset(resourceId),
+                chinese ? '已恢复全部软件参数' : 'Restored all software settings',
+                true,
+            )}>
+                {chinese ? '恢复全部参数' : 'Restore all settings'}
+            </button>
+            <button
+                type='button'
+                className='danger'
+                disabled={saving || (!localDirty && !preview?.dirty)}
+                onClick={applyToCamera}
+            >
+                {saving
+                    ? (chinese ? '正在处理…' : 'Working…')
+                    : (chinese ? '应用到相机' : 'Apply to camera')}
+            </button>
+        </div>
+    </div>;
+
+    const renderTitle = () => <div className='CameraControlTitle'>
+        <div>
+            <div className='CameraControlTitleHeading'>
+                <strong>{chinese ? '智能调参' : 'Smart controls'}</strong>
+                <span className='CameraPreviewSafeBadge'>
+                    {chinese ? '预览未下发' : 'Preview not dispatched'}
+                </span>
+            </div>
+            <span>{chinese
+                ? '调参先预览于 1012，确认后可应用到物理相机'
+                : 'Preview adjustments on 1012, then apply them to the physical camera'}</span>
+        </div>
+    </div>;
 
     return <aside ref={panelRef} className='CameraControlPanel CameraPreviewControlPanel' id='camera-smart-controls'>
-        <div className='CameraControlTitle'>
-            <div>
-                <div className='CameraControlTitleHeading'>
-                    <strong>{chinese ? '智能调参' : 'Smart controls'}</strong>
-                    <span className='CameraPreviewSafeBadge'>
-                        {chinese ? '预览未下发' : 'Preview not dispatched'}
-                    </span>
-                </div>
-                <span>{chinese
-                    ? '调参先预览于 1012，确认后可应用到物理相机'
-                    : 'Preview adjustments on 1012, then apply them to the physical camera'}</span>
-            </div>
-        </div>
+        {renderTitle()}
 
         {loading && <div className='CameraControlLoading'><span/>{chinese ? '正在读取预览方案…' : 'Reading preview preset…'}</div>}
         {error && <div className='CameraControlMessage error'>{error}</div>}
@@ -253,15 +309,10 @@ const CameraControlPanel: React.FC<IProps> = ({
                 <div><span>1012</span><strong>{chinese ? '调参效果' : 'Adjusted'}</strong><em>LIVE</em></div>
             </div>
 
-            {metrics && <div className='CameraMetricGrid'>
-                <div><span>{chinese ? '画面亮度' : 'Luma'}</span><strong>{percent(metrics.luma)}</strong></div>
-                <div><span>{chinese ? '过曝区域' : 'Clipped'}</span><strong>{percent(metrics.clipped_ratio)}</strong></div>
-                <div><span>{chinese ? '清晰度' : 'Sharpness'}</span><strong>{Math.round(metrics.focus_score)}</strong></div>
-                <div><span>{chinese ? '分析画面' : 'Control frame'}</span><strong>{metrics.width}×{metrics.height}</strong></div>
-            </div>}
+            {renderMetrics()}
 
             <div className='CameraAutoControlList'>
-                {autoCards.map(card => {
+                {createAutoCards(draft).map(card => {
                     const active = preview?.active_automations[card.action] === true;
                     return <section
                         className={`CameraAutoControlSection${active ? ' active' : ''}`}
@@ -303,51 +354,7 @@ const CameraControlPanel: React.FC<IProps> = ({
                 <i>{advancedOpen ? '−' : '+'}</i>
             </button>
 
-            {advancedOpen && <div className='CameraAdvancedContent'>
-                <div className='CameraPreviewSliders'>
-                    {FIELD_DEFINITIONS.map(definition => <label key={definition.field}>
-                        <span>
-                            <strong>{chinese ? definition.chinese : definition.english}</strong>
-                            <code>{draft[definition.field].toFixed(definition.step < 0.1 ? 2 : 1)}</code>
-                        </span>
-                        <input
-                            type='range'
-                            aria-label={chinese ? definition.chinese : definition.english}
-                            min={definition.min}
-                            max={definition.max}
-                            step={definition.step}
-                            value={draft[definition.field]}
-                            disabled={saving}
-                            onChange={event => setDraft({
-                                ...draft,
-                                [definition.field]: Number(event.target.value),
-                            })}
-                            onPointerUp={updatePreview}
-                            onKeyUp={updatePreview}
-                            onBlur={updatePreview}
-                        />
-                    </label>)}
-                </div>
-                <div className='CameraPreviewActions'>
-                    <button type='button' disabled={saving} onClick={() => void run(
-                        () => CameraPreviewService.reset(resourceId),
-                        chinese ? '已恢复全部软件参数' : 'Restored all software settings',
-                        true,
-                    )}>
-                        {chinese ? '恢复全部参数' : 'Restore all settings'}
-                    </button>
-                    <button
-                        type='button'
-                        className='danger'
-                        disabled={saving || (!localDirty && !preview?.dirty)}
-                        onClick={applyToCamera}
-                    >
-                        {saving
-                            ? (chinese ? '正在处理…' : 'Working…')
-                            : (chinese ? '应用到相机' : 'Apply to camera')}
-                    </button>
-                </div>
-            </div>}
+            {renderAdvancedControls()}
         </>}
 
         {runningAuto && <div className='CameraControlProgress'><span/><b>{busyText}</b></div>}

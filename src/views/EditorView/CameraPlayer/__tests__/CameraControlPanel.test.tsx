@@ -195,4 +195,58 @@ describe('CameraControlPanel', () => {
         expect(await screen.findByText('已将当前参数应用到物理相机')).toBeInTheDocument();
         confirm.mockRestore();
     });
+    it('ignores a stale preview response after the selected camera changes', async () => {
+        let resolveOld: (value: CameraPreviewState) => void;
+        let resolveCurrent: (value: CameraPreviewState) => void;
+        service.get.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }));
+        service.get.mockReturnValueOnce(new Promise(resolve => { resolveCurrent = resolve; }));
+        const onClose = jest.fn();
+        const {rerender} = render(<CameraControlPanel resourceId='old' language={Language.ENGLISH} onClose={onClose}/>);
+        rerender(<CameraControlPanel resourceId='current' language={Language.ENGLISH} onClose={onClose}/>);
+
+        await act(async () => { resolveOld(state({...neutral, brightness: 0.8})); });
+        expect(screen.queryByRole('button', {name: 'Auto exposure'})).not.toBeInTheDocument();
+        await act(async () => { resolveCurrent(state({...neutral, brightness: 0.3})); });
+        fireEvent.click(screen.getByRole('button', {name: 'Advanced fine-tuning'}));
+        expect(screen.getByRole('slider', {name: 'Brightness'})).toHaveValue('0.3');
+    });
+
+    it('keeps the panel open during adjustment and restores controls after an error', async () => {
+        let rejectAdjustment: (reason: Error) => void;
+        service.autoAdjust.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectAdjustment = reject; }));
+        const onClose = jest.fn();
+        const onStreamChanged = jest.fn();
+        render(<CameraControlPanel resourceId='resource-1' language={Language.ENGLISH} onClose={onClose} onStreamChanged={onStreamChanged}/>);
+        const exposure = await screen.findByRole('button', {name: 'Auto exposure'});
+        fireEvent.click(exposure);
+
+        expect(exposure).toBeDisabled();
+        expect(screen.getByRole('button', {name: 'Auto focus'})).toBeDisabled();
+        expect(screen.getAllByText('Analyzing automatic exposure…')).toHaveLength(2);
+        fireEvent.keyDown(window, {key: 'Escape'});
+        fireEvent.mouseDown(document.body);
+        expect(onClose).not.toHaveBeenCalled();
+
+        await act(async () => { rejectAdjustment(new Error('Camera unavailable')); });
+        expect(screen.getByText('Camera unavailable')).toBeInTheDocument();
+        expect(exposure).toBeEnabled();
+        expect(exposure).toHaveAttribute('aria-pressed', 'false');
+        expect(onStreamChanged).not.toHaveBeenCalled();
+        fireEvent.keyDown(window, {key: 'Escape'});
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves preview and camera untouched when dispatch confirmation is declined', async () => {
+        const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
+        render(<CameraControlPanel resourceId='resource-1' language={Language.ENGLISH} onClose={jest.fn()}/>);
+        fireEvent.click(await screen.findByRole('button', {name: 'Advanced fine-tuning'}));
+        fireEvent.change(screen.getByRole('slider', {name: 'Brightness'}), {target: {value: '0.25'}});
+        fireEvent.click(screen.getByRole('button', {name: 'Apply to camera'}));
+
+        expect(confirm).toHaveBeenCalledTimes(1);
+        expect(service.update).not.toHaveBeenCalled();
+        expect(service.dispatch).not.toHaveBeenCalled();
+        confirm.mockRestore();
+    });
+
 });
