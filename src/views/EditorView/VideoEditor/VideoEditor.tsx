@@ -16,7 +16,6 @@ import {
     updateVideoMetadata as updateVideoMetadataAction
 } from '../../../store/video/actionCreators';
 import { updateImageDataById as updateImageDataByIdAction, updateImageData as updateImageDataAction, updateActiveImageIndex as updateActiveImageIndexAction, addImageData as addImageDataAction, toggleImageSelection as toggleImageSelectionAction } from '../../../store/labels/actionCreators';
-import { ImageDataUtil } from '../../../utils/ImageDataUtil';
 import { ImageRepository } from '../../../logic/imageRepository/ImageRepository';
 import { EditorActions } from '../../../logic/actions/EditorActions';
 import { ViewPortActions } from '../../../logic/actions/ViewPortActions';
