@@ -358,8 +358,6 @@
       }
     }
 
-    .AccountAvatarInput { display: none; }
-
     .AccountDropdown {
       position: absolute;
       z-index: 10001;
@@ -376,6 +374,24 @@
     }
 
     .AccountSummary {
+      width: 100%;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+
+      &:hover,
+      &:focus-visible {
+        background: rgba(255, 255, 255, 0.07);
+      }
+
+      &:focus-visible {
+        outline: 1px solid rgba(109, 200, 255, 0.55);
+      }
+
       display: flex;
       align-items: center;
       gap: 10px;
