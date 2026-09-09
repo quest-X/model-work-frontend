@@ -3,13 +3,24 @@ import {FrameExtractorService} from '../FrameExtractorService';
 import {IndexedDBManager, StoredProjectData} from '../../utils/IndexedDBManager';
 import {ImageRepository} from '../../logic/imageRepository/ImageRepository';
 import {EditorModel} from '../../staticModels/EditorModel';
+import type {LabelRect, LabelsActionTypes} from '../../store/labels/types';
+import type {VideoActionTypes} from '../../store/video/types';
+import type {QueueActionTypes} from '../../store/queue/types';
+import {Action} from '../../store/Actions';
+import {LabelStatus} from '../../data/enums/LabelStatus';
 import {QueueItemStatus, QueueItemType} from '../../store/queue/types';
 
-const mockDispatch = jest.fn();
+type RestoreAction = LabelsActionTypes | VideoActionTypes | QueueActionTypes;
+const mockDispatch = jest.fn<void, [RestoreAction]>();
+
+const rectangle = (id: string): LabelRect => ({
+    id, labelId: 'hot', rect: {x: 1, y: 2, width: 3, height: 4},
+    isVisible: true, isCreatedByAI: false, status: LabelStatus.ACCEPTED, suggestedLabel: '',
+});
 
 jest.mock('../../index', () => ({
     store: {
-        dispatch: (action: unknown) => mockDispatch(action),
+        dispatch: (action: RestoreAction) => mockDispatch(action),
     },
 }));
 
@@ -43,7 +54,7 @@ const storedFrame = (frameIndex: number, annotated: boolean = false) => ({
     fileData: new ArrayBuffer(0),
     fileType: 'image/jpeg',
     loadStatus: true,
-    labelRects: annotated ? [{id: 'rect-2', labelId: 'hot', rect: {x: 1, y: 2, width: 3, height: 4}}] : [],
+    labelRects: annotated ? [rectangle('rect-2')] : [],
     labelPoints: [],
     labelLines: [],
     labelPolygons: [],
@@ -83,8 +94,10 @@ const videoProject = (
     activeQueueItemId: 'video-queue',
 });
 
-const dispatchedAction = (predicate: (action: any) => boolean): any =>
-    mockDispatch.mock.calls.map(call => call[0]).find(predicate);
+const dispatchedAction = <T extends RestoreAction['type']>(type: T) =>
+    mockDispatch.mock.calls.map(call => call[0]).find(
+        (action): action is Extract<RestoreAction, {type: T}> => action.type === type,
+    );
 
 describe('ProjectRestoreService video durability', () => {
     beforeEach(() => {
@@ -117,7 +130,7 @@ describe('ProjectRestoreService video durability', () => {
                 fileName: 'inactive.jpg',
                 fileType: 'image/jpeg',
                 loadStatus: true,
-                labelRects: [{id: 'inactive-rect', labelId: 'hot'}],
+                labelRects: [rectangle('inactive-rect')],
                 labelPoints: [],
                 labelLines: [],
                 labelPolygons: [],
@@ -133,7 +146,7 @@ describe('ProjectRestoreService video durability', () => {
         await expect(ProjectRestoreService.restoreProject()).resolves.toBe(true);
 
         expect(FrameExtractorService.openSession).toHaveBeenCalledWith(source);
-        const imageAction = dispatchedAction(action => Array.isArray(action.payload?.imageData));
+        const imageAction = dispatchedAction(Action.UPDATE_IMAGES_DATA);
         expect(imageAction.payload.imageData).toHaveLength(3);
         expect(imageAction.payload.imageData[0].id).toBe('frame-id-0');
         expect(imageAction.payload.imageData[1].fileData.name).toBe('frame_000001.jpg');
@@ -142,14 +155,14 @@ describe('ProjectRestoreService video durability', () => {
             labelRects: [expect.objectContaining({id: 'rect-2'})],
         }));
 
-        const videoAction = dispatchedAction(action => action.payload?.videoData);
+        const videoAction = dispatchedAction(Action.ADD_VIDEO_DATA);
         expect(videoAction.payload.videoData).toEqual(expect.objectContaining({
             id: 'video-queue',
             fileData: source,
             sessionId: 'fresh-session',
             currentFrame: 2,
         }));
-        const queueAction = dispatchedAction(action => Array.isArray(action.payload?.items));
+        const queueAction = dispatchedAction(Action.ADD_QUEUE_ITEMS);
         expect(queueAction.payload.items[0]).toEqual(expect.objectContaining({
             id: 'video-queue',
             videoSessionId: 'fresh-session',
@@ -178,7 +191,7 @@ describe('ProjectRestoreService video durability', () => {
 
         await expect(ProjectRestoreService.restoreProject()).resolves.toBe(true);
 
-        const videoAction = dispatchedAction(action => action.payload?.videoData);
+        const videoAction = dispatchedAction(Action.ADD_VIDEO_DATA);
         expect(videoAction.payload.videoData.fileData).toBe(source);
         expect(videoAction.payload.videoData.sessionId).toBeUndefined();
         expect(videoAction.payload.videoData.preExtractedFrames).toBeUndefined();
@@ -195,7 +208,7 @@ describe('ProjectRestoreService video durability', () => {
 
         await expect(ProjectRestoreService.restoreProject()).resolves.toBe(true);
 
-        const imageAction = dispatchedAction(action => Array.isArray(action.payload?.imageData));
+        const imageAction = dispatchedAction(Action.UPDATE_IMAGES_DATA);
         expect(imageAction.payload.imageData).toHaveLength(4);
         expect(imageAction.payload.imageData[2]).toEqual(expect.objectContaining({
             id: 'frame-id-2',
@@ -216,9 +229,9 @@ describe('ProjectRestoreService video durability', () => {
 
         await expect(ProjectRestoreService.restoreProject()).resolves.toBe(true);
 
-        const imageAction = dispatchedAction(action => Array.isArray(action.payload?.imageData));
+        const imageAction = dispatchedAction(Action.UPDATE_IMAGES_DATA);
         expect(imageAction.payload.imageData).toHaveLength(metadata.totalFrames);
-        expect(imageAction.payload.imageData.map((image: any) => image.fileData.name)).toEqual([
+        expect(imageAction.payload.imageData.map(image => image.fileData.name)).toEqual([
             'frame_000000.jpg',
             'frame_000001.jpg',
             'frame_000002.jpg',
@@ -293,7 +306,7 @@ describe('ProjectRestoreService video durability', () => {
                     fileName: 'active.jpg',
                     fileType: 'image/jpeg',
                     loadStatus: true,
-                    labelRects: [{id: 'active-rect', labelId: 'hot'}],
+                    labelRects: [rectangle('active-rect')],
                     labelPoints: [],
                     labelLines: [],
                     labelPolygons: [],
@@ -305,7 +318,7 @@ describe('ProjectRestoreService video durability', () => {
 
         await expect(ProjectRestoreService.restoreProject()).resolves.toBe(true);
 
-        const imageAction = dispatchedAction(action => Array.isArray(action.payload?.imageData));
+        const imageAction = dispatchedAction(Action.UPDATE_IMAGES_DATA);
         expect(imageAction.payload.imageData).toEqual([
             expect.objectContaining({
                 id: 'active-frame',

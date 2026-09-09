@@ -6,6 +6,13 @@ import {
     StoredProjectData,
 } from '../IndexedDBManager';
 import {QueueItemStatus, QueueItemType} from '../../store/queue/types';
+import type {LabelRect} from '../../store/labels/types';
+import {LabelStatus} from '../../data/enums/LabelStatus';
+
+const rectangle = (id: string): LabelRect => ({
+    id, labelId: 'steel', rect: {x: 1, y: 2, width: 3, height: 4},
+    isVisible: true, isCreatedByAI: false, status: LabelStatus.ACCEPTED, suggestedLabel: '',
+});
 
 const project = (): StoredProjectData => ({
     id: 'current-project',
@@ -741,7 +748,7 @@ describe('IndexedDBManager durability', () => {
                 fileType: 'image/jpeg',
                 fileData: new ArrayBuffer(0),
                 loadStatus: false,
-                labelRects: [{id: 'r1'}],
+                labelRects: [rectangle('r1')],
                 labelPoints: [],
                 labelLines: [],
                 labelPolygons: [],
@@ -843,7 +850,7 @@ describe('IndexedDBManager durability', () => {
                     fileName: 'inactive.jpg',
                     fileType: 'image/jpeg',
                     loadStatus: true,
-                    labelRects: [{id: 'rect-1'}],
+                    labelRects: [rectangle('rect-1')],
                     labelPoints: [],
                     labelLines: [],
                     labelPolygons: [],

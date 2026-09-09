@@ -1,5 +1,6 @@
-import { LabelName } from '../store/labels/types';
+import { ImageData, LabelName } from '../store/labels/types';
 import { QueueItem, QueueItemType } from '../store/queue/types';
+import type {SegmentationResult} from '../store/ai/types';
 
 export interface StoredExtractionMetadata {
     fps: number;
@@ -28,11 +29,11 @@ export interface StoredProjectData {
     currentImageIndex: number;
     lastModified: number;
     version: string;
-    segmentationResults?: any[];
+    segmentationResults?: SegmentationResult[];
     isVideoProject?: boolean;
     extractionMetadata?: StoredExtractionMetadata;
     videoRecovery?: StoredVideoRecoveryData;
-    imageSegmentationResults?: Record<string, any[]>;
+    imageSegmentationResults?: Record<string, SegmentationResult[]>;
     queueItems?: QueueItem[];
     queueAnnotationSnapshots?: StoredQueueAnnotationSnapshot[];
     activeQueueItemId?: string | null;
@@ -54,10 +55,10 @@ export interface StoredImageData {
     fileData: StoredFileData;
     fileType: string;
     loadStatus: boolean;
-    labelRects: any[];
-    labelPoints: any[];
-    labelLines: any[];
-    labelPolygons: any[];
+    labelRects: ImageData['labelRects'];
+    labelPoints: ImageData['labelPoints'];
+    labelLines: ImageData['labelLines'];
+    labelPolygons: ImageData['labelPolygons'];
     labelNameIds: string[];
 }
 
@@ -68,10 +69,10 @@ export interface StoredQueueAnnotationFrame {
     fileName: string;
     fileType: string;
     loadStatus: boolean;
-    labelRects: any[];
-    labelPoints: any[];
-    labelLines: any[];
-    labelPolygons: any[];
+    labelRects: ImageData['labelRects'];
+    labelPoints: ImageData['labelPoints'];
+    labelLines: ImageData['labelLines'];
+    labelPolygons: ImageData['labelPolygons'];
     labelNameIds: string[];
 }
 
@@ -148,12 +149,9 @@ export const getStoredFileByteLength = (data: StoredFileData | null | undefined)
     return typeof data.size === 'number' ? data.size : 0;
 };
 
-const hasAnnotations = (image: {
-    labelRects?: any[];
-    labelPolygons?: any[];
-    labelPoints?: any[];
-    labelLines?: any[];
-}): boolean =>
+const hasAnnotations = (image: Partial<Pick<ImageData,
+    'labelRects' | 'labelPolygons' | 'labelPoints' | 'labelLines'
+>>): boolean =>
     (image.labelRects?.length > 0) ||
     (image.labelPolygons?.length > 0) ||
     (image.labelPoints?.length > 0) ||
@@ -371,6 +369,7 @@ export class IndexedDBManager {
             return Promise.resolve(null);
         }
         if (!lockManager?.request) return Promise.resolve(null);
+        const claimedLockManager = lockManager;
 
         return new Promise(resolve => {
             let settled = false;
@@ -394,7 +393,7 @@ export class IndexedDBManager {
                         this.WORKSPACE_RELOAD_HANDOFF_MS,
                     );
                 }
-                this.workspaceLockPromise = lockManager!.request(
+                this.workspaceLockPromise = claimedLockManager.request(
                     `${this.WORKSPACE_LOCK_PREFIX}${workspaceId}`,
                     abortController
                         ? {mode: 'exclusive', signal: abortController.signal}
@@ -646,6 +645,7 @@ export class IndexedDBManager {
             }
         }
 
+        const database = this.db;
         const workspaceId = this.getWorkspaceId();
         const projectId = this.projectId(workspaceId);
         const lastModified = Date.now();
@@ -676,7 +676,7 @@ export class IndexedDBManager {
             };
 
             try {
-                const transaction = this.db!.transaction(
+                const transaction = database.transaction(
                     [this.PROJECT_STORE_NAME, this.META_STORE_NAME],
                     'readwrite',
                 );
@@ -986,6 +986,7 @@ export class IndexedDBManager {
 
     public static async clearProject(): Promise<boolean> {
         if (!this.db) return false;
+        const database = this.db;
 
         const currentWorkspaceId = this.getWorkspaceId();
         const projectIds = new Set([
@@ -1010,7 +1011,7 @@ export class IndexedDBManager {
                 resolve(result);
             };
             try {
-                const transaction = this.db!.transaction(
+                const transaction = database.transaction(
                     [this.PROJECT_STORE_NAME, this.META_STORE_NAME],
                     'readwrite',
                 );
