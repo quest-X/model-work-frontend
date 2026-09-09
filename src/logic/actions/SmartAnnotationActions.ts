@@ -5,12 +5,12 @@ import {LabelsSelector} from '../../store/selectors/LabelsSelector';
 import {SegmentationAPIDetector} from '../../ai/SegmentationAPIDetector';
 import {submitNewNotification, deleteNotificationById, updateNotificationById} from '../../store/notifications/actionCreators';
 import {NotificationUtil} from '../../utils/NotificationUtil';
+import {INotification} from '../../store/notifications/types';
 import {NotificationsDataMap} from '../../data/info/NotificationsData';
 import {Notification} from '../../data/enums/Notification';
 import {ImageData, LabelRect} from '../../store/labels/types';
 import {EditorModel} from '../../staticModels/EditorModel';
 import {FrameExtractorService} from '../../services/FrameExtractorService';
-import {LanguageConfig} from '../../data/LanguageConfig';
 import {updateImageDataById} from '../../store/labels/actionCreators';
 import {v4 as uuidv4} from 'uuid';
 import {LabelStatus} from '../../data/enums/LabelStatus';
@@ -144,20 +144,19 @@ export class SmartAnnotationActions {
 
         const {points, bbox, request} = this.buildPromptPayload(prompts);
 
-        // 开始推理 → 开启闪烁动画
-        (window as any).__openSightPromptInferring = true;
-
         // Progress notification
         const lang = store.getState().general.language;
         const progressNotification = this.createProgressNotification(points.length, !!bbox);
-        store.dispatch(submitNewNotification(progressNotification));
 
+        // 开始推理 → 开启闪烁动画；从这里开始的所有退出路径都由 finally 清理。
+        const promptWindow = window as Window & {__openSightPromptInferring?: boolean};
+        promptWindow.__openSightPromptInferring = true;
         try {
+            store.dispatch(submitNewNotification(progressNotification));
             // Step 1: prepare image
             this.updateProgress(progressNotification, 1, lang === 'zh' ? '准备图像帧' : 'Preparing image');
             const blob = await this.resolveImageBlob(imageData);
             if (!blob || blob.size === 0) {
-                store.dispatch(deleteNotificationById(progressNotification.id));
                 this.notifyError('Could not obtain image bytes for the active frame');
                 return;
             }
@@ -188,14 +187,12 @@ export class SmartAnnotationActions {
             // Re-read again after clearing prompts
             const finalImageData = LabelsSelector.getActiveImageData();
             AISegmentationActions.applySingleResult(finalImageData || imageData, results, 'smart');
-
-            (window as any).__openSightPromptInferring = false;
-            store.dispatch(deleteNotificationById(progressNotification.id));
         } catch (err) {
             console.error('[SmartAnnotation] inference failed:', err);
-            (window as any).__openSightPromptInferring = false;
-            store.dispatch(deleteNotificationById(progressNotification.id));
             this.notifyError((err as Error).message || 'Smart annotation failed');
+        } finally {
+            promptWindow.__openSightPromptInferring = false;
+            store.dispatch(deleteNotificationById(progressNotification.id));
         }
     }
 
@@ -241,7 +238,7 @@ export class SmartAnnotationActions {
         };
     }
 
-    private static updateProgress(notification: any, step: number, stepDesc: string): void {
+    private static updateProgress(notification: INotification, step: number, stepDesc: string): void {
         store.dispatch(updateNotificationById(notification.id, {
             ...notification,
             currentStep: step,
