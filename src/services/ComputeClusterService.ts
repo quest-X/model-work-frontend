@@ -402,12 +402,12 @@ export type ComputeGroupMember = {
 };
 
 export type ComputeGroupDetail = {
-    schema_version: 'field-group-snapshot.v1';
-    reporting_installation_id: string;
+    schema_version: 'central-group-snapshot.v1' | 'field-group-snapshot.v1';
+    reporting_installation_id: string | null;
     group: {
         group_id: string;
         group_name: string;
-        scope: 'local';
+        scope: 'central' | 'local';
     };
     members: ComputeGroupMember[];
     captured_at: number;
