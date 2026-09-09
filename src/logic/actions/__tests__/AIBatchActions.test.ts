@@ -9,6 +9,8 @@ import {updateFullImageInferenceStatus} from '../../../store/ai/actionCreators';
 import {updateSmartAnnotationActiveStatus} from '../../../store/general/actionCreators';
 import {addVideoData, updateVideoMode} from '../../../store/video/actionCreators';
 import {LabelStatus} from '../../../data/enums/LabelStatus';
+import {LanguageConfig} from '../../../data/LanguageConfig';
+import {NotificationUtil} from '../../../utils/NotificationUtil';
 import {LabelType} from '../../../data/enums/LabelType';
 import {ImageData, LabelRect} from '../../../store/labels/types';
 import {VideoData} from '../../../store/video/types';
@@ -216,7 +218,7 @@ it('keeps segmentation cancellation terminal and schedules no later images', asy
 });
 
 
-it('retries failed browser frame capture and releases its canvas after inference', async () => {
+it.each(['detection', 'segmentation'] as const)('retries failed browser frame capture and releases its canvas after %s inference', async engine => {
     const images = makeImages(3);
     useVideo(images);
     const video = document.createElement('video');
@@ -225,23 +227,27 @@ it('retries failed browser frame capture and releases its canvas after inference
         currentTime: {get: () => 0.08, set: () => video.dispatchEvent(new Event('seeked'))},
     });
     EditorModel.videoElement = video;
-    const drawImage = jest.fn();
-    jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({drawImage} as unknown as CanvasRenderingContext2D);
+    const drawImage: CanvasRenderingContext2D['drawImage'] = jest.fn();
+    jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({drawImage} as CanvasRenderingContext2D);
     const blob = new Blob(['captured'], {type: 'image/jpeg'});
     const encode = jest.spyOn(HTMLCanvasElement.prototype, 'toBlob')
         .mockImplementation(callback => callback(blob))
         .mockImplementationOnce(callback => callback(null));
     const close = jest.fn();
     global.createImageBitmap = jest.fn().mockResolvedValue({close});
-    const predict = jest.spyOn(DetectionAPIDetector, 'predictFromBlob').mockResolvedValue([detection]);
+    const predict = engine === 'detection'
+        ? jest.spyOn(DetectionAPIDetector, 'predictFromBlob').mockResolvedValue([detection])
+        : jest.spyOn(SegmentationAPIDetector, 'predictFromBlob').mockResolvedValue([segmentation]);
 
-    await AIDetectionActions.detectBatch([images[2]]);
+    if (engine === 'detection') await AIDetectionActions.detectBatch([images[2]]);
+    else await AISegmentationActions.segmentBatch([images[2]]);
 
     expect(encode).toHaveBeenCalledTimes(2);
     expect(predict).toHaveBeenCalledWith(blob, 'frame_2.jpg');
     expect(close).toHaveBeenCalledTimes(1);
     expect(encode.mock.instances[0]).toMatchObject({width: 0, height: 0});
-    expect(testStore.getState().labels.imagesData[2].labelRects).toHaveLength(1);
+    const labels = testStore.getState().labels.imagesData[2];
+    expect(engine === 'detection' ? labels.labelRects : labels.labelPolygons).toHaveLength(1);
 });
 
 it('marks entirely failed segmentation as failed without creating polygons', async () => {
@@ -254,4 +260,49 @@ it('marks entirely failed segmentation as failed without creating polygons', asy
     expect(testStore.getState().ai.isFullImageInferenceInProgress).toBe(false);
     expect(testStore.getState().ai.imageAIStates.get('image-1')?.inferenceHistory[0]).toMatchObject({success: false, type: 'segmentation'});
     expect(testStore.getState().labels.imagesData.every(image => image.labelPolygons.length === 0)).toBe(true);
+});
+
+
+it.each(['empty', 'cancel'] as const)('does not report success when browser segmentation capture ends with %s', async outcome => {
+    const images = makeImages(3);
+    useVideo(images);
+    const video = document.createElement('video');
+    Object.defineProperties(video, {
+        videoWidth: {value: 640}, videoHeight: {value: 360}, readyState: {value: 4},
+        currentTime: {get: () => 0.08, set: () => video.dispatchEvent(new Event('seeked'))},
+    });
+    EditorModel.videoElement = video;
+    const drawImage: CanvasRenderingContext2D['drawImage'] = jest.fn();
+    jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({drawImage} as CanvasRenderingContext2D);
+    const blob = new Blob(['captured'], {type: 'image/jpeg'});
+    const encode = jest.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => {
+        if (outcome === 'cancel') testStore.dispatch(updateFullImageInferenceStatus(false));
+        callback(outcome === 'empty' ? null : blob);
+    });
+    const close = jest.fn();
+    global.createImageBitmap = jest.fn().mockResolvedValue({close});
+    const predict = jest.spyOn(SegmentationAPIDetector, 'predictFromBlob');
+    const successNotification = jest.spyOn(NotificationUtil, 'createSuccessNotification');
+    const messageNotification = jest.spyOn(NotificationUtil, 'createMessageNotification');
+
+    await AISegmentationActions.segmentBatch([images[2]]);
+
+    expect(predict).not.toHaveBeenCalled();
+    expect(task.complete).not.toHaveBeenCalled();
+    expect(successNotification).not.toHaveBeenCalled();
+    if (outcome === 'empty') {
+        expect(encode).toHaveBeenCalledTimes(4);
+        expect(task.fail).toHaveBeenCalledTimes(1);
+        expect(close).not.toHaveBeenCalled();
+    } else {
+        expect(encode).toHaveBeenCalledTimes(1);
+        expect(task.cancel).toHaveBeenCalledTimes(1);
+        expect(messageNotification).toHaveBeenCalledWith(expect.objectContaining({
+            header: LanguageConfig[testStore.getState().general.language].taskManager.statusCancelled,
+        }));
+        expect(close).toHaveBeenCalledTimes(1);
+    }
+    expect(encode.mock.instances[0]).toMatchObject({width: 0, height: 0});
+    expect(testStore.getState().ai.isFullImageInferenceInProgress).toBe(false);
+    expect(testStore.getState().labels.imagesData[2].labelPolygons).toEqual([]);
 });

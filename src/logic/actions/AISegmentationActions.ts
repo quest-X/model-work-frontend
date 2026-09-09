@@ -16,6 +16,7 @@ import {EditorActions} from "./EditorActions";
 import {EditorModel} from "../../staticModels/EditorModel";
 import {TaskTracker} from "../../services/TaskTracker";
 import {TaskType} from "../../store/tasks/types";
+import {captureBrowserVideoFrames} from "./BrowserVideoFrameCapture";
 
 /**
  * 按视频分辨率压缩前端 in-flight 并发数。后端 SAM 是单 GPU 串行(torch.inference_mode),
@@ -230,9 +231,17 @@ export class AISegmentationActions {
                         if (i % 10 === 0 && i > 0) await this.yieldToUI();
                     }
                 } else {
-                    // raw_browser_mode: not implemented for segmentation (fallback)
-                    console.warn('[BatchSegment] raw_browser_mode not supported for segmentation');
-                    capturedBlobs = [];
+                    capturedBlobs = await captureBrowserVideoFrames(
+                        EditorModel.videoElement,
+                        frameQueue.map(({frameIdx}) => frameIdx),
+                        activeVideo?.fps || 30,
+                        () => this.isCancelled(),
+                        (index, frameIdx) => {
+                            const pct = Math.round((index / captureTotal) * 33);
+                            notify(1, `${t().aiInference.steps.captureFrame} (${index + 1}/${captureTotal})`,
+                                `${pct}% — ${t().video.frame} ${frameIdx}`);
+                        },
+                    );
                 }
                 return capturedBlobs;
             };
@@ -303,7 +312,12 @@ export class AISegmentationActions {
             console.log('[BatchSegment] Complete', { totalTime: totalTime + 's', successCount, failCount, totalObjects });
 
             const doneTexts = t();
-            const completionNotification = allFailed
+            const completionNotification = wasCancelled
+                ? NotificationUtil.createMessageNotification({
+                    header: doneTexts.taskManager.statusCancelled,
+                    description: doneTexts.taskManager.types.batchSegment,
+                })
+                : allFailed
                 ? NotificationUtil.createErrorNotification(doneTexts.notifications.modelInferenceError)
                 : NotificationUtil.createSuccessNotification({
                     header: doneTexts.notifications.batchDetectionCompleted,

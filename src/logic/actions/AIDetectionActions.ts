@@ -18,6 +18,7 @@ import {EditorActions} from "./EditorActions";
 import {EditorModel} from "../../staticModels/EditorModel";
 import {TaskTracker} from "../../services/TaskTracker";
 import {TaskType} from "../../store/tasks/types";
+import {captureBrowserVideoFrames} from "./BrowserVideoFrameCapture";
 
 /**
  * 按视频分辨率压缩前端 in-flight 并发数。后端 YOLO 推理已是高效批处理,
@@ -547,68 +548,17 @@ export class AIDetectionActions {
                 };
 
                 const captureBrowserFrames = async () => {
-                    // === raw_browser_mode fallback: Phase 1 sequential seek+capture from <video> ===
-                    const video = EditorModel.videoElement!;
-                    const captureCanvas = document.createElement('canvas');
-                    captureCanvas.width = video.videoWidth;
-                    captureCanvas.height = video.videoHeight;
-                    const captureCtx = captureCanvas.getContext('2d')!;
-
-                    capturedBlobs = new Array(pendingTotal).fill(null);
-                    let captureSuccess = 0;
-                    let captureFail = 0;
-                    const captureStartTime = Date.now();
-
-                    console.log('[Capture] Phase 1 starting', {
-                        pendingTotal,
-                        videoSize: `${video.videoWidth}x${video.videoHeight}`,
-                        readyState: video.readyState
-                    });
-
-                    for (let i = 0; i < pendingTotal; i++) {
-                        if (this.isCancelled()) { console.log('[Capture] 用户取消,中止 raw_browser_mode 取帧'); break; }
-                        const { frameIdx } = pending[i];
-                        const targetTime = frameIdx / fps;
-
-                        if (i % 5 === 0 || i === pendingTotal - 1) {
-                            const pct = Math.round((i / pendingTotal) * 33);
-                            notify(1, `${t().aiInference.steps.captureFrame} (${i + 1}/${pendingTotal})`, `${pct}% — ${t().video.frame} ${frameIdx}`);
-                        }
-                        if (i % 8 === 0 && i > 0) await this.yieldToUI();
-
-                        let captured = false;
-                        for (let attempt = 0; attempt < 4; attempt++) {
-                            await this.seekVideoToTimeForCapture(video, targetTime);
-                            try {
-                                capturedBlobs[i] = await this.captureFrameToBlob(video, captureCtx, captureCanvas);
-                                captured = true;
-                                break;
-                            } catch (err) {
-                                console.warn(`[Capture] Frame ${frameIdx} attempt ${attempt + 1} failed: ${(err as Error).message}, readyState=${video.readyState}`);
-                                if (attempt < 3) {
-                                    await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
-                                }
-                            }
-                        }
-
-                        if (captured) {
-                            captureSuccess++;
-                        } else {
-                            captureFail++;
-                            console.error(`[Capture] Frame ${frameIdx} FAILED after 3 attempts`);
-                        }
-                    }
-
-                    captureCanvas.width = 0;
-                    captureCanvas.height = 0;
-
-                    const captureElapsed = ((Date.now() - captureStartTime) / 1000).toFixed(1);
-                    console.log('[Capture] Phase 1 complete', {
-                        success: captureSuccess,
-                        failed: captureFail,
-                        total: pendingTotal,
-                        elapsed: captureElapsed + 's'
-                    });
+                    capturedBlobs = await captureBrowserVideoFrames(
+                        EditorModel.videoElement,
+                        pending.map(({frameIdx}) => frameIdx),
+                        fps,
+                        () => this.isCancelled(),
+                        (index, frameIdx) => {
+                            const pct = Math.round((index / pendingTotal) * 33);
+                            notify(1, `${t().aiInference.steps.captureFrame} (${index + 1}/${pendingTotal})`,
+                                `${pct}% — ${t().video.frame} ${frameIdx}`);
+                        },
+                    );
                 };
 
                 if (pendingTotal === 0) {
@@ -928,27 +878,6 @@ export class AIDetectionActions {
     }
 
     /**
-     * 复用已有 canvas 从视频捕获当前帧为 Blob。
-     * 用 createImageBitmap 验证帧非空。
-     */
-    private static async captureFrameToBlob(
-        video: HTMLVideoElement,
-        ctx: CanvasRenderingContext2D,
-        canvas: HTMLCanvasElement
-    ): Promise<Blob> {
-        if (video.readyState < 2) throw new Error('Video not ready');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        // 用 JPEG q=0.9 编码:体积约为 PNG 的 1/5,主线程编码耗时降低 ~70%,通用目标检测精度无感差异
-        // 注意:缺陷检测/OCR 等对压缩敏感的任务请单独走 PNG 通道
-        const blob: Blob = await new Promise((resolve, reject) => {
-            canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/jpeg', 0.9);
-        });
-        const bmp = await createImageBitmap(blob);
-        bmp.close();
-        return blob;
-    }
-
-    /**
      * 将检测结果转换为可编辑的标注框（异步版，单张检测用）
      */
     private static convertDetectionResultsToLabelRects(imageData: ImageData, results: DetectionResult[]): void {
@@ -998,77 +927,6 @@ export class AIDetectionActions {
 
         store.dispatch(updateLabelNames(updatedLabels));
         // 创建了AI标签，跳过重复标签（性能优化：移除日志）
-    }
-
-    /**
-     * 批量捕获专用 seek — 不依赖 rVFC（视频 opacity:0 时 rVFC 可能不触发）
-     *
-     * 策略：seeked 事件 → 轮询 readyState >= 3（最多 2s）→ 100ms 缓冲
-     * H.264 远离关键帧的帧解码可能需要 >500ms，故轮询上限设为 2s。
-     */
-    private static seekVideoToTimeForCapture(video: HTMLVideoElement, time: number): Promise<void> {
-        return new Promise<void>((resolve) => {
-            // 已在目标时间
-            if (Math.abs(video.currentTime - time) < 0.001) {
-                if (video.readyState >= 3) {
-                    setTimeout(resolve, 50);
-                    return;
-                }
-                // 已到目标时间但帧未解码 — 直接轮询 readyState，不依赖 seeked 事件
-                // （设置相同的 currentTime 不会触发 seeked）
-                let polls = 0;
-                const check = () => {
-                    if (video.readyState >= 3 || polls >= 100) {
-                        setTimeout(resolve, 100);
-                    } else {
-                        polls++;
-                        setTimeout(check, 20);
-                    }
-                };
-                check();
-                return;
-            }
-
-            let settled = false;
-            let emergencyTimer: ReturnType<typeof setTimeout> | null = null;
-            let onSeeked: (() => void) | null = null;
-            const settle = () => {
-                if (settled) return;
-                settled = true;
-                video.removeEventListener('seeked', onSeeked);
-                clearTimeout(emergencyTimer);
-                resolve();
-            };
-
-            emergencyTimer = setTimeout(() => {
-                console.warn(`[Capture] Seek timeout for time=${time.toFixed(3)}, readyState=${video.readyState}, currentTime=${video.currentTime.toFixed(3)}`);
-                settle();
-            }, 5000); // 5秒保护（H.264 极端情况）
-
-            const waitForDecode = () => {
-                let polls = 0;
-                const check = () => {
-                    if (video.readyState >= 3 || polls >= 100) { // 100 × 20ms = 2000ms
-                        setTimeout(settle, 100); // 100ms 缓冲
-                    } else {
-                        polls++;
-                        setTimeout(check, 20);
-                    }
-                };
-                check();
-            };
-
-            onSeeked = () => {
-                if (video.readyState >= 3) {
-                    setTimeout(settle, 100);
-                } else {
-                    waitForDecode();
-                }
-            };
-
-            video.addEventListener('seeked', onSeeked, { once: true });
-            video.currentTime = time;
-        });
     }
 
     /**
