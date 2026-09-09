@@ -229,71 +229,11 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
 
     const [activeTab, setActiveTab] = React.useState<'all' | 'detect' | 'segment'>('all');
 
-    const handleDeleteSegmentationResult = (result: DisplayResult, index: number) => {
-        const newSegmentationResults = segmentationResults.filter((_, i) => i !== index);
-        updateSegmentationResults(newSegmentationResults, activeImageData?.id);
-
-        if (!activeImageData) return;
-
-        const resultName = (result.info?.name || result.class_name).toLowerCase();
-        const resultCenterX = result.bbox.x1 + result.bbox.width / 2;
-        const resultCenterY = result.bbox.y1 + result.bbox.height / 2;
-
-        // ── 分割结果（有 mask）→ 删对应的 labelPolygon ──
-        if (result.mask) {
-            const candidates = activeImageData.labelPolygons.filter(polygon => {
-                if (!polygon.isCreatedByAI) return false;
-                const labelName = labelNames.find(ln => ln.id === polygon.labelId);
-                if (labelName && labelName.name.toLowerCase() === resultName) return true;
-                if (polygon.suggestedLabel && polygon.suggestedLabel.toLowerCase() === resultName) return true;
-                return false;
-            });
-            if (candidates.length > 0) {
-                let bestMatch = candidates[0];
-                let minDistance = Number.MAX_VALUE;
-                candidates.forEach(polygon => {
-                    if (polygon.vertices.length === 0) return;
-                    const cx = polygon.vertices.reduce((s, v) => s + v.x, 0) / polygon.vertices.length;
-                    const cy = polygon.vertices.reduce((s, v) => s + v.y, 0) / polygon.vertices.length;
-                    const d = Math.sqrt(Math.pow(resultCenterX - cx, 2) + Math.pow(resultCenterY - cy, 2));
-                    if (d < minDistance) { minDistance = d; bestMatch = polygon; }
-                });
-                LabelActions.deletePolygonLabelById(activeImageData.id, bestMatch.id);
-                EditorActions.fullRender();
-            }
-            return;
-        }
-
-        // ── 检测结果（_labelRectId 直接对应 labelRect）→ 直接删 ──
-        if (result._labelRectId) {
-            LabelActions.deleteRectLabelById(activeImageData.id, result._labelRectId);
-            return;
-        }
-
-        // ── 普通检测结果 → 按类名 + bbox 重心距离匹配 labelRect ──
-        const candidateLabelRects = activeImageData.labelRects.filter(labelRect => {
-            if (!labelRect.isCreatedByAI) return false;
-            const labelName = labelNames.find(ln => ln.id === labelRect.labelId);
-            if (labelName && labelName.name.toLowerCase() === resultName) return true;
-            if (labelRect.suggestedLabel && labelRect.suggestedLabel.toLowerCase() === resultName) return true;
-            return false;
-        });
-        if (candidateLabelRects.length > 0) {
-            let bestMatch = candidateLabelRects[0];
-            let minDistance = Number.MAX_VALUE;
-            candidateLabelRects.forEach(labelRect => {
-                const rectCenterX = labelRect.rect.x + labelRect.rect.width / 2;
-                const rectCenterY = labelRect.rect.y + labelRect.rect.height / 2;
-                const d = Math.sqrt(Math.pow(resultCenterX - rectCenterX, 2) + Math.pow(resultCenterY - rectCenterY, 2));
-                if (d < minDistance) { minDistance = d; bestMatch = labelRect; }
-            });
-            LabelActions.deleteRectLabelById(activeImageData.id, bestMatch.id);
-        }
-    };
-
     /** 返回与 result 最匹配的标注对象的 ID（labelPolygon 或 labelRect），找不到返回 null */
     const findBestMatchingLabelId = (result: DisplayResult): string | null => {
         if (!activeImageData) return null;
+        const linkedLabelId = result._labelPolygonId || result._labelRectId;
+        if (linkedLabelId) return linkedLabelId;
         const resultName = (result.info?.name || result.class_name).toLowerCase();
         const resultCenterX = result.bbox.x1 + result.bbox.width / 2;
         const resultCenterY = result.bbox.y1 + result.bbox.height / 2;
@@ -320,9 +260,6 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
             return best.id;
         }
 
-        // 检测结果（_labelRectId 直接对应）
-        if (result._labelRectId) return result._labelRectId;
-
         // 普通检测结果 → 找 labelRect
         const candidateLabelRects = activeImageData.labelRects.filter(labelRect => {
             if (!labelRect.isCreatedByAI) return false;
@@ -341,6 +278,28 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
             if (d < minD) { minD = d; bestRect = labelRect; }
         });
         return bestRect.id;
+    };
+
+    const handleDeleteSegmentationResult = (result: DisplayResult) => {
+        if (!activeImageData) return;
+
+        // Display cards are filtered/merged; their indices are not cache indices.
+        const cachedIndex = segmentationResults.indexOf(result);
+        if (cachedIndex >= 0) {
+            updateSegmentationResults(
+                segmentationResults.filter((_, index) => index !== cachedIndex),
+                activeImageData.id
+            );
+        }
+
+        const labelId = findBestMatchingLabelId(result);
+        if (!labelId) return;
+        if (result.mask) {
+            LabelActions.deletePolygonLabelById(activeImageData.id, labelId);
+            EditorActions.fullRender();
+        } else {
+            LabelActions.deleteRectLabelById(activeImageData.id, labelId);
+        }
     };
 
     const handleClickSegmentationResult = (result: DisplayResult) => {
@@ -543,7 +502,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
                                 onMouseLeave={handleMouseLeaveSegmentationResult}
                                 style={{ cursor: 'pointer' }}>
                                 <button className="DeleteButton"
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteSegmentationResult(result, index); }}
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteSegmentationResult(result); }}
                                     title="删除此推理结果">×</button>
                                 <div className="ResultHeader">
                                     <div className="ClassName" style={{color: getLabelColor(result.info?.name || result.class_name)}}>
