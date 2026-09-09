@@ -91,6 +91,31 @@ export const ScriptSection: React.FC<IProps> = ({stage, zh}) => {
     // 只显示带本 stage hook 的脚本（避免误选不支持的）
     const visibleScripts = scripts.filter(s => stage === 'preprocess' ? s.has_preprocess : s.has_postprocess);
 
+    const renderScriptParams = () => <div>
+        <div style={{fontSize: 11, color: '#aaa', marginBottom: 4}}>
+            {zh ? '参数 (JSON 对象，传给脚本的 params 入参)' : 'Params (JSON object passed as `params` to the script)'}
+        </div>
+        <textarea
+            value={paramsText}
+            onChange={(e) => onParamsChange(e.target.value)}
+            placeholder='{}  // 留空即可，等同于不传任何参数'
+            rows={3}
+            style={{
+                width: '100%',
+                fontFamily: 'monospace',
+                fontSize: 11,
+                background: '#1e1e1e',
+                color: '#ddd',
+                border: paramsErr ? '1px solid #e05c5c' : '1px solid #444',
+                padding: 6,
+                borderRadius: 3,
+                resize: 'vertical',
+                boxSizing: 'border-box',
+            }}
+        />
+        {paramsErr && <div style={{color: '#e05c5c', fontSize: 10, marginTop: 2}}>JSON: {paramsErr}</div>}
+    </div>;
+
     return (
         <div className='ParamSection'>
             <div className='ParamSectionTitle' onClick={() => setCollapsed(c => !c)}>
@@ -172,30 +197,7 @@ export const ScriptSection: React.FC<IProps> = ({stage, zh}) => {
                 </div>
 
                 {/* params JSON */}
-                <div>
-                    <div style={{fontSize: 11, color: '#aaa', marginBottom: 4}}>
-                        {zh ? '参数 (JSON 对象，传给脚本的 params 入参)' : 'Params (JSON object passed as `params` to the script)'}
-                    </div>
-                    <textarea
-                        value={paramsText}
-                        onChange={(e) => onParamsChange(e.target.value)}
-                        placeholder='{}  // 留空即可，等同于不传任何参数'
-                        rows={3}
-                        style={{
-                            width: '100%',
-                            fontFamily: 'monospace',
-                            fontSize: 11,
-                            background: '#1e1e1e',
-                            color: '#ddd',
-                            border: paramsErr ? '1px solid #e05c5c' : '1px solid #444',
-                            padding: 6,
-                            borderRadius: 3,
-                            resize: 'vertical',
-                            boxSizing: 'border-box',
-                        }}
-                    />
-                    {paramsErr && <div style={{color: '#e05c5c', fontSize: 10, marginTop: 2}}>JSON: {paramsErr}</div>}
-                </div>
+                {renderScriptParams()}
 
                 <div style={{fontSize: 10, color: '#666', marginTop: 10, lineHeight: 1.5}}>
                     {zh

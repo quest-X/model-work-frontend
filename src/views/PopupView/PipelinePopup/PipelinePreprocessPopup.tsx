@@ -54,6 +54,91 @@ const PipelinePreprocessPopup: React.FC<IProps> = ({language}) => {
         setAugment(DEF.augment);
     };
 
+    const renderInputSize = () => <div className={`ParamRow${!imgszEnabled ? ' param-disabled' : ''}`}>
+        <div className='ParamHeader'>
+            <label className='ParamLabelRow'>
+                <input type='checkbox' checked={imgszEnabled}
+                    onChange={(e) => setImgszEnabled(e.target.checked)} />
+                <span className='ParamLabel'>{zh ? '输入尺寸 (imgsz)' : 'Input size (imgsz)'}</span>
+            </label>
+            <div className='ParamValueGroup'>
+                <span className='ParamValue'>{imgsz}</span>
+                {imgsz !== DEF.imgsz && imgszEnabled && (
+                    <button className='ParamResetBtn' onClick={() => setImgsz(DEF.imgsz)}>
+                        ↺ {DEF.imgsz}
+                    </button>
+                )}
+            </div>
+        </div>
+        <div ref={imgszRef} style={{ position: 'relative' }}>
+            <div
+                ref={imgszTriggerRef}
+                onClick={() => {
+                    if (imgszEnabled) {
+                        if (!imgszOpen && imgszTriggerRef.current) {
+                            const r = imgszTriggerRef.current.getBoundingClientRect();
+                            setImgszPos({ top: r.bottom + 2, left: r.left, width: r.width });
+                        }
+                        setImgszOpen(v => !v);
+                    }
+                }}
+                style={{
+                    background: '#333',
+                    color: imgszEnabled ? '#ccc' : '#666',
+                    border: '1px solid #555',
+                    borderRadius: 4,
+                    fontSize: 11,
+                    padding: '3px 22px 3px 8px',
+                    cursor: 'default',
+                    userSelect: 'none',
+                    position: 'relative',
+                    display: 'inline-block',
+                    minWidth: 60,
+                }}
+            >
+                {imgsz}
+                <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9 }}>▼</span>
+            </div>
+            {imgszOpen && imgszEnabled && (
+                <div style={{
+                    position: 'fixed',
+                    top: imgszPos.top,
+                    left: imgszPos.left,
+                    width: imgszPos.width,
+                    zIndex: 9999,
+                    background: '#2a2a2a',
+                    border: '1px solid #555',
+                    borderRadius: 4,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                    overflow: 'hidden',
+                }}>
+                    {IMGSZ_OPTIONS.map(v => (
+                        <div
+                            key={v}
+                            onClick={() => { setImgsz(v); setImgszOpen(false); }}
+                            style={{
+                                padding: '5px 10px',
+                                fontSize: 11,
+                                cursor: 'default',
+                                color: v === imgsz ? '#fff' : '#ccc',
+                                background: v === imgsz ? '#c62828' : 'transparent',
+                            }}
+                            onMouseEnter={ev => { if (v !== imgsz) (ev.currentTarget as HTMLDivElement).style.background = '#3a3a3a'; }}
+                            onMouseLeave={ev => { if (v !== imgsz) (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                        >
+                            {v}{v === imgsz ? ' ✓' : ''}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+        <div className='ParamDesc'>
+            {zh
+                ? '模型推理时的输入图像边长（正方形 letterbox）。越大精度越高但越慢；默认 640。'
+                : 'Input image side length at inference time (square letterbox). Larger = more accurate, slower. Default 640.'}
+        </div>
+    </div>;
+
     const renderContent = () => (
         <div className='PipelinePopupContent'>
             <ScriptSection stage='preprocess' zh={zh} />
@@ -69,90 +154,7 @@ const PipelinePreprocessPopup: React.FC<IProps> = ({language}) => {
                 <div className='ParamSectionTitle scope-both'>{zh ? '[ 通用参数 ]' : '[ Universal ]'}</div>
 
                 {/* imgsz */}
-                <div className={`ParamRow${!imgszEnabled ? ' param-disabled' : ''}`}>
-                    <div className='ParamHeader'>
-                        <label className='ParamLabelRow'>
-                            <input type='checkbox' checked={imgszEnabled}
-                                onChange={(e) => setImgszEnabled(e.target.checked)} />
-                            <span className='ParamLabel'>{zh ? '输入尺寸 (imgsz)' : 'Input size (imgsz)'}</span>
-                        </label>
-                        <div className='ParamValueGroup'>
-                            <span className='ParamValue'>{imgsz}</span>
-                            {imgsz !== DEF.imgsz && imgszEnabled && (
-                                <button className='ParamResetBtn' onClick={() => setImgsz(DEF.imgsz)}>
-                                    ↺ {DEF.imgsz}
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                    <div ref={imgszRef} style={{ position: 'relative' }}>
-                        <div
-                            ref={imgszTriggerRef}
-                            onClick={() => {
-                                if (imgszEnabled) {
-                                    if (!imgszOpen && imgszTriggerRef.current) {
-                                        const r = imgszTriggerRef.current.getBoundingClientRect();
-                                        setImgszPos({ top: r.bottom + 2, left: r.left, width: r.width });
-                                    }
-                                    setImgszOpen(v => !v);
-                                }
-                            }}
-                            style={{
-                                background: '#333',
-                                color: imgszEnabled ? '#ccc' : '#666',
-                                border: '1px solid #555',
-                                borderRadius: 4,
-                                fontSize: 11,
-                                padding: '3px 22px 3px 8px',
-                                cursor: 'default',
-                                userSelect: 'none',
-                                position: 'relative',
-                                display: 'inline-block',
-                                minWidth: 60,
-                            }}
-                        >
-                            {imgsz}
-                            <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9 }}>▼</span>
-                        </div>
-                        {imgszOpen && imgszEnabled && (
-                            <div style={{
-                                position: 'fixed',
-                                top: imgszPos.top,
-                                left: imgszPos.left,
-                                width: imgszPos.width,
-                                zIndex: 9999,
-                                background: '#2a2a2a',
-                                border: '1px solid #555',
-                                borderRadius: 4,
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                                overflow: 'hidden',
-                            }}>
-                                {IMGSZ_OPTIONS.map(v => (
-                                    <div
-                                        key={v}
-                                        onClick={() => { setImgsz(v); setImgszOpen(false); }}
-                                        style={{
-                                            padding: '5px 10px',
-                                            fontSize: 11,
-                                            cursor: 'default',
-                                            color: v === imgsz ? '#fff' : '#ccc',
-                                            background: v === imgsz ? '#c62828' : 'transparent',
-                                        }}
-                                        onMouseEnter={ev => { if (v !== imgsz) (ev.currentTarget as HTMLDivElement).style.background = '#3a3a3a'; }}
-                                        onMouseLeave={ev => { if (v !== imgsz) (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-                                    >
-                                        {v}{v === imgsz ? ' ✓' : ''}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                    <div className='ParamDesc'>
-                        {zh
-                            ? '模型推理时的输入图像边长（正方形 letterbox）。越大精度越高但越慢；默认 640。'
-                            : 'Input image side length at inference time (square letterbox). Larger = more accurate, slower. Default 640.'}
-                    </div>
-                </div>
+                {renderInputSize()}
 
                 {/* augment */}
                 <div className={`ParamRow${!augment ? ' param-disabled' : ''}`}>
