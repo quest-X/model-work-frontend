@@ -6,19 +6,16 @@ export type ImportResult = {
     labelNames: LabelName[]
 }
 
-export class AnnotationImporter {
+export abstract class AnnotationImporter {
     public labelType: LabelType[]
 
     constructor(labelType: LabelType[]) {
         this.labelType = labelType;
     }
 
-    public import(
+    public abstract import(
         filesData: File[],
         onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => void,
         onFailure: (error?:Error) => void
     ): void;
-    public import(): void {
-        throw new Error('Method not implemented.');
-    }
 }
