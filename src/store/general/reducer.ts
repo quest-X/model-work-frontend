@@ -30,6 +30,43 @@ const initialState: GeneralState = {
     language: Language.CHINESE // 默认中文
 };
 
+function updateGeneralField<Key extends keyof GeneralState>(
+    state: GeneralState, field: Key, value: GeneralState[Key],
+): GeneralState {
+    return state[field] === value ? state : {...state, [field]: value};
+}
+
+function reduceEditorTools(state: GeneralState, action: GeneralActionTypes): GeneralState {
+    switch (action.type) {
+        case Action.UPDATE_IMAGE_DRAG_MODE_STATUS: {
+            return updateGeneralField(state, 'imageDragMode', action.payload.imageDragMode);
+        }
+        case Action.UPDATE_SMART_ANNOTATION_ACTIVE_STATUS: {
+            return updateGeneralField(state, 'smartAnnotationActive', action.payload.smartAnnotationActive);
+        }
+        case Action.UPDATE_TRACKING_MODE_STATUS: {
+            return updateGeneralField(state, 'trackingMode', action.payload.trackingMode);
+        }
+        case Action.UPDATE_TRACKING_IN_PROGRESS_STATUS: {
+            return updateGeneralField(state, 'trackingInProgress', action.payload.trackingInProgress);
+        }
+        case Action.UPDATE_ERASER_MODE: {
+            return updateGeneralField(state, 'eraserMode', action.payload.eraserMode);
+        }
+        case Action.UPDATE_ERASER_FINE_MODE: {
+            return updateGeneralField(state, 'eraserFineMode', action.payload.eraserFineMode);
+        }
+        case Action.UPDATE_SAM_NEGATIVE_MODE: {
+            return updateGeneralField(state, 'samNegativeMode', action.payload.samNegativeMode);
+        }
+        case Action.UPDATE_ENABLE_PER_CLASS_COLORATION_STATUS: {
+            return updateGeneralField(state, 'enablePerClassColoration', action.payload.enablePerClassColoration);
+        }
+        default:
+            return state;
+    }
+}
+
 // Idempotency guard for scalar-assignment cases: if the dispatched value
 // equals the current state, return the same reference so React-Redux's
 // shallow compare short-circuits the re-render. Without this, render-time
@@ -63,76 +100,13 @@ export function generalReducer(
             }
         }
         case Action.UPDATE_CUSTOM_CURSOR_STYLE: {
-            if (state.customCursorStyle === action.payload.customCursorStyle) return state;
-            return {
-                ...state,
-                customCursorStyle: action.payload.customCursorStyle
-            }
+            return updateGeneralField(state, 'customCursorStyle', action.payload.customCursorStyle);
         }
         case Action.UPDATE_CONTEXT: {
-            if (state.activeContext === action.payload.activeContext) return state;
-            return {
-                ...state,
-                activeContext: action.payload.activeContext
-            }
+            return updateGeneralField(state, 'activeContext', action.payload.activeContext);
         }
         case Action.UPDATE_PREVENT_CUSTOM_CURSOR_STATUS: {
-            if (state.preventCustomCursor === action.payload.preventCustomCursor) return state;
-            return {
-                ...state,
-                preventCustomCursor: action.payload.preventCustomCursor
-            }
-        }
-        case Action.UPDATE_IMAGE_DRAG_MODE_STATUS: {
-            if (state.imageDragMode === action.payload.imageDragMode) return state;
-            return {
-                ...state,
-                imageDragMode: action.payload.imageDragMode
-            }
-        }
-        case Action.UPDATE_SMART_ANNOTATION_ACTIVE_STATUS: {
-            if (state.smartAnnotationActive === action.payload.smartAnnotationActive) return state;
-            return {
-                ...state,
-                smartAnnotationActive: action.payload.smartAnnotationActive
-            }
-        }
-        case Action.UPDATE_TRACKING_MODE_STATUS: {
-            if (state.trackingMode === action.payload.trackingMode) return state;
-            return {
-                ...state,
-                trackingMode: action.payload.trackingMode
-            }
-        }
-        case Action.UPDATE_TRACKING_IN_PROGRESS_STATUS: {
-            if (state.trackingInProgress === action.payload.trackingInProgress) return state;
-            return {
-                ...state,
-                trackingInProgress: action.payload.trackingInProgress
-            }
-        }
-        case Action.UPDATE_ERASER_MODE: {
-            if (state.eraserMode === action.payload.eraserMode) return state;
-            return {
-                ...state,
-                eraserMode: action.payload.eraserMode,
-                // 保留 eraserFineMode，使橡皮擦记住上次模式（整体/局部）
-                // 这样从局部擦除切换到其他工具再切回，仍恢复局部擦除
-            }
-        }
-        case Action.UPDATE_ERASER_FINE_MODE: {
-            if (state.eraserFineMode === action.payload.eraserFineMode) return state;
-            return {
-                ...state,
-                eraserFineMode: action.payload.eraserFineMode
-            }
-        }
-        case Action.UPDATE_SAM_NEGATIVE_MODE: {
-            if (state.samNegativeMode === action.payload.samNegativeMode) return state;
-            return {
-                ...state,
-                samNegativeMode: action.payload.samNegativeMode
-            }
+            return updateGeneralField(state, 'preventCustomCursor', action.payload.preventCustomCursor);
         }
         case Action.UPDATE_PROJECT_DATA: {
             return {
@@ -141,27 +115,12 @@ export function generalReducer(
             }
         }
         case Action.UPDATE_ZOOM: {
-            if (state.zoom === action.payload.zoom) return state;
-            return {
-                ...state,
-                zoom: action.payload.zoom
-            }
-        }
-        case Action.UPDATE_ENABLE_PER_CLASS_COLORATION_STATUS: {
-            if (state.enablePerClassColoration === action.payload.enablePerClassColoration) return state;
-            return {
-                ...state,
-                enablePerClassColoration: action.payload.enablePerClassColoration
-            }
+            return updateGeneralField(state, 'zoom', action.payload.zoom);
         }
         case Action.UPDATE_LANGUAGE: {
-            if (state.language === action.payload.language) return state;
-            return {
-                ...state,
-                language: action.payload.language
-            }
+            return updateGeneralField(state, 'language', action.payload.language);
         }
         default:
-            return state;
+            return reduceEditorTools(state, action);
     }
 }
