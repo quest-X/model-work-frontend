@@ -160,6 +160,7 @@ const FramePlayer: React.FC<IProps> = ({
 
     // 播放（rAF 驱动）
     const rafRef = useRef<number>();
+    const drawGenerationRef = useRef(0);
     const playFrameRef = useRef(0);
     const isVideoEndedRef = useRef(false);
 
@@ -184,6 +185,11 @@ const FramePlayer: React.FC<IProps> = ({
         }
 
         const cache = frameCacheRef.current;
+        const pendingRequests = pendingRequestsRef.current;
+        const pendingBatches = pendingBatchRef.current;
+        const blobUrls = blobUrlCacheRef.current;
+        const isCurrent = () => mountedRef.current && cache === frameCacheRef.current;
+        if (!isCurrent()) throw new DOMException('Frame load cancelled', 'AbortError');
         const cached = cache.get(frameIdx);
         if (cached) return cached;
 
@@ -194,38 +200,38 @@ const FramePlayer: React.FC<IProps> = ({
             return preloaded;
         }
 
-        const pending = pendingRequestsRef.current.get(frameIdx);
+        const pending = pendingRequests.get(frameIdx);
         if (pending) return pending;
 
         const promise = (async () => {
             const allFrames = EditorModel.videoFrameFiles;
-            let frameFile = (allFrames.length > frameIdx ? allFrames[frameIdx] : null)
-                || (frames.length > frameIdx ? frames[frameIdx] : null);
+            let frameFile = allFrames[frameIdx] || frames[frameIdx] || null;
 
-            if (!frameFile && sessionId) {
+            if (sessionId && !frameFile?.size) {
                 if (sessionExpiredRef.current) throw new SessionExpiredError(sessionId);
                 const batchStart = Math.floor(frameIdx / BATCH_SIZE) * BATCH_SIZE;
                 const batchCount = Math.min(BATCH_SIZE, totalFrames - batchStart);
-                let batchPromise = pendingBatchRef.current.get(batchStart);
+                let batchPromise = pendingBatches.get(batchStart);
                 if (!batchPromise) {
                     batchPromise = FrameExtractorService.fetchFrameRange(sessionId, batchStart, batchCount);
-                    pendingBatchRef.current.set(batchStart, batchPromise);
+                    pendingBatches.set(batchStart, batchPromise);
                     // 独立清理链：用 .then 同时处理成功/失败，避免 .finally 衍生未捕获拒绝
                     batchPromise.then(
-                        () => pendingBatchRef.current.delete(batchStart),
-                        () => pendingBatchRef.current.delete(batchStart),
+                        () => pendingBatches.delete(batchStart),
+                        () => pendingBatches.delete(batchStart),
                     );
                 }
                 let fetched: File[];
                 try {
                     fetched = await batchPromise;
                 } catch (e) {
-                    if (e instanceof SessionExpiredError) {
+                    if (e instanceof SessionExpiredError && isCurrent()) {
                         sessionExpiredRef.current = true;
                         setSessionExpired(true);
                     }
                     throw e;
                 }
+                if (!isCurrent()) throw new DOMException('Frame load cancelled', 'AbortError');
                 for (let i = 0; i < fetched.length; i++) {
                     allFrames[batchStart + i] = fetched[i];
                 }
@@ -245,20 +251,29 @@ const FramePlayer: React.FC<IProps> = ({
             return new Promise<HTMLImageElement>((resolve, reject) => {
                 const img = new Image();
                 const url = URL.createObjectURL(frameFile!);
-                blobUrlCacheRef.current.set(frameIdx, url);
-                img.onload = () => { cache.set(frameIdx, img); resolve(img); };
+                blobUrls.set(frameIdx, url);
+                img.onload = () => {
+                    if (!isCurrent()) {
+                        URL.revokeObjectURL(url);
+                        blobUrls.delete(frameIdx);
+                        reject(new DOMException('Frame load cancelled', 'AbortError'));
+                        return;
+                    }
+                    cache.set(frameIdx, img);
+                    resolve(img);
+                };
                 img.onerror = () => {
                     URL.revokeObjectURL(url);
-                    blobUrlCacheRef.current.delete(frameIdx);
+                    blobUrls.delete(frameIdx);
                     reject(new Error(`Failed to decode frame ${frameIdx}`));
                 };
                 img.src = url;
             });
         })();
 
-        pendingRequestsRef.current.set(frameIdx, promise);
+        pendingRequests.set(frameIdx, promise);
         try { return await promise; }
-        finally { pendingRequestsRef.current.delete(frameIdx); }
+        finally { pendingRequests.delete(frameIdx); }
     }, [frames, sessionId, totalFrames]);
 
     const ensureCanvasSize = (canvas: HTMLCanvasElement) => {
@@ -280,6 +295,7 @@ const FramePlayer: React.FC<IProps> = ({
     };
 
     const drawFrame = useCallback(async (frameIdx: number) => {
+        const generation = ++drawGenerationRef.current;
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
@@ -287,7 +303,7 @@ const FramePlayer: React.FC<IProps> = ({
         ensureCanvasSize(canvas);
         try {
             const img = await loadFrameImage(frameIdx);
-            if (!mountedRef.current || canvas !== canvasRef.current) return;
+            if (!mountedRef.current || generation !== drawGenerationRef.current || canvas !== canvasRef.current) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             EditorModel.videoFrameImage = img;
@@ -299,11 +315,14 @@ const FramePlayer: React.FC<IProps> = ({
                 EditorActions.fullRender();
             }
         } catch (err) {
-            console.error(`[FramePlayer] drawFrame(${frameIdx}) failed:`, err);
+            if (mountedRef.current && generation === drawGenerationRef.current) {
+                console.error(`[FramePlayer] drawFrame(${frameIdx}) failed:`, err);
+            }
         }
     }, [loadFrameImage, videoSize]);
 
     const drawFrameSync = useCallback((frameIdx: number): boolean => {
+        drawGenerationRef.current++;
         const canvas = canvasRef.current;
         if (!mountedRef.current || !canvas) return false;
         const ctx = canvas.getContext('2d');
@@ -329,8 +348,11 @@ const FramePlayer: React.FC<IProps> = ({
 
     // === 完整加载一帧：Image 解码 + 缩略图 ===
     const loadFrameFull = useCallback(async (frameIdx: number): Promise<void> => {
+        const cache = frameCacheRef.current;
+        const isCurrent = () => mountedRef.current && cache === frameCacheRef.current;
         try {
             const img = await loadFrameImage(frameIdx);
+            if (!isCurrent()) return;
             const cb = onFrameReadyRef.current;
             if (!cb || videoSize.width === 0) return;
 
@@ -349,12 +371,17 @@ const FramePlayer: React.FC<IProps> = ({
             // Use async toBlob instead of synchronous toDataURL to avoid blocking
             // the main thread (~512ms total savings per Gemini/DevTools analysis).
             const blob: Blob | null = await new Promise(r => thumbnailCanvasRef.current!.toBlob(r, 'image/jpeg', 0.5));
-            if (!blob) return;
+            if (!blob || !isCurrent()) return;
             const thumbUrl = URL.createObjectURL(blob);
             await new Promise<void>(resolve => {
                 const thumb = new Image();
                 // 不撤销 thumbUrl：ImagePreview <img src={image.src}> 渲染仍指向它
                 thumb.onload = () => {
+                    if (!isCurrent()) {
+                        URL.revokeObjectURL(thumbUrl);
+                        resolve();
+                        return;
+                    }
                     cb(frameIdx, thumb);
                     thumbnailDoneRef.current.add(frameIdx);
                     resolve();
@@ -363,7 +390,7 @@ const FramePlayer: React.FC<IProps> = ({
                 thumb.src = thumbUrl;
             });
         } catch (err) {
-            console.error(`[FramePlayer] loadFrameFull(${frameIdx}) failed:`, err);
+            if (isCurrent()) console.error(`[FramePlayer] loadFrameFull(${frameIdx}) failed:`, err);
         }
     }, [loadFrameImage, videoSize]);
 
@@ -421,10 +448,11 @@ const FramePlayer: React.FC<IProps> = ({
     // 持续维护 available_frames：保证当前位置前方始终有 MIN_AHEAD 帧可播放
     const maintainAvailableFrames = useCallback(async () => {
         const gen = ++loadGenRef.current;
+        const isActive = () => loadGenRef.current === gen && mountedRef.current && !sessionExpiredRef.current;
+        const getPosition = () => isPlayingRef.current ? playFrameRef.current : currentFrameRef.current;
 
-        while (loadGenRef.current === gen) {
-            if (sessionExpiredRef.current) return;
-            const pos = isPlayingRef.current ? playFrameRef.current : currentFrameRef.current;
+        while (isActive()) {
+            const pos = getPosition();
             const {target, backgroundLoad} = getFrameAvailability(frameCacheRef.current, pos, totalFrames, MAX_AVAILABLE, MIN_AHEAD);
             updateBgLoad(backgroundLoad);
 
@@ -448,24 +476,37 @@ const FramePlayer: React.FC<IProps> = ({
 
             const isUrgent = target < pos + MIN_AHEAD;
 
-            if (isUrgent) {
-                // 紧急：在 MIN_AHEAD 范围内有空缺 → 只缓存图片（快，即使播放中也加载）
-                try { await loadFrameImage(target); } catch { /* Background cache loading is best effort; foreground requests report failures. */ }
-            } else if (!isPlayingRef.current) {
-                // 非紧急 + 未播放 → 完整加载（含缩略图）
-                try { await loadFrameFullRef.current(target); } catch { /* Background cache loading is best effort; foreground requests report failures. */ }
-                if (target % 10 === 0) await new Promise(r => setTimeout(r, 0));
-            } else {
-                // 非紧急 + 播放中 → 缓冲充足，暂停加载
-                await new Promise(r => setTimeout(r, 300));
+            try {
+                if (isUrgent) {
+                    // 紧急：在 MIN_AHEAD 范围内有空缺 → 只缓存图片（快，即使播放中也加载）
+                    await loadFrameImage(target);
+                } else if (!isPlayingRef.current) {
+                    // 非紧急 + 未播放 → 完整加载（含缩略图）
+                    await loadFrameFullRef.current(target);
+                    if (target % 10 === 0) await new Promise(r => setTimeout(r, 0));
+                } else {
+                    // 非紧急 + 播放中 → 缓冲充足，暂停加载
+                    await new Promise(r => setTimeout(r, 300));
+                    continue;
+                }
+            } catch { /* The missing cache entry below schedules a bounded retry. */ }
+
+            if (!isActive()) return;
+            if (!frameCacheRef.current.has(target)) {
+                // A failed decode/fetch leaves the same gap. Yield before retrying it.
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 continue;
+            }
+
+            if (target === getPosition()) {
+                drawFrameSync(target);
             }
 
             // 淘汰旧帧:RGBA 严格限,JPEG 大窗口独立 LRU
             evictOldFrames(pos);
             evictJpegByBudget(pos);
         }
-    }, [totalFrames, loadFrameImage, evictOldFrames, evictJpegByBudget, updateBgLoad, MIN_AHEAD, MAX_AVAILABLE]);
+    }, [totalFrames, loadFrameImage, drawFrameSync, evictOldFrames, evictJpegByBudget, updateBgLoad, MIN_AHEAD, MAX_AVAILABLE]);
 
     // 更新稳定 ref
     loadFrameFullRef.current = loadFrameFull;
@@ -493,12 +534,26 @@ const FramePlayer: React.FC<IProps> = ({
 
         };
 
+        const loadFirstFrame = async () => {
+            while (!cancelled) {
+                try {
+                    await loadFrameImage(0);
+                    return;
+                } catch (error) {
+                    if (cancelled) return;
+                    if (error instanceof SessionExpiredError) throw error;
+                    console.error('[FramePlayer] First frame unavailable; retrying:', error);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        };
+
         const init = async () => {
             try {
                 transferPreloadedFrames();
 
                 // 加载并绘制第 0 帧
-                await loadFrameImage(0);
+                await loadFirstFrame();
                 if (cancelled) return;
                 await drawFrame(0);
                 if (cancelled) return;
@@ -527,6 +582,7 @@ const FramePlayer: React.FC<IProps> = ({
 
                 let loaded = 0;
                 const tick = () => {
+                    if (cancelled) return;
                     loaded++;
                     // 用"解析中 X%"进度反馈，不打开右下角角标
                     setLoadingProgress(Math.round((loaded / initEnd) * 100));
@@ -594,6 +650,7 @@ const FramePlayer: React.FC<IProps> = ({
     // === 播放/暂停控制（rAF + 时间驱动） ===
     useEffect(() => {
         if (!isLoaded) return undefined;
+        let cancelled = false;
 
         if (isPlaying) {
             if (isVideoEndedRef.current) {
@@ -636,6 +693,7 @@ const FramePlayer: React.FC<IProps> = ({
                     if (!frameCacheRef.current.has(totalFrames - 1)) {
                         // 最后一帧不在缓存 → 异步加载，画完再暂停
                         drawFrame(totalFrames - 1).then(() => {
+                            if (cancelled || !mountedRef.current) return;
                             isVideoEndedRef.current = true;
                             onPlayPauseRef.current?.();
                         });
@@ -660,6 +718,7 @@ const FramePlayer: React.FC<IProps> = ({
         }
 
         return () => {
+            cancelled = true;
             if (rafRef.current) {
                 cancelAnimationFrame(rafRef.current);
                 rafRef.current = undefined;
@@ -714,6 +773,7 @@ const FramePlayer: React.FC<IProps> = ({
             frameCacheRef.current = new Map();
             blobUrlCacheRef.current = new Map();
             pendingRequestsRef.current = new Map();
+            pendingBatchRef.current = new Map();
             EditorModel.videoFrameImage = null;
         };
     }, []);
