@@ -33,7 +33,7 @@ const PipelinePreprocessPopup: React.FC<IProps> = ({language}) => {
     const [imgszPos, setImgszPos] = useState({ top: 0, left: 0, width: 0 });
 
     useEffect(() => {
-        if (!imgszOpen) return;
+        if (!imgszOpen) return undefined;
         const handler = (e: MouseEvent) => {
             if (imgszRef.current && !imgszRef.current.contains(e.target as Node)) {
                 setImgszOpen(false);

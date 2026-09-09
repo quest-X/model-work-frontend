@@ -1,3 +1,4 @@
+import {LabelStatus} from '../../../../data/enums/LabelStatus';
 import {IPoint} from '../../../../interfaces/IPoint';
 import {VGGPolygon, VGGRegionsData} from '../../../../data/labels/VGG';
 import {ImageData, LabelName} from '../../../../store/labels/types';
@@ -60,6 +61,9 @@ describe('VGGExporter mapImageDataToVGG method', () => {
                         {x: 6, y: 10},
                         {x: 0, y: 10}
                     ],
+                    isCreatedByAI: false,
+                    status: LabelStatus.ACCEPTED,
+                    suggestedLabel: null,
                     isVisible: true
                 },
                 {
@@ -72,6 +76,9 @@ describe('VGGExporter mapImageDataToVGG method', () => {
                         {x: 10, y: 10},
                         {x: 0, y: 10}
                     ],
+                    isCreatedByAI: false,
+                    status: LabelStatus.ACCEPTED,
+                    suggestedLabel: null,
                     isVisible: true
                 }
             ],
@@ -137,6 +144,9 @@ describe('VGGExporter mapImageDataToVGG method', () => {
                         {x: 6, y: 10},
                         {x: 0, y: 10}
                     ],
+                    isCreatedByAI: false,
+                    status: LabelStatus.ACCEPTED,
+                    suggestedLabel: null,
                     isVisible: true
                 },
                 {
@@ -149,6 +159,9 @@ describe('VGGExporter mapImageDataToVGG method', () => {
                         {x: 10, y: 10},
                         {x: 0, y: 10}
                     ],
+                    isCreatedByAI: false,
+                    status: LabelStatus.ACCEPTED,
+                    suggestedLabel: null,
                     isVisible: true
                 }
             ],

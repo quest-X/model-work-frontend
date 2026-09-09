@@ -113,6 +113,10 @@ export class AllLabelsRenderEngine extends BaseRenderEngine {
         }
     }
 
+    protected mouseDownHandler(data: EditorData): void { this.update(data); }
+    protected mouseMoveHandler(data: EditorData): void { this.update(data); }
+    protected mouseUpHandler(data: EditorData): void { this.update(data); }
+
     public render(data: EditorData): void {
         const isSmart = GeneralSelector.getSmartAnnotationActiveStatus();
         const isTracking = GeneralSelector.getTrackingMode();

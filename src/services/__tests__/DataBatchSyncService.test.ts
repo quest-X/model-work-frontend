@@ -1,3 +1,4 @@
+import {LabelStatus} from '../../data/enums/LabelStatus';
 import {DataBatchSyncService} from '../DataBatchSyncService';
 import {ImageData, LabelName} from '../../store/labels/types';
 import {QueueItem, QueueItemStatus, QueueItemType} from '../../store/queue/types';
@@ -19,6 +20,10 @@ const groupPolygon = (
     id: `visual-search:task-mask:result-mask:mask:${componentIndex}`,
     labelId: 'goose',
     vertices,
+    isVisible: true,
+    isCreatedByAI: true,
+    status: LabelStatus.ACCEPTED,
+    suggestedLabel: '',
     extra: {visualSearch: {
         schemaVersion: 1,
         clientJobId: 'client-mask',
@@ -83,6 +88,11 @@ describe('DataBatchSyncService', () => {
         const image = {
             id: 'image-mask',
             fileData: file,
+            loadStatus: true,
+            labelPoints: [],
+            labelLines: [],
+            labelNameIds: [],
+            isVisitedByRoboflowAPI: false,
             labelRects: [],
             labelPolygons: [
                 groupPolygon(0, [{x: 1, y: 1}, {x: 5, y: 1}, {x: 3, y: 4}]),
@@ -146,6 +156,11 @@ describe('DataBatchSyncService', () => {
         const image = (labelPolygons: unknown[]): ImageData => ({
             id: 'image-mask',
             fileData: file,
+            loadStatus: true,
+            labelPoints: [],
+            labelLines: [],
+            labelNameIds: [],
+            isVisitedByRoboflowAPI: false,
             labelRects: [],
             labelPolygons,
         } as ImageData);

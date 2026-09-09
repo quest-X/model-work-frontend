@@ -23,9 +23,9 @@ import {
     filesystemAuthorizationChallenge,
 } from '../AgentSideChat';
 
-const filesystemAuthorization = (
-    state: ComputeFilesystemAuthorization['state'] = 'pending',
-): ComputeFilesystemAuthorization => ({
+const filesystemAuthorization = <State extends ComputeFilesystemAuthorization['state'] = 'pending'>(
+    state: State = 'pending' as State,
+): ComputeFilesystemAuthorization & {state: State; node_name: string} => ({
     version: 1,
     purpose: 'model-work-node.user-authorization.v1',
     authorization_id: 'authorization-1',
@@ -154,7 +154,7 @@ describe('AgentSideChat', () => {
         });
         render(<AgentSideChat language={Language.CHINESE}/>);
 
-        act(() => window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)));
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
         const dialog = await screen.findByRole('dialog', {name: 'Agent 对话'});
         expect(dialog).toBeInTheDocument();
         expect(document.body).toHaveClass('AgentChatOpen');
@@ -233,7 +233,7 @@ describe('AgentSideChat', () => {
         fireEvent.click(screen.getByRole('button', {name: '关闭 Agent 对话'}));
         expect(screen.queryByRole('dialog', {name: 'Agent 对话'})).not.toBeInTheDocument();
         expect(document.body).not.toHaveClass('AgentChatOpen');
-        act(() => window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)));
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
         expect(await screen.findByText('有什么需要处理？')).toBeInTheDocument();
         expect(screen.queryByText(/当前有 2 个运行任务。/)).not.toBeInTheDocument();
         embeddedHost.remove();
@@ -249,7 +249,7 @@ describe('AgentSideChat', () => {
         });
         render(<AgentSideChat language={Language.ENGLISH}/>);
 
-        act(() => window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)));
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
         expect(await screen.findByText('Qwen3-Coder · Fault')).toBeInTheDocument();
     });
 
@@ -274,7 +274,7 @@ describe('AgentSideChat', () => {
             });
         render(<AgentSideChat language={Language.CHINESE}/>);
 
-        act(() => window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)));
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
         const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
         fireEvent.change(composer, {target: {value: '第一条'}});
         fireEvent.click(screen.getByRole('button', {name: '发送'}));
@@ -364,7 +364,7 @@ describe('AgentSideChat', () => {
         });
         render(<AgentSideChat language={Language.CHINESE}/>);
 
-        act(() => window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)));
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
         const historyButton = await screen.findByRole('button', {name: '历史记录'});
         const newConversationButton = screen.getByRole('button', {name: '新对话'});
         expect(newConversationButton).toHaveTextContent('+');
@@ -454,7 +454,7 @@ describe('AgentSideChat', () => {
         });
         render(<AgentSideChat language={Language.CHINESE}/>);
 
-        act(() => window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)));
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
         const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
         fireEvent.change(composer, {target: {value: '@@'}});
         fireEvent.click(await screen.findByRole('option', {name: /baoxin-166-windows/}));
@@ -531,7 +531,7 @@ describe('AgentSideChat', () => {
         });
         render(<AgentSideChat language={Language.CHINESE}/>);
 
-        act(() => window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)));
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
         const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
         fireEvent.change(composer, {target: {value: '@'}});
         const allDevicesOption = await screen.findByRole('option', {name: '@全部节点'});
@@ -635,7 +635,7 @@ describe('AgentSideChat', () => {
         });
         render(<AgentSideChat language={Language.CHINESE}/>);
 
-        act(() => window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)));
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
         const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
         fireEvent.change(composer, {target: {value: '@'}});
         fireEvent.click(await screen.findByRole('option', {name: '@全部节点'}));
@@ -682,7 +682,7 @@ describe('AgentSideChat', () => {
         });
         render(<AgentSideChat language={Language.CHINESE}/>);
 
-        act(() => window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)));
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
         const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
         fireEvent.change(composer, {target: {value: '@shanghai-151-linux 设备信息'}});
         fireEvent.click(screen.getByRole('button', {name: '发送'}));

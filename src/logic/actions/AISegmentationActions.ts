@@ -354,7 +354,7 @@ export class AISegmentationActions {
         // 会反复抛 "无效的 anchors 数据"——所以 map 里直接 return null + filter 掉。
         const newPolygons: LabelPolygon[] = results
             .filter(result => result.mask && result.mask.length >= 3)
-            .map(result => {
+            .map((result): LabelPolygon | null => {
                 const vertices = result.mask
                     .filter(([x, y]) => isFinite(x) && isFinite(y))
                     .map(([x, y]) => ({ x, y }));

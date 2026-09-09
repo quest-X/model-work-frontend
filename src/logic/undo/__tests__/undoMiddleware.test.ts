@@ -239,7 +239,7 @@ describe('undoMiddleware restore snapshots', () => {
             countsBase64: 'AA==',
         } as const;
         const labelPolygons: LabelPolygon[] = sourcePolygons.map((polygon, index) => {
-            const vertices = polygon.map(([x, y]) => ({x, y}));
+            const vertices = polygon.map(([x, y]: readonly [number, number]) => ({x, y}));
             return {
                 id: `visual-search:task-mask:result-mask:mask:${index}`,
                 labelId: 'goose',

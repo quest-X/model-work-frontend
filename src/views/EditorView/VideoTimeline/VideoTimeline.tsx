@@ -367,7 +367,7 @@ const VideoTimeline: React.FC<IProps> = ({
     const syncSourceRef = useRef<'timeline' | 'images' | null>(null);
     useEffect(() => {
         setGlobalRange(selectionRange);
-        if (syncSourceRef.current === 'images') { syncSourceRef.current = null; return; }
+        if (syncSourceRef.current === 'images') { syncSourceRef.current = null; return undefined; }
         if (selectionRange) {
             store.dispatch(selectImageRange(selectionRange.startFrame, selectionRange.endFrame));
         } else {

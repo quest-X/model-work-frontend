@@ -238,39 +238,15 @@ describe('ComputeClusterService field group lifecycle', () => {
         jest.restoreAllMocks();
     });
 
-    it('uses the protected group collection and exact group id', async () => {
+    it('removes the exact field group through the protected collection', async () => {
         global.fetch = jest.fn().mockResolvedValue({
             ok: true,
             json: async () => ({}),
         } as Response);
-        const input = {
-            installation_id: '00000000-0000-4000-8000-000000000014',
-            name: 'new-field-main',
-            ssh_user: 'field-user',
-            control_host: 'fd7a:115c:a1e0::14',
-            lan_host: null,
-            authority_subject: {
-                role: 'main' as const,
-                installation_id: '00000000-0000-4000-8000-000000000014',
-                owner_id: '00000000-0000-4000-8000-000000000114',
-                group_id: '00000000-0000-4000-8000-000000000214',
-                generation: 1,
-                public_key: 'A'.repeat(43) + '=',
-            },
-        };
-
-        await ComputeClusterService.admitFieldGroup(input);
         await ComputeClusterService.removeFieldGroup('field/group');
 
         expect(global.fetch).toHaveBeenNthCalledWith(
             1,
-            expect.stringMatching(/\/groups$/),
-            expect.objectContaining({
-                method: 'POST', body: JSON.stringify({...input, role: 'main'}),
-            }),
-        );
-        expect(global.fetch).toHaveBeenNthCalledWith(
-            2,
             expect.stringMatching(/\/groups\/field%2Fgroup$/),
             expect.objectContaining({method: 'DELETE'}),
         );

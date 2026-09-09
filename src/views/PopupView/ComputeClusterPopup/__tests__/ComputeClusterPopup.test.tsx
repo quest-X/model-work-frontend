@@ -737,11 +737,11 @@ describe('ComputeClusterPopup', () => {
                     target_id: main.entity_id, active: true, reason: 'available',
                 }, ...edges.map(edge => ({
                     relation_id: `manages:${edge.entity_id}`, kind: 'manages' as const,
-                    source_id: main.entity_id, target_id: edge.entity_id, active: true, reason: 'available',
+                    source_id: main.entity_id, target_id: edge.entity_id, active: true, reason: 'available' as const,
                 })), ...cameras.map((camera, index) => ({
                     relation_id: `manages:${camera.entity_id}`, kind: 'manages' as const,
                     source_id: edges[index % edges.length].entity_id,
-                    target_id: camera.entity_id, active: true, reason: 'available',
+                    target_id: camera.entity_id, active: true, reason: 'available' as const,
                 }))],
             }}
             nodes={await service.nodes()}

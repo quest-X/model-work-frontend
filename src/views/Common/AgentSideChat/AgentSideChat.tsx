@@ -675,7 +675,7 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
     }, [open]);
 
     useEffect(() => {
-        if (!open || nodes !== null || nodeError) return;
+        if (!open || nodes !== null || nodeError) return undefined;
         const controller = new AbortController();
         void ComputeClusterService.nodes(controller.signal).then(setNodes).catch(error => {
             if (error?.name !== 'AbortError') {

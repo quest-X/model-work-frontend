@@ -34,7 +34,7 @@ describe('DatasetInferencePopup', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         (DatasetInferenceSelection.get as jest.Mock).mockReturnValue('dataset-1');
-        global.fetch = jest.fn((input: RequestInfo, options?: RequestInit) => {
+        global.fetch = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
             const url = String(input);
             if (url.endsWith('/datasets')) {
                 return Promise.resolve(response({datasets: [{id: 'dataset-1', name: 'default-project', image_count: 465}]}));
@@ -70,7 +70,7 @@ describe('DatasetInferencePopup', () => {
     it('requests cooperative cancellation and shows the acknowledgement state', async () => {
         const existingFetch = global.fetch;
         let state = 'running';
-        global.fetch = jest.fn((input: RequestInfo, options?: RequestInit) => {
+        global.fetch = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
             if (String(input).endsWith('/cancel')) {
                 state = 'cancelling';
                 return Promise.resolve(response({status: 'accepted'}));

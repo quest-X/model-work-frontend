@@ -1,6 +1,7 @@
 import {BaseRenderEngine} from './BaseRenderEngine';
 import {RenderEngineSettings} from '../../settings/RenderEngineSettings';
 import {LabelType} from '../../data/enums/LabelType';
+import {LabelStatus} from '../../data/enums/LabelStatus';
 import {EditorData} from '../../data/EditorData';
 import {RenderEngineUtil} from '../../utils/RenderEngineUtil';
 import {ImageData, LabelLine} from '../../store/labels/types';
@@ -316,6 +317,9 @@ export class LineRenderEngine extends BaseRenderEngine {
             id: uuidv4(),
             labelId: activeLabelId,
             line: lineOnImage,
+            isCreatedByAI: false,
+            status: LabelStatus.ACCEPTED,
+            suggestedLabel: null,
             isVisible: true
         };
         imageData.labelLines.push(labelLine);

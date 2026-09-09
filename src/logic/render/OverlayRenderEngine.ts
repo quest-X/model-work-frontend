@@ -33,6 +33,11 @@ export class OverlayRenderEngine extends BaseRenderEngine {
         this.labelType = LabelType.POLYGON;
     }
 
+    protected mouseDownHandler(): void { /* Passive overlays do not edit labels. */ }
+    protected mouseMoveHandler(): void { /* Passive overlays do not edit labels. */ }
+    protected mouseUpHandler(): void { /* Passive overlays do not edit labels. */ }
+    public isInProgress(): boolean { return false; }
+
     public render(data: EditorData): void {
         const imageData: ImageData = EditorModel.playbackImageData || LabelsSelector.getActiveImageData();
         if (!imageData) return;

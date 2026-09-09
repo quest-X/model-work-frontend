@@ -115,7 +115,7 @@ async function resolveThumbnailSource(
 
         if (typeof fileData === 'string') {
             image.src = fileData;
-        } else if (fileData instanceof File || fileData instanceof Blob) {
+        } else if (fileData instanceof Blob) {
             objectUrl = URL.createObjectURL(fileData);
             image.src = objectUrl;
         } else {
@@ -219,7 +219,7 @@ interface IProps {
     activeImageData: ImageData | null;
     labelNames: LabelName[];
     isVideoMode: boolean;
-    updateSegmentationResults: (results: SegmentationResult[]) => void;
+    updateSegmentationResults: (results: SegmentationResult[], imageId?: string) => void;
     updateActiveLabelId: (activeLabelId: string | null) => void;
 }
 
@@ -450,7 +450,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         if (!imageId || !activeImageData || displayResults.length === 0) {
             setThumbnails({});
             setFailedThumbnailKeys({});
-            return;
+            return undefined;
         }
 
         let cancelled = false;
@@ -472,7 +472,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         setFailedThumbnailKeys({});
 
         if (uncachedJobs.length === 0) {
-            return;
+            return undefined;
         }
 
         const generateMissingThumbnails = async () => {

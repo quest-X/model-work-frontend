@@ -170,7 +170,7 @@ describe('DataCenterPopup', () => {
         (store.getState as jest.Mock).mockReturnValue({queue: {activeQueueItemId: 'queue-1', items: [localItem]}});
         (ImageDatasetRestoreService.restore as jest.Mock).mockResolvedValue({id: 'queue-1'});
         (VideoDatasetRestoreService.restore as jest.Mock).mockResolvedValue({id: 'queue-1'});
-        global.fetch = jest.fn((input: RequestInfo, init?: RequestInit) => {
+        global.fetch = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
             const url = String(input);
             if (url.endsWith('/datasets/dataset-1') && init?.method === 'PATCH') {
                 const body = JSON.parse(String(init.body));
@@ -381,7 +381,7 @@ describe('DataCenterPopup', () => {
             classes: ['defect'],
             media_type: 'video',
         };
-        global.fetch = jest.fn((input: RequestInfo) => {
+        global.fetch = jest.fn((input: RequestInfo | URL) => {
             const url = String(input);
             if (url.endsWith('/datasets')) {
                 return Promise.resolve(jsonResponse({datasets: [imageDataset, videoDataset]}));
@@ -718,7 +718,7 @@ describe('DataCenterPopup', () => {
 
     it('keeps ordinary YOLO datasets on the existing annotation importer path', async () => {
         const yoloDataset = {...dataset, format: 'yolo', source_id: null};
-        (global.fetch as jest.Mock).mockImplementation((input: RequestInfo) => {
+        (global.fetch as jest.Mock).mockImplementation((input: RequestInfo | URL) => {
             const url = String(input);
             if (url.endsWith('/datasets')) return Promise.resolve(jsonResponse({datasets: [yoloDataset]}));
             if (url.endsWith('/dataset-1/stats')) {
@@ -783,7 +783,7 @@ describe('DataCenterPopup', () => {
                 total_frames: 50,
             },
         };
-        (global.fetch as jest.Mock).mockImplementation((input: RequestInfo) => {
+        (global.fetch as jest.Mock).mockImplementation((input: RequestInfo | URL) => {
             const url = String(input);
             if (url.endsWith('/datasets')) {
                 return Promise.resolve(jsonResponse({datasets: [videoDataset]}));
@@ -857,7 +857,7 @@ describe('DataCenterPopup', () => {
             dataset_id: 'legacy-video-dataset',
             revision: 3,
         });
-        (global.fetch as jest.Mock).mockImplementation((input: RequestInfo) => {
+        (global.fetch as jest.Mock).mockImplementation((input: RequestInfo | URL) => {
             const url = String(input);
             if (url.endsWith('/datasets')) {
                 return Promise.resolve(jsonResponse({datasets: [legacyVideoDataset]}));
@@ -925,7 +925,7 @@ describe('DataCenterPopup', () => {
     it('ignores a stale statistics response after another dataset is selected', async () => {
         const secondDataset = {...dataset, id: 'dataset-2', source_id: null, name: 'second-project'};
         let resolveFirstStats: ((response: Response) => void) | undefined;
-        (global.fetch as jest.Mock).mockImplementation((input: RequestInfo) => {
+        (global.fetch as jest.Mock).mockImplementation((input: RequestInfo | URL) => {
             const url = String(input);
             if (url.endsWith('/datasets')) return Promise.resolve(jsonResponse({datasets: [dataset, secondDataset]}));
             if (url.endsWith('/dataset-1/stats')) {

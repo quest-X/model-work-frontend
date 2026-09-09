@@ -215,6 +215,11 @@ interface SelectImageRange {
     }
 }
 
+interface DeleteSelectedImages {
+    type: typeof Action.DELETE_SELECTED_IMAGES;
+    payload: Record<string, never>;
+}
+
 interface DeleteImageById {
     type: typeof Action.DELETE_IMAGE_BY_ID;
     payload: {
@@ -247,5 +252,6 @@ export type LabelsActionTypes = UpdateActiveImageIndex
     | ToggleImageSelection
     | SelectImageRange
     | DeleteImageById
+    | DeleteSelectedImages
     | AcceptVisualSearchBBox
     | AcceptVisualSearchMask

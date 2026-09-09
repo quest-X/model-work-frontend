@@ -123,14 +123,13 @@ const CameraControlPanel: React.FC<IProps> = ({
         setError('');
         setMessage('');
         try {
-            const value = disabling
-                ? await CameraPreviewService.disableAuto(resourceId, action)
-                : await CameraPreviewService.autoAdjust(resourceId, action);
+            const automatic = disabling ? null : await CameraPreviewService.autoAdjust(resourceId, action);
+            const value = automatic ?? await CameraPreviewService.disableAuto(resourceId, action);
             setPreview(value);
             setDraft(value.current);
-            if (!disabling && 'auto_adjustment' in value) {
-                setMetrics(value.auto_adjustment.metrics);
-                setMessage(value.auto_adjustment.message);
+            if (automatic) {
+                setMetrics(automatic.auto_adjustment.metrics);
+                setMessage(automatic.auto_adjustment.message);
             } else {
                 setMessage(chinese
                     ? `已关闭${label}，其他自动项保持开启`

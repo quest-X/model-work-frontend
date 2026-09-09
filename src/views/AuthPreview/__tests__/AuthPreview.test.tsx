@@ -17,6 +17,8 @@ const session: AccountSession = {
         username: 'admin',
         display_name: '本地管理员',
         role: 'admin',
+        enabled: true,
+        scopes: {groups: [], nodes: [], projects: []},
         password_change_required: false,
         avatar_url: null,
         approval: {
