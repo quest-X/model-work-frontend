@@ -53,6 +53,9 @@ const friendlyError = (reason: unknown, zh: boolean): string => {
     if (raw.includes('permission_denied')) return zh
         ? '节点服务没有访问该目录的权限。'
         : 'The node service cannot access this directory.';
+    if (raw.includes('desktop_not_configured')) return zh
+        ? '这台机器尚未设置桌面目录，请输入绝对路径浏览。'
+        : 'This machine has no desktop directory configured. Enter an absolute path to browse.';
     if (raw.includes('path_not_found')) return zh
         ? '目录不存在或已被移动。'
         : 'The directory does not exist or was moved.';
