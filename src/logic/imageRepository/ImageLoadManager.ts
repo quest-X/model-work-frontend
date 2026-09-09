@@ -1,9 +1,9 @@
 export class ImageLoadManager {
 
-	private static queue: (() => Promise<any>)[] = [];
+	private static queue: (() => Promise<void>)[] = [];
 	private static isRunning: boolean = false;
 
-	public static add(fx: Promise<any>) {
+	public static add(fx: Promise<void>) {
 		ImageLoadManager.queue.push(async () => await fx);
 	}
 
@@ -11,7 +11,7 @@ export class ImageLoadManager {
 		setTimeout(() => ImageLoadManager.runQueue(), 10);
 	}
 
-	public static addAndRun(fx: Promise<any>) {
+	public static addAndRun(fx: Promise<void>) {
 		ImageLoadManager.add(fx);
 		ImageLoadManager.run();
 	}

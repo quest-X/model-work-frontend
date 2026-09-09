@@ -38,14 +38,14 @@ self.onmessage = async (ev: MessageEvent<InMessage>) => {
             entries.push({ name, blob });
         }
         const out: OutMessageOk = { id, ok: true, entries };
-        (self as any).postMessage(out);
+        self.postMessage(out);
     } catch (err) {
         const out: OutMessageErr = {
             id,
             ok: false,
             error: (err as Error)?.message || String(err),
         };
-        (self as any).postMessage(out);
+        self.postMessage(out);
     }
 };
 
