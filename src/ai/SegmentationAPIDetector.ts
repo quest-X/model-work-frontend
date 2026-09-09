@@ -4,6 +4,8 @@ import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
 import {getDefaultCoreServiceUrl, getEngineBaseUrl} from '../utils/DefaultBackendUrl';
 import {PipelineStore} from './PipelineStore';
 import {ScriptStore} from './ScriptStore';
+import type {SegmentationResult as UnifiedSegmentationResult} from '../store/ai/types';
+import type {LabelPolygon} from '../store/labels/types';
 
 export interface SegmentationObjectInfo {
     id: number;
@@ -15,7 +17,7 @@ export interface SegmentationResult {
     info: SegmentationObjectInfo;
     bbox: [number, number, number, number]; // [x1, y1, x2, y2]
     mask: [number, number][]; // polygon vertices [[x,y], ...]
-    extra?: Record<string, any>; // 自定义后处理脚本注入的额外字段（含 overlays 等）
+    extra?: LabelPolygon['extra']; // 自定义后处理脚本注入的额外字段（含 overlays 等）
 }
 
 export interface SegmentationAPIResponse {
@@ -359,7 +361,7 @@ export class SegmentationAPIDetector {
         return Math.abs(area) / 2;
     }
 
-    public static convertToUnifiedFormat(results: SegmentationResult[]): any[] {
+    public static convertToUnifiedFormat(results: SegmentationResult[]): UnifiedSegmentationResult[] {
         return results.map(result => ({
             class_id: result.info.id,
             class_name: result.info.name,

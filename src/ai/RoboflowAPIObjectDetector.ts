@@ -31,8 +31,8 @@ export class RoboflowAPIObjectDetector {
 
     public static loadModel(
         roboflowAPIDetails: RoboflowAPIDetails,
-        onSuccess?: () => any,
-        onFailure?: () => any
+        onSuccess?: () => void,
+        onFailure?: () => void
     ) {
         store.dispatch(updateRoboflowAPIDetails(roboflowAPIDetails));
         store.dispatch(updateActiveLabelType(LabelType.RECT));
@@ -51,8 +51,8 @@ export class RoboflowAPIObjectDetector {
 
     public static predict(
         imageData: ImageData,
-        onSuccess?: (predictions: DetectedObject[]) => any,
-        onFailure?: () => any
+        onSuccess?: (predictions: DetectedObject[]) => void,
+        onFailure?: () => void
     ) {
         const roboflowAPIDetails: RoboflowAPIDetails = AISelector.getRoboflowAPIDetails();
         FileUtil.loadImageBase64(imageData.fileData).then((data) => {

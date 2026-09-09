@@ -1,6 +1,7 @@
 import axios from 'axios';
 import {IRect} from '../interfaces/IRect';
 import {ImageData} from '../store/labels/types';
+import type {SegmentationResult} from '../store/ai/types';
 import {EditorModel} from '../staticModels/EditorModel';
 import {store} from '../index';
 import {AIModelsSelector} from '../store/selectors/AIModelsSelector';
@@ -384,7 +385,7 @@ export class DetectionAPIDetector {
     public static async predict(
         imageData: ImageData,
         onSuccess?: (results: DetectionResult[]) => void,
-        onFailure?: (error: any) => void
+        onFailure?: (error: Error) => void
     ): Promise<void> {
         const sync = this.syncFromActiveModel();
         if (!sync.ok) {
@@ -451,7 +452,7 @@ export class DetectionAPIDetector {
     /**
      * 将检测结果转换为统一的推理结果格式（用于兼容现有的渲染逻辑）
      */
-    public static convertToSegmentationFormat(detectionResults: DetectionResult[]): any[] {
+    public static convertToSegmentationFormat(detectionResults: DetectionResult[]): SegmentationResult[] {
         return detectionResults.map(result => ({
             class_id: result.info.id,
             class_name: result.info.name,
