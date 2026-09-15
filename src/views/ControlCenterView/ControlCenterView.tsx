@@ -1190,12 +1190,14 @@ export const ControlCenterView: React.FC<IProps> = ({
         detail: string,
         tone: Tone,
         onClick?: () => void,
+        secondaryDetail?: string,
     ) => {
         const content = <>
             <span className={`ControlStatusDot ${tone}`} aria-hidden='true'/>
             <div>
                 <span>{name}</span>
                 <strong>{value}</strong>
+                {secondaryDetail && <small>{secondaryDetail}</small>}
                 <small>{detail}</small>
             </div>
         </>;
@@ -1249,6 +1251,10 @@ export const ControlCenterView: React.FC<IProps> = ({
             node.capabilities?.includes('task.camera.connect.v1')
             || node.capabilities?.includes('task.camera.discover.v1')
         ));
+        const lanAddresses = node.network.lan_address
+            || node.lan_scan_targets?.map(target => target.address).join(' · ');
+        const tailscaleIpv6Addresses = node.network.tailscale_ipv6_address
+            || node.network.addresses.filter(address => address.includes(':')).join(' · ');
         const jetsonConnectCapable = Boolean(
             node.online && node.capabilities?.includes('control.jetson.connect.v1'),
         );
@@ -1350,6 +1356,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                             setTerminalTransport('lan');
                             setWorkspace('terminal');
                         },
+                        lanAddresses
+                            ? zh ? `局域网 IP：${lanAddresses}` : `LAN IP: ${lanAddresses}`
+                            : undefined,
                     )}
                     {renderServiceCard(
                         communicationStateLabel(tailscaleState, zh),
@@ -1361,6 +1370,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                             setTerminalTransport('tailscale');
                             setWorkspace('terminal');
                         },
+                        tailscaleIpv6Addresses
+                            ? `${zh ? 'IPv6：' : 'IPv6: '}${tailscaleIpv6Addresses}`
+                            : undefined,
                     )}
                 </div>
             </section>

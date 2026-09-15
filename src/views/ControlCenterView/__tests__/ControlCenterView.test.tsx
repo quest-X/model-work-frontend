@@ -328,6 +328,26 @@ describe('ControlCenterView', () => {
             .toHaveClass('warning');
     });
 
+    it('shows reported LAN and Tailscale addresses on their SSH cards', async () => {
+        const machine = node('局域网节点', true);
+        machine.network.addresses = ['100.64.0.166'];
+        machine.network.lan_address = '192.168.10.166';
+        machine.network.tailscale_ipv6_address = 'fd7a:115c:a1e0::166';
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        const {rerender} = render(<ControlCenterView language={Language.CHINESE}/>);
+
+        const lan = await screen.findByRole('button', {name: /SSH 局域网/});
+        expect(within(lan).getByText('局域网 IP：192.168.10.166')).toBeInTheDocument();
+        const tailscale = screen.getByRole('button', {name: /Tailscale 远程/});
+        expect(within(tailscale).getByText('IPv6：fd7a:115c:a1e0::166')).toBeInTheDocument();
+        expect(tailscale).not.toHaveTextContent('100.64.0.166');
+        expect(tailscale).not.toHaveTextContent('192.168.10.166');
+
+        rerender(<ControlCenterView language={Language.ENGLISH}/>);
+        expect(screen.getByText('LAN IP: 192.168.10.166')).toBeInTheDocument();
+        expect(screen.getByText('IPv6: fd7a:115c:a1e0::166')).toBeInTheDocument();
+    });
+
     it('does not guess a version when the node reports unknown', async () => {
         const machine = node('旧节点', true);
         machine.agent_version = 'unknown';
