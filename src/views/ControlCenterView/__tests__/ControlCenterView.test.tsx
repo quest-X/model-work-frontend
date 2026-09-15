@@ -262,7 +262,7 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText('摄像头注册表')).not.toBeInTheDocument();
         expect(screen.queryByText('运行详情暂不可用')).not.toBeInTheDocument();
         expect(ComputeClusterService.runtime).not.toHaveBeenCalled();
-        expect(screen.getByText('CPU · MEM · GPU · DISK · NETWORK')).toBeInTheDocument();
+        expect(screen.getByText('处理器 · 内存 · 显卡 · 磁盘 · 网络')).toBeInTheDocument();
         expect(screen.queryByText('视觉算法服务')).not.toBeInTheDocument();
         expect(container.querySelector('.EditorContainer.ControlCenterView')).toBeInTheDocument();
         expect(container.querySelector('.EditorTopNavigationBar.ControlTopNavigationBar')).toBeInTheDocument();
@@ -276,7 +276,7 @@ describe('ControlCenterView', () => {
 
         fireEvent.click(screen.getByRole('button', {name: /离线节点/}));
         expect(screen.getByRole('heading', {name: '离线节点'})).toBeInTheDocument();
-        expect(screen.getByText('CPU · MEM · GPU · DISK · NETWORK')).toBeInTheDocument();
+        expect(screen.getByText('处理器 · 内存 · 显卡 · 磁盘 · 网络')).toBeInTheDocument();
         expect(within(screen.getByLabelText('设备信息')).getByText('未上报')).toBeInTheDocument();
         const offlineSsh = screen.getByRole('button', {name: /SSH 局域网.*打开当前节点终端连接/});
         const offlineTailscale = screen.getByRole('button', {name: /Tailscale 远程.*打开当前节点终端连接/});
@@ -301,6 +301,7 @@ describe('ControlCenterView', () => {
         expect(within(englishDeviceInformation).queryByText('Node state')).not.toBeInTheDocument();
         expect(screen.getByText('LAN SSH')).toBeInTheDocument();
         expect(screen.getByText('Remote Tailscale')).toBeInTheDocument();
+        expect(screen.getByText('CPU · MEM · GPU · DISK · NETWORK')).toBeInTheDocument();
         expect(screen.getByRole('button', {name: /Active Just now/})).toBeInTheDocument();
         expect(screen.queryByRole('button', {name: /Open live view/})).not.toBeInTheDocument();
         expect(screen.queryByText('处理器')).not.toBeInTheDocument();
@@ -534,7 +535,7 @@ describe('ControlCenterView', () => {
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         await screen.findByRole('button', {name: '打开资源监视器'});
-        expect(await screen.findByText('CPU · MEM · GPU · DISK · NETWORK')).toBeInTheDocument();
+        expect(await screen.findByText('处理器 · 内存 · 显卡 · 磁盘 · 网络')).toBeInTheDocument();
         expect(screen.getByText(/^最后检查 /)).toBeInTheDocument();
         expect(document.querySelector('.ControlRuntimeChecked')).not.toBeInTheDocument();
         expect(screen.queryByText('视觉算法服务')).not.toBeInTheDocument();
@@ -692,7 +693,7 @@ describe('ControlCenterView', () => {
         fireEvent.click(screen.getByRole('button', {name: /离线节点/}));
         expect(await screen.findByRole('heading', {name: '离线节点'})).toBeInTheDocument();
         expect(within(screen.getByRole('button', {name: '打开资源监视器'})).getByText('故障')).toBeInTheDocument();
-        expect(screen.getByText('CPU · MEM · GPU · DISK · NETWORK')).toBeInTheDocument();
+        expect(screen.getByText('处理器 · 内存 · 显卡 · 磁盘 · 网络')).toBeInTheDocument();
         expect(screen.queryByText('实时状态')).not.toBeInTheDocument();
     });
 

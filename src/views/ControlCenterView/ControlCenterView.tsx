@@ -1228,7 +1228,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             <span className='ControlRuntimeIdentity'>
                 <span>{monitorStatus}</span>
                 <strong>{zh ? '资源监视器' : 'Resource monitor'}</strong>
-                <small>CPU · MEM · GPU · DISK · NETWORK</small>
+                <small>{zh ? '处理器 · 内存 · 显卡 · 磁盘 · 网络' : 'CPU · MEM · GPU · DISK · NETWORK'}</small>
             </span>
             <span className='ControlServiceOpen' aria-hidden='true'>›</span>
         </button>;
