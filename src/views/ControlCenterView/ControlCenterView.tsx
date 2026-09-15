@@ -17,6 +17,7 @@ import {
     ComputeResourceGraph,
     ComputeTask,
     ComputeRuntimeInventory,
+    ComputeTerminalTarget,
     ComputeClusterService,
     cameraStreamingAvailable,
     computeNodeState,
@@ -357,6 +358,8 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [workspace, setWorkspace] = useState<Workspace>('node');
     const [terminalAutoConnect, setTerminalAutoConnect] = useState(false);
     const [terminalTransport, setTerminalTransport] = useState<'lan' | 'tailscale'>();
+    const [terminalTargets, setTerminalTargets] = useState<ComputeTerminalTarget[]>([]);
+    const [revealedSshAddress, setRevealedSshAddress] = useState('');
     const [nodes, setNodes] = useState<ComputeClusterNode[]>([]);
     const [groupMemberships, setGroupMemberships] = useState<ComputeGroupMembership[]>([]);
     const [selectedGroupId, setSelectedGroupId] = useState('');
@@ -457,7 +460,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         refreshInFlight.current = true;
         if (mounted.current) initial ? setLoading(true) : setRefreshing(true);
         try {
-            const [nextNodes, graphResult, assetResult, memberships] = await Promise.all([
+            const [nextNodes, graphResult, assetResult, memberships, targets] = await Promise.all([
                 ComputeClusterService.nodes(),
                 ComputeClusterService.resourceGraph().then(
                     value => ({value, error: ''}),
@@ -474,11 +477,16 @@ export const ControlCenterView: React.FC<IProps> = ({
                     value => value.groups,
                     () => [] as ComputeGroupMembership[],
                 ),
+                ComputeClusterService.terminalTargets().then(
+                    value => value.targets,
+                    () => [] as ComputeTerminalTarget[],
+                ),
             ]);
             if (!mounted.current) return;
             setNodes(nextNodes);
             setLanAssets(assetResult);
             setGroupMemberships(memberships);
+            setTerminalTargets(targets);
             if (graphResult.value) setResourceGraph(graphResult.value);
             setGraphError(graphResult.error);
             setSelectedNodeId(current => overviewSelected.current
@@ -1190,7 +1198,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         detail: string,
         tone: Tone,
         onClick?: () => void,
-        secondaryDetail?: string,
+        secondaryDetail?: {address: string; command?: string},
     ) => {
         const content = <>
             <span className={`ControlStatusDot ${tone}`} aria-hidden='true'/>
@@ -1213,7 +1221,15 @@ export const ControlCenterView: React.FC<IProps> = ({
             : <article className='ControlServiceCard'>{content}</article>;
         return <div className='ControlServiceItem'>
             {card}
-            {secondaryDetail && <small className='ControlServiceAddress'>{secondaryDetail}</small>}
+            {secondaryDetail && <button
+                type='button'
+                className='ControlServiceAddress'
+                onClick={() => setRevealedSshAddress(secondaryDetail.address)}
+            >
+                {revealedSshAddress === secondaryDetail.address && secondaryDetail.command
+                    ? secondaryDetail.command
+                    : secondaryDetail.address}
+            </button>}
         </div>;
     };
 
@@ -1258,6 +1274,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             || node.lan_scan_targets?.map(target => target.address).join(' · ');
         const tailscaleIpv6Addresses = node.network.tailscale_ipv6_address
             || node.network.addresses.filter(address => address.includes(':')).join(' · ');
+        const sshUser = terminalTargets.find(target => target.node_id === node.node_id)?.ssh_user;
         const jetsonConnectCapable = Boolean(
             node.online && node.capabilities?.includes('control.jetson.connect.v1'),
         );
@@ -1360,7 +1377,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                             setWorkspace('terminal');
                         },
                         lanAddresses
-                            ? `IPv4: ${lanAddresses}`
+                            ? {
+                                address: lanAddresses,
+                                command: sshUser ? `ssh ${sshUser}@${lanAddresses}` : undefined,
+                            }
                             : undefined,
                     )}
                     {renderServiceCard(
@@ -1374,7 +1394,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                             setWorkspace('terminal');
                         },
                         tailscaleIpv6Addresses
-                            ? `IPv6: ${tailscaleIpv6Addresses}`
+                            ? {
+                                address: tailscaleIpv6Addresses,
+                                command: sshUser ? `ssh ${sshUser}@${tailscaleIpv6Addresses}` : undefined,
+                            }
                             : undefined,
                     )}
                 </div>

@@ -941,6 +941,7 @@ export type ComputeLanSchedulesResponse = {
 export type ComputeTerminalTarget = {
     node_id: string;
     node_name: string;
+    ssh_user?: string;
     platform: string;
     online: boolean;
     available: boolean;

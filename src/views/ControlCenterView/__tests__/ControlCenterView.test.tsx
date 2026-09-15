@@ -169,6 +169,11 @@ describe('ControlCenterView', () => {
             requests: [],
             pending_count: 0,
         });
+        jest.spyOn(ComputeClusterService, 'terminalTargets').mockResolvedValue({
+            version: 1,
+            enabled: true,
+            targets: [],
+        });
         jest.spyOn(ComputeClusterService, 'runtime').mockImplementation(() => new Promise(() => undefined));
         jest.spyOn(ComputeClusterService, 'runtimeInventory').mockImplementation(() => new Promise(() => undefined));
         jest.spyOn(ComputeClusterService, 'runtimeEvents').mockImplementation(() => new Promise(() => undefined));
@@ -335,22 +340,40 @@ describe('ControlCenterView', () => {
         machine.network.lan_address = '192.168.10.166';
         machine.network.tailscale_ipv6_address = 'fd7a:115c:a1e0::166';
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        jest.spyOn(ComputeClusterService, 'terminalTargets').mockResolvedValue({
+            version: 1,
+            enabled: true,
+            targets: [{
+                node_id: machine.node_id,
+                node_name: machine.name,
+                ssh_user: 'operator',
+                platform: 'Windows',
+                online: true,
+                available: true,
+                reason: 'available',
+            }],
+        });
         const {rerender} = render(<ControlCenterView language={Language.CHINESE}/>);
 
         const lan = await screen.findByRole('button', {name: /SSH 局域网/});
-        expect(within(lan).queryByText('IPv4: 192.168.10.166')).not.toBeInTheDocument();
-        expect(lan.nextElementSibling).toHaveTextContent('IPv4: 192.168.10.166');
+        expect(within(lan).queryByText('192.168.10.166')).not.toBeInTheDocument();
+        expect(lan.nextElementSibling).toHaveTextContent('192.168.10.166');
         expect(lan.nextElementSibling).toHaveClass('ControlServiceAddress');
         const tailscale = screen.getByRole('button', {name: /Tailscale 远程/});
-        expect(within(tailscale).queryByText('IPv6: fd7a:115c:a1e0::166')).not.toBeInTheDocument();
-        expect(tailscale.nextElementSibling).toHaveTextContent('IPv6: fd7a:115c:a1e0::166');
+        expect(within(tailscale).queryByText('fd7a:115c:a1e0::166')).not.toBeInTheDocument();
+        expect(tailscale.nextElementSibling).toHaveTextContent('fd7a:115c:a1e0::166');
         expect(tailscale.nextElementSibling).toHaveClass('ControlServiceAddress');
         expect(tailscale).not.toHaveTextContent('100.64.0.166');
         expect(tailscale).not.toHaveTextContent('192.168.10.166');
 
+        fireEvent.click(lan.nextElementSibling as HTMLElement);
+        expect(lan.nextElementSibling).toHaveTextContent('ssh operator@192.168.10.166');
+        fireEvent.click(tailscale.nextElementSibling as HTMLElement);
+        expect(tailscale.nextElementSibling).toHaveTextContent('ssh operator@fd7a:115c:a1e0::166');
+
         rerender(<ControlCenterView language={Language.ENGLISH}/>);
-        expect(screen.getByText('IPv4: 192.168.10.166')).toBeInTheDocument();
-        expect(screen.getByText('IPv6: fd7a:115c:a1e0::166')).toBeInTheDocument();
+        expect(screen.getByText('192.168.10.166')).toBeInTheDocument();
+        expect(screen.getByText('ssh operator@fd7a:115c:a1e0::166')).toBeInTheDocument();
     });
 
     it('does not guess a version when the node reports unknown', async () => {
