@@ -1229,10 +1229,13 @@ export const ControlCenterView: React.FC<IProps> = ({
                     if (!secondaryDetail.command) return;
                     await navigator.clipboard.writeText(secondaryDetail.command);
                     setCopiedSshAddress(secondaryDetail.address);
+                    window.setTimeout(() => setCopiedSshAddress(current =>
+                        current === secondaryDetail.address ? '' : current
+                    ), 1000);
                 }}
             >
                 {copiedSshAddress === secondaryDetail.address
-                    ? (zh ? '已复制' : 'Copied')
+                    ? `${secondaryDetail.address}${zh ? '(已复制)' : '(Copied)'}`
                     : secondaryDetail.address}
             </button>}
         </div>;

@@ -373,14 +373,18 @@ describe('ControlCenterView', () => {
 
         fireEvent.click(lan.nextElementSibling as HTMLElement);
         await waitFor(() => expect(writeText).toHaveBeenCalledWith('ssh operator@192.168.10.166'));
-        await waitFor(() => expect(lan.nextElementSibling).toHaveTextContent('已复制'));
+        await waitFor(() => expect(lan.nextElementSibling).toHaveTextContent('192.168.10.166(已复制)'));
+        await waitFor(() => expect(lan.nextElementSibling).toHaveTextContent(/^192\.168\.10\.166$/), {
+            timeout: 1500,
+        });
         fireEvent.click(tailscale.nextElementSibling as HTMLElement);
         await waitFor(() => expect(writeText).toHaveBeenCalledWith('ssh operator@fd7a:115c:a1e0::166'));
-        await waitFor(() => expect(tailscale.nextElementSibling).toHaveTextContent('已复制'));
+        await waitFor(() => expect(tailscale.nextElementSibling)
+            .toHaveTextContent('fd7a:115c:a1e0::166(已复制)'));
 
         rerender(<ControlCenterView language={Language.ENGLISH}/>);
         expect(screen.getByText('192.168.10.166')).toBeInTheDocument();
-        expect(screen.getByText('Copied')).toBeInTheDocument();
+        expect(screen.getByText('fd7a:115c:a1e0::166(Copied)')).toBeInTheDocument();
     });
 
     it('does not guess a version when the node reports unknown', async () => {
