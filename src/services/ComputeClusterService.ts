@@ -86,6 +86,8 @@ export type ComputeClusterNode = {
         backend_state?: string | null;
         self_name?: string | null;
         addresses: string[];
+        lan_address?: string | null;
+        tailscale_ipv6_address?: string | null;
         tailnet?: string | null;
         error?: string | null;
     };
