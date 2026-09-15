@@ -339,8 +339,16 @@ describe('ControlCenterView', () => {
 
         const lan = await screen.findByRole('button', {name: /SSH 局域网/});
         expect(within(lan).getByText('局域网 IP：192.168.10.166')).toBeInTheDocument();
+        expect([...lan.querySelectorAll('small')].map(item => item.textContent)).toEqual([
+            '仅使用局域网地址建立 SSH 连接',
+            '局域网 IP：192.168.10.166',
+        ]);
         const tailscale = screen.getByRole('button', {name: /Tailscale 远程/});
         expect(within(tailscale).getByText('IPv6：fd7a:115c:a1e0::166')).toBeInTheDocument();
+        expect([...tailscale.querySelectorAll('small')].map(item => item.textContent)).toEqual([
+            '仅使用 Tailscale 地址建立 SSH 连接',
+            'IPv6：fd7a:115c:a1e0::166',
+        ]);
         expect(tailscale).not.toHaveTextContent('100.64.0.166');
         expect(tailscale).not.toHaveTextContent('192.168.10.166');
 

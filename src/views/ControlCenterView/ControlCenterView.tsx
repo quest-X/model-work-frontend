@@ -1197,8 +1197,8 @@ export const ControlCenterView: React.FC<IProps> = ({
             <div>
                 <span>{name}</span>
                 <strong>{value}</strong>
-                {secondaryDetail && <small>{secondaryDetail}</small>}
                 <small>{detail}</small>
+                {secondaryDetail && <small>{secondaryDetail}</small>}
             </div>
         </>;
         return onClick
