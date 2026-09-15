@@ -38,7 +38,7 @@ interface IProps {
 
 const AUTO_PLACEMENT = '__automatic__';
 type ComputeWorkspace = 'graph' | 'tasks' | 'network' | 'nodes' | 'terminal';
-type NodeFilter = 'all' | 'normal' | 'fault' | 'upgradeable';
+type NodeFilter = 'all' | 'normal' | 'fault' | 'abnormal' | 'upgradeable';
 
 const bytes = (value: number | null, zh: boolean): string => {
     if (value === null || !Number.isFinite(value)) return zh ? '未知' : 'Unknown';
@@ -644,7 +644,8 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const sortedNodes = useMemo(() => {
         const collator = new Intl.Collator('en', {numeric: true, sensitivity: 'base'});
         return [...nodes].sort((left, right) => {
-            const stateOrder = Number(computeNodeState(left) === 'normal') - Number(computeNodeState(right) === 'normal');
+            const rank = {abnormal: 0, fault: 1, normal: 2};
+            const stateOrder = rank[computeNodeState(left)] - rank[computeNodeState(right)];
             if (stateOrder !== 0) return stateOrder;
             const regionOrder = collator.compare(
                 regionByNode.get(left.node_id)?.region_id || regionByNode.get(left.node_id)?.region_name || 'unassigned',
@@ -743,6 +744,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                 <div><span>{zh ? '主节点' : 'Main nodes'}</span><strong>{totals.total}</strong></div>
                 <div><span>{zh ? '正常节点' : 'Normal nodes'}</span><strong className='online'>{totals.online}</strong></div>
                 <div><span>{zh ? '故障节点' : 'Fault nodes'}</span><strong>{nodes.filter(node => computeNodeState(node) === 'fault').length}</strong></div>
+                <div><span>{zh ? '异常节点' : 'Abnormal nodes'}</span><strong>{nodes.filter(node => computeNodeState(node) === 'abnormal').length}</strong></div>
             </div>
             </>}
 
@@ -1029,6 +1031,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                                 ['all', zh ? '全部' : 'All', nodes.length],
                                 ['normal', zh ? '正常' : 'Normal', nodes.filter(node => computeNodeState(node) === 'normal').length],
                                 ['fault', zh ? '故障' : 'Fault', nodes.filter(node => computeNodeState(node) === 'fault').length],
+                                ['abnormal', zh ? '异常' : 'Abnormal', nodes.filter(node => computeNodeState(node) === 'abnormal').length],
                                 ['upgradeable', zh ? '可升级' : 'Upgradeable', nodes.filter(node => computeNodeUpgradeAvailable(node, upgradeReleases)).length],
                             ] as Array<[NodeFilter, string, number]>).map(([filter, label, count]) => <button
                                 type='button'

@@ -430,6 +430,7 @@
   &.state-unavailable { border-color: rgba(218, 77, 77, 0.2); background: linear-gradient(180deg, rgba(112, 39, 45, 0.1), rgba(25, 22, 31, 0.1)); }
   &.state-normal { border-color: rgba(85, 199, 123, .45); }
   &.state-fault { border-color: rgba($computeFaultColor, .6); }
+  &.state-abnormal { border-color: rgba($computeAbnormalColor, .72); }
 }
 
 .ComputeGraphEdge {
@@ -1414,8 +1415,10 @@
 .ComputeNodeStatus i { background: #6d737a; }
 .ComputeNodeCard.normal .ComputeNodeStatus { color: #8bdd9f; }
 .ComputeNodeCard.fault .ComputeNodeStatus { color: $computeFaultColor; }
+.ComputeNodeCard.abnormal .ComputeNodeStatus { color: $computeAbnormalColor; }
 .ComputeNodeCard.normal .ComputeNodeStatus i { background: #55c77b; }
 .ComputeNodeCard.fault .ComputeNodeStatus i { background: $computeFaultColor; }
+.ComputeNodeCard.abnormal .ComputeNodeStatus i { background: $computeAbnormalColor; }
 
 .ComputeNodeHeartbeat {
   display: flex;

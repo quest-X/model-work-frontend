@@ -280,9 +280,9 @@ describe('ComputeClusterPopup', () => {
         expect(nodeCard.querySelector('.ComputeNodeResourceGrid')).toHaveTextContent('16');
         const summary = Array.from(document.querySelectorAll('.ComputeClusterSummary > div'));
         expect(summary.map(item => item.querySelector('span')?.textContent))
-            .toEqual(['地域', '节点总数', '主节点', '正常节点', '故障节点']);
+            .toEqual(['地域', '节点总数', '主节点', '正常节点', '故障节点', '异常节点']);
         expect(summary.map(item => item.querySelector('strong')?.textContent))
-            .toEqual(['0', '1', '1', '1', '0']);
+            .toEqual(['0', '1', '1', '1', '0', '0']);
         expect(summary[3].querySelector('strong')).toHaveClass('online');
         expect(screen.queryByRole('button', {name: '刷新'})).not.toBeInTheDocument();
         expect(screen.getByRole('status', {name: '正常 · v0.1.0'})).toBeInTheDocument();
@@ -564,7 +564,7 @@ describe('ComputeClusterPopup', () => {
             .toEqual(['2', '1', '1']);
         expect(screen.getByText('节点总数').closest('div')?.querySelector('strong')).toHaveTextContent('3');
         const offlineNode = screen.getByRole('button', {name: '查看 edge-offline 节点信息'});
-        expect(offlineNode).toHaveClass('node-warning');
+        expect(offlineNode).toHaveClass('node-offline');
         expect(offlineNode).toHaveAttribute('data-entity-kind', 'compute_node');
         expect(offlineNode).toHaveAttribute('data-entity-shape', 'circle');
         expect(offlineNode).toHaveAttribute('data-entity-state', 'unavailable');
@@ -653,7 +653,7 @@ describe('ComputeClusterPopup', () => {
 
         await user.hover(offlineNode);
         const offlineCard = screen.getByRole('status', {name: 'edge-offline 运维信息'});
-        expect(within(offlineCard).getByText('故障 · 最后心跳 20 小时前')).toHaveClass('warning');
+        expect(within(offlineCard).getByText('异常 · 最后心跳 20 小时前')).toHaveClass('offline');
 
         await user.unhover(offlineNode);
         await user.hover(camera);
@@ -794,7 +794,7 @@ describe('ComputeClusterPopup', () => {
         rerender(<ComputeClusterPopup language={Language.ENGLISH}/>);
 
         expect(Array.from(document.querySelectorAll('.ComputeClusterSummary span')).map(item => item.textContent))
-            .toEqual(['Regions', 'Total nodes', 'Main nodes', 'Normal nodes', 'Fault nodes']);
+            .toEqual(['Regions', 'Total nodes', 'Main nodes', 'Normal nodes', 'Fault nodes', 'Abnormal nodes']);
         expect(await screen.findByText('shanghai')).toBeInTheDocument();
         expect(screen.queryByText('上海')).not.toBeInTheDocument();
     });

@@ -307,9 +307,9 @@ describe('node communication state', () => {
         device_inventory: {state: 'unavailable', devices: [{status: 'offline'}]},
     } as ComputeClusterNode);
     it.each([
-        [true, false, 'normal', 'fault', 'normal'],
-        [false, true, 'fault', 'normal', 'normal'],
-        [false, false, 'fault', 'fault', 'normal'],
+        [true, false, 'normal', 'fault', 'fault'],
+        [false, true, 'fault', 'normal', 'fault'],
+        [false, false, 'fault', 'fault', 'fault'],
         [true, true, 'normal', 'normal', 'normal'],
     ] as const)('maps LAN %s and Tailscale %s to binary health', (lan, tailscale, lanState, tailscaleState, state) => {
         const current = {...node(), network: {...node().network, lan_ssh_available: lan, tailscale_ssh_available: tailscale}};
@@ -321,11 +321,13 @@ describe('node communication state', () => {
         expect(computeNodeState(node(false))).toBe('fault');
         expect(computeNodeState({...node(), network: {...node().network, error: 'refresh failed'}})).toBe('fault');
     });
-    it.each([['normal', '正常'], ['fault', '故障'], ['abnormal', '故障']] as const)(
+    it.each([['normal', '正常'], ['fault', '故障'], ['abnormal', '异常']] as const)(
         'uses authoritative %s state even with cached online flags', (state, label) => {
             const current = {...node(), network: {...node().network, tailscale_ssh_available: true}, communication_state: state};
             expect(computeNodeLabel(current, true)).toBe(label);
-            expect(communicationStateLabel(state, false)).toBe(state === 'normal' ? 'Normal' : 'Fault');
+            expect(communicationStateLabel(state, false)).toBe(
+                state === 'normal' ? 'Normal' : state === 'abnormal' ? 'Abnormal' : 'Fault',
+            );
             expect(current.communication_state).toBe(state);
         },
     );
@@ -334,14 +336,14 @@ describe('node communication state', () => {
 describe('communication aggregation', () => {
     it.each([
         [['normal', 'normal'], 'normal'],
-        [['abnormal', 'abnormal'], 'fault'],
-        [['normal', 'abnormal'], 'fault'],
-        [['normal', 'normal', 'abnormal'], 'normal'],
-        [['normal', 'normal', 'normal', 'normal', 'fault', 'abnormal'], 'normal'],
+        [['abnormal', 'abnormal'], 'abnormal'],
+        [['normal', 'abnormal'], 'abnormal'],
+        [['normal', 'normal', 'abnormal'], 'abnormal'],
+        [['normal', 'normal', 'normal', 'normal', 'fault', 'abnormal'], 'abnormal'],
         [['normal', 'fault'], 'fault'],
-        [['abnormal', 'fault'], 'fault'],
+        [['abnormal', 'fault'], 'abnormal'],
         [[], 'fault'],
-    ])('aggregates %j as majority state %s', (states, expected) => {
+    ])('aggregates %j as worst state %s', (states, expected) => {
         expect(aggregateCommunicationStates(states as ('normal' | 'fault' | 'abnormal')[])).toBe(expected);
     });
 });

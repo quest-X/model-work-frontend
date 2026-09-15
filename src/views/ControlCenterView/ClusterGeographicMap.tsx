@@ -9,6 +9,7 @@ import {
     ComputeClusterNode,
     ComputeResourceGraph,
     ComputeResourceGraphEntity,
+    aggregateCommunicationStates,
     computeNodeState,
 } from '../../services/ComputeClusterService';
 
@@ -75,16 +76,15 @@ const prefectureMatches = (
 ): boolean => provinceMatches(featureValue, [node.labels?.city, node.labels?.city_name]
     .filter((value): value is string => Boolean(value)));
 
-const mapNodeTone = (node: ComputeClusterNode): MapMarkerTone =>
-    computeNodeState(node) === 'normal' ? 'healthy' : 'warning';
+const mapNodeTone = (node: ComputeClusterNode): MapMarkerTone => {
+    const state = computeNodeState(node);
+    return state === 'normal' ? 'healthy' : state === 'abnormal' ? 'offline' : 'warning';
+};
 
 const mapStatusCounts = (markerNodes: ComputeClusterNode[]): MapStatusCounts => {
-    const healthy = markerNodes.filter(node => mapNodeTone(node) === 'healthy').length;
-    return {
-        healthy,
-        warning: markerNodes.length - healthy,
-        offline: markerNodes.filter(node => node.communication_state === 'abnormal').length,
-    };
+    const tones = markerNodes.map(mapNodeTone);
+    return Object.fromEntries((['healthy', 'warning', 'offline'] as MapMarkerTone[])
+        .map(tone => [tone, tones.filter(value => value === tone).length])) as MapStatusCounts;
 };
 
 // Geographic gestures, drill-down, and cluster overlays intentionally share one local state owner.
@@ -134,8 +134,8 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph
     const markerHealthRatio = (markerNodes: ComputeClusterNode[]): string =>
         `${mapStatusCounts(markerNodes).healthy}/${markerNodes.length}`;
     const markerTone = (markerNodes: ComputeClusterNode[]): MapMarkerTone => {
-        const counts = mapStatusCounts(markerNodes);
-        return counts.healthy > counts.warning ? 'healthy' : 'warning';
+        const state = aggregateCommunicationStates(markerNodes.map(computeNodeState));
+        return state === 'normal' ? 'healthy' : state === 'abnormal' ? 'offline' : 'warning';
     };
     const markerStatusLabel = (markerNodes: ComputeClusterNode[]): string => {
         const counts = mapStatusCounts(markerNodes);
