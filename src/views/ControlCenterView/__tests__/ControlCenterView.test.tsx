@@ -338,17 +338,13 @@ describe('ControlCenterView', () => {
         const {rerender} = render(<ControlCenterView language={Language.CHINESE}/>);
 
         const lan = await screen.findByRole('button', {name: /SSH 局域网/});
-        expect(within(lan).getByText('局域网 IP：192.168.10.166')).toBeInTheDocument();
-        expect([...lan.querySelectorAll('small')].map(item => item.textContent)).toEqual([
-            '仅使用局域网地址建立 SSH 连接',
-            '局域网 IP：192.168.10.166',
-        ]);
+        expect(within(lan).queryByText('局域网 IP：192.168.10.166')).not.toBeInTheDocument();
+        expect(lan.nextElementSibling).toHaveTextContent('局域网 IP：192.168.10.166');
+        expect(lan.nextElementSibling).toHaveClass('ControlServiceAddress');
         const tailscale = screen.getByRole('button', {name: /Tailscale 远程/});
-        expect(within(tailscale).getByText('IPv6：fd7a:115c:a1e0::166')).toBeInTheDocument();
-        expect([...tailscale.querySelectorAll('small')].map(item => item.textContent)).toEqual([
-            '仅使用 Tailscale 地址建立 SSH 连接',
-            'IPv6：fd7a:115c:a1e0::166',
-        ]);
+        expect(within(tailscale).queryByText('IPv6：fd7a:115c:a1e0::166')).not.toBeInTheDocument();
+        expect(tailscale.nextElementSibling).toHaveTextContent('IPv6：fd7a:115c:a1e0::166');
+        expect(tailscale.nextElementSibling).toHaveClass('ControlServiceAddress');
         expect(tailscale).not.toHaveTextContent('100.64.0.166');
         expect(tailscale).not.toHaveTextContent('192.168.10.166');
 

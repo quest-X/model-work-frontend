@@ -1198,10 +1198,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                 <span>{name}</span>
                 <strong>{value}</strong>
                 <small>{detail}</small>
-                {secondaryDetail && <small>{secondaryDetail}</small>}
             </div>
         </>;
-        return onClick
+        const card = onClick
             ? <button
                 type='button'
                 className='ControlServiceCard'
@@ -1212,6 +1211,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                 onClick={onClick}
             >{content}</button>
             : <article className='ControlServiceCard'>{content}</article>;
+        return <div className='ControlServiceItem'>
+            {card}
+            {secondaryDetail && <small className='ControlServiceAddress'>{secondaryDetail}</small>}
+        </div>;
     };
 
     // eslint-disable-next-line complexity

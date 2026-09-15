@@ -1000,6 +1000,21 @@ button.ComputeFileName:focus-visible { color: white; }
   gap: 8px;
 }
 
+.ControlServiceItem {
+  min-width: 0;
+
+  .ControlServiceCard { width: 100%; }
+}
+
+.ControlServiceAddress {
+  display: block;
+  margin-top: 5px;
+  padding: 0 13px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
 .ControlServiceCard {
   display: flex;
   box-sizing: border-box;
