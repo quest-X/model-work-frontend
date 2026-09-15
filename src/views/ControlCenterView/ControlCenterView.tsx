@@ -1236,7 +1236,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             >
                 {`${secondaryDetail.label}: ${secondaryDetail.address}`}
                 {copiedSshAddress === secondaryDetail.address
-                    && (zh ? '(已复制)' : '(Copied)')}
+                    && (zh ? ' (已复制)' : ' (Copied)')}
             </button>}
         </div>;
     };
@@ -1386,7 +1386,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                         },
                         lanAddresses
                             ? {
-                                label: zh ? 'IPv4 地址' : 'IPv4 address',
+                                label: 'IPv4',
                                 address: lanAddresses,
                                 command: sshUser ? `ssh ${sshUser}@${lanAddresses}` : undefined,
                             }
@@ -1404,7 +1404,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                         },
                         tailscaleIpv6Addresses
                             ? {
-                                label: zh ? 'IPv6 地址' : 'IPv6 address',
+                                label: 'IPv6',
                                 address: tailscaleIpv6Addresses,
                                 command: sshUser ? `ssh ${sshUser}@${tailscaleIpv6Addresses}` : undefined,
                             }

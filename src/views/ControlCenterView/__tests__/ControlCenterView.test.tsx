@@ -361,12 +361,12 @@ describe('ControlCenterView', () => {
         const {rerender} = render(<ControlCenterView language={Language.CHINESE}/>);
 
         const lan = await screen.findByRole('button', {name: /SSH 局域网/});
-        expect(within(lan).queryByText('IPv4 地址: 192.168.10.166')).not.toBeInTheDocument();
-        expect(lan.nextElementSibling).toHaveTextContent('IPv4 地址: 192.168.10.166');
+        expect(within(lan).queryByText('IPv4: 192.168.10.166')).not.toBeInTheDocument();
+        expect(lan.nextElementSibling).toHaveTextContent('IPv4: 192.168.10.166');
         expect(lan.nextElementSibling).toHaveClass('ControlServiceAddress');
         const tailscale = screen.getByRole('button', {name: /Tailscale 远程/});
-        expect(within(tailscale).queryByText('IPv6 地址: fd7a:115c:a1e0::166')).not.toBeInTheDocument();
-        expect(tailscale.nextElementSibling).toHaveTextContent('IPv6 地址: fd7a:115c:a1e0::166');
+        expect(within(tailscale).queryByText('IPv6: fd7a:115c:a1e0::166')).not.toBeInTheDocument();
+        expect(tailscale.nextElementSibling).toHaveTextContent('IPv6: fd7a:115c:a1e0::166');
         expect(tailscale.nextElementSibling).toHaveClass('ControlServiceAddress');
         expect(tailscale).not.toHaveTextContent('100.64.0.166');
         expect(tailscale).not.toHaveTextContent('192.168.10.166');
@@ -374,19 +374,19 @@ describe('ControlCenterView', () => {
         fireEvent.click(lan.nextElementSibling as HTMLElement);
         await waitFor(() => expect(writeText).toHaveBeenCalledWith('ssh operator@192.168.10.166'));
         await waitFor(() => expect(lan.nextElementSibling)
-            .toHaveTextContent('IPv4 地址: 192.168.10.166(已复制)'));
+            .toHaveTextContent('IPv4: 192.168.10.166 (已复制)'));
         await waitFor(() => expect(lan.nextElementSibling)
-            .toHaveTextContent(/^IPv4 地址: 192\.168\.10\.166$/), {
+            .toHaveTextContent(/^IPv4: 192\.168\.10\.166$/), {
             timeout: 1500,
         });
         fireEvent.click(tailscale.nextElementSibling as HTMLElement);
         await waitFor(() => expect(writeText).toHaveBeenCalledWith('ssh operator@fd7a:115c:a1e0::166'));
         await waitFor(() => expect(tailscale.nextElementSibling)
-            .toHaveTextContent('IPv6 地址: fd7a:115c:a1e0::166(已复制)'));
+            .toHaveTextContent('IPv6: fd7a:115c:a1e0::166 (已复制)'));
 
         rerender(<ControlCenterView language={Language.ENGLISH}/>);
-        expect(screen.getByText('IPv4 address: 192.168.10.166')).toBeInTheDocument();
-        expect(screen.getByText('IPv6 address: fd7a:115c:a1e0::166(Copied)')).toBeInTheDocument();
+        expect(screen.getByText('IPv4: 192.168.10.166')).toBeInTheDocument();
+        expect(screen.getByText('IPv6: fd7a:115c:a1e0::166 (Copied)')).toBeInTheDocument();
     });
 
     it('does not guess a version when the node reports unknown', async () => {
