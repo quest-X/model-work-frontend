@@ -359,7 +359,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [terminalAutoConnect, setTerminalAutoConnect] = useState(false);
     const [terminalTransport, setTerminalTransport] = useState<'lan' | 'tailscale'>();
     const [terminalTargets, setTerminalTargets] = useState<ComputeTerminalTarget[]>([]);
-    const [revealedSshAddress, setRevealedSshAddress] = useState('');
+    const [copiedSshAddress, setCopiedSshAddress] = useState('');
     const [nodes, setNodes] = useState<ComputeClusterNode[]>([]);
     const [groupMemberships, setGroupMemberships] = useState<ComputeGroupMembership[]>([]);
     const [selectedGroupId, setSelectedGroupId] = useState('');
@@ -1224,10 +1224,15 @@ export const ControlCenterView: React.FC<IProps> = ({
             {secondaryDetail && <button
                 type='button'
                 className='ControlServiceAddress'
-                onClick={() => setRevealedSshAddress(secondaryDetail.address)}
+                disabled={!secondaryDetail.command}
+                onClick={async () => {
+                    if (!secondaryDetail.command) return;
+                    await navigator.clipboard.writeText(secondaryDetail.command);
+                    setCopiedSshAddress(secondaryDetail.address);
+                }}
             >
-                {revealedSshAddress === secondaryDetail.address && secondaryDetail.command
-                    ? secondaryDetail.command
+                {copiedSshAddress === secondaryDetail.address
+                    ? (zh ? '已复制' : 'Copied')
                     : secondaryDetail.address}
             </button>}
         </div>;

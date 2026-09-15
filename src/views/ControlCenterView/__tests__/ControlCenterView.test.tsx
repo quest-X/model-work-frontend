@@ -334,7 +334,12 @@ describe('ControlCenterView', () => {
             .toHaveClass('warning');
     });
 
-    it('shows reported LAN and Tailscale addresses on their SSH cards', async () => {
+    it('copies SSH commands from reported LAN and Tailscale addresses', async () => {
+        const writeText = jest.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: {writeText},
+        });
         const machine = node('局域网节点', true);
         machine.network.addresses = ['100.64.0.166'];
         machine.network.lan_address = '192.168.10.166';
@@ -367,13 +372,15 @@ describe('ControlCenterView', () => {
         expect(tailscale).not.toHaveTextContent('192.168.10.166');
 
         fireEvent.click(lan.nextElementSibling as HTMLElement);
-        expect(lan.nextElementSibling).toHaveTextContent('ssh operator@192.168.10.166');
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith('ssh operator@192.168.10.166'));
+        await waitFor(() => expect(lan.nextElementSibling).toHaveTextContent('已复制'));
         fireEvent.click(tailscale.nextElementSibling as HTMLElement);
-        expect(tailscale.nextElementSibling).toHaveTextContent('ssh operator@fd7a:115c:a1e0::166');
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith('ssh operator@fd7a:115c:a1e0::166'));
+        await waitFor(() => expect(tailscale.nextElementSibling).toHaveTextContent('已复制'));
 
         rerender(<ControlCenterView language={Language.ENGLISH}/>);
         expect(screen.getByText('192.168.10.166')).toBeInTheDocument();
-        expect(screen.getByText('ssh operator@fd7a:115c:a1e0::166')).toBeInTheDocument();
+        expect(screen.getByText('Copied')).toBeInTheDocument();
     });
 
     it('does not guess a version when the node reports unknown', async () => {

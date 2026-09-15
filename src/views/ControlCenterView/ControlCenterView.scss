@@ -1017,6 +1017,11 @@ button.ComputeFileName:focus-visible { color: white; }
   line-height: 1.45;
   text-align: left;
   cursor: pointer;
+
+  &:disabled {
+    color: rgba(255, 255, 255, 0.4);
+    cursor: default;
+  }
 }
 
 .ControlServiceCard {
