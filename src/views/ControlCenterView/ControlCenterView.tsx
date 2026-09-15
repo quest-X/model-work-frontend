@@ -1198,7 +1198,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         detail: string,
         tone: Tone,
         onClick?: () => void,
-        secondaryDetail?: {address: string; command?: string},
+        secondaryDetail?: {label: string; address: string; command?: string},
     ) => {
         const content = <>
             <span className={`ControlStatusDot ${tone}`} aria-hidden='true'/>
@@ -1234,9 +1234,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                     ), 1000);
                 }}
             >
+                {`${secondaryDetail.label}: ${secondaryDetail.address}`}
                 {copiedSshAddress === secondaryDetail.address
-                    ? `${secondaryDetail.address}${zh ? '(已复制)' : '(Copied)'}`
-                    : secondaryDetail.address}
+                    && (zh ? '(已复制)' : '(Copied)')}
             </button>}
         </div>;
     };
@@ -1386,6 +1386,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                         },
                         lanAddresses
                             ? {
+                                label: zh ? 'IPv4 地址' : 'IPv4 address',
                                 address: lanAddresses,
                                 command: sshUser ? `ssh ${sshUser}@${lanAddresses}` : undefined,
                             }
@@ -1403,6 +1404,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                         },
                         tailscaleIpv6Addresses
                             ? {
+                                label: zh ? 'IPv6 地址' : 'IPv6 address',
                                 address: tailscaleIpv6Addresses,
                                 command: sshUser ? `ssh ${sshUser}@${tailscaleIpv6Addresses}` : undefined,
                             }
