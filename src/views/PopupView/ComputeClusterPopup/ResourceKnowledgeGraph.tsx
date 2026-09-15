@@ -325,7 +325,8 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     );
     const nodeTones = new Map(graphNodes.map(entity => {
         const node = entity.node_id ? nodeIndex.get(entity.node_id) : undefined;
-        return [entity.entity_id, computeNodeState(node) === 'normal' ? 'online' : 'warning'];
+        const state = computeNodeState(node);
+        return [entity.entity_id, state === 'normal' ? 'online' : state === 'abnormal' ? 'offline' : 'warning'];
     }));
     const inspectedEntityId = pinnedEntityId || hoveredEntityId;
     const inspectedEntity = inspectedEntityId ? index.get(inspectedEntityId) : undefined;
@@ -408,7 +409,9 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                 <div className='ComputeGraphRegions'>
                     {topology.regions.map(region => <div
                         key={region.entityId}
-                        className={`ComputeGraphRegion state-${aggregateCommunicationStates(region.nodeIds.map(id => nodeTones.get(id) === 'online' ? 'normal' : 'fault'))}`}
+                        className={`ComputeGraphRegion state-${aggregateCommunicationStates(region.nodeIds.map(id =>
+                            nodeTones.get(id) === 'online' ? 'normal' : nodeTones.get(id) === 'offline' ? 'abnormal' : 'fault'
+                        ))}`}
                         style={{flexGrow: region.width}}
                         data-testid='resource-graph-region'
                     >

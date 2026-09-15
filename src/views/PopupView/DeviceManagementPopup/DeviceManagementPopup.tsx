@@ -3,6 +3,7 @@ import {Language} from '../../../data/LanguageConfig';
 import {
     ComputeClusterNode,
     ComputeClusterService,
+    ComputeCommunicationState,
     ComputeLanAsset,
     ComputeManagedDevice,
     computeNodeState,
@@ -54,7 +55,7 @@ export const DeviceManagementPopup: React.FC<IProps> = (
 ) => {
     const zh = language === Language.CHINESE;
     useEscapeToClose(onClose, true, 20);
-    const nodeTone: DeviceTone = computeNodeState(node);
+    const nodeTone: ComputeCommunicationState = computeNodeState(node);
     const [tab, setTab] = useState<DeviceTab>(initialTab);
     const [query, setQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<DeviceStatusFilter>('all');
@@ -144,7 +145,7 @@ export const DeviceManagementPopup: React.FC<IProps> = (
         }
     };
 
-    const statusLabel = (tone: DeviceTone): string => communicationStateLabel(tone, zh);
+    const statusLabel = (tone: ComputeCommunicationState): string => communicationStateLabel(tone, zh);
     const lastSeen = (timestamp: number): string => timestamp
         ? new Date(timestamp * 1000).toLocaleString(zh ? 'zh-CN' : 'en-US')
         : '—';
