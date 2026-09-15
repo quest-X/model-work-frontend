@@ -1360,7 +1360,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             setWorkspace('terminal');
                         },
                         lanAddresses
-                            ? zh ? `局域网 IP：${lanAddresses}` : `LAN IP: ${lanAddresses}`
+                            ? `IPv4: ${lanAddresses}`
                             : undefined,
                     )}
                     {renderServiceCard(
@@ -1374,7 +1374,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             setWorkspace('terminal');
                         },
                         tailscaleIpv6Addresses
-                            ? `${zh ? 'IPv6：' : 'IPv6: '}${tailscaleIpv6Addresses}`
+                            ? `IPv6: ${tailscaleIpv6Addresses}`
                             : undefined,
                     )}
                 </div>
