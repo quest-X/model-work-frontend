@@ -43,6 +43,7 @@ describe('ComputeClusterPopup', () => {
         });
         service.nodes.mockResolvedValue([{
             node_id: 'node-12345678', installation_id: 'install-1', name: 'edge-01',
+            role: 'main',
             agent_version: '0.1.0', capabilities: ['system.health.v1', 'control.node.upgrade.v1'],
             network: {
                 provider: 'tailscale', installed: true, online: true, ssh_available: true,
@@ -543,7 +544,7 @@ describe('ComputeClusterPopup', () => {
         const graphLegend = graphPanel?.querySelector('.ComputeKnowledgeLegend');
         expect(graphLegend).toHaveTextContent('地域');
         expect(graphLegend).toHaveTextContent('主节点');
-        expect(graphLegend).toHaveTextContent('边缘计算设备');
+        expect(graphLegend).toHaveTextContent('计算节点');
         expect(graphLegend).toHaveTextContent('摄像头');
         expect(graphLegend).toHaveTextContent('数据包');
         expect(graphLegend).not.toHaveTextContent('实时任务流');
@@ -640,7 +641,7 @@ describe('ComputeClusterPopup', () => {
         await user.unhover(onlineNode);
         expect(screen.getByRole('status', {name: 'edge-01 运维信息'})).toBeInTheDocument();
 
-        await user.click(screen.getByRole('figure', {name: '主节点、边缘设备与摄像头关系图'}));
+        await user.click(screen.getByRole('figure', {name: '主节点、计算节点与摄像头关系图'}));
         expect(onlineNode).toHaveAttribute('aria-pressed', 'false');
         expect(screen.queryByRole('status', {name: 'edge-01 运维信息'})).not.toBeInTheDocument();
 
@@ -723,8 +724,93 @@ describe('ComputeClusterPopup', () => {
         expect(legend).not.toHaveTextContent('地域');
         expect(legend).not.toHaveTextContent('数据包');
         expect(legend).toHaveTextContent('主节点');
-        expect(legend).toHaveTextContent('边缘计算设备');
+        expect(legend).toHaveTextContent('计算节点');
         expect(legend).toHaveTextContent('摄像头');
+    });
+
+    it('renders registered AIPACK nodes once and preserves their authoritative ownership chain', async () => {
+        const base = await service.resourceGraph();
+        const main = base.entities.find(entity => entity.kind === 'compute_node');
+        const region = base.entities.find(entity => entity.kind === 'compute_region');
+        const edge = {
+            entity_id: 'managed-device:node-12345678:aipack-01',
+            kind: 'managed_device' as const,
+            label: 'AIPACK-01',
+            state: 'available' as const,
+            callable: false,
+            node_id: main?.node_id,
+            modes: [],
+            provider: 'jetson-connect',
+            device_kind: 'edge_compute',
+            device_status: 'registered',
+            channels: 0,
+            device_model: 'NVIDIA Jetson Orin',
+            device_capabilities: ['terminal.ssh.v1'],
+        };
+        const aipack = {
+            ...main,
+            entity_id: 'node:aipack-01',
+            node_id: 'aipack-01',
+            label: 'AIPACK-01',
+        };
+        if (!main || !region) throw new Error('role projection fixture needs one main node and one region');
+        const baseNodes = await service.nodes();
+
+        render(<ResourceKnowledgeGraph
+            graph={{
+                ...base,
+                entities: [...base.entities, aipack, edge],
+                relations: [
+                    ...base.relations.filter(relation => relation.relation_id !== 'manages:camera-1'),
+                    {
+                        relation_id: 'contains:aipack-01',
+                        kind: 'contains',
+                        source_id: region.entity_id,
+                        target_id: aipack.entity_id,
+                        active: true,
+                        reason: 'available',
+                    },
+                    {
+                        relation_id: 'manages:aipack-01',
+                        kind: 'manages',
+                        source_id: main.entity_id,
+                        target_id: edge.entity_id,
+                        active: true,
+                        reason: 'available',
+                    },
+                    {
+                        relation_id: 'manages:aipack-camera',
+                        kind: 'manages',
+                        source_id: edge.entity_id,
+                        target_id: 'managed-device:node-12345678:camera-1',
+                        active: true,
+                        reason: 'available',
+                    },
+                ],
+            }}
+            nodes={[...baseNodes, {
+                ...baseNodes[0],
+                node_id: 'aipack-01',
+                installation_id: 'install-aipack-01',
+                name: 'AIPACK-01',
+                role: 'node',
+            }]}
+            zh={true}
+            onSelectWorkAgent={jest.fn()}
+        />);
+
+        const mainCard = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
+        expect(mainCard).toHaveAttribute('data-entity-role', 'main');
+        expect(mainCard).toHaveAttribute('data-entity-shape', 'circle');
+        const aipackCard = screen.getByRole('button', {name: '查看 AIPACK-01 节点信息'});
+        expect(aipackCard).toHaveAttribute('data-entity-role', 'node');
+        expect(aipackCard).toHaveAttribute('data-entity-shape', 'rounded-rectangle');
+        expect(aipackCard).toHaveClass('role-node');
+        expect(within(aipackCard).getByText('计算节点')).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '查看 AIPACK-01 设备信息'})).not.toBeInTheDocument();
+        expect(screen.getByLabelText('连接 edge-01 ↔ AIPACK-01')).toBeInTheDocument();
+        expect(screen.getByLabelText('连接 AIPACK-01 ↔ IP CAMERA')).toBeInTheDocument();
+        expect(screen.getAllByTestId('resource-graph-node')).toHaveLength(3);
     });
 
     it('expands a dense radial graph so fixed-size cards do not overlap', async () => {
@@ -767,7 +853,7 @@ describe('ComputeClusterPopup', () => {
             onSelectWorkAgent={jest.fn()}
         />);
 
-        const scene = screen.getByRole('figure', {name: '主节点、边缘设备与摄像头关系图'});
+        const scene = screen.getByRole('figure', {name: '主节点、计算节点与摄像头关系图'});
         const width = parseFloat(scene.style.minWidth);
         const height = parseFloat(scene.style.minHeight);
         expect(width).toBeGreaterThan(720);

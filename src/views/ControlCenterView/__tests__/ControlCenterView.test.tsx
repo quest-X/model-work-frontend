@@ -952,7 +952,7 @@ describe('ControlCenterView', () => {
         expect(within(overviewSwitch).getAllByRole('button').map(button => button.textContent))
             .toEqual(['图谱', '地图']);
         expect(screen.getByRole('button', {name: '图谱'})).toHaveAttribute('aria-pressed', 'true');
-        expect(await screen.findByRole('region', {name: '主节点、边缘设备与摄像头拓扑'})).toBeInTheDocument();
+        expect(await screen.findByRole('region', {name: '主节点、计算节点与摄像头拓扑'})).toBeInTheDocument();
         expect(screen.getByText('边缘集群图谱', {selector: 'strong'})).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '地图'}));
         expect(await screen.findByRole('region', {name: '计算群地理地图'}, {timeout: 15_000})).toBeInTheDocument();
@@ -1021,13 +1021,13 @@ describe('ControlCenterView', () => {
 
         expect(screen.queryByRole('button', {name: '刷新机器状态'})).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '图谱'}));
-        const graphPanel = screen.getByRole('region', {name: '主节点、边缘设备与摄像头拓扑'});
+        const graphPanel = screen.getByRole('region', {name: '主节点、计算节点与摄像头拓扑'});
         expect(graphPanel.querySelector('.ComputeGraphViewport')).toHaveClass('fit-window');
         const graphStats = graphPanel.querySelector('.ComputeKnowledgeStats');
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > span') || []).map(item => item.textContent))
             .toEqual(['设备总数', '计算节点', '摄像头']);
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > strong') || []).map(item => item.textContent))
-            .toEqual(['1', '1', '0']);
+            .toEqual(['4', '4', '0']);
         expect(within(graphPanel).getByText('2/2 正常节点')).toBeInTheDocument();
         expect(within(graphPanel).getByText('0/1 正常节点')).toBeInTheDocument();
         const graphNode = within(graphPanel).getByRole('button', {name: '查看 在线节点 节点信息'});
@@ -1739,7 +1739,7 @@ describe('ControlCenterView', () => {
         expect(within(within(localMembers).getByRole('region', {name: 'Main'})).queryByText('现场节点')).not.toBeInTheDocument();
         expect(within(within(localMembers).getByRole('region', {name: 'Node'})).getByText('现场节点')).toBeInTheDocument();
         fireEvent.click(await within(localMembers).findByRole('button', {name: '在图谱中查看'}));
-        const fieldGraphPanel = await screen.findByRole('region', {name: '主节点、边缘设备与摄像头拓扑'});
+        const fieldGraphPanel = await screen.findByRole('region', {name: '主节点、计算节点与摄像头拓扑'});
         expect(within(fieldGraphPanel).getByRole('button', {name: '查看 现场节点 节点信息'})).toBeInTheDocument();
         expect(screen.getByText('factory-a', {selector: '.ControlToolbarGroup strong'})).toBeInTheDocument();
         expect(ComputeClusterService.group).toHaveBeenNthCalledWith(1, 'central-group', expect.any(AbortSignal));

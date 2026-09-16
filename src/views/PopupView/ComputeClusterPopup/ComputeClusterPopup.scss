@@ -555,7 +555,7 @@
   > small { overflow: hidden; width: 100%; color: rgba(255, 255, 255, 0.42); font-size: 7px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 
   &.compute_group,
-  &.compute_node {
+  &.compute_node.role-main {
     width: 92px;
     height: 92px;
     min-height: 0;
@@ -573,13 +573,23 @@
     > span { color: rgba(132, 231, 175, 0.7); }
   }
   // Role colors stay stable across health states; details retain status text.
-  &.compute_node {
+  &.compute_node.role-main {
     border: 2px solid rgba(190, 137, 241, 0.92);
     background: radial-gradient(circle at 38% 30%, rgba(109, 68, 154, 0.98), rgba(49, 34, 68, 0.98) 68%);
     box-shadow: 0 0 0 6px rgba(190, 137, 241, 0.06), 0 0 24px rgba(190, 137, 241, 0.22);
     filter: none;
     > i { color: #d7b7ff; }
     > span { color: rgba(213, 183, 249, 0.8); }
+  }
+  &.compute_node.role-node {
+    width: 136px;
+    border-color: rgba(102, 221, 160, 0.78);
+    border-radius: 18px;
+    background: linear-gradient(145deg, rgba(34, 117, 77, 0.94), rgba(18, 49, 36, 0.98));
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
+    filter: none;
+    > i { border-color: rgba(102, 221, 160, 0.62); background: #173b2b; color: #8ee4b3; }
+    > span { color: rgba(132, 231, 175, 0.78); }
   }
   .ComputeGraphNodeState {
     position: absolute;
