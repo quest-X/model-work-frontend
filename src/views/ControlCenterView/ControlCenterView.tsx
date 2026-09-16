@@ -1499,6 +1499,18 @@ export const ControlCenterView: React.FC<IProps> = ({
                         </form>}
                     </div>
                 </div>
+                {error && dismissedRefreshWarningKey !== refreshWarningKey && <div
+                    className='ControlRefreshWarning ControlNodeRefreshWarning'
+                    role='status'
+                >
+                    <span>{zh ? '本次刷新失败，正在显示上一次数据：' : 'Refresh failed; showing the last snapshot: '}{error}</span>
+                    <button
+                        type='button'
+                        aria-label={zh ? '关闭刷新失败提示' : 'Dismiss refresh warning'}
+                        title={zh ? '关闭提示' : 'Dismiss warning'}
+                        onClick={() => setDismissedRefreshWarningKey(refreshWarningKey)}
+                    >×</button>
+                </div>}
             </header>
 
             <section className='ControlSection ControlSectionFirst'>
@@ -2234,15 +2246,6 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </div>}
                 {workspace === 'node' && selectedNode && <>
                     <div className='ControlNodeContent'>
-                        {error && dismissedRefreshWarningKey !== refreshWarningKey && <div className='ControlRefreshWarning' role='status'>
-                            <span>{zh ? '本次刷新失败，正在显示上一次数据：' : 'Refresh failed; showing the last snapshot: '}{error}</span>
-                            <button
-                                type='button'
-                                aria-label={zh ? '关闭刷新失败提示' : 'Dismiss refresh warning'}
-                                title={zh ? '关闭提示' : 'Dismiss warning'}
-                                onClick={() => setDismissedRefreshWarningKey(refreshWarningKey)}
-                            >×</button>
-                        </div>}
                         {renderNode(selectedNode)}
                     </div>
                 </>}

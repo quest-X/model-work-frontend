@@ -800,7 +800,7 @@ describe('ControlCenterView', () => {
         expect(container.querySelector('.ControlToolbarGroup .ControlStatusDot')).not.toBeInTheDocument();
     });
 
-    it('keeps the refresh warning above the node and lets the user close it', async () => {
+    it('keeps the refresh warning beside the node title and lets the user close it', async () => {
         const machine = runtimeNode('在线节点');
         const nodes = jest.spyOn(ComputeClusterService, 'nodes')
             .mockResolvedValueOnce([machine])
@@ -811,7 +811,10 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText('运行详情暂不可用')).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
         await waitFor(() => expect(nodes).toHaveBeenCalledTimes(2));
-        expect(await screen.findByText(/本次刷新失败.*HTTP 500/)).toBeInTheDocument();
+        const warning = await screen.findByRole('status');
+        const nodeHeader = screen.getByRole('heading', {name: '在线节点'}).closest('.ControlNodeHeader') as HTMLElement;
+        expect(within(nodeHeader).getByText(/本次刷新失败.*HTTP 500/)).toBeInTheDocument();
+        expect(warning).toHaveClass('ControlNodeRefreshWarning');
         expect(screen.queryByText('运行详情暂不可用')).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '关闭刷新失败提示'}));
         expect(screen.queryByText(/本次刷新失败.*HTTP 500/)).not.toBeInTheDocument();

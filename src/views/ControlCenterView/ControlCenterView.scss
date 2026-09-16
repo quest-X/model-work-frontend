@@ -868,6 +868,12 @@ button.ComputeFileName:focus-visible { color: white; }
   }
 }
 
+.ControlNodeRefreshWarning {
+  min-width: 0;
+  flex: 1;
+  margin: 7px 0 0 24px;
+}
+
 .ControlNodeTags {
   display: flex;
   min-height: 24px;
