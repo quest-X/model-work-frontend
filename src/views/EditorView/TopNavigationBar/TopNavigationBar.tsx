@@ -465,7 +465,7 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                     )}
                 </div>
                 <div
-                    className={`ProjectNameContainer${commercialRestricted ? ' disabled' : ''}`}
+                    className='ProjectNameContainer'
                 >
                     <div className='ProjectName'>{currentTexts.projectName}</div>
                     <div
