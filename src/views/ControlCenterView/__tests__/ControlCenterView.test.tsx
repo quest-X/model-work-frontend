@@ -945,6 +945,14 @@ describe('ControlCenterView', () => {
 
         expect(machine).toHaveAttribute('aria-pressed', 'false');
         expect(overview).toHaveAttribute('aria-pressed', 'true');
+        expect(within(overview).getByText('图谱 / 地图')).toBeInTheDocument();
+        const overviewSwitch = screen.getByRole('group', {name: '总览视角'});
+        expect(within(overviewSwitch).getAllByRole('button').map(button => button.textContent))
+            .toEqual(['图谱', '地图']);
+        expect(screen.getByRole('button', {name: '图谱'})).toHaveAttribute('aria-pressed', 'true');
+        expect(await screen.findByRole('region', {name: '主节点、边缘设备与摄像头拓扑'})).toBeInTheDocument();
+        expect(screen.getByText('边缘集群图谱', {selector: 'strong'})).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '地图'}));
         expect(await screen.findByRole('region', {name: '计算群地理地图'}, {timeout: 15_000})).toBeInTheDocument();
         expect(screen.getByRole('button', {name: '重新定位地图'})).toBeInTheDocument();
         expect(screen.getByText('边缘集群地图', {selector: 'strong'})).toBeInTheDocument();
@@ -997,9 +1005,10 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText('离线节点', {selector: '.ComputeKnowledgeLegend span'})).not.toBeInTheDocument();
         const jinan = container.querySelector('[data-map-feature="济南市"]');
         expect(jinan).toBeInTheDocument();
+        const fetchCountBeforeCityClick = districtFetch.mock.calls.length;
         fireEvent.click(jinan as Element);
         expect(screen.getByText('山东省市级地图')).toBeInTheDocument();
-        expect(districtFetch).not.toHaveBeenCalled();
+        expect(districtFetch).toHaveBeenCalledTimes(fetchCountBeforeCityClick);
         fireEvent.click(screen.getByRole('button', {name: '中国'}));
         const shanghai = container.querySelector('[data-map-feature="上海市"]');
         expect(shanghai).toBeInTheDocument();

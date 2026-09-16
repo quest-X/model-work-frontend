@@ -428,7 +428,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [nodeGrouping, setNodeGrouping] = useState<NodeGrouping>('region');
     const [nodeOrdering, setNodeOrdering] = useState<NodeOrdering>('status');
     const [nodeVisibility, setNodeVisibility] = useState<NodeVisibility>('all');
-    const [overviewView, setOverviewView] = useState<OverviewView>('map');
+    const [overviewView, setOverviewView] = useState<OverviewView>('graph');
     const mounted = useRef(true);
     const refreshInFlight = useRef(false);
     const overviewSelected = useRef(false);
@@ -1178,7 +1178,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </span>
                 <span className='ControlMachineIdentity'>
                     <strong>{zh ? '总览' : 'Overview'}</strong>
-                    <small>{zh ? '地图 / 图谱' : 'Map / graph'}</small>
+                    <small>{zh ? '图谱 / 地图' : 'Graph / map'}</small>
                 </span>
                 <span className={`ControlMachineState ${overviewTone}`}>
                     {normalCount} / {overviewNodes.length}
@@ -1954,16 +1954,16 @@ export const ControlCenterView: React.FC<IProps> = ({
                         ? <div className='ControlOverviewViewSwitch' role='group' aria-label={zh ? '总览视角' : 'Overview view'}>
                             <button
                                 type='button'
-                                className={overviewView === 'map' ? 'active' : ''}
-                                aria-pressed={overviewView === 'map'}
-                                onClick={() => setOverviewView('map')}
-                            >{zh ? '地图' : 'Map'}</button>
-                            <button
-                                type='button'
                                 className={overviewView === 'graph' ? 'active' : ''}
                                 aria-pressed={overviewView === 'graph'}
                                 onClick={() => setOverviewView('graph')}
                             >{zh ? '图谱' : 'Graph'}</button>
+                            <button
+                                type='button'
+                                className={overviewView === 'map' ? 'active' : ''}
+                                aria-pressed={overviewView === 'map'}
+                                onClick={() => setOverviewView('map')}
+                            >{zh ? '地图' : 'Map'}</button>
                         </div>
                         : <button
                             type='button'
