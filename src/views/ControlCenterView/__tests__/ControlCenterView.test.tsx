@@ -344,6 +344,20 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText('图形处理器')).not.toBeInTheDocument();
     });
 
+    it('shows only camera connections below an AIPACK node', async () => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            node('AIPACK-05', true, true, 'NVIDIA Jetson AGX Orin'),
+        ]);
+        const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
+
+        expect(await screen.findByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
+        expect(screen.queryByText('边缘计算设备')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '发现并添加局域网边缘计算设备'}))
+            .not.toBeInTheDocument();
+        expect(screen.getByText('摄像头')).toBeInTheDocument();
+        expect(container.querySelector('.ControlRelatedDeviceGrid')).toHaveClass('camera-only');
+    });
+
     it('uses the worst state when one explicit control path fails', async () => {
         const remoteNode = node('山东节点', true, false, null, 'Windows', 'tailscale');
         remoteNode.network.lan_ssh_available = false;

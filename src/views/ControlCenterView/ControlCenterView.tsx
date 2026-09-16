@@ -1403,6 +1403,8 @@ export const ControlCenterView: React.FC<IProps> = ({
             asset.node_id === node.node_id
             && asset.device_kind === 'edge_compute'
         );
+        const aipackNode = /^AIPACK-/i.test(node.name.trim());
+        const relatedDeviceCount = cameras.length + (aipackNode ? 0 : edgeDevices.length);
         const cameraConnectCapable = Boolean(
             node.online && node.capabilities?.includes('task.camera.connect.v1'),
         );
@@ -1562,18 +1564,18 @@ export const ControlCenterView: React.FC<IProps> = ({
                             type='button'
                             className='ControlSectionCountButton'
                             aria-label={zh
-                            ? `${cameras.length + edgeDevices.length} 个相关设备`
-                            : `${cameras.length + edgeDevices.length} related devices`
+                            ? `${relatedDeviceCount} 个相关设备`
+                            : `${relatedDeviceCount} related devices`
                             }
                             title={zh ? '打开设备管理' : 'Open device management'}
                             onClick={() => setDeviceManagementTab(
-                                cameras.length === 0 && edgeDevices.length > 0 ? 'edge' : 'camera',
+                                !aipackNode && cameras.length === 0 && edgeDevices.length > 0 ? 'edge' : 'camera',
                             )}
-                        >{cameras.length + edgeDevices.length}</button>
+                        >{relatedDeviceCount}</button>
                     </div>
                 </div>
-                <div className='ControlRelatedDeviceGrid'>
-                    <div className='ControlRelatedDeviceGroup'>
+                <div className={`ControlRelatedDeviceGrid${aipackNode ? ' camera-only' : ''}`}>
+                    {!aipackNode && <div className='ControlRelatedDeviceGroup'>
                         <div className='ControlSubsectionHeading'>
                             <strong>{zh ? '边缘计算设备' : 'Edge computing devices'}</strong>
                             {edgeDevices.length > 0 && <button
@@ -1633,7 +1635,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 )}
                             >{zh ? '＋ 连接 NVIDIA Jetson' : '+ Connect NVIDIA Jetson'}</button>}
                         </div>
-                    </div>
+                    </div>}
                     <div className='ControlRelatedDeviceGroup'>
                         <div className='ControlSubsectionHeading'>
                             <strong>{zh ? '摄像头' : 'Cameras'}</strong>
