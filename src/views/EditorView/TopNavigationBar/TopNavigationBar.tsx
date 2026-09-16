@@ -50,6 +50,7 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
     );
     const productionSwitchDisabled = commercialRestricted && controlMode;
     const unavailableTitle = props.language === Language.CHINESE ? '暂未开放' : 'Not available yet';
+    const projectName = commercialRestricted ? '山东钢铁-宝信自动化视觉组' : props.projectData.name;
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
     const [showAccountCenter, setShowAccountCenter] = useState<boolean | null>(
@@ -462,13 +463,14 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                     <div className='ProjectName'>{currentTexts.projectName}</div>
                     <div
                         className='ProjectNameInputWrapper'
-                        data-value={props.projectData.name}
+                        data-value={projectName}
                     >
                         <input
                             type='text'
                             size={1}
-                            value={props.projectData.name}
-                            onChange={onChange}
+                            value={projectName}
+                            readOnly={commercialRestricted}
+                            onChange={commercialRestricted ? undefined : onChange}
                             onFocus={onFocus}
                         />
                     </div>

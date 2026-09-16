@@ -223,6 +223,7 @@ describe('TopNavigationBar extension tool entries', () => {
 describe('TopNavigationBar commercial restrictions', () => {
     it('keeps only camera connection and compute cluster enabled', async () => {
         const updatePopup = jest.fn();
+        const updateProject = jest.fn();
         const previousFetch = global.fetch;
         global.fetch = jest.fn().mockResolvedValue({
             ok: true,
@@ -236,7 +237,13 @@ describe('TopNavigationBar commercial restrictions', () => {
                 commercialRestricted: true,
                 hasExtensionEngine: true,
                 updateActivePopupTypeAction: updatePopup,
+                updateProjectDataAction: updateProject,
             });
+
+            const projectName = screen.getByDisplayValue('山东钢铁-宝信自动化视觉组');
+            expect(projectName).toHaveAttribute('readonly');
+            fireEvent.change(projectName, {target: {value: 'changed'}});
+            expect(updateProject).not.toHaveBeenCalled();
 
             fireEvent.click(screen.getByText('操作'));
             for (const name of ['引擎管理', '编辑标签', '上传文件', '导入标注', '导出标注']) {
