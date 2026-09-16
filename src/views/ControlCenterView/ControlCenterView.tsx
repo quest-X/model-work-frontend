@@ -1055,8 +1055,35 @@ export const ControlCenterView: React.FC<IProps> = ({
         </span>
     </button>;
 
-    const renderSidebarEdge = (node: ComputeClusterNode, device: ComputeLanAsset, depth: number) => {
-        const label = device.display_name || device.hostname || device.address;
+    const installedSidebarNode = (device: ComputeLanAsset) => nodes.find(candidate =>
+        /^AIPACK-/i.test(candidate.name.trim())
+        && (candidate.network.lan_address === device.address
+            || [device.display_name, device.hostname].some(name =>
+                name?.trim().toLowerCase() === candidate.name.trim().toLowerCase()))
+    );
+    const installedSidebarNodeIds = new Set(lanAssets
+        .map(device => installedSidebarNode(device)?.node_id)
+        .filter((nodeId): nodeId is string => Boolean(nodeId)));
+
+    const renderSidebarEdge = (
+        node: ComputeClusterNode,
+        device: ComputeLanAsset,
+        depth: number,
+        installedNode?: ComputeClusterNode,
+    ) => {
+        const label = installedNode?.name || device.display_name || device.hostname || device.address;
+        let selected = device.asset_id === edgeTerminalDeviceId;
+        let ariaLabel = zh
+            ? `打开 ${label} 边缘设备终端`
+            : `Open edge device terminal for ${label}`;
+        let stateTone = device.online ? 'healthy' : 'offline';
+        let stateLabel = toneLabel(stateTone, zh);
+        if (installedNode) {
+            selected = installedNode.node_id === selectedNodeId;
+            ariaLabel = zh ? `查看 ${label} 节点信息` : `View node details for ${label}`;
+            stateTone = machineTone(installedNode);
+            stateLabel = computeNodeLabel(installedNode, zh);
+        }
         const cameras = node.device_inventory.devices.filter(candidate => candidate.kind === 'camera');
         const cameraParents = new Map(cameras.map(camera => [
             camera.device_id,
@@ -1069,15 +1096,12 @@ export const ControlCenterView: React.FC<IProps> = ({
         return <React.Fragment key={device.asset_id}>
             <button
                 type='button'
-                className={`ControlMachineItem edge-device tree-child tree-depth-${depth} ${
-                    device.asset_id === edgeTerminalDeviceId ? 'selected' : ''
-                }`}
-                aria-label={zh
-                    ? `打开 ${label} 边缘设备终端`
-                    : `Open edge device terminal for ${label}`}
+                className={`ControlMachineItem edge-device tree-child tree-depth-${depth} ${selected ? 'selected' : ''}`}
+                aria-pressed={installedNode ? selected : undefined}
+                aria-label={ariaLabel}
                 onClick={() => {
-                    selectSidebarNode(node.node_id);
-                    setEdgeTerminalDeviceId(device.asset_id);
+                    selectSidebarNode(installedNode?.node_id || node.node_id);
+                    if (!installedNode) setEdgeTerminalDeviceId(device.asset_id);
                 }}
             >
                 <img
@@ -1091,8 +1115,8 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <strong>{label}</strong>
                     <small>node · {device.device_model || 'SSH'} · {device.address}</small>
                 </span>
-                <span className={`ControlMachineState ${device.online ? 'healthy' : 'offline'}`}>
-                    {toneLabel(device.online ? 'healthy' : 'offline', zh)}
+                <span className={`ControlMachineState ${stateTone}`}>
+                    {stateLabel}
                 </span>
             </button>
             {cameras
@@ -1161,15 +1185,17 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </span>
             </button>
             {organizedNodes.map(([group, groupNodes]) => {
-                const mainNodes = groupNodes.filter(node => node.role === 'main');
+                const visibleGroupNodes = groupNodes.filter(node => !installedSidebarNodeIds.has(node.node_id));
+                if (visibleGroupNodes.length === 0) return null;
+                const mainNodes = visibleGroupNodes.filter(node => node.role === 'main');
                 const hasSingleMain = mainNodes.length === 1;
                 const orderedNodes = hasSingleMain
-                    ? [mainNodes[0], ...groupNodes.filter(node => node.node_id !== mainNodes[0].node_id)]
-                    : groupNodes;
+                    ? [mainNodes[0], ...visibleGroupNodes.filter(node => node.node_id !== mainNodes[0].node_id)]
+                    : visibleGroupNodes;
                 return <React.Fragment key={group || 'all'}>
                     {group && <div className='ControlMachineGroupHeading'>
                         <strong>{group}</strong>
-                        <span>{groupNodes.length}</span>
+                        <span>{visibleGroupNodes.length}</span>
                     </div>}
                     {orderedNodes.map(node => {
                         const tone = machineTone(node);
@@ -1227,7 +1253,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     </div>
                     {devices.map(device => {
                         const node = nodes.find(item => item.node_id === device.node_id);
-                        return node && renderSidebarEdge(node, device, 0);
+                        return node && renderSidebarEdge(node, device, 0, installedSidebarNode(device));
                     })}
                 </React.Fragment>;
             })}

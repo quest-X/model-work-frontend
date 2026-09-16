@@ -1184,6 +1184,55 @@ describe('ControlCenterView', () => {
         expect(await screen.findByRole('dialog', {name: '相机实时画面'})).toBeInTheDocument();
     });
 
+    it('moves installed AIPACK nodes into their work area without losing the node page', async () => {
+        const main = {...node('shangang-aipac-02', true), role: 'main' as const};
+        const aipack = {
+            ...node('AIPACK-05', true, false, 'Jetson AGX Orin Developer Kit', 'Linux'),
+            role: 'node' as const,
+        };
+        aipack.network.lan_address = '10.168.10.24';
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([main, aipack]);
+        jest.mocked(ComputeClusterService.lanAssets).mockResolvedValue({
+            version: 1,
+            group_id: 'group-1',
+            summary: {total: 1, online: 1, offline: 0, new: 0, changed: 0, networks: 1},
+            latest_scans: [],
+            assets: [{
+                asset_id: 'edge-05',
+                node_id: main.node_id,
+                node_name: main.name,
+                cidr: '10.168.10.0/24',
+                address: '10.168.10.24',
+                hostname: 'aipack-05',
+                mac: '00:04:4b:00:00:05',
+                device_kind: 'edge_compute',
+                display_name: 'AIPACK-05',
+                device_model: 'Orin',
+                ssh_username: 'nvidia',
+                ports: [{port: 22, service: 'ssh'}],
+                online: true,
+                first_seen_at: 1,
+                last_seen_at: 1,
+                last_changed_at: 1,
+                change_type: 'unchanged',
+            }],
+        });
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByRole('heading', {name: 'shangang-aipac-02'});
+        const list = screen.getByRole('complementary', {name: '机器列表'});
+        const installed = within(list).getByRole('button', {name: '查看 AIPACK-05 节点信息'});
+        expect(installed).toHaveClass('edge-device', 'tree-depth-0');
+        expect(installed.querySelector('img')).toHaveAttribute('src', '/ico/jetson-agx-orin.png');
+        expect(within(list).getAllByText('AIPACK-05')).toHaveLength(1);
+        expect(within(list).getByText('炉后作业区')).toBeInTheDocument();
+        expect(within(list).queryByRole('button', {name: '打开 AIPACK-05 边缘设备终端'}))
+            .not.toBeInTheDocument();
+
+        fireEvent.click(installed);
+        expect(await screen.findByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
+    });
+
     it('opens a registered camera with devices on the left and live view on the right', async () => {
         const machine = node('在线节点', true, true);
         machine.device_inventory.devices[0].capabilities = ['camera.stream.v1'];
