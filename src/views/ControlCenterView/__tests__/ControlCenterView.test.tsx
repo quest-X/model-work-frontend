@@ -354,6 +354,8 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText('边缘计算设备')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', {name: '发现并添加局域网边缘计算设备'}))
             .not.toBeInTheDocument();
+        expect(screen.getByText('SSH 局域网')).toBeInTheDocument();
+        expect(screen.queryByText('Tailscale 远程')).not.toBeInTheDocument();
         expect(screen.getByText('摄像头')).toBeInTheDocument();
         expect(container.querySelector('.ControlRelatedDeviceGrid')).toHaveClass('camera-only');
     });

@@ -1564,7 +1564,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             }
                             : undefined,
                     )}
-                    {renderServiceCard(
+                    {!aipackNode && renderServiceCard(
                         communicationStateLabel(tailscaleState, zh),
                         zh ? 'Tailscale 远程' : 'Remote Tailscale',
                         zh ? '仅使用 Tailscale 地址建立 SSH 连接' : 'Uses only the Tailscale address for SSH',
