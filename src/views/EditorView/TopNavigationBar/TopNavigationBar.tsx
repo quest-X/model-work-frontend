@@ -18,6 +18,8 @@ import {
     ACCOUNT_SESSION_CHANGED, AccountUser, currentAccountSession,
 } from '../../../services/AccountService';
 import {AccountCenter} from '../../AccountCenter/AccountCenter';
+import {useEscapeToClose} from '../../../hooks/useEscapeToClose';
+import {version as appVersion} from '../../../../package.json';
 
 declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
 
@@ -53,6 +55,7 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
     const projectName = commercialRestricted ? '山东钢铁-宝信自动化视觉组' : props.projectData.name;
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+    const [showAboutUs, setShowAboutUs] = useState(false);
     const [showAccountCenter, setShowAccountCenter] = useState<boolean | null>(
         () => currentAccountSession()?.user.password_change_required ? true : null,
     );
@@ -71,6 +74,8 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
     const localChangeDescription = props.language === Language.CHINESE
         ? `${localChangeCount} 个本地变动待处理`
         : `${localChangeCount} local ${localChangeCount === 1 ? 'change' : 'changes'} pending`;
+    const zh = props.language === Language.CHINESE;
+    useEscapeToClose(() => setShowAboutUs(false), showAboutUs, 20);
 
     const onFocus = (event: React.FocusEvent<HTMLInputElement>) => {
         event.target.setSelectionRange(0, event.target.value.length);
@@ -531,6 +536,18 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                                     ? currentTexts.account.switchToAnnotationPlatform
                                     : currentTexts.account.switchToControlPlatform}
                             </button>
+                            {commercialRestricted && <button
+                                type='button'
+                                role='menuitem'
+                                className='AccountMenuItem'
+                                onClick={() => {
+                                    setShowAccountDropdown(false);
+                                    setShowAboutUs(true);
+                                }}
+                            >
+                                <img src='/ico/make-sense-ico-transparent.png' alt=''/>
+                                {zh ? '关于我们' : 'About us'}
+                            </button>}
                             <button
                                 type='button'
                                 role='menuitem'
@@ -554,6 +571,55 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                 onClose={() => setShowAccountCenter(false)}
                 onUserChanged={setAccount}
             />}
+            {showAboutUs && <div
+                className='AboutUsBackdrop'
+                role='presentation'
+                onMouseDown={event => {
+                    if (event.target === event.currentTarget) setShowAboutUs(false);
+                }}
+            >
+                <section
+                    className='AboutUsDialog'
+                    role='dialog'
+                    aria-modal='true'
+                    aria-label={zh ? '关于我们' : 'About us'}
+                >
+                    <button
+                        type='button'
+                        className='AboutUsClose'
+                        aria-label={zh ? '关闭关于我们' : 'Close about us'}
+                        onClick={() => setShowAboutUs(false)}
+                    >
+                        <img src='/ico/close.png' alt=''/>
+                    </button>
+                    <div className='AboutUsHero'>
+                        <img src='/make-sense-ico-transparent.png' alt=''/>
+                        <div>
+                            <small>OPENSIGHT PLATFORM</small>
+                            <h2>{zh ? '山东钢铁-宝信自动化视觉组' : 'Shandong Steel - Baosight Automation Vision Team'}</h2>
+                            <p>{zh
+                                ? '面向工业现场的智能视觉与边缘计算平台'
+                                : 'Industrial vision and edge computing platform'}</p>
+                        </div>
+                    </div>
+                    <dl className='AboutUsDetails'>
+                        <div>
+                            <dt>{zh ? '平台' : 'Platform'}</dt>
+                            <dd>OpenSight Platform</dd>
+                        </div>
+                        <div>
+                            <dt>{zh ? '服务场景' : 'Capabilities'}</dt>
+                            <dd>{zh
+                                ? '视觉识别 · 边缘设备管理 · 计算群协同'
+                                : 'Visual recognition · Edge device management · Cluster coordination'}</dd>
+                        </div>
+                        <div>
+                            <dt>{zh ? '版本' : 'Version'}</dt>
+                            <dd>v{appVersion}</dd>
+                        </div>
+                    </dl>
+                </section>
+            </div>}
         </div>
     );
 };
