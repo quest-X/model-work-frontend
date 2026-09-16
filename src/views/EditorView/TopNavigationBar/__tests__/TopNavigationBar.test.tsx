@@ -241,7 +241,7 @@ describe('TopNavigationBar commercial restrictions', () => {
             });
 
             const projectName = screen.getByDisplayValue('山东钢铁-宝信自动化视觉组');
-            expect(projectName).toHaveAttribute('readonly');
+            expect(projectName).toBeDisabled();
             fireEvent.change(projectName, {target: {value: 'changed'}});
             expect(updateProject).not.toHaveBeenCalled();
 

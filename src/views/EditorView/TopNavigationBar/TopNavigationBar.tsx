@@ -474,9 +474,9 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             type='text'
                             size={1}
                             value={projectName}
-                            readOnly={commercialRestricted}
+                            disabled={commercialRestricted}
                             onChange={commercialRestricted ? undefined : onChange}
-                            onFocus={onFocus}
+                            onFocus={commercialRestricted ? undefined : onFocus}
                         />
                     </div>
                 </div>
