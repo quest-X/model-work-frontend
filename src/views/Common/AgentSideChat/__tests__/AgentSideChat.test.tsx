@@ -184,7 +184,11 @@ describe('AgentSideChat', () => {
         expect(minimizedDialog).toHaveClass('minimized');
         expect(minimizedDialog).not.toHaveClass('expanded');
         expect(embeddedHost).not.toContainElement(minimizedDialog);
+        fireEvent.click(screen.getByRole('button', {name: '恢复 Agent 窗口'}));
+        expect(screen.getByRole('dialog', {name: 'Agent 对话'})).not.toHaveClass('minimized');
+        expect(screen.getByRole('dialog', {name: 'Agent 对话'})).not.toHaveClass('expanded');
         fireEvent.click(screen.getByRole('button', {name: '扩大 Agent 对话'}));
+        expect(screen.getByRole('dialog', {name: 'Agent 对话'})).toHaveClass('expanded');
 
         fireEvent.change(screen.getByRole('textbox', {name: '发送给 Agent'}), {
             target: {value: '汇报任务'},

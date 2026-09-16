@@ -1203,11 +1203,16 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
                 <button
                     type='button'
                     className='AgentSideChatWindowControl expand'
-                    aria-label={expanded
-                        ? (zh ? '恢复 Agent 小窗' : 'Restore Agent window')
-                        : (zh ? '扩大 Agent 对话' : 'Expand Agent chat')}
+                    aria-label={minimized
+                        ? (zh ? '恢复 Agent 窗口' : 'Restore Agent window')
+                        : expanded
+                            ? (zh ? '恢复 Agent 小窗' : 'Restore Agent window')
+                            : (zh ? '扩大 Agent 对话' : 'Expand Agent chat')}
                     onClick={() => {
-                        setMinimized(false);
+                        if (minimized) {
+                            setMinimized(false);
+                            return;
+                        }
                         if (expanded) {
                             setExpanded(false);
                             return;
