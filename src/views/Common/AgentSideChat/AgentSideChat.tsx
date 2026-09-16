@@ -1222,16 +1222,10 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
                     type='button'
                     className='AgentSideChatWindowControl minimize'
                     aria-label={minimized
-                        ? (zh ? '收起 Agent 到左下角' : 'Hide Agent in the launcher')
+                        ? (zh ? 'Agent 对话已最小化' : 'Agent chat is minimized')
                         : (zh ? '最小化 Agent 对话' : 'Minimize Agent chat')}
-                    onClick={() => {
-                        if (minimized) {
-                            setOpen(false);
-                            setMinimized(false);
-                            return;
-                        }
-                        minimizeWindow();
-                    }}
+                    disabled={minimized}
+                    onClick={minimizeWindow}
                 ><svg viewBox='0 0 12 12' aria-hidden='true'><path d='M3 6h6'/></svg></button>
                 <button
                     type='button'
