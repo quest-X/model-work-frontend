@@ -56,6 +56,7 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
     const [showAboutUs, setShowAboutUs] = useState(false);
+    const [showOperationManual, setShowOperationManual] = useState(false);
     const [showAccountCenter, setShowAccountCenter] = useState<boolean | null>(
         () => currentAccountSession()?.user.password_change_required ? true : null,
     );
@@ -76,6 +77,7 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
         : `${localChangeCount} local ${localChangeCount === 1 ? 'change' : 'changes'} pending`;
     const zh = props.language === Language.CHINESE;
     useEscapeToClose(() => setShowAboutUs(false), showAboutUs, 20);
+    useEscapeToClose(() => setShowOperationManual(false), showOperationManual, 20);
 
     const onFocus = (event: React.FocusEvent<HTMLInputElement>) => {
         event.target.setSelectionRange(0, event.target.value.length);
@@ -542,6 +544,18 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                                 className='AccountMenuItem'
                                 onClick={() => {
                                     setShowAccountDropdown(false);
+                                    setShowOperationManual(true);
+                                }}
+                            >
+                                <img src='/ico/documentation.png' alt=''/>
+                                {zh ? '操作手册' : 'User guide'}
+                            </button>}
+                            {commercialRestricted && <button
+                                type='button'
+                                role='menuitem'
+                                className='AccountMenuItem'
+                                onClick={() => {
+                                    setShowAccountDropdown(false);
                                     setShowAboutUs(true);
                                 }}
                             >
@@ -616,6 +630,63 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                         <div>
                             <dt>{zh ? '版本' : 'Version'}</dt>
                             <dd>v{appVersion}</dd>
+                        </div>
+                    </dl>
+                </section>
+            </div>}
+            {showOperationManual && <div
+                className='AboutUsBackdrop'
+                role='presentation'
+                onMouseDown={event => {
+                    if (event.target === event.currentTarget) setShowOperationManual(false);
+                }}
+            >
+                <section
+                    className='AboutUsDialog OperationManualDialog'
+                    role='dialog'
+                    aria-modal='true'
+                    aria-label={zh ? '操作手册' : 'User guide'}
+                >
+                    <button
+                        type='button'
+                        className='AboutUsClose'
+                        aria-label={zh ? '关闭操作手册' : 'Close user guide'}
+                        onClick={() => setShowOperationManual(false)}
+                    >
+                        <img src='/ico/close.png' alt=''/>
+                    </button>
+                    <div className='AboutUsHero'>
+                        <img src='/ico/documentation.png' alt=''/>
+                        <div>
+                            <small>OPENSIGHT PLATFORM</small>
+                            <h2>{zh ? '操作手册' : 'User guide'}</h2>
+                            <p>{zh ? '山钢日照现场常用操作说明' : 'Common operations for Shangang Rizhao'}</p>
+                        </div>
+                    </div>
+                    <dl className='AboutUsDetails'>
+                        <div>
+                            <dt>{zh ? '设备' : 'Devices'}</dt>
+                            <dd>{zh
+                                ? '在左侧按作业区浏览主节点、AIPACK 与摄像头；点击节点查看详情或打开终端。'
+                                : 'Browse nodes, AIPACK devices and cameras by work area; select a node for details or terminal access.'}</dd>
+                        </div>
+                        <div>
+                            <dt>{zh ? '摄像头' : 'Cameras'}</dt>
+                            <dd>{zh
+                                ? '点击摄像头名称打开实时画面，返回设备列表可切换其他点位。'
+                                : 'Select a camera to open its live view, then return to the device list to switch locations.'}</dd>
+                        </div>
+                        <div>
+                            <dt>{zh ? '计算群' : 'Cluster'}</dt>
+                            <dd>{zh
+                                ? '从“拓展引擎 → 计算群”查看拓扑、工作调度、网络资产和节点管理。'
+                                : 'Open Extension Engine → Compute Cluster for topology, scheduling, network assets and node management.'}</dd>
+                        </div>
+                        <div>
+                            <dt>Agent</dt>
+                            <dd>{zh
+                                ? '点击左下角 OpenSight Agent，查询设备状态或生成项目报告。'
+                                : 'Open OpenSight Agent in the lower-left corner to inspect device status or generate reports.'}</dd>
                         </div>
                     </dl>
                 </section>

@@ -328,6 +328,20 @@ describe('TopNavigationBar account preview', () => {
         expect(screen.queryByRole('dialog', {name: '关于我们'})).not.toBeInTheDocument();
     });
 
+    it('opens the commercial operation manual from the account menu', () => {
+        renderNavigation([], Language.CHINESE, {commercialRestricted: true});
+
+        fireEvent.click(screen.getByRole('button', {name: '打开账户菜单'}));
+        fireEvent.click(screen.getByRole('menuitem', {name: '操作手册'}));
+
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        expect(screen.getByRole('dialog', {name: '操作手册'})).toHaveTextContent(
+            '拓展引擎 → 计算群',
+        );
+        fireEvent.keyDown(window, {key: 'Escape'});
+        expect(screen.queryByRole('dialog', {name: '操作手册'})).not.toBeInTheDocument();
+    });
+
     it('opens account center from the summary and uploads an avatar there', async () => {
         const {container} = renderNavigation([], Language.CHINESE);
         fireEvent.click(screen.getByRole('button', {name: '打开账户菜单'}));
