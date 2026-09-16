@@ -324,6 +324,7 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             language={props.language}
                             isVisible={true}
                             forceDisabled={commercialRestricted}
+                            allowEngineManagement={commercialRestricted}
                         />}
                     </div>
                     {props.hasCoreEngine && (

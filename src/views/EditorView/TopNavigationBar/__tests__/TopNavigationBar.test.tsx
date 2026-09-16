@@ -19,9 +19,18 @@ jest.mock('../../StateBar/StateBar', () => ({
 }));
 jest.mock('../DropDownMenu/DropDownMenu', () => ({
     __esModule: true,
-    default: function MockDropDownMenu({forceDisabled}: {forceDisabled?: boolean}) {
-        return <div>{['引擎管理', '编辑标签', '上传文件', '导入标注', '导出标注'].map(name =>
-            <button key={name} type='button' disabled={forceDisabled}>{name}</button>,
+    default: function MockDropDownMenu({
+        forceDisabled,
+        allowEngineManagement,
+    }: {forceDisabled?: boolean; allowEngineManagement?: boolean}) {
+        return <div>{['引擎管理', '编辑标签', '上传文件', '导入标注', '导出标注'].map((name, index) =>
+            <button
+                key={name}
+                type='button'
+                disabled={forceDisabled && !(allowEngineManagement && index === 0)}
+            >
+                {name}
+            </button>,
         )}</div>;
     },
 }));
@@ -221,7 +230,7 @@ describe('TopNavigationBar extension tool entries', () => {
 });
 
 describe('TopNavigationBar commercial restrictions', () => {
-    it('keeps only camera connection and compute cluster enabled', async () => {
+    it('keeps engine management, camera connection and compute cluster enabled', async () => {
         const updatePopup = jest.fn();
         const updateProject = jest.fn();
         const previousFetch = global.fetch;
@@ -246,7 +255,8 @@ describe('TopNavigationBar commercial restrictions', () => {
             expect(updateProject).not.toHaveBeenCalled();
 
             fireEvent.click(screen.getByText('操作'));
-            for (const name of ['引擎管理', '编辑标签', '上传文件', '导入标注', '导出标注']) {
+            expect(screen.getByText('引擎管理').closest('button')).toBeEnabled();
+            for (const name of ['编辑标签', '上传文件', '导入标注', '导出标注']) {
                 expect(screen.getByText(name).closest('button')).toBeDisabled();
             }
 

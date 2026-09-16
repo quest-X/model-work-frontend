@@ -8,9 +8,15 @@ interface IProps {
     language: Language;
     isVisible?: boolean;
     forceDisabled?: boolean;
+    allowEngineManagement?: boolean;
 }
 
-const DropDownMenu: React.FC<IProps> = ({language, isVisible = true, forceDisabled = false}) => {
+const DropDownMenu: React.FC<IProps> = ({
+    language,
+    isVisible = true,
+    forceDisabled = false,
+    allowEngineManagement = false,
+}) => {
     if (!isVisible) return null;
     const disabledTitle = language === Language.CHINESE ? '暂未开放' : 'Not available yet';
 
@@ -22,7 +28,7 @@ const DropDownMenu: React.FC<IProps> = ({language, isVisible = true, forceDisabl
             height: 40 * getDropDownMenuData(language)[0].children.length
         }}>
             {getDropDownMenuData(language)[0].children.map((element, index) => {
-                const disabled = forceDisabled || element.disabled;
+                const disabled = (forceDisabled && !(allowEngineManagement && index === 0)) || element.disabled;
                 return <button
                     type='button'
                     className={classNames('DropDownMenuContentOption', {
