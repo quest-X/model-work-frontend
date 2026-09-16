@@ -166,10 +166,10 @@ describe('AgentSideChat', () => {
 
         fireEvent.click(screen.getByRole('button', {name: '最小化 Agent 对话'}));
         expect(screen.getByRole('dialog', {name: 'Agent 对话'})).toHaveClass('minimized');
-        const minimizedButton = screen.getByRole('button', {name: 'Agent 对话已最小化'});
-        expect(minimizedButton).toBeDisabled();
-        fireEvent.click(minimizedButton);
-        expect(screen.getByRole('dialog', {name: 'Agent 对话'})).toHaveClass('minimized');
+        fireEvent.click(screen.getByRole('button', {name: '收起 Agent 到左下角'}));
+        expect(screen.queryByRole('dialog', {name: 'Agent 对话'})).not.toBeInTheDocument();
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
+        expect(await screen.findByRole('dialog', {name: 'Agent 对话'})).not.toHaveClass('minimized');
         fireEvent.click(screen.getByRole('button', {name: '扩大 Agent 对话'}));
         const embeddedDialog = screen.getByRole('dialog', {name: 'Agent 对话'});
         expect(embeddedDialog).toHaveClass('expanded');
@@ -231,7 +231,11 @@ describe('AgentSideChat', () => {
         expect(screen.getByRole('dialog', {name: 'Agent 对话'})).toHaveClass('minimized');
         expect(screen.getByText(/当前有 2 个运行任务。/)).toBeInTheDocument();
         expect(document.body).toHaveClass('AgentChatOpen');
-        expect(screen.getByRole('button', {name: 'Agent 对话已最小化'})).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', {name: '收起 Agent 到左下角'}));
+        expect(screen.queryByRole('dialog', {name: 'Agent 对话'})).not.toBeInTheDocument();
+        expect(document.body).not.toHaveClass('AgentChatOpen');
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
+        expect(await screen.findByText(/当前有 2 个运行任务。/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '关闭 Agent 对话'}));
         expect(screen.queryByRole('dialog', {name: 'Agent 对话'})).not.toBeInTheDocument();
         expect(document.body).not.toHaveClass('AgentChatOpen');
