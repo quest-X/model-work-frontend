@@ -698,10 +698,9 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const operationsGraphEntityCount = resourceGraph?.entities.filter(entity =>
         entity.kind === 'compute_node' || entity.kind === 'managed_device',
     ).length ?? 0;
-    const totalNodeCount = resourceGraph?.entities.filter(entity =>
-        entity.kind === 'compute_node'
-        || (entity.kind === 'managed_device' && entity.device_kind === 'edge_compute'),
-    ).length ?? totals.total;
+    const totalDeviceCount = resourceGraph
+        ? operationsGraphEntityCount
+        : totals.total + (status?.nodes.device_total ?? 0);
 
     return <div
         className={`ComputeClusterBackdrop${maximized ? ' maximized' : ''}${embedded ? ' embedded' : ''}`}
@@ -740,8 +739,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
 
             <div className='ComputeClusterSummary'>
                 <div><span>{zh ? '地域' : 'Regions'}</span><strong>{resourceGraph?.summary.regions ?? 0}</strong></div>
-                <div><span>{zh ? '节点总数' : 'Total nodes'}</span><strong>{totalNodeCount}</strong></div>
-                <div><span>{zh ? '主节点' : 'Main nodes'}</span><strong>{totals.total}</strong></div>
+                <div><span>{zh ? '设备总数(包含摄像头等)' : 'Total devices (incl. cameras)'}</span><strong>{totalDeviceCount}</strong></div>
                 <div><span>{zh ? '正常节点' : 'Normal nodes'}</span><strong className='online'>{totals.online}</strong></div>
                 <div><span>{zh ? '故障节点' : 'Fault nodes'}</span><strong>{nodes.filter(node => computeNodeState(node) === 'fault').length}</strong></div>
                 <div><span>{zh ? '异常节点' : 'Abnormal nodes'}</span><strong>{nodes.filter(node => computeNodeState(node) === 'abnormal').length}</strong></div>

@@ -102,6 +102,14 @@ type ResourceSample = {
     networkSend: number | null;
 };
 
+const sidebarWorkAreas = [
+    {id: 'scrap', zh: '废钢作业区', en: 'Scrap area', addresses: ['10.168.10.10', '10.168.10.11', '10.168.10.12', '10.168.10.13']},
+    {id: 'furnace-front', zh: '炉前作业区', en: 'Furnace-front area', addresses: ['10.168.10.14', '10.168.10.15', '10.168.10.16', '10.168.10.17']},
+    {id: 'furnace-back', zh: '炉后作业区', en: 'Furnace-back area', addresses: ['10.168.10.20', '10.168.10.21', '10.168.10.22', '10.168.10.23', '10.168.10.24', '10.168.10.25', '10.168.10.26', '10.168.10.27', '10.168.10.28', '10.168.10.29']},
+];
+
+const sidebarWorkArea = (asset: ComputeLanAsset) => sidebarWorkAreas.find(area => area.addresses.includes(asset.address));
+
 const machineIconKind = (node: ComputeClusterNode): MachineIconKind => {
     const model = node.resources.hardware_model?.toLowerCase() || '';
     const platform = node.resources.platform.trim().toLowerCase();
@@ -1010,6 +1018,89 @@ export const ControlCenterView: React.FC<IProps> = ({
         saveNodeTags(nodeId, next);
     };
 
+    const selectSidebarNode = (nodeId: string) => {
+        overviewSelected.current = false;
+        setActiveGroupResources(null);
+        setSelectedNodeId(nodeId);
+        setWorkspace('node');
+    };
+
+    const renderSidebarCamera = (
+        node: ComputeClusterNode,
+        camera: ComputeManagedDevice,
+        depth: number,
+    ) => <button
+        type='button'
+        key={camera.device_id}
+        className={`ControlMachineItem camera-device tree-child tree-depth-${depth} ${
+            node.node_id === selectedNodeId && camera.device_id === cameraViewerId ? 'selected' : ''
+        }`}
+        disabled={!node.online || !cameraStreamingAvailable(camera)}
+        aria-label={zh ? `打开 ${camera.name} 实时画面` : `Open live view for ${camera.name}`}
+        title={cameraStreamUnavailableTitle(node, camera, zh)}
+        onClick={() => {
+            selectSidebarNode(node.node_id);
+            setCameraViewerId(camera.device_id);
+        }}
+    >
+        <span className='ControlMachineIcon camera' aria-hidden='true'>◉</span>
+        <span className='ControlMachineIdentity'>
+            <strong>{camera.name}</strong>
+            <small>{camera.model || camera.device_id} · {camera.channels} {zh
+                ? '通道'
+                : camera.channels === 1 ? 'channel' : 'channels'}</small>
+        </span>
+        <span className={`ControlMachineState ${cameraTone(camera.status)}`}>
+            {cameraLabel(camera.status, zh)}
+        </span>
+    </button>;
+
+    const renderSidebarEdge = (node: ComputeClusterNode, device: ComputeLanAsset, depth: number) => {
+        const label = device.display_name || device.hostname || device.address;
+        const cameras = node.device_inventory.devices.filter(candidate => candidate.kind === 'camera');
+        const cameraParents = new Map(cameras.map(camera => [
+            camera.device_id,
+            lanAssets.find(asset =>
+                asset.node_id === node.node_id
+                && asset.device_kind === 'camera'
+                && asset.display_name === camera.name
+            )?.parent_asset_id || '',
+        ]));
+        return <React.Fragment key={device.asset_id}>
+            <button
+                type='button'
+                className={`ControlMachineItem edge-device tree-child tree-depth-${depth} ${
+                    device.asset_id === edgeTerminalDeviceId ? 'selected' : ''
+                }`}
+                aria-label={zh
+                    ? `打开 ${label} 边缘设备终端`
+                    : `Open edge device terminal for ${label}`}
+                onClick={() => {
+                    selectSidebarNode(node.node_id);
+                    setEdgeTerminalDeviceId(device.asset_id);
+                }}
+            >
+                <img
+                    className='ControlMachineIcon'
+                    src='/ico/jetson-agx-orin.png'
+                    alt=''
+                    aria-hidden='true'
+                    draggable={false}
+                />
+                <span className='ControlMachineIdentity'>
+                    <strong>{label}</strong>
+                    <small>node · {device.device_model || 'SSH'} · {device.address}</small>
+                </span>
+                <span className={`ControlMachineState ${device.online ? 'healthy' : 'offline'}`}>
+                    {toneLabel(device.online ? 'healthy' : 'offline', zh)}
+                </span>
+            </button>
+            {cameras
+                .filter(camera => cameraParents.get(camera.device_id) === device.asset_id)
+                .map(camera => renderSidebarCamera(node, camera, depth + 1))}
+        </React.Fragment>;
+    };
+
     // eslint-disable-next-line complexity
     const renderMachineList = () => <aside className='ControlMachinePanel' aria-label={zh ? '机器列表' : 'Machine list'}>
         <div className='ControlMachineOrganizer' aria-label={zh ? '节点整理' : 'Organize nodes'}>
@@ -1069,36 +1160,77 @@ export const ControlCenterView: React.FC<IProps> = ({
                     {normalCount} / {overviewNodes.length}
                 </span>
             </button>
-            {organizedNodes.map(([group, groupNodes]) => <React.Fragment key={group || 'all'}>
-                {group && <div className='ControlMachineGroupHeading'>
-                    <strong>{group}</strong>
-                    <span>{groupNodes.length}</span>
-                </div>}
-                {groupNodes.map(node => {
-                    const tone = machineTone(node);
-                    return <button
-                        type='button'
-                        key={node.node_id}
-                        className={`ControlMachineItem ${node.node_id === selectedNodeId ? 'selected' : ''}`}
-                        aria-pressed={node.node_id === selectedNodeId}
-                        onClick={() => {
-                            overviewSelected.current = false;
-                            setActiveGroupResources(null);
-                            setSelectedNodeId(node.node_id);
-                            setWorkspace('node');
-                        }}
-                    >
-                        <MachinePlatformIcon node={node}/>
-                        <span className='ControlMachineIdentity'>
-                            <strong>{node.name}</strong>
-                            <small>{zh ? '活跃于 ' : 'Active '}{lastSeen(node.heartbeat_age_seconds, zh)}</small>
-                        </span>
-                        <span className={`ControlMachineState ${tone}`}>
-                            {computeNodeLabel(node, zh)}
-                        </span>
-                    </button>;
-                })}
-            </React.Fragment>)}
+            {organizedNodes.map(([group, groupNodes]) => {
+                const mainNodes = groupNodes.filter(node => node.role === 'main');
+                const hasSingleMain = mainNodes.length === 1;
+                const orderedNodes = hasSingleMain
+                    ? [mainNodes[0], ...groupNodes.filter(node => node.node_id !== mainNodes[0].node_id)]
+                    : groupNodes;
+                return <React.Fragment key={group || 'all'}>
+                    {group && <div className='ControlMachineGroupHeading'>
+                        <strong>{group}</strong>
+                        <span>{groupNodes.length}</span>
+                    </div>}
+                    {orderedNodes.map(node => {
+                        const tone = machineTone(node);
+                        const nodeDepth = hasSingleMain && node.role !== 'main' ? 1 : 0;
+                        const allEdgeDevices = lanAssets.filter(asset =>
+                            asset.node_id === node.node_id && asset.device_kind === 'edge_compute'
+                        );
+                        const edgeDevices = allEdgeDevices.filter(asset => !sidebarWorkArea(asset));
+                        const edgeIds = new Set(allEdgeDevices.map(device => device.asset_id));
+                        const cameras = node.device_inventory.devices.filter(device => device.kind === 'camera');
+                        const cameraParents = new Map(cameras.map(camera => [
+                            camera.device_id,
+                            lanAssets.find(asset =>
+                                asset.node_id === node.node_id
+                                && asset.device_kind === 'camera'
+                                && asset.display_name === camera.name
+                            )?.parent_asset_id || '',
+                        ]));
+                        return <React.Fragment key={node.node_id}>
+                            <button
+                                type='button'
+                                className={`ControlMachineItem ${
+                                    nodeDepth ? `tree-child tree-depth-${nodeDepth} ` : ''
+                                }${node.node_id === selectedNodeId ? 'selected' : ''}`}
+                                aria-pressed={node.node_id === selectedNodeId}
+                                onClick={() => selectSidebarNode(node.node_id)}
+                            >
+                                <MachinePlatformIcon node={node}/>
+                                <span className='ControlMachineIdentity'>
+                                    <strong>{node.name}</strong>
+                                    <small>{node.role === 'main' ? 'main' : 'node'} · {zh
+                                        ? '活跃于 '
+                                        : 'Active '}{lastSeen(node.heartbeat_age_seconds, zh)}</small>
+                                </span>
+                                <span className={`ControlMachineState ${tone}`}>
+                                    {computeNodeLabel(node, zh)}
+                                </span>
+                            </button>
+                            {edgeDevices.map(device => renderSidebarEdge(node, device, nodeDepth + 1))}
+                            {cameras
+                                .filter(camera => !edgeIds.has(cameraParents.get(camera.device_id) || ''))
+                                .map(camera => renderSidebarCamera(node, camera, nodeDepth + 1))}
+                        </React.Fragment>;
+                    })}
+                </React.Fragment>;
+            })}
+            {sidebarWorkAreas.map(area => {
+                const devices = lanAssets.filter(asset =>
+                    asset.device_kind === 'edge_compute' && sidebarWorkArea(asset)?.id === area.id
+                );
+                return devices.length > 0 && <React.Fragment key={area.id}>
+                    <div className='ControlMachineGroupHeading'>
+                        <strong>{zh ? area.zh : area.en}</strong>
+                        <span>{devices.length}</span>
+                    </div>
+                    {devices.map(device => {
+                        const node = nodes.find(item => item.node_id === device.node_id);
+                        return node && renderSidebarEdge(node, device, 0);
+                    })}
+                </React.Fragment>;
+            })}
             {!loading && organizedNodes.every(([, groupNodes]) => groupNodes.length === 0) && <p className='ControlMachineEmpty'>
                 {nodes.length === 0
                     ? (zh ? '计算群中暂无机器' : 'No machines in the compute cluster')
@@ -1443,6 +1575,67 @@ export const ControlCenterView: React.FC<IProps> = ({
                 <div className='ControlRelatedDeviceGrid'>
                     <div className='ControlRelatedDeviceGroup'>
                         <div className='ControlSubsectionHeading'>
+                            <strong>{zh ? '边缘计算设备' : 'Edge computing devices'}</strong>
+                            {edgeDevices.length > 0 && <button
+                                type='button'
+                                className='ControlDeviceCountButton'
+                                aria-label={zh ? '添加设备' : 'Add device'}
+                                disabled={!jetsonConnectCapable}
+                                title={!node.online
+                                    ? (zh ? '节点当前故障，恢复正常后才能连接设备' : 'The node must return to normal before a device can be connected')
+                                    : !jetsonConnectCapable
+                                        ? (zh ? '此节点不支持 SSH 设备认证' : 'This node cannot authenticate SSH devices')
+                                        : (zh ? '添加设备' : 'Add device')}
+                                onClick={() => updateActivePopupTypeAction?.(
+                                    PopupWindowType.JETSON_CONNECT,
+                                    node.node_id,
+                                    node.name,
+                                    remoteLan,
+                                )}
+                            >{edgeDevices.length}</button>}
+                        </div>
+                        <div className='ControlCameraGrid'>
+                            {edgeDevices.map(device => <button
+                                type='button'
+                                className='ControlCameraCard'
+                                key={device.asset_id}
+                                aria-label={zh
+                                    ? `打开${device.display_name || device.hostname || device.address}终端`
+                                    : `Open terminal for ${device.display_name || device.hostname || device.address}`}
+                                onClick={() => setEdgeTerminalDeviceId(device.asset_id)}
+                            >
+                                <div className='ControlCameraIcon' aria-hidden='true'>
+                                    <img src='/ico/jetson-agx-orin.png' alt='Jetson'/>
+                                </div>
+                                <div className='ControlCameraIdentity'>
+                                    <strong>{device.display_name || device.hostname || device.address}</strong>
+                                    <small>{device.device_model || device.address} · {device.address}</small>
+                                    <span className={device.online ? 'healthy' : 'offline'}>
+                                        <i/> {toneLabel(device.online ? 'healthy' : 'offline', zh)}
+                                    </span>
+                                </div>
+                            </button>)}
+                            {edgeDevices.length === 0 && <button
+                                type='button'
+                                className='ControlEmptyBlock ControlRelatedDeviceAdd'
+                                aria-label={zh ? '发现并添加局域网边缘计算设备' : 'Discover and add LAN edge devices'}
+                                disabled={!jetsonConnectCapable}
+                                title={!node.online
+                                    ? (zh ? '节点当前故障，恢复正常后才能连接设备' : 'The node must return to normal before a device can be connected')
+                                    : !jetsonConnectCapable
+                                        ? (zh ? '此节点不支持 SSH 设备认证' : 'This node cannot authenticate SSH devices')
+                                        : (zh ? '连接边缘计算设备' : 'Connect an edge device')}
+                                onClick={() => updateActivePopupTypeAction?.(
+                                    PopupWindowType.JETSON_CONNECT,
+                                    node.node_id,
+                                    node.name,
+                                    remoteLan,
+                                )}
+                            >{zh ? '＋ 连接 NVIDIA Jetson' : '+ Connect NVIDIA Jetson'}</button>}
+                        </div>
+                    </div>
+                    <div className='ControlRelatedDeviceGroup'>
+                        <div className='ControlSubsectionHeading'>
                             <strong>{zh ? '摄像头' : 'Cameras'}</strong>
                             {cameras.length > 0 && <button
                                 type='button'
@@ -1460,7 +1653,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     node.name,
                                     remoteLan,
                                 )}
-                            >{cameras.length} ＋</button>}
+                            >{cameras.length}</button>}
                         </div>
                         <div className='ControlCameraGrid'>
                             {cameras.map(camera => <button
@@ -1501,67 +1694,6 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     remoteLan,
                                 )}
                             >{zh ? '＋ 连接局域网相机' : '+ Connect LAN camera'}</button>}
-                        </div>
-                    </div>
-                    <div className='ControlRelatedDeviceGroup'>
-                        <div className='ControlSubsectionHeading'>
-                            <strong>{zh ? '边缘计算设备' : 'Edge computing devices'}</strong>
-                            {edgeDevices.length > 0 && <button
-                                type='button'
-                                className='ControlDeviceCountButton'
-                                aria-label={zh ? '添加设备' : 'Add device'}
-                                disabled={!jetsonConnectCapable}
-                                title={!node.online
-                                    ? (zh ? '节点当前故障，恢复正常后才能连接设备' : 'The node must return to normal before a device can be connected')
-                                    : !jetsonConnectCapable
-                                        ? (zh ? '此节点不支持 SSH 设备认证' : 'This node cannot authenticate SSH devices')
-                                        : (zh ? '添加设备' : 'Add device')}
-                                onClick={() => updateActivePopupTypeAction?.(
-                                    PopupWindowType.JETSON_CONNECT,
-                                    node.node_id,
-                                    node.name,
-                                    remoteLan,
-                                )}
-                            >{edgeDevices.length} ＋</button>}
-                        </div>
-                        <div className='ControlCameraGrid'>
-                            {edgeDevices.map(device => <button
-                                type='button'
-                                className='ControlCameraCard'
-                                key={device.asset_id}
-                                aria-label={zh
-                                    ? `打开${device.display_name || device.hostname || device.address}终端`
-                                    : `Open terminal for ${device.display_name || device.hostname || device.address}`}
-                                onClick={() => setEdgeTerminalDeviceId(device.asset_id)}
-                            >
-                                <div className='ControlCameraIcon' aria-hidden='true'>
-                                    <img src='/ico/jetson-agx-orin.png' alt='Jetson'/>
-                                </div>
-                                <div className='ControlCameraIdentity'>
-                                    <strong>{device.display_name || device.hostname || device.address}</strong>
-                                    <small>{device.device_model || device.address} · {device.address}</small>
-                                    <span className={device.online ? 'healthy' : 'offline'}>
-                                        <i/> {toneLabel(device.online ? 'healthy' : 'offline', zh)}
-                                    </span>
-                                </div>
-                            </button>)}
-                            {edgeDevices.length === 0 && <button
-                                type='button'
-                                className='ControlEmptyBlock ControlRelatedDeviceAdd'
-                                aria-label={zh ? '发现并添加局域网边缘计算设备' : 'Discover and add LAN edge devices'}
-                                disabled={!jetsonConnectCapable}
-                                title={!node.online
-                                    ? (zh ? '节点当前故障，恢复正常后才能连接设备' : 'The node must return to normal before a device can be connected')
-                                    : !jetsonConnectCapable
-                                        ? (zh ? '此节点不支持 SSH 设备认证' : 'This node cannot authenticate SSH devices')
-                                        : (zh ? '连接边缘计算设备' : 'Connect an edge device')}
-                                onClick={() => updateActivePopupTypeAction?.(
-                                    PopupWindowType.JETSON_CONNECT,
-                                    node.node_id,
-                                    node.name,
-                                    remoteLan,
-                                )}
-                            >{zh ? '＋ 连接 NVIDIA Jetson' : '+ Connect NVIDIA Jetson'}</button>}
                         </div>
                     </div>
                 </div>

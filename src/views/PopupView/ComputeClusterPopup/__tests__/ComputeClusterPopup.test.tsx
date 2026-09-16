@@ -280,10 +280,10 @@ describe('ComputeClusterPopup', () => {
         expect(nodeCard.querySelector('.ComputeNodeResourceGrid')).toHaveTextContent('16');
         const summary = Array.from(document.querySelectorAll('.ComputeClusterSummary > div'));
         expect(summary.map(item => item.querySelector('span')?.textContent))
-            .toEqual(['地域', '节点总数', '主节点', '正常节点', '故障节点', '异常节点']);
+            .toEqual(['地域', '设备总数(包含摄像头等)', '正常节点', '故障节点', '异常节点']);
         expect(summary.map(item => item.querySelector('strong')?.textContent))
-            .toEqual(['0', '1', '1', '1', '0', '0']);
-        expect(summary[3].querySelector('strong')).toHaveClass('online');
+            .toEqual(['0', '2', '1', '0', '0']);
+        expect(summary[2].querySelector('strong')).toHaveClass('online');
         expect(screen.queryByRole('button', {name: '刷新'})).not.toBeInTheDocument();
         expect(screen.getByRole('status', {name: '正常 · v0.1.0'})).toBeInTheDocument();
         await waitFor(() => expect(service.status).toHaveBeenCalledTimes(1));
@@ -562,7 +562,7 @@ describe('ComputeClusterPopup', () => {
             .toEqual(['设备总数', '计算节点', '摄像头']);
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > strong') || []).map(item => item.textContent))
             .toEqual(['2', '1', '1']);
-        expect(screen.getByText('节点总数').closest('div')?.querySelector('strong')).toHaveTextContent('3');
+        expect(document.querySelector('.ComputeClusterSummary > div:nth-child(2) strong')).toHaveTextContent('4');
         const offlineNode = screen.getByRole('button', {name: '查看 edge-offline 节点信息'});
         expect(offlineNode).toHaveClass('node-offline');
         expect(offlineNode).toHaveAttribute('data-entity-kind', 'compute_node');
@@ -710,6 +710,23 @@ describe('ComputeClusterPopup', () => {
         expect(Number.parseFloat(clockwiseNext.style.left)).toBeGreaterThan(Number.parseFloat(owner.style.left));
     });
 
+    it('hides region and packet legend entries in the restricted commercial build', async () => {
+        render(<ResourceKnowledgeGraph
+            graph={await service.resourceGraph()}
+            nodes={await service.nodes()}
+            zh={true}
+            commercialRestricted
+            onSelectWorkAgent={jest.fn()}
+        />);
+
+        const legend = document.querySelector('.ComputeKnowledgeLegend');
+        expect(legend).not.toHaveTextContent('地域');
+        expect(legend).not.toHaveTextContent('数据包');
+        expect(legend).toHaveTextContent('主节点');
+        expect(legend).toHaveTextContent('边缘计算设备');
+        expect(legend).toHaveTextContent('摄像头');
+    });
+
     it('expands a dense radial graph so fixed-size cards do not overlap', async () => {
         const base = await service.resourceGraph();
         const main = base.entities.find(entity => entity.kind === 'compute_node');
@@ -794,7 +811,7 @@ describe('ComputeClusterPopup', () => {
         rerender(<ComputeClusterPopup language={Language.ENGLISH}/>);
 
         expect(Array.from(document.querySelectorAll('.ComputeClusterSummary span')).map(item => item.textContent))
-            .toEqual(['Regions', 'Total nodes', 'Main nodes', 'Normal nodes', 'Fault nodes', 'Abnormal nodes']);
+            .toEqual(['Regions', 'Total devices (incl. cameras)', 'Normal nodes', 'Fault nodes', 'Abnormal nodes']);
         expect(await screen.findByText('shanghai')).toBeInTheDocument();
         expect(screen.queryByText('上海')).not.toBeInTheDocument();
     });

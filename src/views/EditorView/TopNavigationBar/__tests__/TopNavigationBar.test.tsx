@@ -19,8 +19,10 @@ jest.mock('../../StateBar/StateBar', () => ({
 }));
 jest.mock('../DropDownMenu/DropDownMenu', () => ({
     __esModule: true,
-    default: function MockDropDownMenu() {
-        return <div data-testid='actions-menu'/>;
+    default: function MockDropDownMenu({forceDisabled}: {forceDisabled?: boolean}) {
+        return <div>{['引擎管理', '编辑标签', '上传文件', '导入标注', '导出标注'].map(name =>
+            <button key={name} type='button' disabled={forceDisabled}>{name}</button>,
+        )}</div>;
     },
 }));
 jest.mock('../../../../services/AccountService', () => {
@@ -218,6 +220,48 @@ describe('TopNavigationBar extension tool entries', () => {
     });
 });
 
+describe('TopNavigationBar commercial restrictions', () => {
+    it('keeps only camera connection and compute cluster enabled', async () => {
+        const updatePopup = jest.fn();
+        const previousFetch = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({plugins: {
+                camera_connect: {enabled: true, state: 'ready'},
+                compute_cluster: {enabled: true, state: 'ready'},
+            }}),
+        } as Response);
+        try {
+            renderNavigation([], Language.CHINESE, {
+                commercialRestricted: true,
+                hasExtensionEngine: true,
+                updateActivePopupTypeAction: updatePopup,
+            });
+
+            fireEvent.click(screen.getByText('操作'));
+            for (const name of ['引擎管理', '编辑标签', '上传文件', '导入标注', '导出标注']) {
+                expect(screen.getByText(name).closest('button')).toBeDisabled();
+            }
+
+            fireEvent.click(screen.getByText('核心引擎'));
+            for (const name of ['资源中心', '推理系统', '训练系统', '任务中心']) {
+                expect(screen.getByText(name).closest('button')).toBeDisabled();
+            }
+
+            fireEvent.click(screen.getByText('拓展引擎'));
+            await waitFor(() => expect(screen.getByText('计算群').closest('button')).toBeEnabled());
+            for (const name of ['向量数据库', '视觉检索', '透视']) {
+                expect(screen.getByText(name).closest('button')).toBeDisabled();
+            }
+            expect(screen.getByText('连接相机').closest('button')).toBeEnabled();
+            fireEvent.click(screen.getByText('计算群'));
+            expect(updatePopup).toHaveBeenCalledWith(PopupWindowType.COMPUTE_CLUSTER);
+        } finally {
+            global.fetch = previousFetch;
+        }
+    });
+});
+
 describe('TopNavigationBar account preview', () => {
     beforeEach(() => window.localStorage.clear());
 
@@ -245,13 +289,21 @@ describe('TopNavigationBar account preview', () => {
         expect(screen.queryByRole('menu', {name: '账户菜单'})).not.toBeInTheDocument();
     });
 
-    it('offers a return to the annotation platform from control mode', () => {
-        renderNavigation([], Language.CHINESE, {platformMode: 'control'});
+    it('disables the production platform switch in the restricted commercial build', () => {
+        const switchPlatform = jest.fn();
+        renderNavigation([], Language.CHINESE, {
+            platformMode: 'control',
+            commercialRestricted: true,
+            onPlatformSwitch: switchPlatform,
+        });
 
         expect(screen.getByText('项目名称:')).toBeInTheDocument();
         expect(screen.getByText('核心引擎')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '打开账户菜单'}));
-        expect(screen.getByRole('menuitem', {name: '切换到生产平台'})).toBeInTheDocument();
+        const platformSwitch = screen.getByRole('menuitem', {name: '切换到生产平台'});
+        expect(platformSwitch).toBeDisabled();
+        fireEvent.click(platformSwitch);
+        expect(switchPlatform).not.toHaveBeenCalled();
     });
 
     it('opens account center from the summary and uploads an avatar there', async () => {

@@ -9,12 +9,15 @@ import {
     aggregateCommunicationStates,
 } from '../../../services/ComputeClusterService';
 
+declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
+
 interface ResourceKnowledgeGraphProps {
     graph: ComputeResourceGraph;
     nodes: ComputeClusterNode[];
     tasks?: ComputeTask[];
     zh: boolean;
     fitWindow?: boolean;
+    commercialRestricted?: boolean;
     selectedTaskType?: string;
     onSelectWorkAgent: (
         agent: ComputeResourceGraphEntity,
@@ -274,6 +277,10 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     tasks = [],
     zh,
     fitWindow = false,
+    commercialRestricted = (
+        typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
+        && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__
+    ),
 }) => {
     const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
     const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
@@ -383,11 +390,11 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         </div>
 
         <div className='ComputeKnowledgeLegend'>
-            <span><i className='entity-shape region'/>{zh ? '地域' : 'Region'}</span>
+            {!commercialRestricted && <span><i className='entity-shape region'/>{zh ? '地域' : 'Region'}</span>}
             <span><i className='entity-shape circle'/>{zh ? '主节点' : 'Main node'}</span>
             <span><i className='entity-shape rounded-rectangle edge-device'/>{zh ? '边缘计算设备' : 'Edge device'}</span>
             <span><i className='entity-shape rounded-rectangle sensor'/>{zh ? '摄像头' : 'Camera'}</span>
-            <span><i className='entity-shape task-flow'/>{zh ? '数据包' : 'Packet'}</span>
+            {!commercialRestricted && <span><i className='entity-shape task-flow'/>{zh ? '数据包' : 'Packet'}</span>}
         </div>
 
         <div className={`ComputeGraphViewport${fitWindow ? ' fit-window' : ''}`}>

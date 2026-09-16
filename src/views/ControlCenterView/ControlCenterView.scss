@@ -114,6 +114,66 @@
   }
 }
 
+.ControlMachineItem.tree-child {
+  background: rgba(0, 0, 0, 0.08);
+
+  &::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    content: '';
+  }
+
+  &.tree-depth-0 {
+    padding-left: 10px;
+    &::before { left: -1px; }
+  }
+
+  &.tree-depth-1 {
+    padding-left: 26px;
+    &::before { left: 15px; }
+  }
+
+  &.tree-depth-2 {
+    padding-left: 42px;
+    &::before { left: 31px; }
+  }
+
+  &.tree-depth-3 {
+    padding-left: 58px;
+    &::before { left: 47px; }
+  }
+}
+
+.ControlMachineItem.edge-device,
+.ControlMachineItem.camera-device {
+  min-height: 50px;
+
+  .ControlMachineIcon {
+    flex-basis: 24px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .ControlMachineIdentity {
+    strong { font-size: 11px; }
+    small { margin-top: 2px; }
+  }
+}
+
+.ControlMachineItem.camera-device {
+  min-height: 46px;
+
+  .ControlMachineIcon.camera {
+    flex-basis: 22px;
+    width: 22px;
+    height: 22px;
+    color: #79c9f8;
+    font-size: 12px;
+  }
+}
+
 .ControlStatusDot {
   display: inline-block;
   flex: 0 0 7px;

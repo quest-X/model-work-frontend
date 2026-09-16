@@ -2,19 +2,17 @@ import React from 'react';
 import classNames from 'classnames'
 import './DropDownMenu.scss';
 import {getDropDownMenuData} from '../../../../data/info/DropDownMenuData';
-import {updatePreventCustomCursorStatus} from '../../../../store/general/actionCreators';
-import {AppState} from '../../../../store';
-import {connect} from 'react-redux';
 import {Language} from '../../../../data/LanguageConfig';
 
 interface IProps {
-    updatePreventCustomCursorStatusAction: typeof updatePreventCustomCursorStatus;
     language: Language;
     isVisible?: boolean;
+    forceDisabled?: boolean;
 }
 
-const DropDownMenu: React.FC<IProps> = ({language, isVisible = true}) => {
+const DropDownMenu: React.FC<IProps> = ({language, isVisible = true, forceDisabled = false}) => {
     if (!isVisible) return null;
+    const disabledTitle = language === Language.CHINESE ? '暂未开放' : 'Not available yet';
 
     return(<div className='DropDownMenuWrapper'>
         <div className='DropDownMenuContent' style={{
@@ -24,8 +22,17 @@ const DropDownMenu: React.FC<IProps> = ({language, isVisible = true}) => {
             height: 40 * getDropDownMenuData(language)[0].children.length
         }}>
             {getDropDownMenuData(language)[0].children.map((element, index) => {
-                return <div className={classNames('DropDownMenuContentOption', 'active', {'divider': element.divider})}
-                    onClick={() => {
+                const disabled = forceDisabled || element.disabled;
+                return <button
+                    type='button'
+                    className={classNames('DropDownMenuContentOption', {
+                        active: !disabled,
+                        disabled,
+                        divider: element.divider,
+                    })}
+                    disabled={disabled}
+                    title={disabled ? disabledTitle : undefined}
+                    onClick={disabled ? undefined : () => {
                         if (element.onClick) element.onClick();
                         // 关闭下拉菜单的逻辑需要在父组件处理
                     }}
@@ -34,21 +41,10 @@ const DropDownMenu: React.FC<IProps> = ({language, isVisible = true}) => {
                     <div className='Marker'/>
                     <img src={element.imageSrc} alt={element.imageAlt}/>
                     {element.name}
-                </div>
+                </button>
             })}
         </div>
     </div>)
 }
 
-const mapDispatchToProps = {
-    updatePreventCustomCursorStatusAction: updatePreventCustomCursorStatus,
-};
-
-const mapStateToProps = (state: AppState) => ({
-    language: state.general.language
-});
-
-export default connect(
-    mapStateToProps,
-    mapDispatchToProps
-)(DropDownMenu);
+export default DropDownMenu;

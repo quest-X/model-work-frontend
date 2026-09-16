@@ -19,6 +19,8 @@ import {
 } from '../../../services/AccountService';
 import {AccountCenter} from '../../AccountCenter/AccountCenter';
 
+declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
+
 interface IProps {
     updateActivePopupTypeAction: (activePopupType: PopupWindowType | null) => any;
     updateProjectDataAction: (projectData: ProjectData) => any;
@@ -32,6 +34,7 @@ interface IProps {
     hasExtensionEngine: boolean;
     platformMode?: 'annotation' | 'control';
     onPlatformSwitch?: () => void;
+    commercialRestricted?: boolean;
 }
 
 type ServicesDropdown = 'core' | 'extension' | null;
@@ -41,6 +44,12 @@ type ServicesDropdown = 'core' | 'extension' | null;
 export const TopNavigationBar: React.FC<IProps> = (props) => {
     const currentTexts = LanguageConfig[props.language];
     const controlMode = props.platformMode === 'control';
+    const commercialRestricted = props.commercialRestricted ?? (
+        typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
+        && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__
+    );
+    const productionSwitchDisabled = commercialRestricted && controlMode;
+    const unavailableTitle = props.language === Language.CHINESE ? '暂未开放' : 'Not available yet';
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
     const [showAccountCenter, setShowAccountCenter] = useState<boolean | null>(
@@ -303,7 +312,11 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             onClick={toggleActionsDropdown}
                             externalClassName={'actions-button'}
                         />
-                        {showActionsDropdown && <DropDownMenu isVisible={true}/>}
+                        {showActionsDropdown && <DropDownMenu
+                            language={props.language}
+                            isVisible={true}
+                            forceDisabled={commercialRestricted}
+                        />}
                     </div>
                     {props.hasCoreEngine && (
                         <div className='ServicesDropdownContainer'>
@@ -324,7 +337,12 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             )}
                             {activeServicesDropdown === 'core' && (
                                 <div className='DropDownMenuContent ServicesDropdown'>
-                                    <div className='DropDownMenuContentOption active'
+                                    <button type='button'
+                                        className={commercialRestricted
+                                            ? 'DropDownMenuContentOption disabled'
+                                            : 'DropDownMenuContentOption active'}
+                                        disabled={commercialRestricted}
+                                        title={commercialRestricted ? unavailableTitle : undefined}
                                         onClick={openDataCenter}>
                                         <div className='Marker'/>
                                         <img src='ico/api.png' alt='data-center'/>
@@ -341,25 +359,40 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                                                 {localChangeCount}
                                             </span>
                                         )}
-                                    </div>
-                                    <div className='DropDownMenuContentOption active'
+                                    </button>
+                                    <button type='button'
+                                        className={commercialRestricted
+                                            ? 'DropDownMenuContentOption disabled'
+                                            : 'DropDownMenuContentOption active'}
+                                        disabled={commercialRestricted}
+                                        title={commercialRestricted ? unavailableTitle : undefined}
                                         onClick={openLocalModelManager}>
                                         <div className='Marker'/>
                                         <img src='ico/ai.png' alt='local-models'/>
                                         {currentTexts.modelManagement.callModels}
-                                    </div>
-                                    <div className='DropDownMenuContentOption active'
+                                    </button>
+                                    <button type='button'
+                                        className={commercialRestricted
+                                            ? 'DropDownMenuContentOption disabled'
+                                            : 'DropDownMenuContentOption active'}
+                                        disabled={commercialRestricted}
+                                        title={commercialRestricted ? unavailableTitle : undefined}
                                         onClick={openTrainingTask}>
                                         <div className='Marker'/>
                                         <img src='ico/ai.png' alt='training-task'/>
                                         {currentTexts.modelManagement.trainingTask}
-                                    </div>
-                                    <div className='DropDownMenuContentOption active'
+                                    </button>
+                                    <button type='button'
+                                        className={commercialRestricted
+                                            ? 'DropDownMenuContentOption disabled'
+                                            : 'DropDownMenuContentOption active'}
+                                        disabled={commercialRestricted}
+                                        title={commercialRestricted ? unavailableTitle : undefined}
                                         onClick={openTaskCenter}>
                                         <div className='Marker'/>
                                         <img src='ico/tasks.png' alt='task-center'/>
                                         {currentTexts.modelManagement.taskCenter}
-                                    </div>
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -373,36 +406,51 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             />
                             {activeServicesDropdown === 'extension' && (
                                 <div className='DropDownMenuContent ServicesDropdown'>
-                                    <div className='DropDownMenuContentOption active'
+                                    <button type='button'
+                                        className={commercialRestricted
+                                            ? 'DropDownMenuContentOption disabled'
+                                            : 'DropDownMenuContentOption active'}
+                                        disabled={commercialRestricted}
+                                        title={commercialRestricted ? unavailableTitle : undefined}
                                         onClick={openVectorDb}>
                                         <div className='Marker'/>
                                         <img src='ico/api.png' alt='vector-db'/>
                                         {currentTexts.modelManagement.vectorDb}
-                                    </div>
-                                    <div className='DropDownMenuContentOption active'
+                                    </button>
+                                    <button type='button'
+                                        className={commercialRestricted
+                                            ? 'DropDownMenuContentOption disabled'
+                                            : 'DropDownMenuContentOption active'}
+                                        disabled={commercialRestricted}
+                                        title={commercialRestricted ? unavailableTitle : undefined}
                                         onClick={openL2gRetrieval}>
                                         <div className='Marker'/>
                                         <img src='ico/ai.png' alt='l2g-retrieval'/>
                                         {currentTexts.modelManagement.l2gRetrieval}
-                                    </div>
-                                    <div className={`DropDownMenuContentOption active${cameraConnectAvailable || computeClusterAvailable ? ' divider' : ''}`}
+                                    </button>
+                                    <button type='button'
+                                        className={`DropDownMenuContentOption ${commercialRestricted ? 'disabled' : 'active'}${cameraConnectAvailable || computeClusterAvailable ? ' divider' : ''}`}
+                                        disabled={commercialRestricted}
+                                        title={commercialRestricted ? unavailableTitle : undefined}
                                         onClick={openModelInspector}>
                                         <div className='Marker'/>
                                         <img src='ico/eye.png' alt='model-inspector'/>
                                         {currentTexts.modelManagement.modelInspector}
-                                    </div>
-                                    {cameraConnectAvailable && <div className='DropDownMenuContentOption active'
+                                    </button>
+                                    {cameraConnectAvailable && <button type='button'
+                                        className='DropDownMenuContentOption active'
                                         onClick={openCameraConnect}>
                                         <div className='Marker'/>
                                         <img src='ico/camera.png' alt='camera-connect'/>
                                         {currentTexts.modelManagement.cameraConnect}
-                                    </div>}
-                                    {computeClusterAvailable && <div className='DropDownMenuContentOption active'
+                                    </button>}
+                                    {computeClusterAvailable && <button type='button'
+                                        className='DropDownMenuContentOption active'
                                         onClick={openComputeCluster}>
                                         <div className='Marker'/>
                                         <img src='ico/tasks.png' alt='compute-cluster'/>
                                         {currentTexts.modelManagement.computeCluster}
-                                    </div>}
+                                    </button>}
                                 </div>
                             )}
                         </div>
@@ -469,6 +517,8 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                                 type='button'
                                 role='menuitem'
                                 className='AccountMenuItem'
+                                disabled={productionSwitchDisabled}
+                                title={productionSwitchDisabled ? unavailableTitle : undefined}
                                 onClick={() => {
                                     setShowAccountDropdown(false);
                                     props.onPlatformSwitch?.();
