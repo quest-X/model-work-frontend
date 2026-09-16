@@ -38,10 +38,10 @@
   position: fixed;
   z-index: 1600;
   bottom: 16px;
-  left: 42px;
+  left: calc(#{$sideNavigationBarCompanionWidth} + 17px);
   display: flex;
   width: 420px;
-  max-width: calc(100vw - 58px);
+  max-width: calc(100vw - #{$sideNavigationBarCompanionWidth} - 33px);
   height: 520px;
   max-height: calc(100vh - #{$topNavigationBarHeight} - 32px);
   flex-direction: column;
@@ -65,7 +65,7 @@
 
   &.minimized {
     right: auto;
-    width: min(300px, calc(100vw - 58px));
+    width: min(300px, calc(100vw - #{$sideNavigationBarCompanionWidth} - 33px));
     height: 54px;
     max-height: 54px;
 
