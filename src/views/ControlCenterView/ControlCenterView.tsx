@@ -1079,7 +1079,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         let stateTone = device.online ? 'healthy' : 'offline';
         let stateLabel = toneLabel(stateTone, zh);
         if (installedNode) {
-            selected = installedNode.node_id === selectedNodeId;
+            selected = installedNode.node_id === selectedNodeId && !cameraViewerId;
             ariaLabel = zh ? `查看 ${label} 节点信息` : `View node details for ${label}`;
             stateTone = machineTone(installedNode);
             stateLabel = computeNodeLabel(installedNode, zh);
@@ -1219,8 +1219,8 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 type='button'
                                 className={`ControlMachineItem ${
                                     nodeDepth ? `tree-child tree-depth-${nodeDepth} ` : ''
-                                }${node.node_id === selectedNodeId ? 'selected' : ''}`}
-                                aria-pressed={node.node_id === selectedNodeId}
+                                }${node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''}`}
+                                aria-pressed={node.node_id === selectedNodeId && !cameraViewerId}
                                 onClick={() => selectSidebarNode(node.node_id)}
                             >
                                 <MachinePlatformIcon node={node}/>

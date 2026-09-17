@@ -1194,6 +1194,11 @@ describe('ControlCenterView', () => {
         expect(camera).toHaveClass('tree-depth-1');
 
         fireEvent.click(camera);
+        expect(camera).toHaveClass('selected');
+        expect(within(list).getByRole('button', {name: /02 笔记本/}))
+            .toHaveAttribute('aria-pressed', 'false');
+        expect(within(list).getByRole('button', {name: /02 笔记本/}))
+            .not.toHaveClass('selected');
         expect(await screen.findByRole('heading', {name: '02 笔记本'})).toBeInTheDocument();
         expect(await screen.findByRole('dialog', {name: '相机实时画面'})).toBeInTheDocument();
     });

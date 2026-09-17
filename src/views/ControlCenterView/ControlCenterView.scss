@@ -134,29 +134,21 @@
   }
 }
 
-.ControlMachineItem.edge-device,
 .ControlMachineItem.camera-device {
-  min-height: 50px;
+  min-height: 46px;
 
   .ControlMachineIcon {
-    flex-basis: 24px;
-    width: 24px;
-    height: 24px;
+    flex-basis: 22px;
+    width: 22px;
+    height: 22px;
   }
 
   .ControlMachineIdentity {
     strong { font-size: 11px; }
     small { margin-top: 2px; }
   }
-}
-
-.ControlMachineItem.camera-device {
-  min-height: 46px;
 
   .ControlMachineIcon.camera {
-    flex-basis: 22px;
-    width: 22px;
-    height: 22px;
     color: #79c9f8;
     font-size: 12px;
   }
