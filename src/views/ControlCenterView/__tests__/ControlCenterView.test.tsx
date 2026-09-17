@@ -293,6 +293,8 @@ describe('ControlCenterView', () => {
         expect(screen.getByText('Tailscale 远程')).toBeInTheDocument();
         const cameraCard = screen.getByText('DS-2CD2686FWDA2-IZS')
             .closest('.ControlCameraCard') as HTMLElement;
+        expect(cameraCard.querySelector('.ControlCameraIcon img'))
+            .toHaveAttribute('src', '/ico/camera.png');
         expect(within(cameraCard).getByText('正常')).toBeInTheDocument();
         expect(screen.queryByText('摄像头注册表')).not.toBeInTheDocument();
         expect(screen.queryByText('运行详情暂不可用')).not.toBeInTheDocument();

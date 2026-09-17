@@ -1733,7 +1733,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 title={cameraStreamUnavailableTitle(node, camera, zh)}
                                 onClick={() => setCameraViewerId(camera.device_id)}
                             >
-                                <div className='ControlCameraIcon' aria-hidden='true'>◉</div>
+                                <div className='ControlCameraIcon' aria-hidden='true'>
+                                    <img src='/ico/camera.png' alt=''/>
+                                </div>
                                 <div className='ControlCameraIdentity'>
                                     <strong>{camera.name}</strong>
                                     <small>{camera.model || camera.device_id}</small>
