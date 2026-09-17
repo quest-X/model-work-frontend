@@ -252,8 +252,7 @@ describe('ComputeClusterPopup', () => {
         expect(nodeCard.querySelector('.ComputeNodeOverview > .ComputeNodeStatus')).toHaveTextContent('正常');
         expect(Array.from(nodeCard.querySelectorAll('.ComputeNodeCompactStats > span')).map(item => item.textContent))
             .toEqual(['CPU 16', 'MEM 25%', 'DISK 32%']);
-        expect(nodeCard.querySelector('.ComputeNodeHeartbeat span')).toHaveTextContent('心跳');
-        expect(nodeCard.querySelector('.ComputeNodeHeartbeat strong')).toHaveTextContent('刚刚');
+        expect(nodeCard.querySelector('.ComputeNodeHeartbeat')).not.toBeInTheDocument();
         expect(nodeCard.querySelector('.ComputeNodeVersion')).toHaveTextContent('v0.1.0');
 
         await user.click(nodeCard);

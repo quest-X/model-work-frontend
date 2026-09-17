@@ -265,10 +265,6 @@ const NodeCardOverview: React.FC<{node: ComputeClusterNode; zh: boolean}> = ({no
         <span>DISK <strong>{percentUsed(node.resources.disk_total_bytes, node.resources.disk_free_bytes)}</strong></span>
     </div>
     <span className='ComputeNodeVersion'>v{node.agent_version}</span>
-    <div className='ComputeNodeHeartbeat'>
-        <span>{zh ? '心跳' : 'Heartbeat'}</span>
-        <strong>{lastSeen(node.heartbeat_age_seconds, zh)}</strong>
-    </div>
 </div>;
 
 // Resource, network, GPU, and device variants are one presentational node boundary.
