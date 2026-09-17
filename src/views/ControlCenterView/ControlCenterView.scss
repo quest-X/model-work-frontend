@@ -72,6 +72,7 @@
   align-items: center;
   justify-content: space-between;
   min-height: 25px;
+  background: rgba(255, 255, 255, 0.035);
   padding: 0 10px 0 13px;
   color: rgba(255, 255, 255, 0.42);
   font-size: 9px;
@@ -99,7 +100,7 @@
 
   &:hover,
   &:focus-visible {
-    background: rgba(255, 255, 255, 0.035);
+    background: rgba(255, 255, 255, 0.055);
   }
 
   &.selected {
