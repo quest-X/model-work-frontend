@@ -1073,6 +1073,16 @@ export const ControlCenterView: React.FC<IProps> = ({
             || [device.display_name, device.hostname].some(name =>
                 name?.trim().toLowerCase() === candidate.name.trim().toLowerCase()))
     );
+    const cameraParentAssetId = (node: ComputeClusterNode, camera: ComputeManagedDevice) =>
+        lanAssets.find(asset =>
+            asset.node_id === node.node_id
+            && asset.device_kind === 'camera'
+            && asset.display_name === camera.name
+        )?.parent_asset_id || '';
+    const edgeCameras = (node: ComputeClusterNode, device: ComputeLanAsset) =>
+        node.device_inventory.devices.filter(camera =>
+            camera.kind === 'camera' && cameraParentAssetId(node, camera) === device.asset_id
+        );
     const installedSidebarNodeIds = new Set(lanAssets
         .map(device => installedSidebarNode(device)?.node_id)
         .filter((nodeId): nodeId is string => Boolean(nodeId)));
@@ -1088,7 +1098,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         let ariaLabel = zh
             ? `打开 ${label} 边缘设备终端`
             : `Open edge device terminal for ${label}`;
-        let stateTone = device.online ? 'healthy' : 'offline';
+        let stateTone: Tone = device.online ? 'healthy' : 'offline';
         let stateLabel = toneLabel(stateTone, zh);
         if (installedNode) {
             selected = installedNode.node_id === selectedNodeId && !cameraViewerId;
@@ -1096,15 +1106,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             stateTone = machineTone(installedNode);
             stateLabel = computeNodeLabel(installedNode, zh);
         }
-        const cameras = node.device_inventory.devices.filter(candidate => candidate.kind === 'camera');
-        const cameraParents = new Map(cameras.map(camera => [
-            camera.device_id,
-            lanAssets.find(asset =>
-                asset.node_id === node.node_id
-                && asset.device_kind === 'camera'
-                && asset.display_name === camera.name
-            )?.parent_asset_id || '',
-        ]));
+        const cameras = edgeCameras(node, device);
         return <React.Fragment key={device.asset_id}>
             <button
                 type='button'
@@ -1131,9 +1133,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     {stateLabel}
                 </span>
             </button>
-            {cameras
-                .filter(camera => cameraParents.get(camera.device_id) === device.asset_id)
-                .map(camera => renderSidebarCamera(node, camera, depth + 1))}
+            {cameras.map(camera => renderSidebarCamera(node, camera, depth + 1))}
         </React.Fragment>;
     };
 
@@ -1218,14 +1218,6 @@ export const ControlCenterView: React.FC<IProps> = ({
                         const edgeDevices = allEdgeDevices.filter(asset => !sidebarWorkArea(asset));
                         const edgeIds = new Set(allEdgeDevices.map(device => device.asset_id));
                         const cameras = node.device_inventory.devices.filter(device => device.kind === 'camera');
-                        const cameraParents = new Map(cameras.map(camera => [
-                            camera.device_id,
-                            lanAssets.find(asset =>
-                                asset.node_id === node.node_id
-                                && asset.device_kind === 'camera'
-                                && asset.display_name === camera.name
-                            )?.parent_asset_id || '',
-                        ]));
                         return <React.Fragment key={node.node_id}>
                             <button
                                 type='button'
@@ -1248,7 +1240,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             </button>
                             {edgeDevices.map(device => renderSidebarEdge(node, device, nodeDepth + 1))}
                             {cameras
-                                .filter(camera => !edgeIds.has(cameraParents.get(camera.device_id) || ''))
+                                .filter(camera => !edgeIds.has(cameraParentAssetId(node, camera)))
                                 .map(camera => renderSidebarCamera(node, camera, nodeDepth + 1))}
                         </React.Fragment>;
                     })}
@@ -1451,12 +1443,23 @@ export const ControlCenterView: React.FC<IProps> = ({
         // Dependency health belongs to the latest node snapshot. Once that
         // snapshot expires, an old green state is no longer current evidence.
         const {lan: lanState, tailscale: tailscaleState} = computeLinkStates(node);
-        const cameras = node.device_inventory.devices.filter(device => device.kind === 'camera');
         const edgeDevices = lanAssets.filter(asset =>
             asset.node_id === node.node_id
             && asset.device_kind === 'edge_compute'
         );
         const aipackNode = /^AIPACK-/i.test(node.name.trim());
+        const installedEdgeDevice = aipackNode
+            ? lanAssets.find(asset =>
+                asset.device_kind === 'edge_compute'
+                && installedSidebarNode(asset)?.node_id === node.node_id
+            )
+            : undefined;
+        const cameraInventoryNode = installedEdgeDevice
+            ? nodes.find(candidate => candidate.node_id === installedEdgeDevice.node_id) || node
+            : node;
+        const cameras = installedEdgeDevice
+            ? edgeCameras(cameraInventoryNode, installedEdgeDevice)
+            : node.device_inventory.devices.filter(device => device.kind === 'camera');
         const relatedDeviceCount = cameras.length + (aipackNode ? 0 : edgeDevices.length);
         const cameraConnectCapable = Boolean(
             node.online && node.capabilities?.includes('task.camera.connect.v1'),
@@ -1807,7 +1810,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             />}
             {cameraViewerId && <CameraLiveViewPopup
                 language={language}
-                node={node}
+                node={cameraInventoryNode}
                 cameras={cameras}
                 initialCameraId={cameraViewerId}
                 onClose={() => setCameraViewerId('')}

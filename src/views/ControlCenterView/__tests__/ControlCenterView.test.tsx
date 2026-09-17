@@ -1207,7 +1207,8 @@ describe('ControlCenterView', () => {
     });
 
     it('moves installed AIPACK nodes into their work area without losing the node page', async () => {
-        const main = {...node('shangang-aipac-02', true), role: 'main' as const};
+        const main = {...node('shangang-aipac-02', true, true), role: 'main' as const};
+        main.device_inventory.devices[0].capabilities = ['camera.stream.v1'];
         const aipack = {
             ...node('AIPACK-05', true, false, 'Jetson AGX Orin Developer Kit', 'Linux'),
             role: 'node' as const,
@@ -1217,7 +1218,7 @@ describe('ControlCenterView', () => {
         jest.mocked(ComputeClusterService.lanAssets).mockResolvedValue({
             version: 1,
             group_id: 'group-1',
-            summary: {total: 1, online: 1, offline: 0, new: 0, changed: 0, networks: 1},
+            summary: {total: 2, online: 2, offline: 0, new: 0, changed: 0, networks: 1},
             latest_scans: [],
             assets: [{
                 asset_id: 'edge-05',
@@ -1237,13 +1238,29 @@ describe('ControlCenterView', () => {
                 last_seen_at: 1,
                 last_changed_at: 1,
                 change_type: 'unchanged',
+            }, {
+                asset_id: 'camera-1',
+                node_id: main.node_id,
+                node_name: main.name,
+                cidr: '10.168.10.0/24',
+                address: '10.168.10.30',
+                hostname: 'camera-1',
+                mac: '00:04:4b:00:00:30',
+                device_kind: 'camera',
+                display_name: '车间相机',
+                parent_asset_id: 'edge-05',
+                ports: [],
+                online: true,
+                first_seen_at: 1,
+                last_seen_at: 1,
+                last_changed_at: 1,
+                change_type: 'unchanged',
             }],
         });
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: 'shangang-aipac-02'});
         const list = screen.getByRole('complementary', {name: '机器列表'});
-        const installed = within(list).getByRole('button', {name: '查看 AIPACK-05 节点信息'});
+        const installed = await within(list).findByRole('button', {name: '查看 AIPACK-05 节点信息'});
         expect(installed).toHaveClass('edge-device', 'tree-depth-0');
         expect(installed.querySelector('img')).toHaveAttribute('src', '/ico/jetson-agx-orin.png');
         expect(within(list).getAllByText('AIPACK-05')).toHaveLength(1);
@@ -1253,6 +1270,13 @@ describe('ControlCenterView', () => {
 
         fireEvent.click(installed);
         expect(await screen.findByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
+        expect(screen.getByLabelText('1 个相关设备')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '打开车间相机实时画面'}));
+        expect(await screen.findByRole('dialog', {name: '相机实时画面'})).toHaveTextContent('shangang-aipac-02');
+        expect(screen.getByAltText('车间相机 实时画面')).toHaveAttribute(
+            'src',
+            expect.stringContaining('/nodes/shangang-aipac-02-id/cameras/camera-1/mjpeg'),
+        );
     });
 
     it('opens a registered camera with devices on the left and live view on the right', async () => {
