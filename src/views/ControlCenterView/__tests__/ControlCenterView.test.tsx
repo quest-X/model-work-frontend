@@ -1539,6 +1539,35 @@ describe('ControlCenterView', () => {
         expect(screen.getByRole('textbox', {name: '扫描目录'})).toBeInTheDocument();
     });
 
+    it('opens fleet performance mode inspection from related features', async () => {
+        const machine = node('在线节点', true);
+        machine.capabilities.push('runtime.performance.mode.read.v1');
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        jest.spyOn(ComputeClusterService, 'performanceMode').mockResolvedValue({
+            schema_version: 'performance.mode-result.v1',
+            captured_at: 1,
+            platform: 'windows',
+            available: true,
+            compliant: true,
+            current_mode: 'high_performance',
+            target_mode: 'high_performance',
+            checks: [{
+                code: 'windows_power_scheme',
+                passed: true,
+                observed: 'high_performance',
+                expected: 'high_performance',
+            }],
+        });
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByRole('heading', {name: '在线节点'});
+        fireEvent.click(screen.getByText('相关功能'));
+        fireEvent.click(within(screen.getByLabelText('相关功能列表')).getByRole('button', {name: /性能模式/}));
+
+        expect(screen.getByRole('heading', {name: '性能模式'})).toBeInTheDocument();
+        expect(await screen.findByText('1 / 1 正常')).toBeInTheDocument();
+    });
+
     it('opens terminal connection from the network status cards', async () => {
         const terminalSession = {
             version: 1 as const,

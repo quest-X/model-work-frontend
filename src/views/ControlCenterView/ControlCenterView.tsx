@@ -46,6 +46,7 @@ import {StorageAnalysisPanel} from './StorageAnalysisPanel';
 import {DuplicateAnalysisPanel} from './DuplicateAnalysisPanel';
 import {StartupItemsPanel} from './StartupItemsPanel';
 import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
+import {PerformanceModePanel} from './PerformanceModePanel';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
@@ -71,7 +72,7 @@ const toneLabel = (tone: Tone, zh: boolean): string => tone === 'healthy'
     ? zh ? '正常' : 'Normal'
     : zh ? '故障' : 'Fault';
 type SidePanel = 'machines' | 'features';
-type Workspace = 'node' | 'network' | 'files' | 'utilities' | 'terminal' | 'groups';
+type Workspace = 'node' | 'network' | 'files' | 'utilities' | 'performance-mode' | 'terminal' | 'groups';
 type MachineIconKind = 'jetson' | 'windows' | 'linux' | 'macos' | 'computer';
 type NodeGrouping = 'none' | 'region' | 'platform';
 type NodeOrdering = 'status' | 'activity' | 'name';
@@ -777,6 +778,9 @@ export const ControlCenterView: React.FC<IProps> = ({
     const terminalAvailable = Boolean(selectedNode?.online && selectedNode.network.ssh_available);
     const filesAvailable = overviewNodes.some(node => node.online && node.capabilities.includes('filesystem.list.v1'));
     const utilitiesAvailable = overviewNodes.some(node => node.online && node.capabilities.includes('task.storage.scan.v1'));
+    const performanceModeAvailable = overviewNodes.length > 0 && overviewNodes.every(node =>
+        node.online && node.capabilities.includes('runtime.performance.mode.read.v1')
+    );
     const toolbarTone: Tone | null = workspace === 'groups'
         ? visibleGroups.length ? currentGroupTone : null
         : workspace === 'network'
@@ -787,6 +791,8 @@ export const ControlCenterView: React.FC<IProps> = ({
                     ? (filesAvailable ? 'healthy' : 'offline')
                 : workspace === 'utilities'
                     ? (utilitiesAvailable ? 'healthy' : 'offline')
+                : workspace === 'performance-mode'
+                    ? (performanceModeAvailable ? 'healthy' : 'offline')
                 : selectedNode
                     ? machineTone(selectedNode)
                     : overviewNodes.length ? overviewTone : null;
@@ -1302,6 +1308,21 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </span>
                 <span className={`ControlMachineState ${error ? 'offline' : 'healthy'}`}>
                     {toneLabel(error ? 'offline' : 'healthy', zh)}
+                </span>
+            </button>
+            <button
+                type='button'
+                className={`ControlMachineItem ${workspace === 'performance-mode' ? 'selected' : ''}`}
+                aria-pressed={workspace === 'performance-mode'}
+                onClick={() => setWorkspace('performance-mode')}
+            >
+                <span className='ControlMachineIcon network' aria-hidden='true'>PWR</span>
+                <span className='ControlMachineIdentity'>
+                    <strong>{zh ? '性能模式' : 'Performance mode'}</strong>
+                    <small>{zh ? '检查全部机器的目标性能配置' : 'Check target configuration on all machines'}</small>
+                </span>
+                <span className={`ControlMachineState ${performanceModeAvailable ? 'healthy' : 'offline'}`}>
+                    {toneLabel(performanceModeAvailable ? 'healthy' : 'offline', zh)}
                 </span>
             </button>
             <button
@@ -1936,7 +1957,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                         ? (zh ? '网络资产' : 'Network assets')
                         : workspace === 'terminal'
                             ? (zh ? '终端连接' : 'Terminal connection')
-                            : workspace === 'files'
+                        : workspace === 'performance-mode'
+                            ? (zh ? '性能模式' : 'Performance mode')
+                        : workspace === 'files'
                                 ? (zh ? '文件管理' : 'File manager')
                             : workspace === 'utilities'
                                 ? (zh ? '实用工具' : 'Utilities')
@@ -2182,6 +2205,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </div>}
                 {workspace === 'files' && <div className='ControlFeatureWorkspace'>
                     <ComputeFilePanel nodes={overviewNodes} zh={zh}/>
+                </div>}
+                {workspace === 'performance-mode' && <div className='ControlFeatureWorkspace'>
+                    <PerformanceModePanel nodes={overviewNodes} zh={zh} visible/>
                 </div>}
                 <div className='ControlFeatureWorkspace' hidden={workspace !== 'utilities'}>
                     {!selectedNode && <><StorageAnalysisPanel node={null} zh={zh} visible={workspace === 'utilities'}/><DuplicateAnalysisPanel node={null} zh={zh} visible={workspace === 'utilities'}/></>}

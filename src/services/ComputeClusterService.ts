@@ -326,6 +326,32 @@ export type ComputePerformanceSnapshot = {
     metrics: Record<ComputePerformanceMetric, number | null>;
 };
 
+export type ComputePerformanceModeCheck = {
+    code:
+        | 'inspection_available'
+        | 'jetson_power_profile'
+        | 'linux_boost'
+        | 'linux_governor'
+        | 'linux_max_frequency'
+        | 'macos_energy_mode'
+        | 'windows_power_scheme'
+        | 'windows_processor_maximum';
+    passed: boolean;
+    observed: string;
+    expected: string;
+};
+
+export type ComputePerformanceMode = {
+    schema_version: 'performance.mode-result.v1';
+    captured_at: number;
+    platform: 'windows' | 'linux' | 'jetson' | 'macos' | 'unsupported';
+    available: boolean;
+    compliant: boolean;
+    current_mode: string;
+    target_mode: string;
+    checks: ComputePerformanceModeCheck[];
+};
+
 export type ComputePerformanceEvidence = {
     metric: ComputePerformanceMetric;
     unit: 'percent' | 'celsius';
@@ -1291,6 +1317,13 @@ export class ComputeClusterService {
         signal?: AbortSignal,
     ): Promise<ComputePerformanceSnapshot> {
         return request(`/nodes/${encodeURIComponent(nodeId)}/agentos/performance/snapshot`, signal);
+    }
+
+    public static performanceMode(
+        nodeId: string,
+        signal?: AbortSignal,
+    ): Promise<ComputePerformanceMode> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/agentos/performance/mode`, signal);
     }
 
     public static performanceDiagnosis(

@@ -603,6 +603,57 @@ span.ControlMachineIcon {
   }
 }
 
+.ControlPerformanceMode {
+  color: rgba(255, 255, 255, 0.76);
+
+  table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  th,
+  td { border-bottom: 1px solid rgba(255, 255, 255, 0.07); padding: 11px 9px; text-align: left; vertical-align: top; }
+  th { color: rgba(255, 255, 255, 0.34); font-size: 8px; font-weight: 500; }
+  td:first-child { color: rgba(255, 255, 255, 0.88); font-weight: 600; }
+  td:nth-child(2) { max-width: 220px; color: rgba(255, 255, 255, 0.48); }
+  details summary { color: rgba(255, 255, 255, 0.66); cursor: pointer; }
+  details ul { margin: 8px 0 0; padding: 0; list-style: none; }
+  details li { display: flex; justify-content: space-between; gap: 16px; margin-top: 6px; }
+  details li strong { color: rgba(255, 255, 255, 0.62); font-size: 9px; font-weight: 500; }
+  details li span { color: rgba(255, 255, 255, 0.38); font-size: 9px; text-align: right; }
+}
+
+.ControlPerformanceModeHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+
+  h1 { margin: 0; color: white; font-size: 20px; font-weight: 600; }
+  p { margin: 6px 0 0; color: rgba(255, 255, 255, 0.4); font-size: 10px; }
+  button {
+    flex: 0 0 auto;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 7px 12px;
+    color: rgba(255, 255, 255, 0.76);
+    cursor: pointer;
+
+    &:disabled { cursor: default; opacity: 0.45; }
+  }
+}
+
+.ControlPerformanceModeSummary {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px 0;
+
+  strong { color: rgba(255, 255, 255, 0.88); font-size: 13px; }
+  span { color: rgba(255, 255, 255, 0.38); font-size: 9px; }
+}
+
 .ComputeFilePanel {
   display: flex;
   min-height: 0;
@@ -1928,6 +1979,17 @@ button.ControlServiceCard {
   .ControlServiceGrid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
   .ControlRelatedDeviceGrid { grid-template-columns: 1fr; }
   .ControlCameraGrid { grid-template-columns: 1fr; }
+  .ControlFeatureWorkspace:has(> .ControlPerformanceMode) { min-width: 0; padding: 16px; }
+  .ControlPerformanceModeHeader,
+  .ControlPerformanceModeSummary { align-items: stretch; flex-direction: column; gap: 8px; }
+  .ControlPerformanceMode table,
+  .ControlPerformanceMode tbody,
+  .ControlPerformanceMode tr,
+  .ControlPerformanceMode td { display: block; width: 100%; }
+  .ControlPerformanceMode thead { display: none; }
+  .ControlPerformanceMode tr { border-bottom: 1px solid rgba(255, 255, 255, 0.12); padding: 8px 0; }
+  .ControlPerformanceMode td { box-sizing: border-box; display: grid; max-width: none; grid-template-columns: 92px minmax(0, 1fr); border: 0; padding: 5px 0; }
+  .ControlPerformanceMode td::before { content: attr(data-label); color: rgba(255, 255, 255, 0.32); font-size: 8px; font-weight: 500; }
 }
 
 @media (max-width: 760px) {
