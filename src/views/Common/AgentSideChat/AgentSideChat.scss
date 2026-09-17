@@ -697,6 +697,7 @@
     &:disabled { cursor: default; opacity: 0.35; }
     span { color: #e7a640; font-size: 8px; }
     span.online { color: #79d89e; }
+    span.device-count { color: rgba(255, 255, 255, 0.5); font-size: 9px; }
   }
 
   &.node-actions {

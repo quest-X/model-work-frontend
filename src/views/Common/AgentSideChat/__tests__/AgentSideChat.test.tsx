@@ -472,6 +472,7 @@ describe('AgentSideChat', () => {
 
         fireEvent.change(composer, {target: {value: '@'}});
         const allDevicesOption = await screen.findByRole('option', {name: '@全部节点'});
+        expect(allDevicesOption).toHaveTextContent('@全部节点共 2 台设备');
         const nodeOption = await screen.findByRole('option', {name: /baoxin-166-windows/});
         expect(allDevicesOption).toHaveAttribute('aria-selected', 'true');
         fireEvent.keyDown(composer, {key: 'ArrowDown'});
