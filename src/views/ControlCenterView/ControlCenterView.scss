@@ -82,7 +82,7 @@
 .ControlMachineItem {
   position: relative;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   box-sizing: border-box;
   width: 100%;
   min-height: 64px;
@@ -115,8 +115,6 @@
 }
 
 .ControlMachineItem.tree-child {
-  background: rgba(0, 0, 0, 0.08);
-
   &.tree-depth-0 {
     padding-left: 10px;
   }
@@ -247,7 +245,7 @@ span.ControlMachineIcon {
 
 .ControlMachineState {
   flex: 0 0 auto;
-  margin-top: 1px;
+  margin-top: 0;
   color: rgba(255, 255, 255, 0.48);
   font-size: 9px;
 
