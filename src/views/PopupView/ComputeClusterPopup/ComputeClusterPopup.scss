@@ -1397,9 +1397,9 @@
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: auto auto auto;
   grid-template-areas:
-    'identity status'
-    'stats version'
-    '. heartbeat';
+    'name status'
+    'model version'
+    'stats heartbeat';
   min-width: 0;
   gap: 5px 12px;
 }
@@ -1417,13 +1417,9 @@
 }
 
 .ComputeNodeIdentity {
-  grid-area: identity;
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-  h3 { overflow: hidden; margin: 0; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-  small { overflow: hidden; color: rgba(255, 255, 255, 0.34); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+  display: contents;
+  h3 { grid-area: name; overflow: hidden; margin: 0; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  small { grid-area: model; overflow: hidden; color: rgba(255, 255, 255, 0.34); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 }
 
 .ComputeNodeOverview > .ComputeNodeStatus {
