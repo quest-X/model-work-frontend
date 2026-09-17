@@ -1394,14 +1394,14 @@
 
 .ComputeNodeOverview {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   grid-template-rows: auto auto auto;
   grid-template-areas:
-    'name status'
-    'model version'
-    'stats heartbeat';
+    'name status heartbeat'
+    'model version version'
+    'stats stats stats';
   min-width: 0;
-  gap: 5px 12px;
+  gap: 5px 8px;
 }
 
 .ComputeNodeCompactStats {
@@ -1462,10 +1462,9 @@
 .ComputeNodeHeartbeat {
   grid-area: heartbeat;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  align-self: end;
-  gap: 1px;
+  align-items: baseline;
+  align-self: start;
+  gap: 3px;
   white-space: nowrap;
   span { color: rgba(255, 255, 255, 0.3); font-size: 7px; }
   strong { color: rgba(255, 255, 255, 0.64); font-size: 8px; font-weight: 500; }
