@@ -878,7 +878,7 @@ describe('ControlCenterView', () => {
         expect(window.localStorage.getItem('opensight.control-center.node-tags.在线节点-id')).toBe('[]');
     });
 
-    it('opens the pinned overview and switches map and graph views', async () => {
+    it('opens the graph overview by default and switches map and graph views', async () => {
         const districtFetch = jest.fn();
         Object.defineProperty(global, 'fetch', {configurable: true, writable: true, value: districtFetch});
         const onlineNode = node('在线节点', true);
@@ -939,13 +939,13 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(resourceGraph);
         const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
 
-        expect(await screen.findByRole('heading', {name: '在线节点'})).toBeInTheDocument();
+        expect(await screen.findByText('边缘集群图谱', {selector: 'strong'})).toBeInTheDocument();
         const machineList = screen.getByRole('complementary', {name: '机器列表'});
+        await within(machineList).findByText('上海市');
         expect(new Set(Array.from(machineList.querySelectorAll('.ControlMachineGroupHeading strong'))
             .map(item => item.textContent))).toEqual(new Set(['上海市', '山东省']));
-        const machine = screen.getByRole('button', {name: /在线节点/});
-        const overview = screen.getByRole('button', {name: /总览/});
-        fireEvent.click(overview);
+        const machine = within(machineList).getByRole('button', {name: /在线节点/});
+        const overview = within(machineList).getByRole('button', {name: /总览/});
 
         expect(machine).toHaveAttribute('aria-pressed', 'false');
         expect(overview).toHaveAttribute('aria-pressed', 'true');
