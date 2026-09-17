@@ -369,6 +369,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([remoteNode]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
+        fireEvent.click(await screen.findByRole('button', {name: /山东节点/}));
         const lan = await screen.findByRole('button', {name: /SSH 局域网/});
         const remote = screen.getByRole('button', {name: /Tailscale 远程/});
         expect(lan).toHaveTextContent('故障');
@@ -381,6 +382,8 @@ describe('ControlCenterView', () => {
         expect(machineState).toHaveClass('warning');
         expect(screen.getByRole('button', {name: /总览/}).querySelector('.ControlMachineState'))
             .toHaveClass('warning');
+        expect(within(screen.getByRole('button', {name: '打开资源监视器'})).getByText('正常'))
+            .toBeInTheDocument();
     });
 
     it('copies SSH commands from reported LAN and Tailscale addresses', async () => {

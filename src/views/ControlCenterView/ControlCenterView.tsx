@@ -306,6 +306,10 @@ const regionDisplayName = (name: string, zh: boolean): string => zh
 const communicationTone = (state: 'normal' | 'fault' | 'abnormal'): Tone =>
     state === 'normal' ? 'healthy' : state === 'abnormal' ? 'offline' : 'warning';
 const machineTone = (node: ComputeClusterNode): Tone => communicationTone(computeNodeState(node));
+const resourceMonitorTone = (node?: ComputeClusterNode): Tone =>
+    node?.online && Number.isFinite(node.resources.captured_at) && node.resources.captured_at > 0
+        ? 'healthy'
+        : node ? machineTone(node) : 'warning';
 
 const cameraTone = (status: ComputeManagedDevice['status']): Tone =>
     status === 'registered' || status === 'online' ? 'healthy' : 'offline';
@@ -1420,8 +1424,8 @@ export const ControlCenterView: React.FC<IProps> = ({
 
     // eslint-disable-next-line complexity
     const renderResourceMonitorCard = () => {
-        const monitorTone = selectedNode ? machineTone(selectedNode) : 'warning';
-        const monitorStatus = computeNodeLabel(selectedNode, zh);
+        const monitorTone = resourceMonitorTone(selectedNode);
+        const monitorStatus = toneLabel(monitorTone, zh);
         return <button
             type='button'
             className='ControlServiceCard ControlRuntimeService'
@@ -1843,7 +1847,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         Number.NEGATIVE_INFINITY,
     );
     const {lan: controlNetworkState, tailscale: remoteNetworkState} = computeLinkStates(selectedNode);
-    const networkValue = computeNodeLabel(selectedNode, zh);
+    const networkValue = toneLabel(resourceMonitorTone(selectedNode), zh);
     const selectedResourceHistory = resourceHistory.filter(sample => sample.nodeId === selectedNode?.node_id);
     const resourceMetrics: {
         id: ResourceMetricId;
