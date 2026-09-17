@@ -484,7 +484,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 ),
                 ComputeClusterService.lanAssets().then(
                     value => value.assets,
-                    () => [] as ComputeLanAsset[],
+                    () => null,
                 ),
                 ComputeClusterService.groups().then(
                     value => value.groups,
@@ -497,7 +497,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             ]);
             if (!mounted.current) return;
             setNodes(nextNodes);
-            setLanAssets(assetResult);
+            if (assetResult !== null) setLanAssets(assetResult);
             setGroupMemberships(memberships);
             setTerminalTargets(targets);
             if (graphResult.value) setResourceGraph(graphResult.value);
@@ -785,6 +785,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const performanceModeAvailable = overviewNodes.length > 0 && overviewNodes.every(node =>
         node.online && node.capabilities.includes('runtime.performance.mode.read.v1')
     );
+    const performanceModeTone: Tone = performanceModeAvailable ? 'healthy' : 'warning';
     const toolbarTone: Tone | null = workspace === 'groups'
         ? visibleGroups.length ? currentGroupTone : null
         : workspace === 'network'
@@ -796,7 +797,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 : workspace === 'utilities'
                     ? (utilitiesAvailable ? 'healthy' : 'offline')
                 : workspace === 'performance-mode'
-                    ? (performanceModeAvailable ? 'healthy' : 'offline')
+                    ? performanceModeTone
                 : selectedNode
                     ? machineTone(selectedNode)
                     : overviewNodes.length ? overviewTone : null;
@@ -1317,8 +1318,8 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <strong>{zh ? '性能模式' : 'Performance mode'}</strong>
                     <small>{zh ? '检查全部机器的目标性能配置' : 'Check target configuration on all machines'}</small>
                 </span>
-                <span className={`ControlMachineState ${performanceModeAvailable ? 'healthy' : 'offline'}`}>
-                    {toneLabel(performanceModeAvailable ? 'healthy' : 'offline', zh)}
+                <span className={`ControlMachineState ${performanceModeTone}`}>
+                    {toneLabel(performanceModeTone, zh)}
                 </span>
             </button>
             <button
@@ -2216,7 +2217,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <ComputeFilePanel nodes={overviewNodes} zh={zh}/>
                 </div>}
                 {workspace === 'performance-mode' && <div className='ControlFeatureWorkspace'>
-                    <PerformanceModePanel nodes={overviewNodes} zh={zh} visible/>
+                    <PerformanceModePanel nodes={overviewNodes} lanAssets={lanAssets} zh={zh} visible/>
                 </div>}
                 <div className='ControlFeatureWorkspace' hidden={workspace !== 'utilities'}>
                     {!selectedNode && <><StorageAnalysisPanel node={null} zh={zh} visible={workspace === 'utilities'}/><DuplicateAnalysisPanel node={null} zh={zh} visible={workspace === 'utilities'}/></>}

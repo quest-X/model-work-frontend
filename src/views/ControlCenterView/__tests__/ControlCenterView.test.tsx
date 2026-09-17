@@ -1218,7 +1218,7 @@ describe('ControlCenterView', () => {
         };
         aipack.network.lan_address = '10.168.10.24';
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([main, aipack]);
-        jest.mocked(ComputeClusterService.lanAssets).mockResolvedValue({
+        const lanAssets = jest.mocked(ComputeClusterService.lanAssets).mockResolvedValueOnce({
             version: 1,
             group_id: 'group-1',
             summary: {total: 2, online: 2, offline: 0, new: 0, changed: 0, networks: 1},
@@ -1259,7 +1259,7 @@ describe('ControlCenterView', () => {
                 last_changed_at: 1,
                 change_type: 'unchanged',
             }],
-        });
+        }).mockRejectedValue(new Error('temporary asset failure'));
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         const list = screen.getByRole('complementary', {name: '机器列表'});
@@ -1270,6 +1270,11 @@ describe('ControlCenterView', () => {
         expect(within(list).getByText('炉后作业区')).toBeInTheDocument();
         expect(within(list).queryByRole('button', {name: '打开 AIPACK-05 边缘设备终端'}))
             .not.toBeInTheDocument();
+
+        fireEvent(window, new CustomEvent('opensight:edge-device-updated'));
+        await waitFor(() => expect(lanAssets).toHaveBeenCalledTimes(2));
+        expect(within(list).getByRole('button', {name: '查看 AIPACK-05 节点信息'}))
+            .toBeInTheDocument();
 
         fireEvent.click(installed);
         expect(await screen.findByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
@@ -1571,8 +1576,9 @@ describe('ControlCenterView', () => {
     it('opens fleet performance mode inspection from related features', async () => {
         const machine = node('在线节点', true);
         machine.capabilities.push('runtime.performance.mode.read.v1');
-        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
-        jest.spyOn(ComputeClusterService, 'performanceMode').mockResolvedValue({
+        const unsupported = node('旧版节点', true);
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine, unsupported]);
+        const inspect = jest.spyOn(ComputeClusterService, 'performanceMode').mockResolvedValue({
             schema_version: 'performance.mode-result.v1',
             captured_at: 1,
             platform: 'windows',
@@ -1591,10 +1597,16 @@ describe('ControlCenterView', () => {
 
         await screen.findByRole('heading', {name: '在线节点'});
         fireEvent.click(screen.getByText('相关功能'));
-        fireEvent.click(within(screen.getByLabelText('相关功能列表')).getByRole('button', {name: /性能模式/}));
+        const performanceMode = within(screen.getByLabelText('相关功能列表'))
+            .getByRole('button', {name: /性能模式/});
+        expect(within(performanceMode).getByText('故障')).toHaveClass('warning');
+        fireEvent.click(performanceMode);
 
         expect(screen.getByRole('heading', {name: '性能模式'})).toBeInTheDocument();
-        expect(await screen.findByText('1 / 1 正常')).toBeInTheDocument();
+        expect(screen.getByText('尚未扫描')).toBeInTheDocument();
+        expect(inspect).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', {name: '开始扫描'}));
+        expect(await screen.findByText('1 / 2 正常')).toBeInTheDocument();
     });
 
     it('opens terminal connection from the network status cards', async () => {

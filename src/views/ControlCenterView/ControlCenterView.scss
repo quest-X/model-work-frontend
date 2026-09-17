@@ -596,7 +596,8 @@ span.ControlMachineIcon {
   td { border-bottom: 1px solid rgba(255, 255, 255, 0.07); padding: 11px 9px; text-align: left; vertical-align: top; }
   th { color: rgba(255, 255, 255, 0.34); font-size: 8px; font-weight: 500; }
   td:first-child { color: rgba(255, 255, 255, 0.88); font-weight: 600; }
-  td:nth-child(2) { max-width: 220px; color: rgba(255, 255, 255, 0.48); }
+  .ControlPerformanceModeDetail td:nth-child(2),
+  .ControlPerformanceModeDetail td:nth-child(3) { max-width: 220px; color: rgba(255, 255, 255, 0.48); }
   details summary { color: rgba(255, 255, 255, 0.66); cursor: pointer; }
   details ul { margin: 8px 0 0; padding: 0; list-style: none; }
   details li { display: flex; justify-content: space-between; gap: 16px; margin-top: 6px; }
@@ -623,7 +624,14 @@ span.ControlMachineIcon {
     cursor: pointer;
 
     &:disabled { cursor: default; opacity: 0.45; }
+    &.primary { border-color: rgba(58, 166, 255, 0.55); background: rgba(18, 111, 181, 0.32); color: #b8e0ff; }
   }
+}
+
+.ControlPerformanceModeActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 .ControlPerformanceModeSummary {
@@ -637,6 +645,15 @@ span.ControlMachineIcon {
 
   strong { color: rgba(255, 255, 255, 0.88); font-size: 13px; }
   span { color: rgba(255, 255, 255, 0.38); font-size: 9px; }
+}
+
+.ControlPerformanceModeResult {
+  margin: 0 0 14px;
+  border-left: 2px solid rgba(58, 166, 255, 0.65);
+  background: rgba(58, 166, 255, 0.08);
+  padding: 8px 10px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 10px;
 }
 
 .ControlPerformanceModeTargets {
@@ -695,6 +712,33 @@ span.ControlMachineIcon {
     color: #d7efff;
     box-shadow: none;
   }
+}
+
+.ControlPerformanceOptimization,
+.ControlPerformanceFaults {
+  margin: 18px 0;
+
+  h2 { margin: 0 0 8px; color: rgba(255, 255, 255, 0.82); font-size: 12px; font-weight: 600; }
+}
+
+.ControlPerformanceOptimization {
+  > p { margin: -2px 0 8px; color: rgba(255, 255, 255, 0.4); font-size: 9px; }
+  th:first-child,
+  td:first-child { width: 42px; }
+  td:nth-child(3) { color: rgba(255, 255, 255, 0.56); }
+  input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: #3aa6ff;
+    cursor: pointer;
+
+    &:disabled { cursor: default; opacity: 0.45; }
+  }
+}
+
+.ControlPerformanceFaults {
+  td:nth-child(3) { max-width: 420px; color: rgba(255, 255, 255, 0.56); }
 }
 
 .ComputeFilePanel {
@@ -2025,6 +2069,8 @@ button.ControlServiceCard {
   .ControlFeatureWorkspace:has(> .ControlPerformanceMode) { min-width: 0; padding: 16px; }
   .ControlPerformanceModeHeader,
   .ControlPerformanceModeSummary { align-items: stretch; flex-direction: column; gap: 8px; }
+  .ControlPerformanceModeActions { width: 100%; }
+  .ControlPerformanceModeActions button { min-width: 0; flex: 1; }
   .ControlPerformanceMode table,
   .ControlPerformanceMode tbody,
   .ControlPerformanceMode tr,
