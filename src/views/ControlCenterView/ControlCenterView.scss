@@ -117,32 +117,20 @@
 .ControlMachineItem.tree-child {
   background: rgba(0, 0, 0, 0.08);
 
-  &.camera-device::before {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-    content: '';
-  }
-
   &.tree-depth-0 {
     padding-left: 10px;
-    &.camera-device::before { left: -1px; }
   }
 
   &.tree-depth-1 {
     padding-left: 26px;
-    &.camera-device::before { left: 15px; }
   }
 
   &.tree-depth-2 {
     padding-left: 42px;
-    &.camera-device::before { left: 31px; }
   }
 
   &.tree-depth-3 {
     padding-left: 58px;
-    &.camera-device::before { left: 47px; }
   }
 }
 
