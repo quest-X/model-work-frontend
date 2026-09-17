@@ -1192,6 +1192,7 @@ describe('ControlCenterView', () => {
             .toHaveClass('tree-depth-0');
         const camera = within(list).getByRole('button', {name: '打开 yy-camera 实时画面'});
         expect(camera).toHaveClass('tree-depth-1');
+        expect(camera.querySelector('img')).toHaveAttribute('src', '/ico/camera.png');
 
         fireEvent.click(camera);
         expect(camera).toHaveClass('selected');

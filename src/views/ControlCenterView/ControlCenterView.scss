@@ -149,8 +149,9 @@
   }
 
   .ControlMachineIcon.camera {
-    color: #79c9f8;
-    font-size: 12px;
+    object-fit: contain;
+    padding: 2px;
+    filter: invert(79%) sepia(28%) saturate(831%) hue-rotate(170deg) brightness(102%);
   }
 }
 

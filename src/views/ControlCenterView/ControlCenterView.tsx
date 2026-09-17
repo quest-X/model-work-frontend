@@ -1043,7 +1043,13 @@ export const ControlCenterView: React.FC<IProps> = ({
             setCameraViewerId(camera.device_id);
         }}
     >
-        <span className='ControlMachineIcon camera' aria-hidden='true'>◉</span>
+        <img
+            className='ControlMachineIcon camera'
+            src='/ico/camera.png'
+            alt=''
+            aria-hidden='true'
+            draggable={false}
+        />
         <span className='ControlMachineIdentity'>
             <strong>{camera.name}</strong>
             <small>{camera.model || camera.device_id} · {camera.channels} {zh
