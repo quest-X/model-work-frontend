@@ -243,44 +243,47 @@ describe('ComputeClusterPopup', () => {
 
     it('shows node, aggregate resources, and the phase-six boundary', async () => {
         const user = userEvent.setup();
-        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        const {container} = render(<ComputeClusterPopup language={Language.CHINESE}/>);
 
         expect(await screen.findByRole('navigation', {name: '计算群工作区'})).toBeInTheDocument();
         expect(screen.getByRole('button', {name: '节点与传感器 0'})).toHaveAttribute('aria-current', 'page');
         await user.click(await screen.findByRole('button', {name: '节点管理 1'}));
-        expect(screen.getByText('edge-01')).toBeInTheDocument();
-        expect(screen.getByText('NVIDIA RTX 4090')).toBeInTheDocument();
-        expect(screen.getByText('IP CAMERA')).toBeInTheDocument();
-        expect(screen.getByText('DS-2CD2686FWDA2-IZS')).toBeInTheDocument();
-        expect(screen.getByText('2 个通道')).toBeInTheDocument();
-        const nodeCard = screen.getByText('edge-01').closest('.ComputeNodeCard') as HTMLElement;
-        expect(nodeCard).not.toHaveAttribute('open');
-        await user.click(within(nodeCard).getByText('edge-01'));
-        expect(nodeCard).toHaveAttribute('open');
-        expect(nodeCard.querySelector('.ComputeNodeStatus')).toHaveTextContent('正常');
-        expect(nodeCard.querySelector('.ComputeNodeDeviceHeading')).toHaveTextContent('设备源：正常');
-        const relatedDevices = nodeCard.querySelector('.ComputeNodeDeviceSection') as HTMLDetailsElement;
-        expect(relatedDevices).not.toHaveAttribute('open');
-        expect(nodeCard.querySelector('.ComputeNodeDeviceList')).not.toBeVisible();
-        await user.click(within(nodeCard).getByText('相关设备'));
-        expect(relatedDevices).toHaveAttribute('open');
-        expect(nodeCard.querySelector('.ComputeNodeDeviceList')).toBeVisible();
-        expect(nodeCard.querySelector('.ComputeDeviceStatus')).toHaveTextContent('故障');
-        expect(screen.getByText('SSH: 正常')).toBeInTheDocument();
-        expect(screen.getByText('Tailscale: 正常')).toBeInTheDocument();
+        const nodeCard = screen.getByRole('button', {name: '查看 edge-01 节点详情'});
+        expect(nodeCard.querySelector('.ComputeNodeOverview > .ComputeNodeStatus')).toHaveTextContent('正常');
         expect(Array.from(nodeCard.querySelectorAll('.ComputeNodeCompactStats > span')).map(item => item.textContent))
             .toEqual(['CPU 16', 'MEM 25%', 'DISK 32%']);
         expect(nodeCard.querySelector('.ComputeNodeHeartbeat span')).toHaveTextContent('心跳');
         expect(nodeCard.querySelector('.ComputeNodeHeartbeat strong')).toHaveTextContent('刚刚');
         expect(nodeCard.querySelector('.ComputeNodeVersion')).toHaveTextContent('v0.1.0');
+
+        await user.click(nodeCard);
+        const nodeDetail = screen.getByRole('region', {name: 'edge-01 节点详情'});
+        expect(screen.getByRole('button', {name: '返回节点管理'})).toBeInTheDocument();
+        expect(screen.getByText('NVIDIA RTX 4090')).toBeInTheDocument();
+        expect(screen.getByText('IP CAMERA')).toBeInTheDocument();
+        expect(screen.getByText('DS-2CD2686FWDA2-IZS')).toBeInTheDocument();
+        expect(screen.getByText('2 个通道')).toBeInTheDocument();
+        expect(nodeDetail.querySelector('.ComputeNodeStatus')).toHaveTextContent('正常');
+        expect(nodeDetail.querySelector('.ComputeNodeDeviceHeading')).toHaveTextContent('设备源：正常');
+        const relatedDevices = nodeDetail.querySelector('.ComputeNodeDeviceSection') as HTMLDetailsElement;
+        expect(relatedDevices).not.toHaveAttribute('open');
+        expect(nodeDetail.querySelector('.ComputeNodeDeviceList')).not.toBeVisible();
+        await user.click(within(nodeDetail).getByText('相关设备'));
+        expect(relatedDevices).toHaveAttribute('open');
+        expect(nodeDetail.querySelector('.ComputeNodeDeviceList')).toBeVisible();
+        expect(nodeDetail.querySelector('.ComputeDeviceStatus')).toHaveTextContent('故障');
+        expect(screen.getByText('SSH: 正常')).toBeInTheDocument();
+        expect(screen.getByText('Tailscale: 正常')).toBeInTheDocument();
         expect(screen.queryByRole('button', {name: '节点升级 1'})).not.toBeInTheDocument();
         expect(screen.queryByRole('button', {name: '管理 edge-01 节点升级'})).not.toBeInTheDocument();
+        await user.click(screen.getByRole('button', {name: '返回节点管理'}));
+        expect(container.querySelector('.ComputeNodeDetail')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '查看 edge-01 节点详情'})).toBeInTheDocument();
         await user.click(screen.getByRole('button', {name: '管理'}));
         expect(await screen.findByRole('heading', {name: '一键升级节点'})).toBeInTheDocument();
         expect(screen.getByRole('button', {name: '完成'})).toBeInTheDocument();
         expect(screen.getByRole('checkbox', {name: '选择 edge-01'})).toBeEnabled();
         expect(screen.getByText('统一查看资源关系、工作调度、网络资产、节点状态与终端连接。')).toBeInTheDocument();
-        expect(nodeCard.querySelector('.ComputeNodeResourceGrid')).toHaveTextContent('16');
         const summary = Array.from(document.querySelectorAll('.ComputeClusterSummary > div'));
         expect(summary.map(item => item.querySelector('span')?.textContent))
             .toEqual(['地域', '设备总数(包含摄像头等)', '正常节点', '故障节点', '异常节点']);
@@ -361,7 +364,7 @@ describe('ComputeClusterPopup', () => {
             .toEqual(['作业区 A', '作业区 B']);
         expect(Array.from(groups[1].querySelectorAll('.ComputeNodeCard h3')).map(element => element.textContent))
             .toEqual(['shanghai-z', 'shanghai-a']);
-        expect(container.querySelectorAll('.ComputeNodeCard[open]')).toHaveLength(0);
+        expect(screen.getByRole('button', {name: '查看 shanghai-z 节点详情'})).toBeInTheDocument();
 
         await user.click(screen.getByRole('button', {name: '故障 1'}));
         expect(Array.from(container.querySelectorAll('.ComputeNodeCard h3')).map(element => element.textContent))

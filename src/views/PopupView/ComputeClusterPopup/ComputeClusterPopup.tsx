@@ -249,45 +249,52 @@ interface NodeCardProps {
     zh: boolean;
     managing: boolean;
     selected: boolean;
+    onOpen: () => void;
     onSelectedChange: (selected: boolean) => void;
 }
 
 const NodeCardOverview: React.FC<{node: ComputeClusterNode; zh: boolean}> = ({node, zh}) => <div className='ComputeNodeOverview'>
     <div className='ComputeNodeIdentity'>
-        <span className='ComputeNodeStatus'><i/>{computeNodeLabel(node, zh)}</span>
         <h3>{node.name}</h3>
         <small>{node.resources.hardware_model || `${node.resources.platform} · ${node.resources.architecture}`}</small>
     </div>
+    <span className='ComputeNodeStatus'><i/>{computeNodeLabel(node, zh)}</span>
     <div className='ComputeNodeCompactStats'>
         <span>CPU <strong>{node.resources.cpu_percent == null ? node.resources.cpu_logical : `${Math.round(node.resources.cpu_percent)}%`}</strong></span>
         <span>MEM <strong>{percentUsed(node.resources.memory_total_bytes, node.resources.memory_available_bytes)}</strong></span>
         <span>DISK <strong>{percentUsed(node.resources.disk_total_bytes, node.resources.disk_free_bytes)}</strong></span>
     </div>
-    <div className='ComputeNodeHeaderActions'>
-        <div className='ComputeNodeHeartbeat'>
-            <span>{zh ? '心跳' : 'Heartbeat'}</span>
-            <strong>{lastSeen(node.heartbeat_age_seconds, zh)}</strong>
-        </div>
-        <span className='ComputeNodeVersion'>v{node.agent_version}</span>
+    <span className='ComputeNodeVersion'>v{node.agent_version}</span>
+    <div className='ComputeNodeHeartbeat'>
+        <span>{zh ? '心跳' : 'Heartbeat'}</span>
+        <strong>{lastSeen(node.heartbeat_age_seconds, zh)}</strong>
     </div>
 </div>;
 
 // Resource, network, GPU, and device variants are one presentational node boundary.
-// eslint-disable-next-line complexity
-const NodeCard: React.FC<NodeCardProps> = ({node, zh, managing, selected, onSelectedChange}) => managing
-    ? <label className={`ComputeNodeSelectCard ${computeNodeState(node)}${selected ? ' selected' : ''}`}>
-        <input
-            type='checkbox'
-            aria-label={`${zh ? '选择' : 'Select'} ${node.name}`}
-            disabled={!computeNodeUpgradeReady(node)}
-            checked={selected}
-            onChange={event => onSelectedChange(event.target.checked)}
-        />
-        <NodeCardOverview node={node} zh={zh}/>
-        {!computeNodeUpgradeReady(node) && <small className='ComputeNodeUnavailable'>{zh ? '当前不可升级' : 'Upgrade unavailable'}</small>}
-    </label>
-    : <details className={`ComputeNodeCard ${computeNodeState(node)}`}>
-    <summary className='ComputeNodeHeading'><NodeCardOverview node={node} zh={zh}/></summary>
+/* eslint-disable complexity */
+const NodeDetail: React.FC<{
+    node: ComputeClusterNode;
+    zh: boolean;
+    onBack: () => void;
+}> = ({node, zh, onBack}) => <section
+    className={`ComputeNodeDetail ${computeNodeState(node)}`}
+    aria-label={`${node.name} ${zh ? '节点详情' : 'node details'}`}
+>
+    <header className='ComputeNodeDetailHeader'>
+        <button
+            type='button'
+            className='ComputeNodeBackButton'
+            aria-label={zh ? '返回节点管理' : 'Back to node management'}
+            onClick={onBack}
+        ><span aria-hidden='true'>←</span>{zh ? '返回' : 'Back'}</button>
+        <div>
+            <small>{nodeWorkArea(node, zh)}</small>
+            <h3>{node.name}</h3>
+            <span>{node.resources.hardware_model || `${node.resources.platform} · ${node.resources.architecture}`}</span>
+        </div>
+        <span className='ComputeNodeStatus'><i/>{computeNodeLabel(node, zh)}</span>
+    </header>
 
     <div className='ComputeNodeResourceGrid'>
         <div><span>CPU</span><strong>{node.resources.cpu_logical}</strong><small>{zh ? '逻辑核心' : 'logical cores'}</small></div>
@@ -339,7 +346,27 @@ const NodeCard: React.FC<NodeCardProps> = ({node, zh, managing, selected, onSele
             : healthLabel(false, zh)}</span>
         <span>{node.capabilities.length} {zh ? '项能力' : 'capabilities'}</span>
     </footer>
-</details>;
+</section>;
+/* eslint-enable complexity */
+
+const NodeCard: React.FC<NodeCardProps> = ({node, zh, managing, selected, onOpen, onSelectedChange}) => managing
+    ? <label className={`ComputeNodeSelectCard ${computeNodeState(node)}${selected ? ' selected' : ''}`}>
+        <input
+            type='checkbox'
+            aria-label={`${zh ? '选择' : 'Select'} ${node.name}`}
+            disabled={!computeNodeUpgradeReady(node)}
+            checked={selected}
+            onChange={event => onSelectedChange(event.target.checked)}
+        />
+        <NodeCardOverview node={node} zh={zh}/>
+        {!computeNodeUpgradeReady(node) && <small className='ComputeNodeUnavailable'>{zh ? '当前不可升级' : 'Upgrade unavailable'}</small>}
+    </label>
+    : <button
+        type='button'
+        className={`ComputeNodeCard ${computeNodeState(node)}`}
+        aria-label={`${zh ? '查看' : 'View'} ${node.name} ${zh ? '节点详情' : 'node details'}`}
+        onClick={onOpen}
+    ><NodeCardOverview node={node} zh={zh}/></button>;
 
 // This container intentionally owns the polling lifecycle and the complete modal state.
 // eslint-disable-next-line complexity
@@ -365,6 +392,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const [upgradeOpen, setUpgradeOpen] = useState(() => typeof window !== 'undefined'
         && Boolean(window.localStorage.getItem(ACTIVE_BATCH_KEY)));
     const [selectedUpgradeNodes, setSelectedUpgradeNodes] = useState<string[]>([]);
+    const [nodeDetailId, setNodeDetailId] = useState('');
     const [error, setError] = useState('');
     const [taskError, setTaskError] = useState('');
     const [selectedNode, setSelectedNode] = useState(preferredNodeId || AUTO_PLACEMENT);
@@ -689,6 +717,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
             || left.localeCompare(right, zh ? 'zh-CN' : 'en')
         );
     }, [filteredNodes, zh]);
+    const nodeDetail = nodes.find(node => node.node_id === nodeDetailId);
 
     const taskControlEnabled = status?.task_control?.enabled === true;
     const orchestrationEnabled = taskControlEnabled
@@ -792,7 +821,10 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                     key={workspace}
                     className={activeWorkspace === workspace ? 'active' : ''}
                     aria-current={activeWorkspace === workspace ? 'page' : undefined}
-                    onClick={() => setActiveWorkspace(workspace)}
+                    onClick={() => {
+                        setNodeDetailId('');
+                        setActiveWorkspace(workspace);
+                    }}
                 ><span>{label}</span><strong>{count}</strong></button>)}
             </nav>}
 
@@ -1052,7 +1084,12 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                 {!loading && activeWorkspace === 'terminal' && !status?.task_control?.terminal_sessions && <div className='ComputeTaskDisabled'>
                     {zh ? 'Mac Client 尚未启用终端控制。' : 'Terminal control is not enabled on the Mac Client.'}
                 </div>}
-                {!loading && activeWorkspace === 'nodes' && nodes.length > 0 && <div className='ComputeNodeSectionTitle'>
+                {!loading && activeWorkspace === 'nodes' && nodeDetail && <NodeDetail
+                    node={nodeDetail}
+                    zh={zh}
+                    onBack={() => setNodeDetailId('')}
+                />}
+                {!loading && activeWorkspace === 'nodes' && !nodeDetail && nodes.length > 0 && <div className='ComputeNodeSectionTitle'>
                     <div><strong>{zh ? '节点资源与版本' : 'Node resources and versions'}</strong><span>{nodes.length}</span></div>
                     <div className='ComputeNodeToolbar'>
                         <div className='ComputeNodeFilters' role='group' aria-label={zh ? '节点筛选' : 'Node filters'}>
@@ -1080,7 +1117,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                         >{upgradeOpen ? (zh ? '完成' : 'Done') : (zh ? '管理' : 'Manage')}</button>
                     </div>
                 </div>}
-                {!loading && activeWorkspace === 'nodes' && upgradeOpen && <div className='ComputeNodeUpgradeArea'>
+                {!loading && activeWorkspace === 'nodes' && !nodeDetail && upgradeOpen && <div className='ComputeNodeUpgradeArea'>
                     <ComputeUpgradePanel
                         nodes={nodes}
                         selected={selectedUpgradeNodes}
@@ -1091,10 +1128,10 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                         zh={zh}
                     />
                 </div>}
-                {!loading && activeWorkspace === 'nodes' && filteredNodes.length === 0 && <div className='ComputeNodeFilterEmpty'>
+                {!loading && activeWorkspace === 'nodes' && !nodeDetail && filteredNodes.length === 0 && <div className='ComputeNodeFilterEmpty'>
                     {zh ? '没有符合当前筛选条件的节点。' : 'No nodes match the current filter.'}
                 </div>}
-                {!loading && activeWorkspace === 'nodes' && groupedNodes.map(([area, areaNodes]) => <section className='ComputeNodeGroup' key={area}>
+                {!loading && activeWorkspace === 'nodes' && !nodeDetail && groupedNodes.map(([area, areaNodes]) => <section className='ComputeNodeGroup' key={area}>
                     <header><strong>{area}</strong><span>{areaNodes.length}</span></header>
                     <div className='ComputeNodeGrid'>
                         {areaNodes.map(node => <NodeCard
@@ -1103,6 +1140,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                             zh={zh}
                             managing={upgradeOpen}
                             selected={selectedUpgradeNodes.includes(node.node_id)}
+                            onOpen={() => setNodeDetailId(node.node_id)}
                             onSelectedChange={checked => setSelectedUpgradeNodes(current => checked
                                 ? Array.from(new Set([...current, node.node_id]))
                                 : current.filter(id => id !== node.node_id))}
