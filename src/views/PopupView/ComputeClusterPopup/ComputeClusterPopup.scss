@@ -1398,8 +1398,8 @@
   grid-template-rows: auto auto auto;
   grid-template-areas:
     'name status'
-    'model version'
-    'stats stats';
+    'model model'
+    'stats version';
   min-width: 0;
   gap: 5px 8px;
 }
@@ -1452,7 +1452,7 @@
 
 .ComputeNodeVersion {
   grid-area: version;
-  align-self: start;
+  align-self: center;
   justify-self: end;
   color: rgba(121, 201, 248, 0.68);
   font-size: 8px;
