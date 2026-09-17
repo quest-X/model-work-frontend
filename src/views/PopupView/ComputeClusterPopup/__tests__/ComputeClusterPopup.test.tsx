@@ -28,7 +28,7 @@ const service = ComputeClusterService as jest.Mocked<typeof ComputeClusterServic
 
 const openNodeUpgrade = async (user: ReturnType<typeof userEvent.setup>) => {
     await user.click(await screen.findByRole('button', {name: /节点管理 \d+/}));
-    const expand = screen.queryByRole('button', {name: '批量升级'});
+    const expand = screen.queryByRole('button', {name: '管理'});
     if (expand) await user.click(expand);
 };
 
@@ -269,14 +269,16 @@ describe('ComputeClusterPopup', () => {
         expect(screen.getByText('SSH: 正常')).toBeInTheDocument();
         expect(screen.getByText('Tailscale: 正常')).toBeInTheDocument();
         expect(Array.from(nodeCard.querySelectorAll('.ComputeNodeCompactStats > span')).map(item => item.textContent))
-            .toEqual(['CPU 16', 'MEM 25%', 'GPU 1', 'DISK 32%', 'DEVICE 1']);
-        expect(nodeCard.querySelector('.ComputeNodeHeartbeat span')).toHaveTextContent('HEARTBEAT');
+            .toEqual(['CPU 16', 'MEM 25%', 'DISK 32%']);
+        expect(nodeCard.querySelector('.ComputeNodeHeartbeat span')).toHaveTextContent('心跳');
         expect(nodeCard.querySelector('.ComputeNodeHeartbeat strong')).toHaveTextContent('刚刚');
-        expect(nodeCard.querySelector('.ComputeNodeVersion')).toHaveTextContent('SERVICE v0.1.0');
+        expect(nodeCard.querySelector('.ComputeNodeVersion')).toHaveTextContent('v0.1.0');
         expect(screen.queryByRole('button', {name: '节点升级 1'})).not.toBeInTheDocument();
-        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toBeDisabled();
-        await user.click(screen.getByRole('button', {name: '批量升级'}));
+        expect(screen.queryByRole('button', {name: '管理 edge-01 节点升级'})).not.toBeInTheDocument();
+        await user.click(screen.getByRole('button', {name: '管理'}));
         expect(await screen.findByRole('heading', {name: '一键升级节点'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '完成'})).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', {name: '选择 edge-01'})).toBeEnabled();
         expect(screen.getByText('统一查看资源关系、工作调度、网络资产、节点状态与终端连接。')).toBeInTheDocument();
         expect(nodeCard.querySelector('.ComputeNodeResourceGrid')).toHaveTextContent('16');
         const summary = Array.from(document.querySelectorAll('.ComputeClusterSummary > div'));
@@ -320,13 +322,13 @@ describe('ComputeClusterPopup', () => {
         expect(screen.getByRole('combobox', {name: '计划节点'})).toHaveValue('node-12345678');
     });
 
-    it('sorts faults first and filters the compact node list', async () => {
+    it('groups compact nodes by work area and keeps status filters', async () => {
         const user = userEvent.setup();
         const [baseNode] = await service.nodes();
         service.nodes.mockResolvedValue([
-            {...baseNode, node_id: 'shanghai-offline', name: 'shanghai-z', online: false},
-            {...baseNode, node_id: 'shanghai-online', name: 'shanghai-a', online: true},
-            {...baseNode, node_id: 'shandong-online', name: 'shandong-a', online: true},
+            {...baseNode, node_id: 'shanghai-offline', name: 'shanghai-z', online: false, labels: {site_name: '作业区 B'}},
+            {...baseNode, node_id: 'shanghai-online', name: 'shanghai-a', online: true, labels: {site_name: '作业区 B'}},
+            {...baseNode, node_id: 'shandong-online', name: 'shandong-a', online: true, labels: {site_name: '作业区 A'}},
         ]);
         const graph = await service.resourceGraph();
         service.resourceGraph.mockResolvedValue({
@@ -354,9 +356,11 @@ describe('ComputeClusterPopup', () => {
         const {container} = render(<ComputeClusterPopup language={Language.CHINESE}/>);
         await user.click(await screen.findByRole('button', {name: '节点管理 3'}));
 
-        const nodeNames = Array.from(container.querySelectorAll('.ComputeNodeCard h3'))
-            .map(element => element.textContent);
-        expect(nodeNames).toEqual(['shanghai-z', 'shandong-a', 'shanghai-a']);
+        const groups = Array.from(container.querySelectorAll('.ComputeNodeGroup'));
+        expect(groups.map(group => group.querySelector('header strong')?.textContent))
+            .toEqual(['作业区 A', '作业区 B']);
+        expect(Array.from(groups[1].querySelectorAll('.ComputeNodeCard h3')).map(element => element.textContent))
+            .toEqual(['shanghai-z', 'shanghai-a']);
         expect(container.querySelectorAll('.ComputeNodeCard[open]')).toHaveLength(0);
 
         await user.click(screen.getByRole('button', {name: '故障 1'}));
@@ -1428,10 +1432,8 @@ describe('ComputeClusterPopup', () => {
         await user.click(await screen.findByRole('button', {name: '节点管理 1'}));
         await waitFor(() => expect(service.upgradeReleases).toHaveBeenCalledTimes(1));
         expect(screen.getByRole('button', {name: '可升级 0'})).toBeInTheDocument();
-        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toBeDisabled();
-        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toHaveTextContent('暂无可用升级');
-
-        await user.click(screen.getByRole('button', {name: '批量升级'}));
+        await user.click(screen.getByRole('button', {name: '管理'}));
+        await user.click(screen.getByRole('checkbox', {name: '选择 edge-01'}));
         await user.selectOptions(screen.getByLabelText('当前控制端的升级版本'), '1.1.1');
         expect(screen.getByText('已是目标版本，无需升级')).toBeInTheDocument();
     });
@@ -1469,12 +1471,12 @@ describe('ComputeClusterPopup', () => {
 
         render(<ComputeClusterPopup language={Language.CHINESE}/>);
         await openNodeUpgrade(user);
-        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toBeEnabled();
+        expect(screen.getByRole('checkbox', {name: '选择 edge-01'})).toBeEnabled();
         await screen.findByRole('option', {name: 'v1.0.5'});
-        expect(screen.getByText('当前版本 v0.1.0')).toBeInTheDocument();
         expect(screen.queryByLabelText('选择签名发布清单')).not.toBeInTheDocument();
         await user.selectOptions(screen.getByLabelText('当前控制端的升级版本'), '1.0.5');
         await user.click(screen.getByRole('checkbox', {name: /edge-01/}));
+        expect(screen.getByText('当前版本 v0.1.0')).toBeInTheDocument();
         await user.click(screen.getByRole('button', {name: '创建升级批次'}));
 
         await waitFor(() => expect(service.createMainUpgradeBatch).toHaveBeenCalledWith(['node-12345678'], '1.0.5'));
