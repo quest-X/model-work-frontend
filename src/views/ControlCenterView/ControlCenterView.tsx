@@ -1643,7 +1643,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             onClick={() => setDeviceManagementTab(
                                 !aipackNode && cameras.length === 0 && edgeDevices.length > 0 ? 'edge' : 'camera',
                             )}
-                        >{relatedDeviceCount}</button>
+                        >+</button>
                     </div>
                 </div>
                 <div className={`ControlRelatedDeviceGrid${aipackNode ? ' camera-only' : ''}`}>
