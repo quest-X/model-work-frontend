@@ -271,6 +271,8 @@ describe('ProgramRunnerPanel', () => {
             target: {value: 'all'},
         });
         fireEvent.click(within(artifacts).getByRole('button', {name: /017.png/}));
+        expect(within(artifacts).getByText('正在加载图片预览…')).toBeInTheDocument();
+        fireEvent.load(within(artifacts).getByRole('img', {name: '017.png'}));
         expect(within(artifacts).getByRole('img', {name: '017.png'})).toBeInTheDocument();
         fireEvent.click(within(artifacts).getByRole('button', {name: /017.json/}));
         expect(await within(artifacts).findByLabelText('结果内容预览'))

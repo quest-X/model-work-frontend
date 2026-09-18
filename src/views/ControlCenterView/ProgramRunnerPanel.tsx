@@ -162,6 +162,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [artifactCategoryFilter, setArtifactCategoryFilter] = useState<ResultCategory>('all');
     const [artifactQuery, setArtifactQuery] = useState('');
     const [loadedVideoId, setLoadedVideoId] = useState('');
+    const [readyVideoId, setReadyVideoId] = useState('');
+    const [videoPreviewError, setVideoPreviewError] = useState('');
+    const [loadedImageId, setLoadedImageId] = useState('');
+    const [imagePreviewError, setImagePreviewError] = useState('');
     const [resultPreview, setResultPreview] = useState('');
     const [resultPreviewError, setResultPreviewError] = useState('');
     const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
@@ -186,6 +190,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setArtifactCategoryFilter('all');
         setArtifactQuery('');
         setLoadedVideoId('');
+        setReadyVideoId('');
+        setVideoPreviewError('');
+        setLoadedImageId('');
+        setImagePreviewError('');
         setResultPreview('');
         setResultPreviewError('');
         setResultPreviewLoading(false);
@@ -337,6 +345,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
 
     useEffect(() => {
         setLoadedVideoId('');
+        setReadyVideoId('');
+        setVideoPreviewError('');
+        setLoadedImageId('');
+        setImagePreviewError('');
     }, [selectedArtifact?.selection_id]);
 
     useEffect(() => {
@@ -722,31 +734,75 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         </header>
                                         {selectedArtifact.kind === 'video'
                                             ? loadedVideoId === selectedArtifact.selection_id
-                                                ? <video
-                                                    controls
-                                                    preload='metadata'
-                                                    src={selectedArtifactUrl}
-                                                />
+                                                ? <div className='ControlProgramPreviewFrame'>
+                                                    {videoPreviewError
+                                                        ? <div className='ControlProgramPreviewPlaceholder'>
+                                                            <strong>{zh ? '视频预览加载失败' : 'Video preview failed'}</strong>
+                                                            <span>{videoPreviewError}</span>
+                                                                <button
+                                                                    type='button'
+                                                                    onClick={() => {
+                                                                        setLoadedVideoId('');
+                                                                        setVideoPreviewError('');
+                                                                        setReadyVideoId('');
+                                                                    }}
+                                                            >{zh ? '重新加载视频' : 'Reload video'}</button>
+                                                        </div>
+                                                        : readyVideoId !== selectedArtifact.selection_id && <div className='ControlProgramPreviewPlaceholder'>
+                                                            <strong>{zh ? '正在加载视频预览…' : 'Loading video preview…'}</strong>
+                                                            <span>{zh ? '正在读取视频文件' : 'Reading the video file'}</span>
+                                                        </div>}
+                                                    <video
+                                                        className={readyVideoId === selectedArtifact.selection_id ? '' : 'is-loading'}
+                                                        controls
+                                                        preload='metadata'
+                                                        src={selectedArtifactUrl}
+                                                        onLoadedData={() => setReadyVideoId(selectedArtifact.selection_id)}
+                                                        onError={() => setVideoPreviewError(zh ? '无法读取视频文件' : 'Unable to read the video file')}
+                                                    />
+                                                </div>
                                                 : <div className='ControlProgramPreviewPlaceholder'>
                                                     <strong>{zh ? '视频预览未加载' : 'Video preview is not loaded'}</strong>
                                                     <span>{zh ? '点击后才会读取视频文件' : 'The video is fetched only after you load the preview'}</span>
                                                     <button
                                                         type='button'
-                                                        onClick={() => setLoadedVideoId(selectedArtifact.selection_id)}
+                                                        onClick={() => {
+                                                            setLoadedVideoId(selectedArtifact.selection_id);
+                                                            setReadyVideoId('');
+                                                            setVideoPreviewError('');
+                                                        }}
                                                     >{zh ? '加载视频预览' : 'Load video preview'}</button>
                                                 </div>
                                             : selectedArtifact.kind === 'image'
-                                                ? <img
-                                                    src={selectedArtifactUrl}
-                                                    alt={selectedArtifact.name}
-                                                />
+                                                ? <div className='ControlProgramPreviewFrame'>
+                                                    {imagePreviewError
+                                                        ? <div className='ControlProgramPreviewPlaceholder'>
+                                                            <strong>{zh ? '图片预览加载失败' : 'Image preview failed'}</strong>
+                                                            <span>{imagePreviewError}</span>
+                                                        </div>
+                                                        : loadedImageId !== selectedArtifact.selection_id && <div className='ControlProgramPreviewPlaceholder'>
+                                                            <strong>{zh ? '正在加载图片预览…' : 'Loading image preview…'}</strong>
+                                                            <span>{zh ? '正在读取图片文件' : 'Reading the image file'}</span>
+                                                        </div>}
+                                                    <img
+                                                        className={loadedImageId === selectedArtifact.selection_id ? '' : 'is-loading'}
+                                                        src={selectedArtifactUrl}
+                                                        alt={selectedArtifact.name}
+                                                        onLoad={() => setLoadedImageId(selectedArtifact.selection_id)}
+                                                        onError={() => setImagePreviewError(zh ? '无法读取图片文件' : 'Unable to read the image file')}
+                                                    />
+                                                </div>
                                                 : <div className='ControlProgramResultData'>
                                                     {resultPreviewLoading
-                                                        ? <p>{zh ? '正在加载结果预览…' : 'Loading result preview…'}</p>
+                                                        ? <div className='ControlProgramPreviewPlaceholder ControlProgramResultPlaceholder'>
+                                                            <strong>{zh ? '正在加载数据预览…' : 'Loading data preview…'}</strong>
+                                                            <span>{zh ? '正在读取结果文件' : 'Reading the result file'}</span>
+                                                        </div>
                                                         : resultPreviewError
-                                                            ? <p className='error'>
-                                                                {zh ? `结果预览失败：${resultPreviewError}` : `Result preview failed: ${resultPreviewError}`}
-                                                            </p>
+                                                            ? <div className='ControlProgramPreviewPlaceholder ControlProgramResultPlaceholder error'>
+                                                                <strong>{zh ? '数据预览加载失败' : 'Data preview failed'}</strong>
+                                                                <span>{resultPreviewError}</span>
+                                                            </div>
                                                             : <pre aria-label={zh ? '结果内容预览' : 'Result content preview'}>
                                                                 {resultPreview || (zh ? '文件为空' : 'Empty file')}
                                                             </pre>}

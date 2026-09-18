@@ -2160,7 +2160,33 @@ button.ControlServiceCard {
     object-fit: contain;
   }
 
-  video { width: min(100%, 720px); aspect-ratio: 16 / 9; background: #080a0c; }
+  video { width: 100%; height: 100%; background: #080a0c; }
+
+  .ControlProgramPreviewFrame {
+    position: relative;
+    display: flex;
+    width: min(100%, 720px);
+    aspect-ratio: 16 / 9;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #080a0c;
+
+    img,
+    video {
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      max-height: none;
+    }
+
+    .is-loading {
+      position: absolute;
+      inset: 0;
+      visibility: hidden;
+    }
+  }
 
   .ControlProgramPreviewPlaceholder {
     display: flex;
@@ -2173,6 +2199,8 @@ button.ControlServiceCard {
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(0, 0, 0, 0.22);
     text-align: center;
+
+    &.error strong { color: #ef8b8b; }
 
     strong { color: rgba(255, 255, 255, 0.72); font-size: 11px; }
     span { margin: 0; color: rgba(255, 255, 255, 0.36); font-size: 9px; }
@@ -2187,14 +2215,6 @@ button.ControlServiceCard {
     }
   }
 
-  a {
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    border-radius: 3px;
-    padding: 8px 12px;
-    color: #69c6ff;
-    font-size: 10px;
-    text-decoration: none;
-  }
 }
 
 .ControlProgramResultData {
@@ -2212,6 +2232,15 @@ button.ControlServiceCard {
     font-size: 10px;
 
     &.error { color: #ef8b8b; }
+  }
+
+  .ControlProgramResultPlaceholder {
+    width: 100%;
+    min-height: 260px;
+    aspect-ratio: auto;
+    flex: 1;
+
+    &.error strong { color: #ef8b8b; }
   }
 
   pre {
