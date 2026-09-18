@@ -132,6 +132,34 @@ describe('ProgramRunnerPanel', () => {
                     status_code: 200,
                     latency_ms: 3.5,
                 },
+                interfaces: [{
+                    method: 'GET',
+                    path: '/health',
+                    name: '健康检查',
+                    description: '服务存活、推理与处理帧',
+                    state: 'healthy',
+                    checked_at: 101,
+                    status_code: 200,
+                    latency_ms: 3.5,
+                }, {
+                    method: 'GET',
+                    path: '/furnace',
+                    name: '转炉生产数据',
+                    description: '角度、炉次、钢种及车辆位置',
+                    state: 'unavailable',
+                    checked_at: 101,
+                    status_code: 503,
+                    latency_ms: 4.2,
+                }, {
+                    method: 'POST',
+                    path: '/display',
+                    name: '标注显示开关',
+                    description: '持久化修改标注显示',
+                    state: 'not_checked',
+                    checked_at: null,
+                    status_code: null,
+                    latency_ms: null,
+                }],
                 events: [{
                     created_at: 100,
                     level: 'info',
@@ -192,13 +220,20 @@ describe('ProgramRunnerPanel', () => {
         expect(within(dialog).getByText(/启停及模式切换仍需一次性授权接口/))
             .toBeInTheDocument();
 
-        fireEvent.click(within(dialog).getByRole('button', {name: '接口状态'}));
-        const endpoints = await within(dialog).findByLabelText('程序接口状态');
-        expect(endpoints).toHaveTextContent('节点服务');
+        fireEvent.click(within(dialog).getByRole('button', {name: '接口'}));
+        const endpoints = await within(dialog).findByLabelText('程序接口');
         expect(endpoints).toHaveTextContent('Vision OCR');
+        expect(endpoints).toHaveTextContent('GET');
+        expect(endpoints).toHaveTextContent('/health');
+        expect(endpoints).toHaveTextContent('健康检查');
         expect(endpoints).toHaveTextContent('HTTP 200');
-        expect(endpoints).toHaveTextContent('12 ms');
         expect(endpoints).toHaveTextContent('3.5 ms');
+        expect(endpoints).toHaveTextContent('HTTP 503');
+        expect(endpoints).toHaveTextContent('POST');
+        expect(endpoints).toHaveTextContent('/display');
+        expect(endpoints).toHaveTextContent('未检查');
+        expect(endpoints).not.toHaveTextContent('节点服务');
+        expect(endpoints).not.toHaveTextContent('任务执行器');
         expect(inventory).not.toHaveBeenCalled();
 
         fireEvent.click(within(dialog).getByRole('button', {name: '产物'}));

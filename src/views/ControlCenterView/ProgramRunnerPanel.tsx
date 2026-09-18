@@ -29,6 +29,19 @@ const runtimeStateLabel = (state: ComputeRuntimeService['state'], zh: boolean): 
     unknown: zh ? '未知' : 'Unknown',
 })[state];
 
+const interfaceTone = (
+    state: ComputeProgramSnapshot['programs'][number]['interfaces'][number]['state'],
+): ProgramTone => state === 'healthy' ? 'healthy' : state === 'unavailable' ? 'offline' : 'warning';
+
+const interfaceStateLabel = (
+    state: ComputeProgramSnapshot['programs'][number]['interfaces'][number]['state'],
+    zh: boolean,
+): string => ({
+    healthy: zh ? '正常' : 'Healthy',
+    unavailable: zh ? '不可用' : 'Unavailable',
+    not_checked: zh ? '未检查' : 'Not checked',
+})[state];
+
 const programName = (service: ComputeRuntimeService, zh: boolean): string => {
     if (!zh) return service.name;
     if (service.service_id === 'node-service') return '节点服务';
@@ -182,20 +195,13 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     (programs?.programs || []).forEach(program =>
         serviceNames.set(program.program_id, program.name)
     );
-    const endpointRows = [
-        ...(snapshot?.services || []).map(service => ({
-            key: `runtime-${service.service_id}`,
-            name: programName(service, zh),
-            kind: programKind(service, zh),
-            ...service.health,
-        })),
-        ...(programs?.programs || []).map(program => ({
-            key: `program-${program.program_id}`,
-            name: program.name,
-            kind: zh ? '部署程序' : 'Deployed program',
-            ...program.health,
-        })),
-    ];
+    const endpointRows = (programs?.programs || []).flatMap(program =>
+        program.interfaces.map(endpoint => ({
+            ...endpoint,
+            key: `${program.program_id}-${endpoint.method}-${endpoint.path}`,
+            program_name: program.name,
+        }))
+    );
     const filteredEvents = [...events]
         .filter(event => !logServiceId || event.service_id === logServiceId)
         .reverse();
@@ -285,7 +291,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             <nav className='ControlMonitorNav' aria-label={zh ? '程序运行器导航' : 'Program runner navigation'}>
                 {([
                     ['programs', zh ? '程序' : 'Programs'],
-                    ['endpoints', zh ? '接口状态' : 'Endpoint status'],
+                    ['endpoints', zh ? '接口' : 'APIs'],
                     ['artifacts', zh ? '产物' : 'Artifacts'],
                     ['logs', zh ? '日志' : 'Logs'],
                 ] as [ProgramRunnerView, string][]).map(([item, label]) => <button
@@ -301,7 +307,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     ? unavailable(
                         zh ? '当前节点尚不支持程序状态' : 'Program status is not supported',
                         node.online
-                            ? (zh ? '升级节点程序后可查看程序、接口状态和日志。' : 'Upgrade the node software to view programs, endpoint status, and logs.')
+                            ? (zh ? '升级节点程序后可查看程序、接口和日志。' : 'Upgrade the node software to view programs, APIs, and logs.')
                             : (zh ? '节点恢复在线后才能读取程序状态。' : 'The node must return online before program status can be read.'),
                     )
                     : snapshot?.services.length && selectedService
@@ -439,52 +445,54 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             runtimeError,
                         ))}
 
-                {view === 'endpoints' && (!runtimeCapable && !programsCapable
+                {view === 'endpoints' && (!programsCapable
                     ? unavailable(
-                        zh ? '当前节点尚不支持接口状态' : 'Endpoint status is not supported',
+                        zh ? '当前节点尚不支持程序接口' : 'Program APIs are not supported',
                         node.online
-                            ? (zh ? '升级节点程序后可查看接口状态。' : 'Upgrade the node software to view endpoint status.')
-                            : (zh ? '节点恢复在线后才能读取接口状态。' : 'The node must return online before endpoint status can be read.'),
+                            ? (zh ? '升级节点程序后可查看程序接口。' : 'Upgrade the node software to view program APIs.')
+                            : (zh ? '节点恢复在线后才能读取程序接口。' : 'The node must return online before program APIs can be read.'),
                     )
-                    : <section className='ControlMonitorProcesses ControlMonitorInventory' aria-label={zh ? '程序接口状态' : 'Program endpoint status'}>
+                    : <section className='ControlMonitorProcesses ControlMonitorInventory ControlProgramInterfaces' aria-label={zh ? '程序接口' : 'Program APIs'}>
                         <header className='ControlMonitorSearchHeader'>
                             <div>
-                                <h3>{zh ? '接口状态' : 'Endpoint status'}</h3>
-                                <p>{zh ? '每 5 秒检查一次服务健康状态' : 'Service health checks refresh every 5 seconds'}</p>
+                                <h3>{zh ? '接口' : 'APIs'}</h3>
+                                <p>{zh ? '每 5 秒检查程序声明的安全只读接口' : 'Declared safe read-only APIs refresh every 5 seconds'}</p>
                             </div>
                             <span className='ControlProgramEndpointCount'>{endpointRows.length}</span>
                         </header>
-                        {(runtimeError || programsError) && <p className='ControlProgramError' role='status'>
-                            {[runtimeError, programsError].filter(Boolean).join(' · ')}
+                        {programsError && <p className='ControlProgramError' role='status'>
+                            {programsError}
                         </p>}
                         {endpointRows.length > 0 ? <table>
                             <thead><tr>
-                                <th>{zh ? '名称' : 'Name'}</th>
-                                <th>{zh ? '类型' : 'Type'}</th>
+                                <th>{zh ? '程序' : 'Program'}</th>
+                                <th>{zh ? '方法' : 'Method'}</th>
+                                <th>{zh ? '路径' : 'Path'}</th>
+                                <th>{zh ? '功能' : 'Function'}</th>
                                 <th>{zh ? '状态' : 'Status'}</th>
                                 <th>{zh ? '响应' : 'Response'}</th>
                                 <th>{zh ? '延迟' : 'Latency'}</th>
                                 <th>{zh ? '最近检查' : 'Last checked'}</th>
                             </tr></thead>
                             <tbody>{endpointRows.map(endpoint => <tr key={endpoint.key}>
-                                <td>
-                                    <span className='ControlProgramEndpointName'>
-                                        <span className={`ControlStatusDot ${runtimeTone(endpoint.state)}`} aria-hidden='true'/>
-                                        {endpoint.name}
-                                    </span>
-                                </td>
-                                <td>{endpoint.kind}</td>
-                                <td>{runtimeStateLabel(endpoint.state, zh)}</td>
-                                <td>{endpoint.status_code === null ? 'HTTP —' : `HTTP ${endpoint.status_code}`}</td>
+                                <td>{endpoint.program_name}</td>
+                                <td><code>{endpoint.method}</code></td>
+                                <td><code>{endpoint.path}</code></td>
+                                <td><span className='ControlProgramEndpointName'>
+                                    <span className={`ControlStatusDot ${interfaceTone(endpoint.state)}`} aria-hidden='true'/>
+                                    <span><strong>{endpoint.name}</strong><small>{endpoint.description}</small></span>
+                                </span></td>
+                                <td>{interfaceStateLabel(endpoint.state, zh)}</td>
+                                <td>{endpoint.status_code === null ? '—' : `HTTP ${endpoint.status_code}`}</td>
                                 <td>{endpoint.latency_ms === null ? '—' : `${endpoint.latency_ms} ms`}</td>
-                                <td>{dateTime(endpoint.checked_at, zh)}</td>
+                                <td>{endpoint.checked_at === null ? '—' : dateTime(endpoint.checked_at, zh)}</td>
                             </tr>)}</tbody>
                         </table> : unavailable(
-                            runtimeError || programsError
-                                ? (zh ? '接口状态暂不可用' : 'Endpoint status is unavailable')
+                            programsError
+                                ? (zh ? '程序接口暂不可用' : 'Program APIs are unavailable')
                                 : refreshing
-                                    ? (zh ? '正在读取接口状态…' : 'Loading endpoint status…')
-                                    : (zh ? '暂无接口状态' : 'No endpoint status'),
+                                    ? (zh ? '正在读取程序接口…' : 'Loading program APIs…')
+                                    : (zh ? '该程序未声明接口' : 'The program has not declared any APIs'),
                         )}
                     </section>)}
 

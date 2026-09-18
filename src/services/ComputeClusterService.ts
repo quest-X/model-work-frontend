@@ -272,6 +272,16 @@ export type ComputeProgramSnapshot = {
             status_code: number | null;
             latency_ms: number | null;
         };
+        interfaces: {
+            method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+            path: string;
+            name: string;
+            description: string;
+            state: 'healthy' | 'unavailable' | 'not_checked';
+            checked_at: number | null;
+            status_code: number | null;
+            latency_ms: number | null;
+        }[];
         events: {
             created_at: number;
             level: 'info' | 'warning' | 'error';
