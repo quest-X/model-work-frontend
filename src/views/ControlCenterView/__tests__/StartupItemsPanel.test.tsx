@@ -88,15 +88,16 @@ describe('StartupItemsPanel', () => {
     afterEach(() => jest.restoreAllMocks());
 
     it('loads the latest items on reopen without a refresh button', async () => {
+        let resolveRefresh: (value: ComputeStartupList) => void = () => undefined;
+        const refresh = new Promise<ComputeStartupList>(resolve => {
+            resolveRefresh = resolve;
+        });
         const load = jest.spyOn(ComputeClusterService, 'startupItems')
             .mockResolvedValueOnce({
                 schema_version: 'startup.list-result.v1', platform: 'windows', available: true,
                 items: [item],
             })
-            .mockResolvedValueOnce({
-                schema_version: 'startup.list-result.v1', platform: 'windows', available: true,
-                items: [{...item, enabled: false}],
-            });
+            .mockReturnValueOnce(refresh);
         const view = render(<StartupItemsPanel node={node} zh visible/>);
 
         expect(await screen.findByText('已启用')).toBeInTheDocument();
@@ -106,6 +107,11 @@ describe('StartupItemsPanel', () => {
         view.rerender(<></>);
         view.rerender(<StartupItemsPanel node={node} zh visible/>);
 
+        expect(screen.getByText('已启用')).toBeInTheDocument();
+        resolveRefresh({
+            schema_version: 'startup.list-result.v1', platform: 'windows', available: true,
+            items: [{...item, enabled: false}],
+        });
         expect(await screen.findByText('已禁用')).toBeInTheDocument();
         expect(load).toHaveBeenCalledTimes(2);
         expect(load).toHaveBeenLastCalledWith(nodeId);
