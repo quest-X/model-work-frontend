@@ -47,7 +47,7 @@ const node: ComputeClusterNode = {
 describe('ProgramRunnerPanel', () => {
     afterEach(() => jest.restoreAllMocks());
 
-    it('shows programs, processes, and structured logs from the node runtime', async () => {
+    it('shows programs, endpoint status, artifacts, and structured logs', async () => {
         jest.spyOn(ComputeClusterService, 'runtime').mockResolvedValue({
             schema_version: 'runtime.snapshot.v1',
             captured_at: 101,
@@ -105,20 +105,8 @@ describe('ProgramRunnerPanel', () => {
                 },
             }],
         });
-        jest.spyOn(ComputeClusterService, 'runtimeInventory').mockResolvedValue({
-            schema_version: 'runtime.inventory.v1',
-            captured_at: 101,
-            processes_available: true,
-            processes: [{
-                pid: 1200,
-                name: 'python3',
-                cpu_percent: 7.5,
-                memory_bytes: 128 * 1024 ** 2,
-                state: 'running',
-            }],
-            startup_services_available: true,
-            startup_services: [],
-        });
+        const inventory = jest.spyOn(ComputeClusterService, 'runtimeInventory')
+            .mockRejectedValue(new Error('program runner must not fetch the system process inventory'));
         jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
             schema_version: 'runtime.programs.v1',
             captured_at: 101,
@@ -204,9 +192,14 @@ describe('ProgramRunnerPanel', () => {
         expect(within(dialog).getByText(/启停及模式切换仍需一次性授权接口/))
             .toBeInTheDocument();
 
-        fireEvent.click(within(dialog).getByRole('button', {name: '进程'}));
-        expect(await within(dialog).findByLabelText('程序运行器进程清单')).toHaveTextContent('python3');
-        expect(within(dialog).getByText('128 MB')).toBeInTheDocument();
+        fireEvent.click(within(dialog).getByRole('button', {name: '接口状态'}));
+        const endpoints = await within(dialog).findByLabelText('程序接口状态');
+        expect(endpoints).toHaveTextContent('节点服务');
+        expect(endpoints).toHaveTextContent('Vision OCR');
+        expect(endpoints).toHaveTextContent('HTTP 200');
+        expect(endpoints).toHaveTextContent('12 ms');
+        expect(endpoints).toHaveTextContent('3.5 ms');
+        expect(inventory).not.toHaveBeenCalled();
 
         fireEvent.click(within(dialog).getByRole('button', {name: '产物'}));
         const artifacts = await within(dialog).findByLabelText('程序产物');
@@ -229,7 +222,6 @@ describe('ProgramRunnerPanel', () => {
         expect(close).toHaveBeenCalledTimes(1);
         unmount();
         expect(jest.mocked(ComputeClusterService.runtime).mock.calls[0][1]?.aborted).toBe(true);
-        expect(jest.mocked(ComputeClusterService.runtimeInventory).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.programs).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.runtimeEvents).mock.calls[0][3]?.aborted).toBe(true);
     });

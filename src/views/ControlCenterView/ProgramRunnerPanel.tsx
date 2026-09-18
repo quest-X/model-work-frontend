@@ -1,15 +1,14 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
     ComputeClusterNode,
     ComputeClusterService,
     ComputeProgramSnapshot,
     ComputeRuntimeEvent,
-    ComputeRuntimeInventory,
     ComputeRuntimeService,
     ComputeRuntimeSnapshot,
 } from '../../services/ComputeClusterService';
 
-type ProgramRunnerView = 'programs' | 'processes' | 'artifacts' | 'logs';
+type ProgramRunnerView = 'programs' | 'endpoints' | 'artifacts' | 'logs';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
 
 interface IProps {
@@ -27,17 +26,6 @@ const runtimeStateLabel = (state: ComputeRuntimeService['state'], zh: boolean): 
     healthy: zh ? '正常' : 'Healthy',
     degraded: zh ? '降级' : 'Degraded',
     unavailable: zh ? '不可用' : 'Unavailable',
-    unknown: zh ? '未知' : 'Unknown',
-})[state];
-
-const processStateLabel = (
-    state: ComputeRuntimeInventory['processes'][number]['state'],
-    zh: boolean,
-): string => ({
-    running: zh ? '运行中' : 'Running',
-    sleeping: zh ? '休眠' : 'Sleeping',
-    stopped: zh ? '已停止' : 'Stopped',
-    zombie: zh ? '僵尸进程' : 'Zombie',
     unknown: zh ? '未知' : 'Unknown',
 })[state];
 
@@ -91,7 +79,7 @@ const taskStateLabel = (state: string, zh: boolean): string => ({
     cancelled: zh ? '已取消' : 'Cancelled',
 })[state] || state;
 
-// The three views share one polling boundary so closing the runner cancels every request together.
+// The four views share one polling boundary so closing the runner cancels every request together.
 // eslint-disable-next-line complexity
 export const ProgramRunnerPanel: React.FC<IProps> = ({
     node,
@@ -102,41 +90,34 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
 }) => {
     const [view, setView] = useState<ProgramRunnerView>('programs');
     const [snapshot, setSnapshot] = useState<ComputeRuntimeSnapshot | null>(null);
-    const [inventory, setInventory] = useState<ComputeRuntimeInventory | null>(null);
     const [programs, setPrograms] = useState<ComputeProgramSnapshot | null>(null);
     const [events, setEvents] = useState<ComputeRuntimeEvent[]>([]);
     const [runtimeError, setRuntimeError] = useState('');
-    const [inventoryError, setInventoryError] = useState('');
     const [programsError, setProgramsError] = useState('');
     const [eventsError, setEventsError] = useState('');
     const [selectedServiceId, setSelectedServiceId] = useState('');
-    const [processQuery, setProcessQuery] = useState('');
     const [logServiceId, setLogServiceId] = useState('');
     const [selectedArtifactId, setSelectedArtifactId] = useState('');
     const [refreshing, setRefreshing] = useState(false);
     const [refreshVersion, setRefreshVersion] = useState(0);
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
-    const inventoryCapable = node.online && node.capabilities.includes('runtime.inventory.v1');
     const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
 
     useEffect(() => {
         setView('programs');
         setSnapshot(null);
-        setInventory(null);
         setPrograms(null);
         setEvents([]);
         setRuntimeError('');
-        setInventoryError('');
         setProgramsError('');
         setEventsError('');
         setSelectedServiceId('');
-        setProcessQuery('');
         setLogServiceId('');
         setSelectedArtifactId('');
     }, [node.node_id]);
 
     useEffect(() => {
-        if (!runtimeCapable && !inventoryCapable && !programsCapable) return undefined;
+        if (!runtimeCapable && !programsCapable) return undefined;
         const controller = new AbortController();
         let inFlight = false;
         // eslint-disable-next-line complexity
@@ -144,12 +125,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             if (inFlight) return;
             inFlight = true;
             setRefreshing(true);
-            const [runtimeResult, inventoryResult, programsResult, eventsResult] = await Promise.allSettled([
+            const [runtimeResult, programsResult, eventsResult] = await Promise.allSettled([
                 runtimeCapable
                     ? ComputeClusterService.runtime(node.node_id, controller.signal)
-                    : Promise.resolve(null),
-                inventoryCapable
-                    ? ComputeClusterService.runtimeInventory(node.node_id, controller.signal)
                     : Promise.resolve(null),
                 programsCapable
                     ? ComputeClusterService.programs(node.node_id, controller.signal)
@@ -166,14 +144,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     setRuntimeError(runtimeResult.reason instanceof Error
                         ? runtimeResult.reason.message
                         : String(runtimeResult.reason));
-                }
-                if (inventoryResult.status === 'fulfilled') {
-                    if (inventoryResult.value) setInventory(inventoryResult.value);
-                    setInventoryError('');
-                } else {
-                    setInventoryError(inventoryResult.reason instanceof Error
-                        ? inventoryResult.reason.message
-                        : String(inventoryResult.reason));
                 }
                 if (programsResult.status === 'fulfilled') {
                     if (programsResult.value) setPrograms(programsResult.value);
@@ -201,7 +171,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [inventoryCapable, node.node_id, programsCapable, refreshVersion, runtimeCapable]);
+    }, [node.node_id, programsCapable, refreshVersion, runtimeCapable]);
 
     const selectedService = snapshot?.services.find(service =>
         service.service_id === selectedServiceId
@@ -212,17 +182,20 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     (programs?.programs || []).forEach(program =>
         serviceNames.set(program.program_id, program.name)
     );
-    const filteredProcesses = useMemo(() => {
-        const query = processQuery.trim().toLowerCase();
-        return [...(inventory?.processes || [])]
-            .filter(process => !query
-                || process.name.toLowerCase().includes(query)
-                || String(process.pid).includes(query)
-                || processStateLabel(process.state, zh).toLowerCase().includes(query))
-            .sort((left, right) =>
-                right.memory_bytes - left.memory_bytes || left.name.localeCompare(right.name)
-            );
-    }, [inventory, processQuery, zh]);
+    const endpointRows = [
+        ...(snapshot?.services || []).map(service => ({
+            key: `runtime-${service.service_id}`,
+            name: programName(service, zh),
+            kind: programKind(service, zh),
+            ...service.health,
+        })),
+        ...(programs?.programs || []).map(program => ({
+            key: `program-${program.program_id}`,
+            name: program.name,
+            kind: zh ? '部署程序' : 'Deployed program',
+            ...program.health,
+        })),
+    ];
     const filteredEvents = [...events]
         .filter(event => !logServiceId || event.service_id === logServiceId)
         .reverse();
@@ -258,7 +231,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         )
         : '';
     const capturedAt = snapshot?.captured_at
-        || inventory?.captured_at
         || programs?.captured_at
         || node.resources.captured_at;
 
@@ -313,7 +285,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             <nav className='ControlMonitorNav' aria-label={zh ? '程序运行器导航' : 'Program runner navigation'}>
                 {([
                     ['programs', zh ? '程序' : 'Programs'],
-                    ['processes', zh ? '进程' : 'Processes'],
+                    ['endpoints', zh ? '接口状态' : 'Endpoint status'],
                     ['artifacts', zh ? '产物' : 'Artifacts'],
                     ['logs', zh ? '日志' : 'Logs'],
                 ] as [ProgramRunnerView, string][]).map(([item, label]) => <button
@@ -467,58 +439,54 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             runtimeError,
                         ))}
 
-                {view === 'processes' && (!inventoryCapable
+                {view === 'endpoints' && (!runtimeCapable && !programsCapable
                     ? unavailable(
-                        zh ? '当前节点尚不支持进程清单' : 'Process inventory is not supported',
+                        zh ? '当前节点尚不支持接口状态' : 'Endpoint status is not supported',
                         node.online
-                            ? (zh ? '升级节点程序后可查看进程。' : 'Upgrade the node software to view processes.')
-                            : (zh ? '节点恢复在线后才能读取进程。' : 'The node must return online before processes can be read.'),
+                            ? (zh ? '升级节点程序后可查看接口状态。' : 'Upgrade the node software to view endpoint status.')
+                            : (zh ? '节点恢复在线后才能读取接口状态。' : 'The node must return online before endpoint status can be read.'),
                     )
-                    : inventory?.processes_available
-                        ? <section className='ControlMonitorProcesses ControlMonitorInventory' aria-label={zh ? '程序运行器进程清单' : 'Program runner process list'}>
-                            <header className='ControlMonitorSearchHeader'>
-                                <div>
-                                    <h3>{zh ? '节点进程' : 'Node processes'}</h3>
-                                    <p>{zh ? '按内存占用排序' : 'Sorted by memory usage'}</p>
-                                </div>
-                                <div className='ControlMonitorSearchTools'>
-                                    <input
-                                        type='search'
-                                        value={processQuery}
-                                        aria-label={zh ? '搜索程序运行器进程' : 'Search program runner processes'}
-                                        placeholder={zh ? '搜索名称、PID 或状态' : 'Search name, PID, or status'}
-                                        onChange={event => setProcessQuery(event.target.value)}
-                                    />
-                                    <span>{processQuery.trim()
-                                        ? `${filteredProcesses.length}/${inventory.processes.length}`
-                                        : inventory.processes.length}</span>
-                                </div>
-                            </header>
-                            {filteredProcesses.length > 0 ? <table>
-                                <thead><tr>
-                                    <th>{zh ? '名称' : 'Name'}</th>
-                                    <th>PID</th>
-                                    <th>CPU</th>
-                                    <th>{zh ? '内存' : 'Memory'}</th>
-                                    <th>{zh ? '状态' : 'Status'}</th>
-                                </tr></thead>
-                                <tbody>{filteredProcesses.map(process => <tr key={process.pid}>
-                                    <td>{process.name}</td>
-                                    <td>{process.pid}</td>
-                                    <td>{process.cpu_percent === null ? '—' : `${process.cpu_percent.toFixed(1)}%`}</td>
-                                    <td>{bytes(process.memory_bytes)}</td>
-                                    <td>{processStateLabel(process.state, zh)}</td>
-                                </tr>)}</tbody>
-                            </table> : unavailable(zh ? '未找到匹配进程' : 'No matching processes')}
-                        </section>
-                        : unavailable(
-                            inventoryError
-                                ? (zh ? '进程清单暂不可用' : 'The process list is unavailable')
-                                : inventory
-                                    ? (zh ? '节点无法读取进程清单' : 'The node cannot read its process list')
-                                    : (zh ? '正在读取进程清单…' : 'Loading process list…'),
-                            inventoryError,
-                        ))}
+                    : <section className='ControlMonitorProcesses ControlMonitorInventory' aria-label={zh ? '程序接口状态' : 'Program endpoint status'}>
+                        <header className='ControlMonitorSearchHeader'>
+                            <div>
+                                <h3>{zh ? '接口状态' : 'Endpoint status'}</h3>
+                                <p>{zh ? '每 5 秒检查一次服务健康状态' : 'Service health checks refresh every 5 seconds'}</p>
+                            </div>
+                            <span className='ControlProgramEndpointCount'>{endpointRows.length}</span>
+                        </header>
+                        {(runtimeError || programsError) && <p className='ControlProgramError' role='status'>
+                            {[runtimeError, programsError].filter(Boolean).join(' · ')}
+                        </p>}
+                        {endpointRows.length > 0 ? <table>
+                            <thead><tr>
+                                <th>{zh ? '名称' : 'Name'}</th>
+                                <th>{zh ? '类型' : 'Type'}</th>
+                                <th>{zh ? '状态' : 'Status'}</th>
+                                <th>{zh ? '响应' : 'Response'}</th>
+                                <th>{zh ? '延迟' : 'Latency'}</th>
+                                <th>{zh ? '最近检查' : 'Last checked'}</th>
+                            </tr></thead>
+                            <tbody>{endpointRows.map(endpoint => <tr key={endpoint.key}>
+                                <td>
+                                    <span className='ControlProgramEndpointName'>
+                                        <span className={`ControlStatusDot ${runtimeTone(endpoint.state)}`} aria-hidden='true'/>
+                                        {endpoint.name}
+                                    </span>
+                                </td>
+                                <td>{endpoint.kind}</td>
+                                <td>{runtimeStateLabel(endpoint.state, zh)}</td>
+                                <td>{endpoint.status_code === null ? 'HTTP —' : `HTTP ${endpoint.status_code}`}</td>
+                                <td>{endpoint.latency_ms === null ? '—' : `${endpoint.latency_ms} ms`}</td>
+                                <td>{dateTime(endpoint.checked_at, zh)}</td>
+                            </tr>)}</tbody>
+                        </table> : unavailable(
+                            runtimeError || programsError
+                                ? (zh ? '接口状态暂不可用' : 'Endpoint status is unavailable')
+                                : refreshing
+                                    ? (zh ? '正在读取接口状态…' : 'Loading endpoint status…')
+                                    : (zh ? '暂无接口状态' : 'No endpoint status'),
+                        )}
+                    </section>)}
 
                 {view === 'artifacts' && (!programsCapable
                     ? unavailable(
