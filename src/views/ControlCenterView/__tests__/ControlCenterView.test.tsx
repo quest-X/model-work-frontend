@@ -347,19 +347,63 @@ describe('ControlCenterView', () => {
     });
 
     it('shows only camera connections below an AIPACK node', async () => {
-        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
-            node('AIPACK-05', true, true, 'NVIDIA Jetson AGX Orin'),
-        ]);
+        const aipack = node('AIPACK-05', true, true, 'NVIDIA Jetson AGX Orin');
+        aipack.network.tailscale_ssh_available = false;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([aipack]);
         const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
 
+        fireEvent.click(await screen.findByRole('button', {name: /AIPACK-05/}));
         expect(await screen.findByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
         expect(screen.queryByText('边缘计算设备')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', {name: '发现并添加局域网边缘计算设备'}))
             .not.toBeInTheDocument();
         expect(screen.getByText('SSH 局域网')).toBeInTheDocument();
         expect(screen.queryByText('Tailscale 远程')).not.toBeInTheDocument();
+        expect(within(screen.getByRole('button', {name: '打开资源监视器'})).getByText('正常'))
+            .toBeInTheDocument();
         expect(screen.getByText('摄像头')).toBeInTheDocument();
         expect(container.querySelector('.ControlRelatedDeviceGrid')).toHaveClass('camera-only');
+    });
+
+    it('opens a node-scoped program runner for every AIPACK and closes it on selection changes', async () => {
+        const fleet = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 18, 19, 20, 21]
+            .map(number => runtimeNode(`AIPACK-${String(number).padStart(2, '0')}`));
+        fleet[1].capabilities = [];
+        fleet[2].online = false;
+        const main = node('baosight-02', true);
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([...fleet, main]);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        const machines = screen.getByRole('complementary', {name: '机器列表'});
+        await within(machines).findByRole('button', {name: /AIPACK-01/});
+        for (const machine of fleet) {
+            fireEvent.click(within(machines).getByRole('button', {name: new RegExp(machine.name)}));
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+            expect(screen.getByRole('heading', {name: '程序运行'})).toBeInTheDocument();
+            const launcher = screen.getByRole('button', {name: '打开程序运行器'});
+            expect(launcher).toHaveTextContent(!machine.online
+                ? '故障'
+                : machine.capabilities.length ? '正常' : '待升级');
+            fireEvent.click(launcher);
+            expect(screen.getByRole('dialog', {name: `${machine.name} 程序运行器`}))
+                .toBeInTheDocument();
+            if (!machine.online || !machine.capabilities.length) {
+                expect(ComputeClusterService.runtime).not.toHaveBeenCalledWith(
+                    machine.node_id, expect.any(AbortSignal),
+                );
+            } else {
+                expect(ComputeClusterService.runtime).toHaveBeenLastCalledWith(
+                    machine.node_id, expect.any(AbortSignal),
+                );
+            }
+        }
+        fireEvent.keyDown(document, {key: 'Escape'});
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        for (const [, signal] of jest.mocked(ComputeClusterService.runtime).mock.calls) {
+            expect(signal?.aborted).toBe(true);
+        }
+        fireEvent.click(within(machines).getByRole('button', {name: /baosight-02/}));
+        expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
     });
 
     it('uses the worst state when one explicit control path fails', async () => {

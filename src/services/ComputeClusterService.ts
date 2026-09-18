@@ -247,6 +247,40 @@ export type ComputeRuntimeInventory = {
     }[];
 };
 
+export type ComputeProgramSnapshot = {
+    schema_version: 'runtime.programs.v1';
+    captured_at: number;
+    invalid_manifests: number;
+    programs: {
+        program_id: string;
+        name: string;
+        version: string;
+        root: string;
+        environment: string;
+        mode: 'production' | 'debug';
+        encryption: 'encrypted' | 'plain' | 'unknown';
+        state: ComputeRuntimeState;
+        service: {
+            name: string;
+            state: 'running' | 'stopped' | 'unknown';
+            pid: number | null;
+            uptime_seconds: number | null;
+        };
+        health: {
+            state: ComputeRuntimeState;
+            checked_at: number;
+            status_code: number | null;
+            latency_ms: number | null;
+        };
+        events: {
+            created_at: number;
+            level: 'info' | 'warning' | 'error';
+            event_type: string;
+            message: string;
+        }[];
+    }[];
+};
+
 export type ComputeStartupItem = {
     item_id: string;
     name: string;
@@ -1360,6 +1394,10 @@ export class ComputeClusterService {
 
     public static runtimeInventory(nodeId: string, signal?: AbortSignal): Promise<ComputeRuntimeInventory> {
         return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/inventory`, signal);
+    }
+
+    public static programs(nodeId: string, signal?: AbortSignal): Promise<ComputeProgramSnapshot> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/programs`, signal);
     }
 
     public static startupItems(nodeId: string, signal?: AbortSignal): Promise<ComputeStartupList> {

@@ -47,6 +47,7 @@ import {DuplicateAnalysisPanel} from './DuplicateAnalysisPanel';
 import {StartupItemsPanel} from './StartupItemsPanel';
 import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
 import {PerformanceModePanel} from './PerformanceModePanel';
+import {ProgramRunnerPanel} from './ProgramRunnerPanel';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
@@ -402,6 +403,12 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [inspectedServiceId, setInspectedServiceId] = useState('');
     useEscapeToClose(() => setInspectedServiceId(''), Boolean(inspectedServiceId), 20);
     const [monitorMaximized, setMonitorMaximized] = useState(false);
+    const [programRunnerOpen, setProgramRunnerOpen] = useState(false);
+    const [programRunnerMaximized, setProgramRunnerMaximized] = useState(false);
+    useEscapeToClose(() => {
+        setProgramRunnerOpen(false);
+        setProgramRunnerMaximized(false);
+    }, programRunnerOpen, 21);
     const [monitorView, setMonitorView] = useState<MonitorView>('performance');
     const [deviceManagementTab, setDeviceManagementTab] = useState<'camera' | 'edge' | null>(null);
     const [cameraViewerId, setCameraViewerId] = useState('');
@@ -810,6 +817,8 @@ export const ControlCenterView: React.FC<IProps> = ({
         if (nodeChanged) {
             setInspectedServiceId('');
             setMonitorView('performance');
+            setProgramRunnerOpen(false);
+            setProgramRunnerMaximized(false);
         }
         if (nodeChanged || !runtimeInventoryCapable) {
             runtimeInventoryAbort.current?.abort();
@@ -1461,6 +1470,30 @@ export const ControlCenterView: React.FC<IProps> = ({
         </button>;
     };
 
+    const renderProgramRunnerCard = () => {
+        const capable = Boolean(
+            selectedNode?.online && selectedNode.capabilities.includes('runtime.read.v1'),
+        );
+        const tone: Tone = selectedNode?.online ? (capable ? 'healthy' : 'warning') : 'offline';
+        const status = selectedNode?.online
+            ? capable ? (zh ? '正常' : 'Normal') : (zh ? '待升级' : 'Upgrade required')
+            : (zh ? '故障' : 'Fault');
+        return <button
+            type='button'
+            className='ControlServiceCard ControlRuntimeService'
+            aria-label={zh ? '打开程序运行器' : 'Open program runner'}
+            onClick={() => setProgramRunnerOpen(true)}
+        >
+            <span className={`ControlStatusDot ${tone}`} aria-hidden='true'/>
+            <span className='ControlRuntimeIdentity'>
+                <span>{status}</span>
+                <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
+                <small>{zh ? '程序 · 环境 · 接口 · 状态 · 日志' : 'Programs · environments · endpoints · status · logs'}</small>
+            </span>
+            <span className='ControlServiceOpen' aria-hidden='true'>›</span>
+        </button>;
+    };
+
     // eslint-disable-next-line complexity
     const renderNode = (node: ComputeClusterNode) => {
         // Dependency health belongs to the latest node snapshot. Once that
@@ -1646,6 +1679,15 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </div>
                 <div className='ControlServiceGrid'>{renderResourceMonitorCard()}</div>
             </section>
+
+            {aipackNode && <section className='ControlSection'>
+                <div className='ControlSectionHeading'>
+                    <div>
+                        <h2>{zh ? '程序运行' : 'Program runtime'}</h2>
+                    </div>
+                </div>
+                <div className='ControlServiceGrid'>{renderProgramRunnerCard()}</div>
+            </section>}
 
             <section className='ControlSection'>
                 <div className='ControlSectionHeading'>
@@ -2600,6 +2642,26 @@ export const ControlCenterView: React.FC<IProps> = ({
                     </div>
                 </div>
             </section>
+        </div>}
+        {selectedNode && programRunnerOpen && <div
+            className={`ControlResourceMonitorBackdrop${programRunnerMaximized ? ' maximized' : ''}`}
+            onMouseDown={event => {
+                if (event.target === event.currentTarget) {
+                    setProgramRunnerOpen(false);
+                    setProgramRunnerMaximized(false);
+                }
+            }}
+        >
+            <ProgramRunnerPanel
+                node={selectedNode}
+                zh={zh}
+                maximized={programRunnerMaximized}
+                onClose={() => {
+                    setProgramRunnerOpen(false);
+                    setProgramRunnerMaximized(false);
+                }}
+                onToggleMaximized={() => setProgramRunnerMaximized(current => !current)}
+            />
         </div>}
     </div>;
 };
