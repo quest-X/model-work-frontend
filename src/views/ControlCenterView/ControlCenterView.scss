@@ -2027,6 +2027,101 @@ button.ControlServiceCard {
 .ControlProgramLogType { color: rgba(255, 255, 255, 0.46); font-family: SFMono-Regular, Consolas, monospace; }
 .ControlProgramError { margin: 0 0 12px; color: #ef8b8b; font-size: 9px; }
 
+.ControlProgramArtifacts {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 18px 20px;
+
+  .ControlMonitorSearchHeader > span {
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 10px;
+  }
+}
+
+.ControlProgramArtifactWorkspace {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(230px, 32%) minmax(0, 1fr);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+  > aside {
+    overflow: auto;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 8px 8px 8px 0;
+  }
+
+  > aside button {
+    display: block;
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    outline: 0;
+    background: transparent;
+    padding: 9px 10px;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible { border-color: rgba(0, 154, 255, 0.5); }
+    &[aria-current='page'] { border-color: rgba(0, 154, 255, 0.72); background: rgba(0, 154, 255, 0.1); }
+  }
+
+  strong,
+  span,
+  small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  strong { color: rgba(255, 255, 255, 0.84); font-size: 10px; }
+  span { margin-top: 4px; color: rgba(255, 255, 255, 0.46); font-size: 8px; }
+  small { margin-top: 3px; color: rgba(255, 255, 255, 0.3); font-size: 8px; }
+}
+
+.ControlProgramArtifactPreview {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 0 0 16px;
+
+  > header {
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+
+    div { min-width: 0; }
+    strong,
+    span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    strong { color: rgba(255, 255, 255, 0.84); font-size: 10px; }
+    span { margin-top: 4px; color: rgba(255, 255, 255, 0.34); font-size: 8px; }
+    em { flex: 0 0 auto; color: rgba(255, 255, 255, 0.42); font-size: 9px; font-style: normal; }
+  }
+
+  img,
+  video {
+    display: block;
+    max-width: 100%;
+    max-height: calc(100% - 46px);
+    object-fit: contain;
+  }
+
+  a {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 3px;
+    padding: 8px 12px;
+    color: #69c6ff;
+    font-size: 10px;
+    text-decoration: none;
+  }
+}
+
 .ControlPerformanceDiagnosis {
   > p { margin: 0 0 12px; color: rgba(255, 255, 255, 0.42); font-size: 9px; }
 
@@ -2338,4 +2433,8 @@ button.ControlServiceCard {
   .ControlProgramLogType { grid-column: 1; }
   .ControlProgramLogs li strong { grid-column: 2; grid-row: 2; }
   .ControlProgramLogs li small { grid-column: 2; }
+  .ControlProgramArtifactWorkspace { display: block; overflow: auto; }
+  .ControlProgramArtifactWorkspace > aside { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-right: 0; }
+  .ControlProgramArtifactWorkspace > aside button { flex: 0 0 230px; }
+  .ControlProgramArtifactPreview { min-height: 360px; padding-left: 0; }
 }

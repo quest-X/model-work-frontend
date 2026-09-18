@@ -9,7 +9,7 @@ import {
     ComputeRuntimeSnapshot,
 } from '../../services/ComputeClusterService';
 
-type ProgramRunnerView = 'programs' | 'processes' | 'logs';
+type ProgramRunnerView = 'programs' | 'processes' | 'artifacts' | 'logs';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
 
 interface IProps {
@@ -112,6 +112,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [processQuery, setProcessQuery] = useState('');
     const [logServiceId, setLogServiceId] = useState('');
+    const [selectedArtifactId, setSelectedArtifactId] = useState('');
     const [refreshing, setRefreshing] = useState(false);
     const [refreshVersion, setRefreshVersion] = useState(0);
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
@@ -131,6 +132,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setSelectedServiceId('');
         setProcessQuery('');
         setLogServiceId('');
+        setSelectedArtifactId('');
     }, [node.node_id]);
 
     useEffect(() => {
@@ -236,6 +238,25 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             task_id: null,
         })),
     ].sort((left, right) => right.created_at - left.created_at);
+    const programArtifacts = (programs?.programs || []).flatMap(program =>
+        program.artifacts.map(artifact => ({
+            ...artifact,
+            selection_id: `${program.program_id}:${artifact.artifact_id}`,
+            program_id: program.program_id,
+            program_name: program.name,
+        }))
+    ).sort((left, right) => right.modified_at - left.modified_at);
+    const selectedArtifact = programArtifacts.find(artifact =>
+        artifact.selection_id === selectedArtifactId
+    ) || programArtifacts[0] || null;
+    const selectedArtifactUrl = selectedArtifact
+        ? ComputeClusterService.programArtifactUrl(
+            node.node_id,
+            selectedArtifact.program_id,
+            selectedArtifact.artifact_id,
+            selectedArtifact.modified_at,
+        )
+        : '';
     const capturedAt = snapshot?.captured_at
         || inventory?.captured_at
         || programs?.captured_at
@@ -293,6 +314,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                 {([
                     ['programs', zh ? '程序' : 'Programs'],
                     ['processes', zh ? '进程' : 'Processes'],
+                    ['artifacts', zh ? '产物' : 'Artifacts'],
                     ['logs', zh ? '日志' : 'Logs'],
                 ] as [ProgramRunnerView, string][]).map(([item, label]) => <button
                     type='button'
@@ -433,8 +455,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 <div className='ControlProgramCapabilityNote' role='status'>
                                     <strong>{zh ? '当前管理范围' : 'Current management scope'}</strong>
                                     <span>{zh
-                                        ? '已接入程序目录、独立环境、运行模式、加密声明、状态、进程、接口健康与结构化日志。部署、加密执行、启停及模式切换仍需一次性授权接口。'
-                                        : 'Program directories, environments, modes, encryption declarations, status, processes, endpoint health, and structured logs are available. Deployment, encryption actions, lifecycle actions, and mode changes still require one-time authorization APIs.'}</span>
+                                        ? '已接入程序目录、独立环境、运行模式、加密声明、状态、进程、接口健康、运行产物与结构化日志。部署、加密执行、启停及模式切换仍需一次性授权接口。'
+                                        : 'Program directories, environments, modes, encryption declarations, status, processes, endpoint health, runtime artifacts, and structured logs are available. Deployment, encryption actions, lifecycle actions, and mode changes still require one-time authorization APIs.'}</span>
                                 </div>
                             </section>
                         </div>
@@ -497,6 +519,70 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     : (zh ? '正在读取进程清单…' : 'Loading process list…'),
                             inventoryError,
                         ))}
+
+                {view === 'artifacts' && (!programsCapable
+                    ? unavailable(
+                        zh ? '当前节点尚不支持程序产物' : 'Program artifacts are not supported',
+                        node.online
+                            ? (zh ? '升级节点程序后可查看录像、图片和数据文件。' : 'Upgrade the node software to view recordings, images, and data files.')
+                            : (zh ? '节点恢复在线后才能读取程序产物。' : 'The node must return online before artifacts can be read.'),
+                    )
+                    : <section className='ControlProgramArtifacts' aria-label={zh ? '程序产物' : 'Program artifacts'}>
+                        <header className='ControlMonitorSearchHeader'>
+                            <div>
+                                <h3>{zh ? '运行产物' : 'Runtime artifacts'}</h3>
+                                <p>{zh ? '录像、图表与配套数据' : 'Recordings, charts, and paired data'}</p>
+                            </div>
+                            <span>{programArtifacts.length}</span>
+                        </header>
+                        {programsError
+                            ? <p className='ControlProgramError' role='status'>{programsError}</p>
+                            : selectedArtifact
+                                ? <div className='ControlProgramArtifactWorkspace'>
+                                    <aside aria-label={zh ? '产物列表' : 'Artifact list'}>
+                                        {programArtifacts.map(artifact => <button
+                                            type='button'
+                                            key={`${artifact.program_id}-${artifact.artifact_id}`}
+                                            aria-current={artifact.selection_id === selectedArtifact.selection_id
+                                                ? 'page'
+                                                : undefined}
+                                            onClick={() => setSelectedArtifactId(artifact.selection_id)}
+                                        >
+                                            <strong>{artifact.name}</strong>
+                                            <span>{artifact.program_name} · {bytes(artifact.size_bytes)}</span>
+                                            <small>{dateTime(artifact.modified_at, zh)}</small>
+                                        </button>)}
+                                    </aside>
+                                    <div className='ControlProgramArtifactPreview'>
+                                        <header>
+                                            <div>
+                                                <strong>{selectedArtifact.name}</strong>
+                                                <span>{selectedArtifact.relative_path}</span>
+                                            </div>
+                                            <em>{bytes(selectedArtifact.size_bytes)}</em>
+                                        </header>
+                                        {selectedArtifact.kind === 'video'
+                                            ? <video
+                                                controls
+                                                preload='metadata'
+                                                src={selectedArtifactUrl}
+                                            />
+                                            : selectedArtifact.kind === 'image'
+                                                ? <img
+                                                    src={selectedArtifactUrl}
+                                                    alt={selectedArtifact.name}
+                                                />
+                                                : <a href={selectedArtifactUrl} download={selectedArtifact.name}>
+                                                    {zh ? '下载数据文件' : 'Download data file'}
+                                                </a>}
+                                    </div>
+                                </div>
+                                : unavailable(
+                                    refreshing
+                                        ? (zh ? '正在读取程序产物…' : 'Loading program artifacts…')
+                                        : (zh ? '暂无录像、图片或数据文件' : 'No recordings, images, or data files'),
+                                )}
+                    </section>)}
 
                 {view === 'logs' && (!runtimeCapable && !programsCapable
                     ? unavailable(

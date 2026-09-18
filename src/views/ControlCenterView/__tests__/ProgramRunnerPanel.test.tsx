@@ -150,6 +150,23 @@ describe('ProgramRunnerPanel', () => {
                     event_type: 'started',
                     message: 'Program started',
                 }],
+                artifacts: [{
+                    artifact_id: 'a'.repeat(32),
+                    name: '017.mp4',
+                    relative_path: 'runs/20260918/017/017.mp4',
+                    kind: 'video',
+                    content_type: 'video/mp4',
+                    size_bytes: 111 * 1024 ** 2,
+                    modified_at: 100,
+                }, {
+                    artifact_id: 'b'.repeat(32),
+                    name: '017.png',
+                    relative_path: 'runs/20260918/017/017.png',
+                    kind: 'image',
+                    content_type: 'image/png',
+                    size_bytes: 1024,
+                    modified_at: 99,
+                }],
             }],
         });
         jest.spyOn(ComputeClusterService, 'runtimeEvents').mockResolvedValue({
@@ -190,6 +207,14 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(dialog).getByRole('button', {name: '进程'}));
         expect(await within(dialog).findByLabelText('程序运行器进程清单')).toHaveTextContent('python3');
         expect(within(dialog).getByText('128 MB')).toBeInTheDocument();
+
+        fireEvent.click(within(dialog).getByRole('button', {name: '产物'}));
+        const artifacts = await within(dialog).findByLabelText('程序产物');
+        expect(artifacts).toHaveTextContent('017.mp4');
+        const video = artifacts.querySelector('video');
+        expect(video?.getAttribute('src')).toContain('/runtime/programs/vision-ocr/artifacts/');
+        fireEvent.click(within(artifacts).getByRole('button', {name: /017.png/}));
+        expect(within(artifacts).getByRole('img', {name: '017.png'})).toBeInTheDocument();
 
         fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
         const logs = await within(dialog).findByLabelText('程序日志');

@@ -278,6 +278,15 @@ export type ComputeProgramSnapshot = {
             event_type: string;
             message: string;
         }[];
+        artifacts: {
+            artifact_id: string;
+            name: string;
+            relative_path: string;
+            kind: 'image' | 'video' | 'data';
+            content_type: string;
+            size_bytes: number;
+            modified_at: number;
+        }[];
     }[];
 };
 
@@ -1398,6 +1407,17 @@ export class ComputeClusterService {
 
     public static programs(nodeId: string, signal?: AbortSignal): Promise<ComputeProgramSnapshot> {
         return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/programs`, signal);
+    }
+
+    public static programArtifactUrl(
+        nodeId: string,
+        programId: string,
+        artifactId: string,
+        modifiedAt: number,
+    ): string {
+        return `${baseUrl()}/nodes/${encodeURIComponent(nodeId)}/runtime/programs/${
+            encodeURIComponent(programId)
+        }/artifacts/${encodeURIComponent(artifactId)}?v=${modifiedAt}`;
     }
 
     public static startupItems(nodeId: string, signal?: AbortSignal): Promise<ComputeStartupList> {
