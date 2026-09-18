@@ -1674,20 +1674,14 @@ export const ControlCenterView: React.FC<IProps> = ({
             <section className='ControlSection'>
                 <div className='ControlSectionHeading'>
                     <div>
-                        <h2>{zh ? '资源监控' : 'Resource monitoring'}</h2>
+                        <h2>{zh ? '资源管理' : 'Resource management'}</h2>
                     </div>
                 </div>
-                <div className='ControlServiceGrid'>{renderResourceMonitorCard()}</div>
+                <div className='ControlServiceGrid'>
+                    {renderResourceMonitorCard()}
+                    {aipackNode && renderProgramRunnerCard()}
+                </div>
             </section>
-
-            {aipackNode && <section className='ControlSection'>
-                <div className='ControlSectionHeading'>
-                    <div>
-                        <h2>{zh ? '程序运行' : 'Program runtime'}</h2>
-                    </div>
-                </div>
-                <div className='ControlServiceGrid'>{renderProgramRunnerCard()}</div>
-            </section>}
 
             <section className='ControlSection'>
                 <div className='ControlSectionHeading'>

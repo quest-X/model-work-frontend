@@ -257,7 +257,7 @@ describe('ControlCenterView', () => {
         expect(await screen.findByRole('heading', {name: '在线节点'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '基础信息'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '网络情况'})).toBeInTheDocument();
-        expect(screen.getByRole('heading', {name: '资源监控'})).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: '资源管理'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '相关设备'})).toBeInTheDocument();
         expect(screen.getByText('边缘计算设备')).toBeInTheDocument();
         expect(screen.getByRole('button', {name: '发现并添加局域网边缘计算设备'})).toBeInTheDocument();
@@ -379,7 +379,8 @@ describe('ControlCenterView', () => {
         for (const machine of fleet) {
             fireEvent.click(within(machines).getByRole('button', {name: new RegExp(machine.name)}));
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-            expect(screen.getByRole('heading', {name: '程序运行'})).toBeInTheDocument();
+            expect(screen.getByRole('heading', {name: '资源管理'})).toBeInTheDocument();
+            expect(screen.queryByRole('heading', {name: '程序运行'})).not.toBeInTheDocument();
             const launcher = screen.getByRole('button', {name: '打开程序运行器'});
             expect(launcher).toHaveTextContent(!machine.online
                 ? '故障'
