@@ -267,7 +267,7 @@ describe('ProgramRunnerPanel', () => {
         expect(global.fetch).toHaveBeenCalledWith(
             expect.stringContaining('/runtime/programs/vision-ocr/artifacts/'),
             expect.objectContaining({
-                headers: {Range: 'bytes=0-1048575'},
+                headers: {Range: 'bytes=0-262143'},
                 signal: expect.any(AbortSignal),
             }),
         );

@@ -83,7 +83,7 @@ const bytes = (value: number): string => {
     return `${size >= 100 || index === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[index]}`;
 };
 
-const RESULT_PREVIEW_BYTES = 1024 * 1024;
+const RESULT_PREVIEW_BYTES = 256 * 1024;
 
 const formatResultPreview = (contentType: string, value: string, truncated: boolean): string => {
     if (!truncated && contentType.startsWith('application/json')) {
