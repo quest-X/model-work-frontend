@@ -1101,6 +1101,8 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(regionGraph);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
+        fireEvent.click(await within(screen.getByRole('complementary', {name: '机器列表'}))
+            .findByRole('button', {name: /Charlie/}));
         await screen.findByRole('heading', {name: 'Charlie'});
         const list = screen.getByRole('complementary', {name: '机器列表'});
         expect(within(screen.getByRole('combobox', {name: '节点状态'})).getAllByRole('option')
@@ -1116,6 +1118,22 @@ describe('ControlCenterView', () => {
 
         fireEvent.change(screen.getByRole('combobox', {name: '节点分组'}), {target: {value: 'platform'}});
         expect(list.querySelectorAll('.ControlMachineGroupHeading')).toHaveLength(2);
+
+        const windowsToggle = within(list).getByRole('button', {name: '收起Windows'});
+        expect(windowsToggle).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.click(windowsToggle);
+        expect(windowsToggle).toHaveAttribute('aria-expanded', 'false');
+        expect(within(list).queryByRole('button', {name: /Charlie/})).not.toBeInTheDocument();
+        expect(within(list).queryByRole('button', {name: /Bravo/})).not.toBeInTheDocument();
+        expect(within(list).getByRole('button', {name: /Alpha/})).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'Charlie'})).toBeInTheDocument();
+
+        fireEvent.change(screen.getByRole('combobox', {name: '节点分组'}), {target: {value: 'none'}});
+        expect(list.querySelectorAll('.ControlMachineGroupHeading')).toHaveLength(0);
+        expect(within(list).getByRole('button', {name: /Charlie/})).toBeInTheDocument();
+        fireEvent.change(screen.getByRole('combobox', {name: '节点分组'}), {target: {value: 'platform'}});
+        fireEvent.click(within(list).getByRole('button', {name: '展开Windows'}));
+        expect(within(list).getByRole('button', {name: /Charlie/})).toBeInTheDocument();
 
         fireEvent.change(screen.getByRole('combobox', {name: '节点状态'}), {target: {value: 'fault'}});
         expect(screen.getByRole('button', {name: /Alpha/})).toBeInTheDocument();
@@ -1186,6 +1204,8 @@ describe('ControlCenterView', () => {
         });
         render(<ControlCenterView language={Language.CHINESE}/>);
 
+        fireEvent.click(await within(screen.getByRole('complementary', {name: '机器列表'}))
+            .findByRole('button', {name: /01 笔记本/}));
         await screen.findByRole('heading', {name: '01 笔记本'});
         const list = screen.getByRole('complementary', {name: '机器列表'});
         expect(Array.from(list.querySelectorAll('.ControlMachineItem strong')).map(item => item.textContent))
@@ -1195,6 +1215,19 @@ describe('ControlCenterView', () => {
         expect(within(list).getByRole('button', {name: /02 笔记本/})).toHaveClass('tree-depth-1');
         expect(within(list).getByRole('button', {name: '打开 AIPACK-13 边缘设备终端'}))
             .toHaveClass('tree-depth-0');
+        const areaToggle = within(list).getByRole('button', {name: '收起废钢作业区'});
+        const areaHeading = areaToggle.closest('.ControlMachineGroupHeading') as HTMLElement;
+        expect(areaHeading.querySelector('strong')?.nextElementSibling).toHaveTextContent('1');
+        expect(areaToggle).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.click(areaToggle);
+        expect(areaToggle).toHaveAttribute('aria-expanded', 'false');
+        expect(within(list).queryByRole('button', {name: '打开 AIPACK-13 边缘设备终端'}))
+            .not.toBeInTheDocument();
+        expect(within(list).queryByRole('button', {name: '打开 yy-camera 实时画面'})).not.toBeInTheDocument();
+        expect(within(list).getByRole('button', {name: /02 笔记本/})).toBeInTheDocument();
+        fireEvent.click(within(list).getByRole('button', {name: '展开废钢作业区'}));
+        expect(within(list).getByRole('button', {name: '打开 AIPACK-13 边缘设备终端'}))
+            .toBeInTheDocument();
         const camera = within(list).getByRole('button', {name: '打开 yy-camera 实时画面'});
         expect(camera).toHaveClass('tree-depth-1');
         expect(camera.querySelector('img')).toHaveAttribute('src', '/ico/camera.png');
@@ -1278,6 +1311,13 @@ describe('ControlCenterView', () => {
 
         fireEvent.click(installed);
         expect(await screen.findByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
+        fireEvent.click(within(list).getByRole('button', {name: '收起炉后作业区'}));
+        expect(within(list).queryByRole('button', {name: '查看 AIPACK-05 节点信息'}))
+            .not.toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
+        fireEvent.click(within(list).getByRole('button', {name: '展开炉后作业区'}));
+        expect(within(list).getByRole('button', {name: '查看 AIPACK-05 节点信息'}))
+            .toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByLabelText('1 个相关设备')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '打开车间相机实时画面'}));
         expect(await screen.findByRole('dialog', {name: '相机实时画面'})).toHaveTextContent('shangang-aipac-02');

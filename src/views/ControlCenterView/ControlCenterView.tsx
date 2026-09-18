@@ -433,6 +433,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [nodeGrouping, setNodeGrouping] = useState<NodeGrouping>('region');
     const [nodeOrdering, setNodeOrdering] = useState<NodeOrdering>('status');
     const [nodeVisibility, setNodeVisibility] = useState<NodeVisibility>('all');
+    const [collapsedMachineGroups, setCollapsedMachineGroups] = useState<Set<string>>(new Set());
     const [overviewView, setOverviewView] = useState<OverviewView>('graph');
     const mounted = useRef(true);
     const refreshInFlight = useRef(false);
@@ -1142,6 +1143,27 @@ export const ControlCenterView: React.FC<IProps> = ({
         </React.Fragment>;
     };
 
+    const renderMachineGroupHeading = (id: string, label: string, count: number) => {
+        const collapsed = collapsedMachineGroups.has(id);
+        const action = zh ? `${collapsed ? '展开' : '收起'}${label}` : `${collapsed ? 'Expand' : 'Collapse'} ${label}`;
+        return <div className='ControlMachineGroupHeading'>
+            <strong>{label}</strong>
+            <span>{count}</span>
+            <button
+                type='button'
+                aria-label={action}
+                title={action}
+                aria-expanded={!collapsed}
+                onClick={() => setCollapsedMachineGroups(current => {
+                    const next = new Set(current);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                })}
+            ><span aria-hidden='true'>&#8250;</span></button>
+        </div>;
+    };
+
     // eslint-disable-next-line complexity
     const renderMachineList = () => <aside className='ControlMachinePanel' aria-label={zh ? '机器列表' : 'Machine list'}>
         <div className='ControlMachineOrganizer' aria-label={zh ? '节点整理' : 'Organize nodes'}>
@@ -1209,12 +1231,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                 const orderedNodes = hasSingleMain
                     ? [mainNodes[0], ...visibleGroupNodes.filter(node => node.node_id !== mainNodes[0].node_id)]
                     : visibleGroupNodes;
+                const groupId = `${nodeGrouping}:${group}`;
                 return <React.Fragment key={group || 'all'}>
-                    {group && <div className='ControlMachineGroupHeading'>
-                        <strong>{group}</strong>
-                        <span>{visibleGroupNodes.length}</span>
-                    </div>}
-                    {orderedNodes.map(node => {
+                    {group && renderMachineGroupHeading(groupId, group, visibleGroupNodes.length)}
+                    {(!group || !collapsedMachineGroups.has(groupId)) && orderedNodes.map(node => {
                         const tone = machineTone(node);
                         const nodeDepth = hasSingleMain && node.role !== 'main' ? 1 : 0;
                         const allEdgeDevices = lanAssets.filter(asset =>
@@ -1255,12 +1275,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                 const devices = lanAssets.filter(asset =>
                     asset.device_kind === 'edge_compute' && sidebarWorkArea(asset)?.id === area.id
                 );
+                const groupId = `work-area:${area.id}`;
                 return devices.length > 0 && <React.Fragment key={area.id}>
-                    <div className='ControlMachineGroupHeading'>
-                        <strong>{zh ? area.zh : area.en}</strong>
-                        <span>{devices.length}</span>
-                    </div>
-                    {devices.map(device => {
+                    {renderMachineGroupHeading(groupId, zh ? area.zh : area.en, devices.length)}
+                    {!collapsedMachineGroups.has(groupId) && devices.map(device => {
                         const node = nodes.find(item => item.node_id === device.node_id);
                         return node && renderSidebarEdge(node, device, 0, installedSidebarNode(device));
                     })}

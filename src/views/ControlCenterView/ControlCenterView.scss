@@ -70,14 +70,36 @@
 .ControlMachineGroupHeading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   min-height: 25px;
   background: rgba(255, 255, 255, 0.035);
   padding: 0 10px 0 13px;
   color: rgba(255, 255, 255, 0.42);
   font-size: 9px;
 
-  strong { font-weight: 600; }
+  strong { min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  > span { flex: 0 0 auto; }
+
+  button {
+    display: flex;
+    width: 16px;
+    height: 25px;
+    flex: 0 0 16px;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    font-size: 16px;
+    cursor: pointer;
+
+    span { display: block; }
+    &[aria-expanded='true'] span { transform: rotate(90deg); }
+    &:focus-visible { outline: 1px solid rgba(0, 154, 255, 0.55); outline-offset: -1px; }
+  }
 }
 
 .ControlMachineItem {
