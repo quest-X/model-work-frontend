@@ -282,8 +282,9 @@ describe('ProgramRunnerPanel', () => {
                 signal: expect.any(AbortSignal),
             }),
         );
-        expect(within(artifacts).getByRole('link', {name: '下载原文件'}))
-            .toHaveAttribute('download', '017.json');
+        expect(within(artifacts).getByText('网页内预览')).toBeInTheDocument();
+        expect(within(artifacts).queryByRole('link', {name: '下载原文件'}))
+            .not.toBeInTheDocument();
 
         fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
         const logs = await within(dialog).findByLabelText('程序日志');

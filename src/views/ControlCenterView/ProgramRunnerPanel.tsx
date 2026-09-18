@@ -751,14 +751,12 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                                 {resultPreview || (zh ? '文件为空' : 'Empty file')}
                                                             </pre>}
                                                     <footer>
+                                                        <span>{zh ? '网页内预览' : 'In-page preview'}</span>
                                                         {resultPreviewTruncated && <span>
                                                             {zh
                                                                 ? `仅预览前 ${bytes(RESULT_PREVIEW_BYTES)}`
                                                                 : `Previewing the first ${bytes(RESULT_PREVIEW_BYTES)}`}
                                                         </span>}
-                                                        <a href={selectedArtifactUrl} download={selectedArtifact.name}>
-                                                            {zh ? '下载原文件' : 'Download original'}
-                                                        </a>
                                                     </footer>
                                                 </div>}
                                     </div>
