@@ -181,7 +181,7 @@ export const StartupItemsPanel: React.FC<IProps> = ({node, zh, visible}) => {
     return <section className='ControlMonitorProcesses ControlMonitorInventory' aria-label={zh ? '启动应用清单' : 'Startup app list'}>
         <header className='ControlMonitorSearchHeader'>
             <h3>{zh ? '启动应用' : 'Startup apps'}</h3>
-            <div className='ControlMonitorSearchTools'><input type='search' value={query} aria-label={zh ? '搜索启动应用' : 'Search startup apps'} placeholder={zh ? '搜索名称、标识、状态或范围' : 'Search name, identifier, status, or scope'} onChange={event => setQuery(event.target.value)}/><button type='button' onClick={() => void load()} disabled={loading}>{zh ? '刷新' : 'Refresh'}</button><span>{items.length}/{document.items.length}</span></div>
+            <div className='ControlMonitorSearchTools'><input type='search' value={query} aria-label={zh ? '搜索启动应用' : 'Search startup apps'} placeholder={zh ? '搜索名称、标识、状态或范围' : 'Search name, identifier, status, or scope'} onChange={event => setQuery(event.target.value)}/><span>{items.length}/{document.items.length}</span></div>
         </header>
         {error && <div className='ControlMonitorUnavailable'><strong>{error}</strong></div>}
         <table><thead><tr><th>{zh ? '名称' : 'Name'}</th><th>{zh ? '标识' : 'Identifier'}</th><th>{zh ? '范围' : 'Scope'}</th><th>{zh ? '状态' : 'Status'}</th><th>{zh ? '操作' : 'Action'}</th></tr></thead><tbody>{items.map(item => <tr key={item.item_id}>
