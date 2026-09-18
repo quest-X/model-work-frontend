@@ -257,8 +257,19 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
         const artifacts = await within(dialog).findByLabelText('程序结果');
         expect(artifacts).toHaveTextContent('017.mp4');
+        expect(within(artifacts).getByRole('button', {name: '加载视频预览'})).toBeInTheDocument();
+        expect(artifacts.querySelector('video')).not.toBeInTheDocument();
+        fireEvent.click(within(artifacts).getByRole('button', {name: '加载视频预览'}));
         const video = artifacts.querySelector('video');
         expect(video?.getAttribute('src')).toContain('/runtime/programs/vision-ocr/artifacts/');
+        fireEvent.change(within(artifacts).getByRole('combobox', {name: '筛选结果类型'}), {
+            target: {value: 'image'},
+        });
+        expect(within(artifacts).getByRole('button', {name: /017.png/})).toBeInTheDocument();
+        expect(within(artifacts).queryByRole('button', {name: /017.mp4/})).not.toBeInTheDocument();
+        fireEvent.change(within(artifacts).getByRole('combobox', {name: '筛选结果类型'}), {
+            target: {value: 'all'},
+        });
         fireEvent.click(within(artifacts).getByRole('button', {name: /017.png/}));
         expect(within(artifacts).getByRole('img', {name: '017.png'})).toBeInTheDocument();
         fireEvent.click(within(artifacts).getByRole('button', {name: /017.json/}));

@@ -10,6 +10,7 @@ import {
 
 type ProgramRunnerView = 'programs' | 'endpoints' | 'artifacts' | 'logs';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
+type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'log';
 
 interface IProps {
     node: ComputeClusterNode;
@@ -91,6 +92,30 @@ const bytes = (value: number): string => {
     return `${size >= 100 || index === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[index]}`;
 };
 
+type ProgramArtifact = ComputeProgramSnapshot['programs'][number]['artifacts'][number];
+
+const artifactCategory = (artifact: ProgramArtifact): Exclude<ResultCategory, 'all'> => {
+    if (artifact.kind === 'video') return 'video';
+    if (artifact.kind === 'image') return 'image';
+    if (artifact.name.toLowerCase().endsWith('.jsonl')) return 'log';
+    return 'data';
+};
+
+const artifactCategoryLabel = (category: ResultCategory, zh: boolean): string => ({
+    all: zh ? '全部' : 'All',
+    video: zh ? '视频' : 'Videos',
+    image: zh ? '图片' : 'Images',
+    data: zh ? '数据' : 'Data',
+    log: zh ? '日志' : 'Logs',
+}[category]);
+
+const localDateKey = (timestamp: number): string => {
+    const date = new Date(timestamp * 1000);
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${date.getFullYear()}-${month}-${day}`;
+};
+
 const RESULT_PREVIEW_BYTES = 256 * 1024;
 
 const formatResultPreview = (contentType: string, value: string, truncated: boolean): string => {
@@ -133,6 +158,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [logServiceId, setLogServiceId] = useState('');
     const [selectedArtifactId, setSelectedArtifactId] = useState('');
+    const [artifactDate, setArtifactDate] = useState('');
+    const [artifactCategoryFilter, setArtifactCategoryFilter] = useState<ResultCategory>('all');
+    const [artifactQuery, setArtifactQuery] = useState('');
+    const [loadedVideoId, setLoadedVideoId] = useState('');
     const [resultPreview, setResultPreview] = useState('');
     const [resultPreviewError, setResultPreviewError] = useState('');
     const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
@@ -153,6 +182,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setSelectedServiceId('');
         setLogServiceId('');
         setSelectedArtifactId('');
+        setArtifactDate('');
+        setArtifactCategoryFilter('all');
+        setArtifactQuery('');
+        setLoadedVideoId('');
         setResultPreview('');
         setResultPreviewError('');
         setResultPreviewLoading(false);
@@ -270,9 +303,25 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             program_name: program.name,
         }))
     ).sort((left, right) => right.modified_at - left.modified_at);
-    const selectedArtifact = programArtifacts.find(artifact =>
+    const filteredProgramArtifacts = programArtifacts.filter(artifact => {
+        const matchesDate = !artifactDate || localDateKey(artifact.modified_at) === artifactDate;
+        const category = artifactCategory(artifact);
+        const matchesCategory = artifactCategoryFilter === 'all'
+            || category === artifactCategoryFilter;
+        const query = artifactQuery.trim().toLowerCase();
+        const matchesQuery = !query
+            || artifact.name.toLowerCase().includes(query)
+            || artifact.relative_path.toLowerCase().includes(query)
+            || artifact.program_name.toLowerCase().includes(query);
+        return matchesDate && matchesCategory && matchesQuery;
+    });
+    const selectedArtifact = filteredProgramArtifacts.find(artifact =>
         artifact.selection_id === selectedArtifactId
-    ) || programArtifacts[0] || null;
+    ) || filteredProgramArtifacts[0] || null;
+    const artifactGroups = (['video', 'image', 'data', 'log'] as const).map(category => ({
+        category,
+        artifacts: filteredProgramArtifacts.filter(artifact => artifactCategory(artifact) === category),
+    }));
     const selectedArtifactUrl = selectedArtifact
         ? ComputeClusterService.programArtifactUrl(
             node.node_id,
@@ -285,6 +334,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         selectedArtifact?.kind === 'data'
         && selectedArtifact.size_bytes > RESULT_PREVIEW_BYTES,
     );
+
+    useEffect(() => {
+        setLoadedVideoId('');
+    }, [selectedArtifact?.selection_id]);
 
     useEffect(() => {
         setResultPreview('');
@@ -597,25 +650,67 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 <h3>{zh ? '运行结果' : 'Runtime results'}</h3>
                                 <p>{zh ? '录像、图表与配套数据' : 'Recordings, charts, and paired data'}</p>
                             </div>
-                            <span>{programArtifacts.length}</span>
+                            <div className='ControlProgramArtifactFilters'>
+                                <input
+                                    type='search'
+                                    value={artifactQuery}
+                                    aria-label={zh ? '搜索结果' : 'Search results'}
+                                    placeholder={zh ? '搜索文件名或路径' : 'Search file name or path'}
+                                    onChange={event => setArtifactQuery(event.target.value)}
+                                />
+                                <input
+                                    type='date'
+                                    value={artifactDate}
+                                    aria-label={zh ? '筛选结果日期' : 'Filter results by date'}
+                                    onChange={event => setArtifactDate(event.target.value)}
+                                />
+                                <select
+                                    aria-label={zh ? '筛选结果类型' : 'Filter result type'}
+                                    value={artifactCategoryFilter}
+                                    onChange={event => setArtifactCategoryFilter(event.target.value as ResultCategory)}
+                                >
+                                    {(['all', 'video', 'image', 'data', 'log'] as ResultCategory[]).map(category => <option
+                                        key={category}
+                                        value={category}
+                                    >{artifactCategoryLabel(category, zh)}</option>)}
+                                </select>
+                                {(artifactDate || artifactQuery || artifactCategoryFilter !== 'all') && <button
+                                    type='button'
+                                    onClick={() => {
+                                        setArtifactDate('');
+                                        setArtifactQuery('');
+                                        setArtifactCategoryFilter('all');
+                                    }}
+                                >{zh ? '清除筛选' : 'Clear filters'}</button>}
+                                <span>{filteredProgramArtifacts.length}/{programArtifacts.length}</span>
+                            </div>
                         </header>
                         {programsError
                             ? <p className='ControlProgramError' role='status'>{programsError}</p>
-                            : selectedArtifact
+                            : programArtifacts.length > 0 && selectedArtifact
                                 ? <div className='ControlProgramArtifactWorkspace'>
                                     <aside aria-label={zh ? '结果列表' : 'Result list'}>
-                                        {programArtifacts.map(artifact => <button
-                                            type='button'
-                                            key={`${artifact.program_id}-${artifact.artifact_id}`}
-                                            aria-current={artifact.selection_id === selectedArtifact.selection_id
-                                                ? 'page'
-                                                : undefined}
-                                            onClick={() => setSelectedArtifactId(artifact.selection_id)}
+                                        {artifactGroups.map(group => group.artifacts.length > 0 && <section
+                                            className='ControlProgramArtifactGroup'
+                                            key={group.category}
                                         >
-                                            <strong>{artifact.name}</strong>
-                                            <span>{artifact.program_name} · {bytes(artifact.size_bytes)}</span>
-                                            <small>{dateTime(artifact.modified_at, zh)}</small>
-                                        </button>)}
+                                            <header>
+                                                <strong>{artifactCategoryLabel(group.category, zh)}</strong>
+                                                <span>{group.artifacts.length}</span>
+                                            </header>
+                                            {group.artifacts.map(artifact => <button
+                                                type='button'
+                                                key={`${artifact.program_id}-${artifact.artifact_id}`}
+                                                aria-current={artifact.selection_id === selectedArtifact.selection_id
+                                                    ? 'page'
+                                                    : undefined}
+                                                onClick={() => setSelectedArtifactId(artifact.selection_id)}
+                                            >
+                                                <strong>{artifact.name}</strong>
+                                                <span>{artifact.program_name} · {bytes(artifact.size_bytes)}</span>
+                                                <small>{dateTime(artifact.modified_at, zh)}</small>
+                                            </button>)}
+                                        </section>)}
                                     </aside>
                                     <div className='ControlProgramArtifactPreview'>
                                         <header>
@@ -626,11 +721,20 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                             <em>{bytes(selectedArtifact.size_bytes)}</em>
                                         </header>
                                         {selectedArtifact.kind === 'video'
-                                            ? <video
-                                                controls
-                                                preload='metadata'
-                                                src={selectedArtifactUrl}
-                                            />
+                                            ? loadedVideoId === selectedArtifact.selection_id
+                                                ? <video
+                                                    controls
+                                                    preload='metadata'
+                                                    src={selectedArtifactUrl}
+                                                />
+                                                : <div className='ControlProgramPreviewPlaceholder'>
+                                                    <strong>{zh ? '视频预览未加载' : 'Video preview is not loaded'}</strong>
+                                                    <span>{zh ? '点击后才会读取视频文件' : 'The video is fetched only after you load the preview'}</span>
+                                                    <button
+                                                        type='button'
+                                                        onClick={() => setLoadedVideoId(selectedArtifact.selection_id)}
+                                                    >{zh ? '加载视频预览' : 'Load video preview'}</button>
+                                                </div>
                                             : selectedArtifact.kind === 'image'
                                                 ? <img
                                                     src={selectedArtifactUrl}
@@ -662,7 +766,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 : unavailable(
                                     refreshing
                                         ? (zh ? '正在读取程序结果…' : 'Loading program results…')
-                                        : (zh ? '暂无录像、图片或数据文件' : 'No recordings, images, or data files'),
+                                        : programArtifacts.length > 0
+                                            ? (zh ? '没有符合筛选条件的结果' : 'No results match the filters')
+                                            : (zh ? '暂无录像、图片或数据文件' : 'No recordings, images, or data files'),
                                 )}
                     </section>)}
 

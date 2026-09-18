@@ -2042,6 +2042,38 @@ button.ControlServiceCard {
   }
 }
 
+.ControlProgramArtifactFilters {
+  display: flex;
+  max-width: 70%;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  input,
+  select,
+  button {
+    box-sizing: border-box;
+    height: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 2px;
+    outline: 0;
+    background: rgba(0, 0, 0, 0.16);
+    padding: 0 7px;
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 9px;
+  }
+
+  input[type='search'] { width: 170px; }
+  input[type='date'] { width: 132px; }
+  select { width: 80px; }
+  button { cursor: pointer; }
+  input:focus-visible,
+  select:focus-visible,
+  button:focus-visible { border-color: rgba(0, 154, 255, 0.72); }
+  > span { margin-left: 4px; white-space: nowrap; }
+}
+
 .ControlProgramArtifactWorkspace {
   display: grid;
   min-height: 0;
@@ -2070,6 +2102,21 @@ button.ControlServiceCard {
     &:hover,
     &:focus-visible { border-color: rgba(0, 154, 255, 0.5); }
     &[aria-current='page'] { border-color: rgba(0, 154, 255, 0.72); background: rgba(0, 154, 255, 0.1); }
+  }
+
+  .ControlProgramArtifactGroup {
+    margin-bottom: 10px;
+
+    > header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 10px;
+    }
+
+    > header strong { color: rgba(255, 255, 255, 0.48); font-size: 9px; font-weight: 500; }
+    > header span { margin: 0; color: rgba(255, 255, 255, 0.28); font-size: 8px; }
+    > button { margin-bottom: 2px; }
   }
 
   strong,
@@ -2111,6 +2158,33 @@ button.ControlServiceCard {
     max-width: 100%;
     max-height: calc(100% - 46px);
     object-fit: contain;
+  }
+
+  video { width: min(100%, 720px); aspect-ratio: 16 / 9; background: #080a0c; }
+
+  .ControlProgramPreviewPlaceholder {
+    display: flex;
+    width: min(100%, 720px);
+    aspect-ratio: 16 / 9;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.22);
+    text-align: center;
+
+    strong { color: rgba(255, 255, 255, 0.72); font-size: 11px; }
+    span { margin: 0; color: rgba(255, 255, 255, 0.36); font-size: 9px; }
+    button {
+      border: 1px solid rgba(0, 154, 255, 0.5);
+      border-radius: 2px;
+      background: rgba(0, 154, 255, 0.12);
+      padding: 7px 12px;
+      color: #69c6ff;
+      font-size: 9px;
+      cursor: pointer;
+    }
   }
 
   a {
@@ -2479,4 +2553,6 @@ button.ControlServiceCard {
   .ControlProgramArtifactWorkspace > aside { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-right: 0; }
   .ControlProgramArtifactWorkspace > aside button { flex: 0 0 230px; }
   .ControlProgramArtifactPreview { min-height: 360px; padding-left: 0; }
+  .ControlProgramArtifactFilters { max-width: 100%; justify-content: flex-start; }
+  .ControlProgramArtifactFilters input[type='search'] { width: 150px; }
 }
