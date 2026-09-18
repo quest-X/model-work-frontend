@@ -44,10 +44,20 @@ const node: ComputeClusterNode = {
     heartbeat_age_seconds: 2,
 };
 
-describe('ProgramRunnerPanel', () => {
-    afterEach(() => jest.restoreAllMocks());
+const originalFetch = global.fetch;
 
-    it('shows programs, endpoint status, artifacts, and structured logs', async () => {
+describe('ProgramRunnerPanel', () => {
+    afterEach(() => {
+        global.fetch = originalFetch;
+        jest.restoreAllMocks();
+    });
+
+    it('shows programs, endpoint status, previewable results, and structured logs', async () => {
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            status: 206,
+            text: async () => '{"overflow_n":3,"label":"倾炉"}',
+        } as Response);
         jest.spyOn(ComputeClusterService, 'runtime').mockResolvedValue({
             schema_version: 'runtime.snapshot.v1',
             captured_at: 101,
@@ -182,6 +192,14 @@ describe('ProgramRunnerPanel', () => {
                     content_type: 'image/png',
                     size_bytes: 1024,
                     modified_at: 99,
+                }, {
+                    artifact_id: 'c'.repeat(32),
+                    name: '017.json',
+                    relative_path: 'runs/20260918/017/017.json',
+                    kind: 'data',
+                    content_type: 'application/json; charset=utf-8',
+                    size_bytes: 34,
+                    modified_at: 98,
                 }],
             }],
         });
@@ -236,13 +254,25 @@ describe('ProgramRunnerPanel', () => {
         expect(endpoints).not.toHaveTextContent('任务执行器');
         expect(inventory).not.toHaveBeenCalled();
 
-        fireEvent.click(within(dialog).getByRole('button', {name: '产物'}));
-        const artifacts = await within(dialog).findByLabelText('程序产物');
+        fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
+        const artifacts = await within(dialog).findByLabelText('程序结果');
         expect(artifacts).toHaveTextContent('017.mp4');
         const video = artifacts.querySelector('video');
         expect(video?.getAttribute('src')).toContain('/runtime/programs/vision-ocr/artifacts/');
         fireEvent.click(within(artifacts).getByRole('button', {name: /017.png/}));
         expect(within(artifacts).getByRole('img', {name: '017.png'})).toBeInTheDocument();
+        fireEvent.click(within(artifacts).getByRole('button', {name: /017.json/}));
+        expect(await within(artifacts).findByLabelText('结果内容预览'))
+            .toHaveTextContent('"overflow_n": 3');
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/runtime/programs/vision-ocr/artifacts/'),
+            expect.objectContaining({
+                headers: {Range: 'bytes=0-1048575'},
+                signal: expect.any(AbortSignal),
+            }),
+        );
+        expect(within(artifacts).getByRole('link', {name: '下载原文件'}))
+            .toHaveAttribute('download', '017.json');
 
         fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
         const logs = await within(dialog).findByLabelText('程序日志');

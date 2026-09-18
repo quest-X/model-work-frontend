@@ -83,6 +83,19 @@ const bytes = (value: number): string => {
     return `${size >= 100 || index === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[index]}`;
 };
 
+const RESULT_PREVIEW_BYTES = 1024 * 1024;
+
+const formatResultPreview = (contentType: string, value: string, truncated: boolean): string => {
+    if (!truncated && contentType.startsWith('application/json')) {
+        try {
+            return JSON.stringify(JSON.parse(value), null, 2);
+        } catch {
+            return value;
+        }
+    }
+    return value;
+};
+
 const taskStateLabel = (state: string, zh: boolean): string => ({
     queued: zh ? '排队' : 'Queued',
     running: zh ? '运行中' : 'Running',
@@ -111,6 +124,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [logServiceId, setLogServiceId] = useState('');
     const [selectedArtifactId, setSelectedArtifactId] = useState('');
+    const [resultPreview, setResultPreview] = useState('');
+    const [resultPreviewError, setResultPreviewError] = useState('');
+    const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [refreshVersion, setRefreshVersion] = useState(0);
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
@@ -127,6 +143,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setSelectedServiceId('');
         setLogServiceId('');
         setSelectedArtifactId('');
+        setResultPreview('');
+        setResultPreviewError('');
+        setResultPreviewLoading(false);
     }, [node.node_id]);
 
     useEffect(() => {
@@ -236,6 +255,49 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             selectedArtifact.modified_at,
         )
         : '';
+    const resultPreviewTruncated = Boolean(
+        selectedArtifact?.kind === 'data'
+        && selectedArtifact.size_bytes > RESULT_PREVIEW_BYTES,
+    );
+
+    useEffect(() => {
+        setResultPreview('');
+        setResultPreviewError('');
+        setResultPreviewLoading(false);
+        if (!selectedArtifact || selectedArtifact.kind !== 'data' || !selectedArtifactUrl) {
+            return undefined;
+        }
+        const controller = new AbortController();
+        setResultPreviewLoading(true);
+        void fetch(selectedArtifactUrl, {
+            headers: {Range: `bytes=0-${RESULT_PREVIEW_BYTES - 1}`},
+            signal: controller.signal,
+        }).then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.text();
+        }).then(value => {
+            if (!controller.signal.aborted) {
+                setResultPreview(formatResultPreview(
+                    selectedArtifact.content_type,
+                    value,
+                    resultPreviewTruncated,
+                ));
+                setResultPreviewLoading(false);
+            }
+        }).catch(error => {
+            if (!controller.signal.aborted) {
+                setResultPreviewError(error instanceof Error ? error.message : String(error));
+                setResultPreviewLoading(false);
+            }
+        });
+        return () => controller.abort();
+    }, [
+        resultPreviewTruncated,
+        selectedArtifact?.content_type,
+        selectedArtifact?.selection_id,
+        selectedArtifactUrl,
+    ]);
+
     const capturedAt = snapshot?.captured_at
         || programs?.captured_at
         || node.resources.captured_at;
@@ -292,7 +354,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                 {([
                     ['programs', zh ? '程序' : 'Programs'],
                     ['endpoints', zh ? '接口' : 'APIs'],
-                    ['artifacts', zh ? '产物' : 'Artifacts'],
+                    ['artifacts', zh ? '结果' : 'Results'],
                     ['logs', zh ? '日志' : 'Logs'],
                 ] as [ProgramRunnerView, string][]).map(([item, label]) => <button
                     type='button'
@@ -433,8 +495,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 <div className='ControlProgramCapabilityNote' role='status'>
                                     <strong>{zh ? '当前管理范围' : 'Current management scope'}</strong>
                                     <span>{zh
-                                        ? '已接入程序目录、独立环境、运行模式、加密声明、状态、进程、接口健康、运行产物与结构化日志。部署、加密执行、启停及模式切换仍需一次性授权接口。'
-                                        : 'Program directories, environments, modes, encryption declarations, status, processes, endpoint health, runtime artifacts, and structured logs are available. Deployment, encryption actions, lifecycle actions, and mode changes still require one-time authorization APIs.'}</span>
+                                        ? '已接入程序目录、独立环境、运行模式、加密声明、状态、进程、接口健康、运行结果与结构化日志。部署、加密执行、启停及模式切换仍需一次性授权接口。'
+                                        : 'Program directories, environments, modes, encryption declarations, status, processes, endpoint health, runtime results, and structured logs are available. Deployment, encryption actions, lifecycle actions, and mode changes still require one-time authorization APIs.'}</span>
                                 </div>
                             </section>
                         </div>
@@ -498,15 +560,15 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
 
                 {view === 'artifacts' && (!programsCapable
                     ? unavailable(
-                        zh ? '当前节点尚不支持程序产物' : 'Program artifacts are not supported',
+                        zh ? '当前节点尚不支持程序结果' : 'Program results are not supported',
                         node.online
                             ? (zh ? '升级节点程序后可查看录像、图片和数据文件。' : 'Upgrade the node software to view recordings, images, and data files.')
-                            : (zh ? '节点恢复在线后才能读取程序产物。' : 'The node must return online before artifacts can be read.'),
+                            : (zh ? '节点恢复在线后才能读取程序结果。' : 'The node must return online before results can be read.'),
                     )
-                    : <section className='ControlProgramArtifacts' aria-label={zh ? '程序产物' : 'Program artifacts'}>
+                    : <section className='ControlProgramArtifacts' aria-label={zh ? '程序结果' : 'Program results'}>
                         <header className='ControlMonitorSearchHeader'>
                             <div>
-                                <h3>{zh ? '运行产物' : 'Runtime artifacts'}</h3>
+                                <h3>{zh ? '运行结果' : 'Runtime results'}</h3>
                                 <p>{zh ? '录像、图表与配套数据' : 'Recordings, charts, and paired data'}</p>
                             </div>
                             <span>{programArtifacts.length}</span>
@@ -515,7 +577,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             ? <p className='ControlProgramError' role='status'>{programsError}</p>
                             : selectedArtifact
                                 ? <div className='ControlProgramArtifactWorkspace'>
-                                    <aside aria-label={zh ? '产物列表' : 'Artifact list'}>
+                                    <aside aria-label={zh ? '结果列表' : 'Result list'}>
                                         {programArtifacts.map(artifact => <button
                                             type='button'
                                             key={`${artifact.program_id}-${artifact.artifact_id}`}
@@ -548,14 +610,32 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                     src={selectedArtifactUrl}
                                                     alt={selectedArtifact.name}
                                                 />
-                                                : <a href={selectedArtifactUrl} download={selectedArtifact.name}>
-                                                    {zh ? '下载数据文件' : 'Download data file'}
-                                                </a>}
+                                                : <div className='ControlProgramResultData'>
+                                                    {resultPreviewLoading
+                                                        ? <p>{zh ? '正在加载结果预览…' : 'Loading result preview…'}</p>
+                                                        : resultPreviewError
+                                                            ? <p className='error'>
+                                                                {zh ? `结果预览失败：${resultPreviewError}` : `Result preview failed: ${resultPreviewError}`}
+                                                            </p>
+                                                            : <pre aria-label={zh ? '结果内容预览' : 'Result content preview'}>
+                                                                {resultPreview || (zh ? '文件为空' : 'Empty file')}
+                                                            </pre>}
+                                                    <footer>
+                                                        {resultPreviewTruncated && <span>
+                                                            {zh
+                                                                ? `仅预览前 ${bytes(RESULT_PREVIEW_BYTES)}`
+                                                                : `Previewing the first ${bytes(RESULT_PREVIEW_BYTES)}`}
+                                                        </span>}
+                                                        <a href={selectedArtifactUrl} download={selectedArtifact.name}>
+                                                            {zh ? '下载原文件' : 'Download original'}
+                                                        </a>
+                                                    </footer>
+                                                </div>}
                                     </div>
                                 </div>
                                 : unavailable(
                                     refreshing
-                                        ? (zh ? '正在读取程序产物…' : 'Loading program artifacts…')
+                                        ? (zh ? '正在读取程序结果…' : 'Loading program results…')
                                         : (zh ? '暂无录像、图片或数据文件' : 'No recordings, images, or data files'),
                                 )}
                     </section>)}
