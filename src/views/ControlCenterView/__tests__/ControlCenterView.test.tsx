@@ -1578,6 +1578,7 @@ describe('ControlCenterView', () => {
         machine.capabilities.push('runtime.performance.mode.read.v1');
         const unsupported = node('旧版节点', true);
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine, unsupported]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(machine));
         const inspect = jest.spyOn(ComputeClusterService, 'performanceMode').mockResolvedValue({
             schema_version: 'performance.mode-result.v1',
             captured_at: 1,
@@ -1595,7 +1596,7 @@ describe('ControlCenterView', () => {
         });
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '在线节点'});
+        await screen.findByRole('button', {name: '查看 在线节点 节点信息'});
         fireEvent.click(screen.getByText('相关功能'));
         const performanceMode = within(screen.getByLabelText('相关功能列表'))
             .getByRole('button', {name: /性能模式/});
