@@ -65,6 +65,7 @@
 
   &.minimized {
     right: auto;
+    bottom: 0;
     width: min(300px, calc(100vw - #{$sideNavigationBarCompanionWidth} - 17px));
     height: 54px;
     max-height: 54px;
