@@ -1175,10 +1175,15 @@ button.ComputeFileName:focus-visible { color: white; }
     font-size: 9px;
   }
 
-  .ControlSectionCountButton {
+  > div > .ControlSectionCountButton {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
     border: 0;
     padding: 0;
-    color: rgba(255, 255, 255, 0.58);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 20px;
+    line-height: 1;
     cursor: pointer;
 
     &:hover,
