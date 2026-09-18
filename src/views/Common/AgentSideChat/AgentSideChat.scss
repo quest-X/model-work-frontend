@@ -37,7 +37,7 @@
 .AgentSideChat {
   position: fixed;
   z-index: 1600;
-  bottom: 16px;
+  bottom: 0;
   left: calc(#{$sideNavigationBarCompanionWidth} + 1px);
   display: flex;
   width: 420px;
@@ -65,7 +65,6 @@
 
   &.minimized {
     right: auto;
-    bottom: 0;
     width: min(300px, calc(100vw - #{$sideNavigationBarCompanionWidth} - 17px));
     height: 54px;
     max-height: 54px;
@@ -712,7 +711,6 @@
 @media (max-width: 620px) {
   .AgentSideChat {
     right: 8px;
-    bottom: 8px;
     left: 8px;
     width: auto;
     max-width: none;
