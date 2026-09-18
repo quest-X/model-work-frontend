@@ -1264,7 +1264,7 @@ describe('ControlCenterView', () => {
         const areaHeading = areaToggle.closest('.ControlMachineGroupHeading') as HTMLElement;
         expect(areaHeading.querySelector('strong')?.nextElementSibling).toHaveTextContent('1');
         expect(areaToggle).toHaveAttribute('aria-expanded', 'true');
-        fireEvent.click(areaToggle);
+        fireEvent.click(within(areaToggle).getByText('废钢作业区'));
         expect(areaToggle).toHaveAttribute('aria-expanded', 'false');
         expect(within(list).queryByRole('button', {name: '打开 AIPACK-13 边缘设备终端'}))
             .not.toBeInTheDocument();

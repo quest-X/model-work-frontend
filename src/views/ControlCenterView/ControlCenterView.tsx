@@ -1155,22 +1155,23 @@ export const ControlCenterView: React.FC<IProps> = ({
     const renderMachineGroupHeading = (id: string, label: string, count: number) => {
         const collapsed = collapsedMachineGroups.has(id);
         const action = zh ? `${collapsed ? '展开' : '收起'}${label}` : `${collapsed ? 'Expand' : 'Collapse'} ${label}`;
-        return <div className='ControlMachineGroupHeading'>
+        return <button
+            type='button'
+            className='ControlMachineGroupHeading'
+            aria-label={action}
+            title={action}
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsedMachineGroups(current => {
+                const next = new Set(current);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+            })}
+        >
             <strong>{label}</strong>
             <span>{count}</span>
-            <button
-                type='button'
-                aria-label={action}
-                title={action}
-                aria-expanded={!collapsed}
-                onClick={() => setCollapsedMachineGroups(current => {
-                    const next = new Set(current);
-                    if (next.has(id)) next.delete(id);
-                    else next.add(id);
-                    return next;
-                })}
-            ><span aria-hidden='true'>&#8250;</span></button>
-        </div>;
+            <span className='ControlMachineGroupChevron' aria-hidden='true'>&#8250;</span>
+        </button>;
     };
 
     // eslint-disable-next-line complexity
