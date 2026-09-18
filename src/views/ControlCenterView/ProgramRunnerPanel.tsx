@@ -19,6 +19,14 @@ interface IProps {
     onToggleMaximized: () => void;
 }
 
+interface ProgramRunnerCache {
+    snapshot: ComputeRuntimeSnapshot | null;
+    programs: ComputeProgramSnapshot | null;
+    events: ComputeRuntimeEvent[];
+}
+
+const programRunnerCache = new Map<string, ProgramRunnerCache>();
+
 const runtimeTone = (state: ComputeRuntimeService['state']): ProgramTone =>
     state === 'healthy' ? 'healthy' : state === 'unavailable' ? 'offline' : 'warning';
 
@@ -114,10 +122,11 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     onClose,
     onToggleMaximized,
 }) => {
+    const cached = programRunnerCache.get(node.node_id);
     const [view, setView] = useState<ProgramRunnerView>('programs');
-    const [snapshot, setSnapshot] = useState<ComputeRuntimeSnapshot | null>(null);
-    const [programs, setPrograms] = useState<ComputeProgramSnapshot | null>(null);
-    const [events, setEvents] = useState<ComputeRuntimeEvent[]>([]);
+    const [snapshot, setSnapshot] = useState<ComputeRuntimeSnapshot | null>(cached?.snapshot || null);
+    const [programs, setPrograms] = useState<ComputeProgramSnapshot | null>(cached?.programs || null);
+    const [events, setEvents] = useState<ComputeRuntimeEvent[]>(cached?.events || []);
     const [runtimeError, setRuntimeError] = useState('');
     const [programsError, setProgramsError] = useState('');
     const [eventsError, setEventsError] = useState('');
@@ -133,10 +142,11 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
 
     useEffect(() => {
+        const next = programRunnerCache.get(node.node_id);
         setView('programs');
-        setSnapshot(null);
-        setPrograms(null);
-        setEvents([]);
+        setSnapshot(next?.snapshot || null);
+        setPrograms(next?.programs || null);
+        setEvents(next?.events || []);
         setRuntimeError('');
         setProgramsError('');
         setEventsError('');
@@ -169,8 +179,17 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     : Promise.resolve(null),
             ]);
             if (!controller.signal.aborted) {
+                const cachedResult = programRunnerCache.get(node.node_id);
+                const nextCache: ProgramRunnerCache = {
+                    snapshot: cachedResult?.snapshot || null,
+                    programs: cachedResult?.programs || null,
+                    events: cachedResult?.events || [],
+                };
                 if (runtimeResult.status === 'fulfilled') {
-                    if (runtimeResult.value) setSnapshot(runtimeResult.value);
+                    if (runtimeResult.value) {
+                        nextCache.snapshot = runtimeResult.value;
+                        setSnapshot(runtimeResult.value);
+                    }
                     setRuntimeError('');
                 } else {
                     setRuntimeError(runtimeResult.reason instanceof Error
@@ -178,7 +197,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         : String(runtimeResult.reason));
                 }
                 if (programsResult.status === 'fulfilled') {
-                    if (programsResult.value) setPrograms(programsResult.value);
+                    if (programsResult.value) {
+                        nextCache.programs = programsResult.value;
+                        setPrograms(programsResult.value);
+                    }
                     setProgramsError('');
                 } else {
                     setProgramsError(programsResult.reason instanceof Error
@@ -186,13 +208,17 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         : String(programsResult.reason));
                 }
                 if (eventsResult.status === 'fulfilled') {
-                    if (eventsResult.value) setEvents(eventsResult.value.events);
+                    if (eventsResult.value) {
+                        nextCache.events = eventsResult.value.events;
+                        setEvents(eventsResult.value.events);
+                    }
                     setEventsError('');
                 } else {
                     setEventsError(eventsResult.reason instanceof Error
                         ? eventsResult.reason.message
                         : String(eventsResult.reason));
                 }
+                programRunnerCache.set(node.node_id, nextCache);
                 setRefreshing(false);
             }
             inFlight = false;

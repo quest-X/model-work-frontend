@@ -290,4 +290,62 @@ describe('ProgramRunnerPanel', () => {
         expect(jest.mocked(ComputeClusterService.programs).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.runtimeEvents).mock.calls[0][3]?.aborted).toBe(true);
     });
+
+    it('shows the last node snapshot immediately when reopened', async () => {
+        const cachedNode = {...node, node_id: 'aipack-cache'};
+        const runtime = jest.spyOn(ComputeClusterService, 'runtime').mockResolvedValue({
+            schema_version: 'runtime.snapshot.v1',
+            captured_at: 101,
+            summary: {
+                total: 1, healthy: 1, degraded: 0, unavailable: 0,
+                task_counts: {queued: 0, running: 0, paused: 0, succeeded: 0, failed: 0, cancelled: 0},
+            },
+            services: [{
+                service_id: 'cached-service',
+                name: 'Cached Service',
+                kind: 'service',
+                state: 'healthy',
+                version: '1.0.0',
+                uptime_seconds: 10,
+                restart_count: 0,
+                health: {state: 'healthy', checked_at: 101, status_code: 200, latency_ms: 1},
+                process: {pid: 1, state: 'running'},
+            }],
+        });
+        jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
+            schema_version: 'runtime.programs.v1',
+            captured_at: 101,
+            invalid_manifests: 0,
+            programs: [],
+        });
+        jest.spyOn(ComputeClusterService, 'runtimeEvents').mockResolvedValue({
+            schema_version: 'runtime.events.v1',
+            captured_at: 101,
+            cursor: 0,
+            has_more: false,
+            events: [],
+        });
+
+        const first = render(<ProgramRunnerPanel
+            node={cachedNode}
+            zh
+            maximized={false}
+            onClose={jest.fn()}
+            onToggleMaximized={jest.fn()}
+        />);
+        expect((await screen.findAllByText('Cached Service')).length).toBeGreaterThan(0);
+        first.unmount();
+
+        runtime.mockImplementation(() => new Promise(() => undefined));
+        render(<ProgramRunnerPanel
+            node={cachedNode}
+            zh
+            maximized={false}
+            onClose={jest.fn()}
+            onToggleMaximized={jest.fn()}
+        />);
+
+        expect(screen.getAllByText('Cached Service').length).toBeGreaterThan(0);
+        expect(runtime).toHaveBeenCalledTimes(2);
+    });
 });
