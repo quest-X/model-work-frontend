@@ -788,6 +788,9 @@ export const ControlCenterView: React.FC<IProps> = ({
     const normalCount = overviewNodes.filter(node => machineTone(node) === 'healthy').length;
     const overviewTone = communicationTone(aggregateCommunicationStates(overviewNodes.map(computeNodeState)));
     const terminalAvailable = Boolean(selectedNode?.online && selectedNode.network.ssh_available);
+    const terminalFeatureTone: Tone = terminalTargets.some(target => target.available)
+        ? 'healthy'
+        : 'warning';
     const filesAvailable = overviewNodes.some(node => node.online && node.capabilities.includes('filesystem.list.v1'));
     const utilitiesAvailable = overviewNodes.some(node => node.online && node.capabilities.includes('task.storage.scan.v1'));
     const performanceModeAvailable = overviewNodes.length > 0 && overviewNodes.every(node =>
@@ -799,7 +802,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         : workspace === 'network'
             ? (error ? 'offline' : 'healthy')
             : workspace === 'terminal'
-                ? (terminalAvailable ? 'healthy' : 'offline')
+                ? terminalFeatureTone
                 : workspace === 'files'
                     ? (filesAvailable ? 'healthy' : 'offline')
                 : workspace === 'utilities'
@@ -1246,7 +1249,6 @@ export const ControlCenterView: React.FC<IProps> = ({
                     {group && renderMachineGroupHeading(groupId, group, visibleGroupNodes.length)}
                     {(!group || !collapsedMachineGroups.has(groupId)) && orderedNodes.map(node => {
                         const tone = machineTone(node);
-                        const nodeDepth = hasSingleMain && node.role !== 'main' ? 1 : 0;
                         const allEdgeDevices = lanAssets.filter(asset =>
                             asset.node_id === node.node_id && asset.device_kind === 'edge_compute'
                         );
@@ -1257,8 +1259,8 @@ export const ControlCenterView: React.FC<IProps> = ({
                             <button
                                 type='button'
                                 className={`ControlMachineItem ${
-                                    nodeDepth ? `tree-child tree-depth-${nodeDepth} ` : ''
-                                }${node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''}`}
+                                    node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''
+                                }`}
                                 aria-pressed={node.node_id === selectedNodeId && !cameraViewerId}
                                 onClick={() => selectSidebarNode(node.node_id)}
                             >
@@ -1273,10 +1275,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     {computeNodeLabel(node, zh)}
                                 </span>
                             </button>
-                            {edgeDevices.map(device => renderSidebarEdge(node, device, nodeDepth + 1))}
+                            {edgeDevices.map(device => renderSidebarEdge(node, device, 1))}
                             {cameras
                                 .filter(camera => !edgeIds.has(cameraParentAssetId(node, camera)))
-                                .map(camera => renderSidebarCamera(node, camera, nodeDepth + 1))}
+                                .map(camera => renderSidebarCamera(node, camera, 1))}
                         </React.Fragment>;
                     })}
                 </React.Fragment>;
@@ -1395,8 +1397,13 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <strong>{zh ? '终端连接' : 'Terminal connection'}</strong>
                     <small>{zh ? '受控 SSH · 输入指令' : 'Controlled SSH · command input'}</small>
                 </span>
-                <span className={`ControlMachineState ${terminalAvailable ? 'healthy' : 'offline'}`}>
-                    {toneLabel(terminalAvailable ? 'healthy' : 'offline', zh)}
+                <span className={`ControlMachineState ${terminalFeatureTone}`}>
+                    {communicationStateLabel(
+                        terminalFeatureTone === 'healthy'
+                            ? 'normal'
+                            : terminalFeatureTone === 'warning' ? 'fault' : 'abnormal',
+                        zh,
+                    )}
                 </span>
             </button>
         </div>

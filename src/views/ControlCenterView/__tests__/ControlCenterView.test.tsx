@@ -1257,7 +1257,7 @@ describe('ControlCenterView', () => {
             .toEqual(['总览', '01 笔记本', '02 笔记本', 'AIPACK-13', 'yy-camera']);
         expect(Array.from(list.querySelectorAll('.ControlMachineGroupHeading strong')).map(item => item.textContent))
             .toContain('废钢作业区');
-        expect(within(list).getByRole('button', {name: /02 笔记本/})).toHaveClass('tree-depth-1');
+        expect(within(list).getByRole('button', {name: /02 笔记本/})).not.toHaveClass('tree-child');
         expect(within(list).getByRole('button', {name: '打开 AIPACK-13 边缘设备终端'}))
             .toHaveClass('tree-depth-0');
         const areaToggle = within(list).getByRole('button', {name: '收起废钢作业区'});
@@ -1641,6 +1641,29 @@ describe('ControlCenterView', () => {
         expect(screen.getByLabelText('终端指令')).toBeInTheDocument();
         await waitFor(() => expect(screen.getByRole('combobox', {name: '目标节点'})).toHaveValue('在线节点-id'));
         expect(container.querySelector('.ControlCenterBody .ComputeTerminalPanel')).toBeInTheDocument();
+    });
+
+    it('shows unavailable terminal task control as a yellow fault', async () => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            node('离线节点', false),
+        ]);
+        jest.mocked(ComputeClusterService.terminalTargets)
+            .mockRejectedValue(new Error('model-work-node Client task control is unavailable'));
+        const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByText('离线节点');
+        fireEvent.click(screen.getByText('相关功能'));
+        const terminal = within(screen.getByLabelText('相关功能列表'))
+            .getByRole('button', {name: /终端连接/});
+        const state = within(terminal).getByText('故障');
+        expect(state).toHaveClass('warning');
+        expect(state).not.toHaveClass('offline');
+
+        fireEvent.click(terminal);
+        expect(await screen.findByText('model-work-node Client task control is unavailable'))
+            .toBeInTheDocument();
+        expect(container.querySelector('.ControlTopNavigationBar .ControlStatusDot'))
+            .toHaveClass('warning');
     });
 
     it('opens single-node storage analysis from related features', async () => {

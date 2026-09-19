@@ -1220,12 +1220,55 @@
   justify-content: space-between;
   padding: 0 0 9px;
   > div { display: flex; align-items: center; gap: 7px; }
-  .ComputeNodeToolbar { gap: 18px; }
-  .ComputeNodeFilters { display: flex; gap: 8px; }
-  button { border: 1px solid rgba(51, 174, 247, 0.24); border-radius: 4px; background: rgba(51, 174, 247, 0.08); padding: 7px 10px; color: #a9ddfb; font-size: 9px; }
-  .ComputeNodeFilters button[aria-pressed='true'] { border-color: rgba(51, 174, 247, 0.62); background: rgba(51, 174, 247, 0.2); color: #d7f1ff; }
-  .ComputeNodeFilters strong { margin-left: 3px; font-size: inherit; }
-  .ComputeBatchUpgradeButton { min-width: 62px; padding: 7px 14px; }
+}
+
+.ComputeNodeManage {
+  position: relative;
+  summary {
+    min-width: 62px;
+    border: 1px solid rgba(51, 174, 247, 0.34);
+    border-radius: 4px;
+    background: rgba(51, 174, 247, 0.12);
+    padding: 7px 14px;
+    color: #a9ddfb;
+    font-size: 9px;
+    text-align: center;
+    list-style: none;
+    cursor: pointer;
+  }
+  summary::-webkit-details-marker { display: none; }
+  &[open] summary { border-color: rgba(51, 174, 247, 0.68); background: rgba(51, 174, 247, 0.2); }
+}
+
+.ComputeNodeManageMenu {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  gap: 3px;
+  min-width: 132px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  background: #17181a;
+  padding: 4px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.46);
+  button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    padding: 7px 9px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 9px;
+    text-align: left;
+  }
+  button:hover,
+  button[aria-checked='true'] { background: rgba(51, 174, 247, 0.16); color: #d7f1ff; }
+  strong { color: #79c9f8; font-size: inherit; }
 }
 
 .ComputeTaskEmpty,
@@ -1238,6 +1281,8 @@
   font-size: 9px;
   text-align: center;
 }
+
+.ComputeNodeFilterEmpty { padding: 24px; color: rgba(255, 255, 255, 0.4); font-size: 10px; text-align: center; }
 
 .ComputeTaskDisabled {
   margin: 0 0 16px;
@@ -1362,8 +1407,37 @@
     background: rgba(51, 174, 247, 0.055);
     padding: 8px 11px;
   }
-  > header strong { color: rgba(255, 255, 255, 0.78); font-size: 10px; font-weight: 500; }
-  > header span { color: rgba(121, 201, 248, 0.72); font-size: 9px; }
+  &.collapsed > header { margin-bottom: 0; }
+}
+
+.ComputeNodeGroupTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  strong { color: rgba(255, 255, 255, 0.78); font-size: 10px; font-weight: 500; }
+  span { border-radius: 999px; background: rgba(102, 194, 250, 0.14); padding: 2px 6px; color: #79c9f8; font-size: 8px; }
+}
+
+.ComputeNodeGroupToggle {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(51, 174, 247, 0.24);
+  border-radius: 4px;
+  background: rgba(51, 174, 247, 0.08);
+  color: #79c9f8;
+  cursor: pointer;
+  i {
+    width: 6px;
+    height: 6px;
+    border-right: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+    transform: rotate(225deg) translate(-1px, -1px);
+  }
+  &[aria-expanded='false'] i { transform: rotate(45deg) translate(-1px, -1px); }
+  &:hover { border-color: rgba(51, 174, 247, 0.5); background: rgba(51, 174, 247, 0.15); }
+  &:focus-visible { outline: 1px solid #33aef7; outline-offset: 2px; }
 }
 
 .ComputeNodeGrid {
@@ -1372,8 +1446,7 @@
   gap: 8px;
 }
 
-.ComputeNodeCard,
-.ComputeNodeSelectCard {
+.ComputeNodeCard {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
@@ -1399,7 +1472,7 @@
   grid-template-areas:
     'name status'
     'model model'
-    'stats version';
+    'stats stats';
   min-width: 0;
   gap: 5px 8px;
 }
@@ -1408,7 +1481,7 @@
   grid-area: stats;
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(3, auto);
+  grid-template-columns: repeat(4, auto);
   justify-content: start;
   gap: 10px;
   color: rgba(255, 255, 255, 0.38);
@@ -1432,49 +1505,22 @@
 
 .ComputeNodeStatus i { background: #6d737a; }
 .ComputeNodeCard.normal .ComputeNodeStatus,
-.ComputeNodeSelectCard.normal .ComputeNodeStatus,
 .ComputeNodeDetail.normal .ComputeNodeStatus { color: #8bdd9f; }
 .ComputeNodeCard.fault .ComputeNodeStatus,
-.ComputeNodeSelectCard.fault .ComputeNodeStatus,
 .ComputeNodeDetail.fault .ComputeNodeStatus { color: $computeFaultColor; }
 .ComputeNodeCard.abnormal .ComputeNodeStatus,
-.ComputeNodeSelectCard.abnormal .ComputeNodeStatus,
 .ComputeNodeDetail.abnormal .ComputeNodeStatus { color: $computeAbnormalColor; }
 .ComputeNodeCard.normal .ComputeNodeStatus i,
-.ComputeNodeSelectCard.normal .ComputeNodeStatus i,
 .ComputeNodeDetail.normal .ComputeNodeStatus i { background: #55c77b; }
 .ComputeNodeCard.fault .ComputeNodeStatus i,
-.ComputeNodeSelectCard.fault .ComputeNodeStatus i,
 .ComputeNodeDetail.fault .ComputeNodeStatus i { background: $computeFaultColor; }
 .ComputeNodeCard.abnormal .ComputeNodeStatus i,
-.ComputeNodeSelectCard.abnormal .ComputeNodeStatus i,
 .ComputeNodeDetail.abnormal .ComputeNodeStatus i { background: $computeAbnormalColor; }
 
 .ComputeNodeVersion {
-  grid-area: version;
-  align-self: center;
-  justify-self: end;
   color: rgba(121, 201, 248, 0.68);
   font-size: 8px;
   white-space: nowrap;
-}
-
-.ComputeNodeSelectCard {
-  position: relative;
-  display: block;
-  min-height: 90px;
-  padding: 11px 13px 11px 39px;
-  cursor: pointer;
-  input {
-    position: absolute;
-    top: 12px;
-    left: 13px;
-    width: 14px;
-    height: 14px;
-    accent-color: #33aef7;
-  }
-  &.selected { border-color: rgba(51, 174, 247, 0.7); background: rgba(29, 70, 94, 0.46); }
-  &:has(input:disabled) { cursor: not-allowed; opacity: 0.48; }
 }
 
 .ComputeNodeDetail {
@@ -1511,14 +1557,6 @@
   span { font-size: 14px; line-height: 1; }
   &:hover { border-color: rgba(51, 174, 247, 0.48); background: rgba(51, 174, 247, 0.14); }
   &:focus-visible { outline: 1px solid #33aef7; outline-offset: 2px; }
-}
-
-.ComputeNodeUnavailable {
-  position: absolute;
-  right: 12px;
-  bottom: 8px;
-  color: rgba(229, 179, 94, 0.76);
-  font-size: 8px;
 }
 
 .ComputeNodeResourceGrid {
@@ -1614,86 +1652,6 @@
   .ssh-ready { color: #7bd694; }
 }
 
-.ComputeNodeFilterEmpty { padding: 24px; color: rgba(255, 255, 255, 0.4); font-size: 10px; text-align: center; }
-
-.ComputeNodeUpgradeArea { margin-bottom: 16px; }
-
-.ComputeUpgradePanel {
-  display: grid;
-  gap: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  background: #17181a;
-  padding: 16px;
-  > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
-  > header div { display: flex; align-items: baseline; gap: 8px; }
-  > header span { color: #79c9f8; font-size: 9px; }
-  > header h3 { margin: 0; font-size: 14px; }
-  > header p { max-width: 520px; margin: 0; color: rgba(255, 255, 255, 0.48); font-size: 9px; }
-  button { border: 1px solid rgba(51, 174, 247, 0.34); border-radius: 4px; background: rgba(51, 174, 247, 0.13); padding: 7px 12px; color: #a9ddfb; }
-  button:disabled { opacity: 0.4; }
-  button.danger { border-color: rgba(255, 93, 93, 0.35); background: rgba(255, 93, 93, 0.1); color: #ff9b9b; }
-}
-
-.ComputeUpgradeManifestInput {
-  display: grid;
-  gap: 5px;
-  border: 1px dashed rgba(255, 255, 255, 0.14);
-  border-radius: 5px;
-  padding: 12px;
-  label { font-size: 11px; }
-  select { min-width: 0; width: 100%; padding: 8px; color: #e8edf2; background: #202226; border: 1px solid #42474d; border-radius: 4px; }
-  button { justify-self: start; }
-  span { font-size: 10px; }
-  small { color: rgba(255, 255, 255, 0.42); font-size: 8px; }
-}
-
-.ComputeUpgradeSelection,
-.ComputeUpgradeBatch { display: grid; gap: 7px; }
-
-.ComputeUpgradeNodeState { align-items: flex-end; }
-
-.ComputeUpgradeSelection > div:first-child {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  strong { font-size: 10px; }
-  small { color: rgba(255, 255, 255, 0.4); font-size: 8px; }
-}
-
-.ComputeUpgradeSelection > article,
-.ComputeUpgradeBatch > article {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 4px;
-  background: #1b1c1e;
-  padding: 9px 10px;
-  div { display: flex; flex-direction: column; gap: 2px; }
-  strong { font-size: 10px; }
-  small { color: rgba(255, 255, 255, 0.4); font-size: 8px; }
-  span, code { color: #79c9f8; font-size: 8px; }
-}
-
-.ComputeUpgradeBatch > article.current { border-color: rgba(51, 174, 247, 0.38); }
-.ComputeUpgradeLog {
-  grid-column: 1 / -1;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding-top: 8px;
-  summary { cursor: pointer; color: rgba(255, 255, 255, 0.66); font-size: 9px; }
-  summary span { margin-left: 4px; }
-  ol { display: grid; gap: 5px; max-height: 190px; margin: 8px 0 0; padding: 0; overflow: auto; list-style: none; }
-  li { display: grid; grid-template-columns: minmax(150px, auto) minmax(100px, 1fr) auto; gap: 10px; }
-  time { color: rgba(255, 255, 255, 0.38); font: 8px monospace; }
-  > small { display: block; margin-top: 7px; }
-}
-.ComputeUpgradeBatch > div:first-child,
-.ComputeUpgradeActions { display: flex; align-items: center; gap: 10px; }
-.ComputeUpgradeBatch > div:first-child code { color: rgba(255, 255, 255, 0.35); }
-
 @keyframes compute-spin { to { transform: rotate(360deg); } }
 @keyframes compute-status-pulse {
   50% { box-shadow: 0 0 0 6px transparent; opacity: 0.72; }
@@ -1741,7 +1699,7 @@
   .ComputeLanScheduleList article { grid-template-columns: auto 1fr; }
   .ComputeTaskActions { justify-content: flex-start; }
   .ComputeNodeGpuList > div { grid-template-columns: 1fr; }
-  .ComputeNodeSectionTitle, .ComputeNodeToolbar { align-items: flex-start; flex-direction: column; }
+  .ComputeNodeSectionTitle { align-items: flex-start; flex-direction: column; }
   .ComputeNodeGrid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
   .ComputeNodeDeviceList > div { grid-template-columns: auto 1fr; }
   .ComputeDeviceMeta { align-items: flex-start; }
