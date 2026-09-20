@@ -2121,6 +2121,20 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 zh={zh}
                                 fitWindow
                                 onSelectWorkAgent={() => undefined}
+                                onOpenNodeTool={(node, tool) => {
+                                    setSelectedNodeId(node.node_id);
+                                    if (tool === 'terminal') {
+                                        setTerminalAutoConnect(true);
+                                        setTerminalTransport(undefined);
+                                        setWorkspace('terminal');
+                                        return;
+                                    }
+                                    setWorkspace('node');
+                                    window.setTimeout(() => {
+                                        if (tool === 'monitor') setInspectedServiceId('node-runtime');
+                                        else setProgramRunnerOpen(true);
+                                    });
+                                }}
                             />
                             : <div className='ControlCenterMessage error'>
                                 <strong>{zh ? '边缘集群图谱暂不可用' : 'Edge cluster graph unavailable'}</strong>

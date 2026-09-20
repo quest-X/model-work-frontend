@@ -676,6 +676,32 @@ describe('ComputeClusterPopup', () => {
         await waitFor(() => expect(service.resourceGraph).toHaveBeenCalledTimes(1));
     });
 
+    it('opens the three classic node tools from a pinned graph card', async () => {
+        const user = userEvent.setup();
+        const graph = await service.resourceGraph();
+        const nodes = await service.nodes();
+        const onOpenNodeTool = jest.fn();
+        render(<ResourceKnowledgeGraph
+            graph={graph}
+            nodes={nodes}
+            zh={true}
+            onSelectWorkAgent={jest.fn()}
+            onOpenNodeTool={onOpenNodeTool}
+        />);
+
+        const node = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
+        await user.dblClick(node);
+        const card = screen.getByRole('status', {name: 'edge-01 运维信息'});
+        expect(card).toHaveClass('pinned');
+
+        await user.click(within(card).getByRole('button', {name: /SSH \/ Tailscale/}));
+        await user.click(within(card).getByRole('button', {name: /资源监视器/}));
+        await user.click(within(card).getByRole('button', {name: /程序运行器/}));
+
+        expect(onOpenNodeTool.mock.calls.map(([, tool]) => tool))
+            .toEqual(['terminal', 'monitor', 'runner']);
+    });
+
     it('puts a direct camera owner at the top without changing the clockwise node order', async () => {
         const base = await service.resourceGraph();
         const main = base.entities.find(entity => entity.kind === 'compute_node');
