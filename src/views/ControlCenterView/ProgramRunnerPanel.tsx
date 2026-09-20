@@ -181,7 +181,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [resultPreviewError, setResultPreviewError] = useState('');
     const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const [refreshVersion, setRefreshVersion] = useState(0);
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
     const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
 
@@ -282,7 +281,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [node.node_id, programsCapable, refreshVersion, runtimeCapable]);
+    }, [node.node_id, programsCapable, runtimeCapable]);
 
     const selectedService = snapshot?.services.find(service =>
         service.service_id === selectedServiceId
@@ -427,14 +426,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                 </p>
             </div>
             <div className='ComputeClusterHeaderActions'>
-                <button
-                    type='button'
-                    className='ControlProgramRefresh'
-                    aria-label={zh ? '刷新程序运行器' : 'Refresh program runner'}
-                    title={zh ? '刷新' : 'Refresh'}
-                    disabled={refreshing}
-                    onClick={() => setRefreshVersion(current => current + 1)}
-                >↻</button>
                 <button
                     type='button'
                     className={`window-toggle ${maximized ? 'restore' : 'maximize'}`}
