@@ -17,6 +17,7 @@ import {
 } from '../../../../services/ComputeClusterService';
 import {AgentChatTrigger} from '../AgentChatTrigger';
 import {
+    AGENT_CHAT_SEND_EVENT,
     AGENT_CHAT_TOGGLE_EVENT,
     AgentSideChat,
     canonicalAuthorizationJson,
@@ -708,6 +709,39 @@ describe('AgentSideChat', () => {
 
         expect(toggled).toHaveBeenCalledTimes(1);
         window.removeEventListener(AGENT_CHAT_TOGGLE_EVENT, toggled);
+    });
+
+    it('opens and immediately sends a graph task-worker request', async () => {
+        const machine = {
+            node_id: 'node-205',
+            name: 'shanghai-205-linux',
+            online: true,
+            heartbeat_age_seconds: 2,
+            network: {},
+            resources: {},
+        } as ComputeClusterNode;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        jest.spyOn(AgentChatService, 'status').mockResolvedValue({
+            status: 'ready', auth_configured: true, llm_configured: true, primary_model: 'Qwen3-Coder',
+        });
+        const send = jest.spyOn(AgentChatService, 'send').mockResolvedValue({
+            conversation_id: 'conversation-1',
+            message: '等待诊断已完成。',
+            model: 'Qwen3-Coder',
+            degraded: false,
+        });
+        render(<AgentSideChat language={Language.CHINESE}/>);
+        const command = '@shanghai-205-linux 执行 等待诊断（system.wait） 服务并查看结果';
+
+        act(() => {
+            window.dispatchEvent(new CustomEvent(AGENT_CHAT_SEND_EVENT, {detail: command}));
+        });
+
+        expect(await screen.findByRole('dialog', {name: 'Agent 对话'})).toBeInTheDocument();
+        expect(await screen.findByText(command)).toBeInTheDocument();
+        await waitFor(() => expect(AgentChatService.startTrace).toHaveBeenCalledWith(command));
+        expect(send.mock.calls[0][0]).toContain(command);
+        expect(send.mock.calls[0][0]).toContain('shanghai-205-linux');
     });
 
     it('sorts every object level in the signed authorization JSON', () => {

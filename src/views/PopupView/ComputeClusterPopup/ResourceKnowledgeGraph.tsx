@@ -8,6 +8,7 @@ import {
     computeNodeLabel,
     aggregateCommunicationStates,
 } from '../../../services/ComputeClusterService';
+import {sendAgentMessage} from '../../Common/AgentSideChat/AgentSideChat';
 
 interface ResourceKnowledgeGraphProps {
     graph: ComputeResourceGraph;
@@ -730,7 +731,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                                     <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
                                     <small>{zh ? '程序 · 环境 · 接口 · 状态 · 结果 · 日志' : 'Programs · environments · APIs · status · results · logs'}</small>
                                 </button>
-                            </div> : <><div className='ComputeGraphHoverRoutes'>
+                            </div> : <div className='ComputeGraphHoverRoutes'>
                                 <div className={sshAvailable ? 'available' : 'unavailable'}>
                                     <span>{zh ? 'SSH 通路' : 'SSH route'}</span><strong>{routeAvailabilityLabel(sshAvailable, zh)}</strong>
                                     <small>{node?.network.self_name || node?.network.addresses.join(' · ') || (zh ? '地址待节点上报' : 'Address pending')}</small>
@@ -743,13 +744,26 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                                     <span>{zh ? 'Tailscale 私有组网' : 'Tailscale private overlay'}</span><strong>{routeAvailabilityLabel(tailscaleAvailable, zh)}</strong>
                                     <small>{node?.network.tailnet || (zh ? '私有链路' : 'Private route')}</small>
                                 </div>
-                            </div>
+                            </div>}
                             <div className='ComputeGraphHoverAgents'>
                                 <span>{zh ? '可调用任务执行器' : 'Callable task workers'}</span>
-                                {agents.length ? <div>{agents.map(agent => <em key={agent.entity_id}>{codes.get(agent.entity_id)} · {agentLabel(agent, zh)}</em>)}</div>
+                                {agents.length ? <div>{agents.map(agent => {
+                                    const service = agentLabel(agent, zh);
+                                    const command = zh
+                                        ? `@${node.name} 执行 ${service}${agent.task_type ? `（${agent.task_type}）` : ''} 服务并查看结果`
+                                        : `@${node.name} run the ${service}${agent.task_type ? ` (${agent.task_type})` : ''} service and show the result`;
+                                    return <button
+                                        type='button'
+                                        key={agent.entity_id}
+                                        aria-label={zh ? `通过 OpenSight Agent 执行 ${service}` : `Run ${service} with OpenSight Agent`}
+                                        onClick={event => {
+                                            event.stopPropagation();
+                                            sendAgentMessage(command);
+                                        }}
+                                    >{codes.get(agent.entity_id)} · {service}</button>;
+                                })}</div>
                                     : <small>{zh ? '暂无可调用任务执行器' : 'No callable task worker'}</small>}
                             </div>
-                            </>}
                         </>;
                     })() : <>
                         <span>{sensorKindLabel(inspectedEntity, zh)} {codes.get(inspectedEntity.entity_id)} · {deviceStatusLabel(inspectedEntity.device_status, zh)}</span>
