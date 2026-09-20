@@ -46,6 +46,7 @@ import {StorageAnalysisPanel} from './StorageAnalysisPanel';
 import {DuplicateAnalysisPanel} from './DuplicateAnalysisPanel';
 import {StartupItemsPanel} from './StartupItemsPanel';
 import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
+import {ProgramRunnerPanel} from './ProgramRunnerPanel';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
@@ -380,6 +381,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [computeTasks, setComputeTasks] = useState<ComputeTask[]>([]);
     const [selectedNodeId, setSelectedNodeId] = useState('');
     const [loading, setLoading] = useState(true);
+    const [loadingProgress, setLoadingProgress] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
     const [graphError, setGraphError] = useState('');
@@ -389,6 +391,12 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [inspectedServiceId, setInspectedServiceId] = useState('');
     useEscapeToClose(() => setInspectedServiceId(''), Boolean(inspectedServiceId), 20);
     const [monitorMaximized, setMonitorMaximized] = useState(false);
+    const [programRunnerOpen, setProgramRunnerOpen] = useState(false);
+    const [programRunnerMaximized, setProgramRunnerMaximized] = useState(false);
+    useEscapeToClose(() => {
+        setProgramRunnerOpen(false);
+        setProgramRunnerMaximized(false);
+    }, programRunnerOpen, 21);
     const [monitorView, setMonitorView] = useState<MonitorView>('performance');
     const [deviceManagementTab, setDeviceManagementTab] = useState<'camera' | 'edge' | null>(null);
     const [cameraViewerId, setCameraViewerId] = useState('');
@@ -423,6 +431,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [overviewView, setOverviewView] = useState<OverviewView>('map');
     const mounted = useRef(true);
     const refreshInFlight = useRef(false);
+    const groupRefreshInFlight = useRef(false);
     const overviewSelected = useRef(false);
     const selectedNodeIdRef = useRef('');
     const runtimeInventoryRequest = useRef(0);
@@ -458,34 +467,52 @@ export const ControlCenterView: React.FC<IProps> = ({
     const refresh = useCallback(async (initial = false) => {
         if (refreshInFlight.current) return;
         refreshInFlight.current = true;
-        if (mounted.current) initial ? setLoading(true) : setRefreshing(true);
+        let completed = 0;
+        const track = <T,>(promise: Promise<T>) => promise.finally(() => {
+            completed += 1;
+            if (initial && mounted.current) setLoadingProgress(completed * 25);
+        });
+        if (!groupRefreshInFlight.current) {
+            groupRefreshInFlight.current = true;
+            void ComputeClusterService.groups()
+                .then(value => {
+                    if (mounted.current) setGroupMemberships(value.groups);
+                })
+                .catch(() => undefined)
+                .finally(() => {
+                    groupRefreshInFlight.current = false;
+                });
+        }
+        if (mounted.current) {
+            if (initial) {
+                setLoading(true);
+                setLoadingProgress(0);
+            } else {
+                setRefreshing(true);
+            }
+        }
         try {
-            const [nextNodes, graphResult, assetResult, memberships, targets] = await Promise.all([
-                ComputeClusterService.nodes(),
-                ComputeClusterService.resourceGraph().then(
+            const [nextNodes, graphResult, assetResult, targets] = await Promise.all([
+                track(ComputeClusterService.nodes()),
+                track(ComputeClusterService.resourceGraph().then(
                     value => ({value, error: ''}),
                     reason => ({
                         value: null,
                         error: reason instanceof Error ? reason.message : String(reason),
                     }),
-                ),
-                ComputeClusterService.lanAssets().then(
+                )),
+                track(ComputeClusterService.lanAssets().then(
                     value => value.assets,
                     () => [] as ComputeLanAsset[],
-                ),
-                ComputeClusterService.groups().then(
-                    value => value.groups,
-                    () => [] as ComputeGroupMembership[],
-                ),
-                ComputeClusterService.terminalTargets().then(
+                )),
+                track(ComputeClusterService.terminalTargets().then(
                     value => value.targets,
                     () => [] as ComputeTerminalTarget[],
-                ),
+                )),
             ]);
             if (!mounted.current) return;
             setNodes(nextNodes);
             setLanAssets(assetResult);
-            setGroupMemberships(memberships);
             setTerminalTargets(targets);
             if (graphResult.value) setResourceGraph(graphResult.value);
             setGraphError(graphResult.error);
@@ -790,6 +817,8 @@ export const ControlCenterView: React.FC<IProps> = ({
         if (nodeChanged) {
             setInspectedServiceId('');
             setMonitorView('performance');
+            setProgramRunnerOpen(false);
+            setProgramRunnerMaximized(false);
         }
         if (nodeChanged || !runtimeInventoryCapable) {
             runtimeInventoryAbort.current?.abort();
@@ -1261,6 +1290,30 @@ export const ControlCenterView: React.FC<IProps> = ({
         </button>;
     };
 
+    const renderProgramRunnerCard = () => {
+        const capable = Boolean(
+            selectedNode?.online && selectedNode.capabilities.includes('runtime.read.v1'),
+        );
+        const tone: Tone = selectedNode?.online ? (capable ? 'healthy' : 'warning') : 'offline';
+        const status = selectedNode?.online
+            ? capable ? (zh ? '正常' : 'Normal') : (zh ? '待升级' : 'Upgrade required')
+            : (zh ? '故障' : 'Fault');
+        return <button
+            type='button'
+            className='ControlServiceCard ControlRuntimeService'
+            aria-label={zh ? '打开程序运行器' : 'Open program runner'}
+            onClick={() => setProgramRunnerOpen(true)}
+        >
+            <span className={`ControlStatusDot ${tone}`} aria-hidden='true'/>
+            <span className='ControlRuntimeIdentity'>
+                <span>{status}</span>
+                <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
+                <small>{zh ? '程序 · 环境 · 接口 · 状态 · 结果 · 日志' : 'Programs · environments · APIs · status · results · logs'}</small>
+            </span>
+            <span className='ControlServiceOpen' aria-hidden='true'>›</span>
+        </button>;
+    };
+
     // eslint-disable-next-line complexity
     const renderNode = (node: ComputeClusterNode) => {
         // Dependency health belongs to the latest node snapshot. Once that
@@ -1302,7 +1355,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             <header className='ControlNodeHeader'>
                 <div>
                     <h1>{node.name}</h1>
-                    <p>{zh ? '最后检查' : 'Last check'} {runtimeTime(node.resources.captured_at, zh)} · {zh ? '最近心跳' : 'Last heartbeat'} {lastSeen(node.heartbeat_age_seconds, zh)}</p>
+                    <p>{zh ? '最后检查' : 'Last check'} {runtimeTime(node.resources.captured_at, zh)} · {zh ? '最近通信' : 'Last contact'} {lastSeen(node.heartbeat_age_seconds, zh)}</p>
                     <div className='ControlNodeTags' aria-label={zh ? '节点标签' : 'Node tags'}>
                         {locationTag && <span className='ControlNodeTag location'>
                             {zh ? `地域 (${locationTag})` : `Region (${locationTag})`}
@@ -1419,7 +1472,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                         <h2>{zh ? '资源监控' : 'Resource monitoring'}</h2>
                     </div>
                 </div>
-                <div className='ControlServiceGrid'>{renderResourceMonitorCard()}</div>
+                <div className='ControlServiceGrid'>
+                    {renderResourceMonitorCard()}
+                    {renderProgramRunnerCard()}
+                </div>
             </section>
 
             <section className='ControlSection'>
@@ -2030,7 +2086,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     />
                 </div>}
                 {workspace === 'node' && loading && nodes.length === 0 && <div className='ControlCenterMessage'>
-                    <strong>{zh ? '正在读取计算群' : 'Loading compute cluster'}</strong>
+                    <strong>{zh ? `正在读取计算群 ${loadingProgress}%` : `Loading compute cluster ${loadingProgress}%`}</strong>
                     <span>{zh ? '正在获取已加入计算群的机器…' : 'Fetching enrolled machines…'}</span>
                 </div>}
                 {workspace === 'node' && !loading && !selectedNode && overviewNodes.length === 0 && <div className='ControlCenterMessage error'>
@@ -2377,6 +2433,30 @@ export const ControlCenterView: React.FC<IProps> = ({
                     </div>
                 </div>
             </section>
+        </div>}
+        {selectedNode && programRunnerOpen && <div
+            className={`ControlResourceMonitorBackdrop${programRunnerMaximized ? ' maximized' : ''}`}
+            onMouseDown={event => {
+                if (event.target === event.currentTarget) {
+                    setProgramRunnerOpen(false);
+                    setProgramRunnerMaximized(false);
+                }
+            }}
+        >
+            <ProgramRunnerPanel
+                node={selectedNode}
+                edgeDevices={lanAssets.filter(asset =>
+                    asset.node_id === selectedNode.node_id
+                    && asset.device_kind === 'edge_compute'
+                )}
+                zh={zh}
+                maximized={programRunnerMaximized}
+                onClose={() => {
+                    setProgramRunnerOpen(false);
+                    setProgramRunnerMaximized(false);
+                }}
+                onToggleMaximized={() => setProgramRunnerMaximized(current => !current)}
+            />
         </div>}
     </div>;
 };

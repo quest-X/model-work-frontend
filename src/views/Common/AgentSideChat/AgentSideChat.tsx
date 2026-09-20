@@ -879,8 +879,8 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
             const state = latest.online ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
             const network = latest.network.online ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
             const content = zh
-                ? `@${latest.name}\n状态：${state}\n最近心跳：${Math.round(latest.heartbeat_age_seconds)} 秒前\nTailscale：${network}`
-                : `@${latest.name}\nStatus: ${state}\nLast heartbeat: ${Math.round(latest.heartbeat_age_seconds)}s ago\nTailscale: ${network}`;
+                ? `@${latest.name}\n状态：${state}\n最近通信：${Math.round(latest.heartbeat_age_seconds)} 秒前\nTailscale：${network}`
+                : `@${latest.name}\nStatus: ${state}\nLast contact: ${Math.round(latest.heartbeat_age_seconds)}s ago\nTailscale: ${network}`;
             return content;
         }
         if (operation === 'probe') return runConnectivityProbe(node, zh);
