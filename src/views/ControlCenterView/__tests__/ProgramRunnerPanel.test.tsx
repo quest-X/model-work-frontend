@@ -499,10 +499,8 @@ describe('ProgramRunnerPanel', () => {
             await new Promise(resolve => setTimeout(resolve, 0));
         });
         await waitFor(() => expect(runtime).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(
-            screen.getByRole('button', {name: '刷新程序运行器'}),
-        ).not.toBeDisabled());
-        expect(screen.getByText('节点尚未注册部署程序。')).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '刷新程序运行器'})).not.toBeInTheDocument();
+        expect(await screen.findByText('节点尚未注册部署程序。')).toBeInTheDocument();
         runtime.mockClear();
         runtimeEvents.mockClear();
 
@@ -530,9 +528,6 @@ describe('ProgramRunnerPanel', () => {
         });
         expect(edgePrograms).toHaveBeenCalledTimes(1);
         finishEdgeLoad();
-        await waitFor(() => expect(
-            within(dialog).getByRole('button', {name: '刷新程序运行器'}),
-        ).not.toBeDisabled());
         fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
         expect(await within(dialog).findByText('DLK-02 overflow level 3')).toBeInTheDocument();
         expect(runtime).not.toHaveBeenCalled();
