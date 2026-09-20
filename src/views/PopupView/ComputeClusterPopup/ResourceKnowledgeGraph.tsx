@@ -750,8 +750,8 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                                 {agents.length ? <div>{agents.map(agent => {
                                     const service = agentLabel(agent, zh);
                                     const command = zh
-                                        ? `@${node.name} 执行 ${service}${agent.task_type ? `（${agent.task_type}）` : ''} 服务并查看结果`
-                                        : `@${node.name} run the ${service}${agent.task_type ? ` (${agent.task_type})` : ''} service and show the result`;
+                                        ? `@${node.name} 执行 ${service}${agent.task_type ? `（${agent.task_type}）` : ''} 服务，并将执行结果按表格输出`
+                                        : `@${node.name} run the ${service}${agent.task_type ? ` (${agent.task_type})` : ''} service and show the result as a table`;
                                     return <button
                                         type='button'
                                         key={agent.entity_id}

@@ -706,7 +706,7 @@ describe('ComputeClusterPopup', () => {
         window.addEventListener(AGENT_CHAT_SEND_EVENT, sent);
         await user.click(within(card).getByRole('button', {name: /通过 OpenSight Agent 执行 等待诊断/}));
         expect((sent.mock.calls[0][0] as CustomEvent<string>).detail)
-            .toBe('@edge-01 执行 等待诊断（system.wait） 服务并查看结果');
+            .toBe('@edge-01 执行 等待诊断（system.wait） 服务，并将执行结果按表格输出');
         window.removeEventListener(AGENT_CHAT_SEND_EVENT, sent);
     });
 

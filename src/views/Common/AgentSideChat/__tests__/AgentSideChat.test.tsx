@@ -731,7 +731,7 @@ describe('AgentSideChat', () => {
             degraded: false,
         });
         render(<AgentSideChat language={Language.CHINESE}/>);
-        const command = '@shanghai-205-linux 执行 等待诊断（system.wait） 服务并查看结果';
+        const command = '@shanghai-205-linux 执行 等待诊断（system.wait） 服务，并将执行结果按表格输出';
 
         act(() => {
             window.dispatchEvent(new CustomEvent(AGENT_CHAT_SEND_EVENT, {detail: command}));
