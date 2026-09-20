@@ -150,6 +150,7 @@ const localDateKey = (timestamp: number): string => {
     const day = `${date.getDate()}`.padStart(2, '0');
     return `${date.getFullYear()}-${month}-${day}`;
 };
+const todayDateKey = (): string => localDateKey(Date.now() / 1000);
 
 const RESULT_PREVIEW_BYTES = 256 * 1024;
 
@@ -210,7 +211,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [logServiceId, setLogServiceId] = useState('');
     const [selectedArtifactId, setSelectedArtifactId] = useState('');
-    const [artifactDate, setArtifactDate] = useState('');
+    const [artifactDate, setArtifactDate] = useState(todayDateKey);
     const [artifactCategoryFilter, setArtifactCategoryFilter] = useState<ResultCategory>('all');
     const [artifactQuery, setArtifactQuery] = useState('');
     const [loadedVideoId, setLoadedVideoId] = useState('');
@@ -248,7 +249,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setSelectedServiceId('');
         setLogServiceId('');
         setSelectedArtifactId('');
-        setArtifactDate('');
+        setArtifactDate(todayDateKey());
         setArtifactCategoryFilter('all');
         setArtifactQuery('');
         setLoadedVideoId('');

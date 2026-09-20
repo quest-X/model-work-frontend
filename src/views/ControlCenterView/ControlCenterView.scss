@@ -1877,7 +1877,14 @@ button.ControlServiceCard {
   }
 
   input[type='search'] { width: 170px; }
-  input[type='date'] { width: 132px; }
+  input[type='date'] {
+    width: 132px;
+    color-scheme: dark;
+  }
+  input[type='date']::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.9;
+  }
   select { width: 80px; }
   button { cursor: pointer; }
   input:focus-visible,
