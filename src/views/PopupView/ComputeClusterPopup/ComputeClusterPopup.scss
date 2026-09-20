@@ -581,6 +581,17 @@
     > i { color: #d7b7ff; }
     > span { color: rgba(213, 183, 249, 0.8); }
   }
+  &.compute_node.node-warning {
+    border-color: rgba(224, 170, 72, 0.94);
+    box-shadow: 0 0 0 6px rgba(224, 170, 72, 0.08), 0 0 24px rgba(224, 170, 72, 0.28);
+  }
+  &.compute_node.node-offline {
+    border-color: rgba(226, 76, 76, 0.96);
+    background: radial-gradient(circle at 38% 30%, rgba(126, 47, 62, 0.98), rgba(60, 27, 36, 0.98) 68%);
+    box-shadow: 0 0 0 6px rgba(226, 76, 76, 0.09), 0 0 26px rgba(226, 76, 76, 0.34);
+    > i { color: #ffb4b4; }
+    > span { color: rgba(255, 174, 174, 0.82); }
+  }
   .ComputeGraphNodeState {
     position: absolute;
     right: -18px;
