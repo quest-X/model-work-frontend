@@ -973,9 +973,10 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText('离线节点', {selector: '.ComputeKnowledgeLegend span'})).not.toBeInTheDocument();
         const jinan = container.querySelector('[data-map-feature="济南市"]');
         expect(jinan).toBeInTheDocument();
+        const fetchCount = districtFetch.mock.calls.length;
         fireEvent.click(jinan as Element);
         expect(screen.getByText('山东省市级地图')).toBeInTheDocument();
-        expect(districtFetch).not.toHaveBeenCalled();
+        expect(districtFetch).toHaveBeenCalledTimes(fetchCount);
         fireEvent.click(screen.getByRole('button', {name: '中国'}));
         const shanghai = container.querySelector('[data-map-feature="上海市"]');
         expect(shanghai).toBeInTheDocument();
@@ -1001,6 +1002,15 @@ describe('ControlCenterView', () => {
         fireEvent.mouseEnter(graphNode);
         expect(within(graphPanel).getByText('正常 · 心跳 刚刚')).toHaveClass('online');
         expect(screen.getByText('边缘集群图谱', {selector: 'strong'})).toBeInTheDocument();
+        fireEvent.click(within(graphPanel).getByRole('button', {name: /资源监视器/}));
+        const graphMonitor = await screen.findByRole('dialog', {name: '在线节点 资源监视器'});
+        expect(screen.getByRole('region', {name: '主节点、边缘设备与摄像头拓扑'})).toBeInTheDocument();
+        expect(overview).toHaveAttribute('aria-pressed', 'true');
+        expect(machine).toHaveAttribute('aria-pressed', 'false');
+        fireEvent.mouseDown(graphMonitor.parentElement as HTMLElement);
+        await waitFor(() => expect(screen.queryByRole('dialog', {name: '在线节点 资源监视器'}))
+            .not.toBeInTheDocument());
+        expect(screen.getByRole('region', {name: '主节点、边缘设备与摄像头拓扑'})).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '地图'}));
         expect(screen.getByRole('region', {name: '计算群地理地图'})).toBeInTheDocument();
         expect(nodesRequest).toHaveBeenCalledTimes(1);
