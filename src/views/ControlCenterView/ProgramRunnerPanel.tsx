@@ -18,7 +18,6 @@ interface IProps {
     edgeDevices: ComputeLanAsset[];
     zh: boolean;
     maximized: boolean;
-    onClose: () => void;
     onToggleMaximized: () => void;
 }
 
@@ -190,7 +189,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     edgeDevices,
     zh,
     maximized,
-    onClose,
     onToggleMaximized,
 }) => {
     const [targetId, setTargetId] = useState(node.node_id);
@@ -522,12 +520,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     aria-pressed={maximized}
                     onClick={onToggleMaximized}
                 ><i aria-hidden='true'/></button>
-                <button
-                    type='button'
-                    aria-label={zh ? '关闭程序运行器' : 'Close program runner'}
-                    title={zh ? '关闭' : 'Close'}
-                    onClick={onClose}
-                >×</button>
             </div>
         </header>
 

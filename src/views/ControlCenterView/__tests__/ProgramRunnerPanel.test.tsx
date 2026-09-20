@@ -227,7 +227,6 @@ describe('ProgramRunnerPanel', () => {
                 task_id: '00000000-0000-4000-8000-000000000007',
             }],
         });
-        const close = jest.fn();
         const toggleMaximized = jest.fn();
 
         const {unmount} = render(<ProgramRunnerPanel
@@ -235,7 +234,6 @@ describe('ProgramRunnerPanel', () => {
             edgeDevices={[]}
             zh
             maximized={false}
-            onClose={close}
             onToggleMaximized={toggleMaximized}
         />);
 
@@ -326,8 +324,7 @@ describe('ProgramRunnerPanel', () => {
 
         fireEvent.click(within(dialog).getByRole('button', {name: '放大程序运行器窗口'}));
         expect(toggleMaximized).toHaveBeenCalledTimes(1);
-        fireEvent.click(within(dialog).getByRole('button', {name: '关闭程序运行器'}));
-        expect(close).toHaveBeenCalledTimes(1);
+        expect(within(dialog).queryByRole('button', {name: '关闭程序运行器'})).not.toBeInTheDocument();
         unmount();
         expect(jest.mocked(ComputeClusterService.runtime).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.programs).mock.calls[0][1]?.aborted).toBe(true);
@@ -374,7 +371,6 @@ describe('ProgramRunnerPanel', () => {
             edgeDevices={[]}
             zh
             maximized={false}
-            onClose={jest.fn()}
             onToggleMaximized={jest.fn()}
         />);
         expect((await screen.findAllByText('Cached Service')).length).toBeGreaterThan(0);
@@ -386,7 +382,6 @@ describe('ProgramRunnerPanel', () => {
             edgeDevices={[]}
             zh
             maximized={false}
-            onClose={jest.fn()}
             onToggleMaximized={jest.fn()}
         />);
 
@@ -492,7 +487,6 @@ describe('ProgramRunnerPanel', () => {
             edgeDevices={[edge]}
             zh
             maximized={false}
-            onClose={jest.fn()}
             onToggleMaximized={jest.fn()}
         />);
         await act(async () => {
@@ -520,7 +514,6 @@ describe('ProgramRunnerPanel', () => {
             edgeDevices={[{...edge}]}
             zh
             maximized={false}
-            onClose={jest.fn()}
             onToggleMaximized={jest.fn()}
         />);
         await act(async () => {
