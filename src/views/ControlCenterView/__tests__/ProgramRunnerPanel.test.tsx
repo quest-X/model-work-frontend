@@ -53,6 +53,13 @@ describe('ProgramRunnerPanel', () => {
     });
 
     it('shows programs, endpoint status, previewable results, and structured logs', async () => {
+        const today = Math.floor(Date.now() / 1000);
+        const todayDate = new Date(today * 1000);
+        const todayValue = [
+            todayDate.getFullYear(),
+            `${todayDate.getMonth() + 1}`.padStart(2, '0'),
+            `${todayDate.getDate()}`.padStart(2, '0'),
+        ].join('-');
         global.fetch = jest.fn().mockResolvedValue({
             ok: true,
             status: 206,
@@ -183,7 +190,7 @@ describe('ProgramRunnerPanel', () => {
                     kind: 'video',
                     content_type: 'video/mp4',
                     size_bytes: 111 * 1024 ** 2,
-                    modified_at: 100,
+                    modified_at: today,
                 }, {
                     artifact_id: 'b'.repeat(32),
                     name: '017.png',
@@ -191,7 +198,7 @@ describe('ProgramRunnerPanel', () => {
                     kind: 'image',
                     content_type: 'image/png',
                     size_bytes: 1024,
-                    modified_at: 99,
+                    modified_at: today - 1,
                 }, {
                     artifact_id: 'c'.repeat(32),
                     name: '017.json',
@@ -199,7 +206,7 @@ describe('ProgramRunnerPanel', () => {
                     kind: 'data',
                     content_type: 'application/json; charset=utf-8',
                     size_bytes: 34,
-                    modified_at: 98,
+                    modified_at: today - 2,
                 }],
             }],
         });
@@ -255,6 +262,7 @@ describe('ProgramRunnerPanel', () => {
         expect(inventory).not.toHaveBeenCalled();
 
         fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
+        expect(within(dialog).getByLabelText('筛选结果日期')).toHaveValue(todayValue);
         const artifacts = await within(dialog).findByLabelText('程序结果');
         expect(artifacts).toHaveTextContent('017.mp4');
         expect(within(artifacts).getByRole('button', {name: '加载视频预览'})).toBeInTheDocument();
