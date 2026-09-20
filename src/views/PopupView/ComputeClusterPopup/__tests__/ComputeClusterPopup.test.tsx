@@ -581,6 +581,14 @@ describe('ComputeClusterPopup', () => {
         expect(camera).toHaveClass('sensor');
         expect(within(camera).getByText('S-001')).toBeInTheDocument();
         const onlineNode = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
+        const groupLink = screen.getByTestId('resource-graph-group-link-hit');
+        expect(groupLink).toHaveAttribute('aria-label', '同群成员 edge-offline ↔ edge-01');
+        await user.hover(groupLink);
+        expect(screen.getByText('计算群成员关系').closest('[role="status"]'))
+            .toHaveTextContent('计算群成员关系edge-offline↔edge-01');
+        expect(onlineNode).toHaveClass('relation-focused');
+        expect(offlineNode).toHaveClass('relation-focused');
+        await user.unhover(groupLink);
 
         const taskFlow = screen.getByLabelText('任务流 edge-01 → edge-offline');
         expect(screen.getAllByTestId('resource-graph-task-flow')).toHaveLength(2);
