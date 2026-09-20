@@ -117,7 +117,7 @@ describe('ProgramRunnerPanel', () => {
         });
         const inventory = jest.spyOn(ComputeClusterService, 'runtimeInventory')
             .mockRejectedValue(new Error('program runner must not fetch the system process inventory'));
-        jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
+        const programs = jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
             schema_version: 'runtime.programs.v1',
             captured_at: 101,
             invalid_manifests: 0,
@@ -287,6 +287,13 @@ describe('ProgramRunnerPanel', () => {
         expect(within(artifacts).getByText('网页内预览')).toBeInTheDocument();
         expect(within(artifacts).queryByRole('link', {name: '下载原文件'}))
             .not.toBeInTheDocument();
+
+        programs.mockRejectedValue(new Error('model-work-node Client task control is unavailable'));
+        fireEvent.click(within(dialog).getByRole('button', {name: '刷新程序运行器'}));
+        expect(await within(artifacts).findByText(
+            /刷新失败，正在重试：model-work-node Client task control is unavailable/,
+        )).toBeInTheDocument();
+        expect(within(artifacts).getByRole('button', {name: /017.mp4/})).toBeInTheDocument();
 
         fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
         const logs = await within(dialog).findByLabelText('程序日志');

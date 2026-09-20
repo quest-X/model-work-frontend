@@ -697,7 +697,13 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 <span>{filteredProgramArtifacts.length}/{programArtifacts.length}</span>
                             </div>
                         </header>
-                        {programsError
+                        {programsError && programs && <div className='ControlRefreshWarning' role='status'>
+                            <span>
+                                {zh ? '刷新失败，正在重试：' : 'Refresh failed; retrying: '}
+                                {programsError}
+                            </span>
+                        </div>}
+                        {programsError && !programs
                             ? <p className='ControlProgramError' role='status'>{programsError}</p>
                             : programArtifacts.length > 0 && selectedArtifact
                                 ? <div className='ControlProgramArtifactWorkspace'>
