@@ -1998,6 +1998,19 @@ button.ControlServiceCard {
       inset: 0;
       visibility: hidden;
     }
+
+    .ControlProgramPreviewProgress {
+      position: absolute;
+      z-index: 1;
+      top: 8px;
+      left: 8px;
+      margin: 0;
+      border-radius: 2px;
+      background: rgba(8, 10, 12, 0.78);
+      padding: 4px 6px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 9px;
+    }
   }
 
   .ControlProgramPreviewPlaceholder {

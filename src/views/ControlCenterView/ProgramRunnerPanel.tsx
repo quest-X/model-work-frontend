@@ -164,6 +164,15 @@ const formatResultPreview = (contentType: string, value: string, truncated: bool
     return value;
 };
 
+const bufferedPercent = (media: HTMLMediaElement): number => {
+    if (!Number.isFinite(media.duration) || media.duration <= 0) return 0;
+    let bufferedSeconds = 0;
+    for (let index = 0; index < media.buffered.length; index += 1) {
+        bufferedSeconds += Math.max(0, media.buffered.end(index) - media.buffered.start(index));
+    }
+    return Math.min(100, Math.floor(bufferedSeconds / media.duration * 100));
+};
+
 const taskStateLabel = (state: string, zh: boolean): string => ({
     queued: zh ? '排队' : 'Queued',
     running: zh ? '运行中' : 'Running',
@@ -206,6 +215,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [artifactQuery, setArtifactQuery] = useState('');
     const [loadedVideoId, setLoadedVideoId] = useState('');
     const [readyVideoId, setReadyVideoId] = useState('');
+    const [videoPreviewProgress, setVideoPreviewProgress] = useState(0);
     const [videoPreviewError, setVideoPreviewError] = useState('');
     const [loadedImageId, setLoadedImageId] = useState('');
     const [imagePreviewError, setImagePreviewError] = useState('');
@@ -243,6 +253,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setArtifactQuery('');
         setLoadedVideoId('');
         setReadyVideoId('');
+        setVideoPreviewProgress(0);
         setVideoPreviewError('');
         setLoadedImageId('');
         setImagePreviewError('');
@@ -419,6 +430,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     useEffect(() => {
         setLoadedVideoId('');
         setReadyVideoId('');
+        setVideoPreviewProgress(0);
         setVideoPreviewError('');
         setLoadedImageId('');
         setImagePreviewError('');
@@ -840,19 +852,37 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                                         setLoadedVideoId('');
                                                                         setVideoPreviewError('');
                                                                         setReadyVideoId('');
+                                                                        setVideoPreviewProgress(0);
                                                                     }}
                                                             >{zh ? '重新加载视频' : 'Reload video'}</button>
                                                         </div>
                                                         : readyVideoId !== selectedArtifact.selection_id && <div className='ControlProgramPreviewPlaceholder'>
-                                                            <strong>{zh ? '正在加载视频预览…' : 'Loading video preview…'}</strong>
+                                                            <strong>{zh
+                                                                ? `正在加载视频预览 ${videoPreviewProgress}%`
+                                                                : `Loading video preview ${videoPreviewProgress}%`}</strong>
                                                             <span>{zh ? '正在读取视频文件' : 'Reading the video file'}</span>
                                                         </div>}
+                                                    {readyVideoId === selectedArtifact.selection_id
+                                                        && videoPreviewProgress < 100
+                                                        && <span className='ControlProgramPreviewProgress'>
+                                                            {zh
+                                                                ? `视频加载 ${videoPreviewProgress}%`
+                                                                : `Video loading ${videoPreviewProgress}%`}
+                                                        </span>}
                                                     <video
                                                         className={readyVideoId === selectedArtifact.selection_id ? '' : 'is-loading'}
                                                         controls
-                                                        preload='metadata'
+                                                        preload='auto'
                                                         src={selectedArtifactUrl}
-                                                        onLoadedData={() => setReadyVideoId(selectedArtifact.selection_id)}
+                                                        onDurationChange={event =>
+                                                            setVideoPreviewProgress(bufferedPercent(event.currentTarget))}
+                                                        onProgress={event =>
+                                                            setVideoPreviewProgress(bufferedPercent(event.currentTarget))}
+                                                        onLoadedData={event => {
+                                                            setVideoPreviewProgress(bufferedPercent(event.currentTarget));
+                                                            setReadyVideoId(selectedArtifact.selection_id);
+                                                        }}
+                                                        onCanPlayThrough={() => setVideoPreviewProgress(100)}
                                                         onError={() => setVideoPreviewError(zh ? '无法读取视频文件' : 'Unable to read the video file')}
                                                     />
                                                 </div>
@@ -864,6 +894,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                         onClick={() => {
                                                             setLoadedVideoId(selectedArtifact.selection_id);
                                                             setReadyVideoId('');
+                                                            setVideoPreviewProgress(0);
                                                             setVideoPreviewError('');
                                                         }}
                                                     >{zh ? '加载视频预览' : 'Load video preview'}</button>
