@@ -4,6 +4,7 @@ import {
     ComputeClusterNode,
     ComputeClusterService,
     ComputeLanAsset,
+    ComputeProgramSnapshot,
 } from '../../../services/ComputeClusterService';
 import {ProgramRunnerPanel} from '../ProgramRunnerPanel';
 
@@ -418,7 +419,7 @@ describe('ProgramRunnerPanel', () => {
             has_more: false,
             events: [],
         });
-        const edgePrograms = jest.spyOn(ComputeClusterService, 'edgePrograms').mockResolvedValue({
+        const edgePayload: ComputeProgramSnapshot = {
             schema_version: 'runtime.programs.v1',
             captured_at: 102,
             invalid_manifests: 0,
@@ -452,9 +453,15 @@ describe('ProgramRunnerPanel', () => {
                     message: 'DLK-02 overflow level 3',
                 }],
             }],
-        });
+        };
+        let finishEdgeLoad = () => undefined;
+        const edgePrograms = jest.spyOn(ComputeClusterService, 'edgePrograms').mockImplementation(
+            () => new Promise(resolve => {
+                finishEdgeLoad = () => resolve(edgePayload);
+            }),
+        );
 
-        render(<ProgramRunnerPanel
+        const rendered = render(<ProgramRunnerPanel
             node={parent}
             edgeDevices={[edge]}
             zh
@@ -469,6 +476,7 @@ describe('ProgramRunnerPanel', () => {
         await waitFor(() => expect(
             screen.getByRole('button', {name: '刷新程序运行器'}),
         ).not.toBeDisabled());
+        expect(screen.getByText('节点尚未注册部署程序。')).toBeInTheDocument();
         runtime.mockClear();
         runtimeEvents.mockClear();
 
@@ -483,6 +491,19 @@ describe('ProgramRunnerPanel', () => {
             edge.asset_id,
             expect.any(AbortSignal),
         ));
+        rendered.rerender(<ProgramRunnerPanel
+            node={parent}
+            edgeDevices={[{...edge}]}
+            zh
+            maximized={false}
+            onClose={jest.fn()}
+            onToggleMaximized={jest.fn()}
+        />);
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+        expect(edgePrograms).toHaveBeenCalledTimes(1);
+        finishEdgeLoad();
         await waitFor(() => expect(
             within(dialog).getByRole('button', {name: '刷新程序运行器'}),
         ).not.toBeDisabled());

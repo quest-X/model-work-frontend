@@ -185,7 +185,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
 }) => {
     const [targetId, setTargetId] = useState(node.node_id);
     const selectedEdge = edgeDevices.find(device => device.asset_id === targetId) || null;
-    const targetKey = selectedEdge ? `edge:${selectedEdge.asset_id}` : node.node_id;
+    const selectedEdgeId = selectedEdge?.asset_id || '';
+    const targetKey = selectedEdgeId ? `edge:${selectedEdgeId}` : node.node_id;
     const targetName = selectedEdge
         ? selectedEdge.display_name || selectedEdge.hostname || selectedEdge.address
         : node.name;
@@ -264,8 +265,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     ? ComputeClusterService.runtime(node.node_id, controller.signal)
                     : Promise.resolve(null),
                 programsCapable
-                    ? selectedEdge
-                        ? ComputeClusterService.edgePrograms(selectedEdge.asset_id, controller.signal)
+                    ? selectedEdgeId
+                        ? ComputeClusterService.edgePrograms(selectedEdgeId, controller.signal)
                         : ComputeClusterService.programs(node.node_id, controller.signal)
                     : Promise.resolve(null),
                 nodeRuntimeCapable && !selectedEdge
@@ -294,7 +295,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     if (programsResult.value) {
                         nextCache.programs = programsResult.value;
                         setPrograms(programsResult.value);
-                        if (selectedEdge) {
+                        if (selectedEdgeId) {
                             const edgeSnapshot = edgeRuntimeSnapshot(programsResult.value);
                             nextCache.snapshot = edgeSnapshot;
                             setSnapshot(edgeSnapshot);
@@ -333,7 +334,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         nodeRuntimeCapable,
         programsCapable,
         refreshVersion,
-        selectedEdge,
+        selectedEdgeId,
         targetKey,
     ]);
 
@@ -681,12 +682,16 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 </div>
                             </section>
                         </div>
-                        : unavailable(
-                            runtimeError
-                                ? (zh ? '程序状态暂不可用' : 'Program status is unavailable')
-                                : (zh ? '正在读取程序状态…' : 'Loading program status…'),
-                            runtimeError,
-                        ))}
+                        : snapshot
+                            ? unavailable(
+                                zh ? '节点尚未注册部署程序。' : 'No deployed programs are registered on this node.',
+                            )
+                            : unavailable(
+                                runtimeError
+                                    ? (zh ? '程序状态暂不可用' : 'Program status is unavailable')
+                                    : (zh ? '正在读取程序状态…' : 'Loading program status…'),
+                                runtimeError,
+                            ))}
 
                 {view === 'endpoints' && (!programsCapable
                     ? unavailable(
