@@ -252,6 +252,9 @@ const agentLabel = (
 const availabilityLabel = (available: boolean, zh: boolean): string =>
     available ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
 
+const routeAvailabilityLabel = (available: boolean, zh: boolean): string =>
+    available ? (zh ? '正常' : 'Normal') : (zh ? '异常' : 'Abnormal');
+
 const sensorKindLabel = (entity: ComputeResourceGraphEntity, zh: boolean): string => {
     if (entity.device_kind === 'edge_compute') return zh ? '边缘计算设备' : 'Edge device';
     const classification = deviceClass(entity);
@@ -683,15 +686,15 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                                 : (zh ? '最后心跳' : 'last heartbeat')}{' '}{heartbeatLabel(node?.heartbeat_age_seconds, zh)}</small>
                             <div className='ComputeGraphHoverRoutes'>
                                 <div className={sshAvailable ? 'available' : 'unavailable'}>
-                                    <span>{zh ? 'SSH 通路' : 'SSH route'}</span><strong>{availabilityLabel(sshAvailable, zh)}</strong>
+                                    <span>{zh ? 'SSH 通路' : 'SSH route'}</span><strong>{routeAvailabilityLabel(sshAvailable, zh)}</strong>
                                     <small>{node?.network.self_name || node?.network.addresses.join(' · ') || (zh ? '地址待节点上报' : 'Address pending')}</small>
                                 </div>
                                 <div className={publicAvailable ? 'available' : 'unavailable'}>
-                                    <span>{zh ? '公网出口' : 'Public egress'}</span><strong>{availabilityLabel(publicAvailable, zh)}</strong>
+                                    <span>{zh ? '公网出口' : 'Public egress'}</span><strong>{routeAvailabilityLabel(publicAvailable, zh)}</strong>
                                     <small>{zh ? '公开网络访问' : 'Public network access'}</small>
                                 </div>
                                 <div className={tailscaleAvailable ? 'available' : 'unavailable'}>
-                                    <span>{zh ? 'Tailscale 私有组网' : 'Tailscale private overlay'}</span><strong>{availabilityLabel(tailscaleAvailable, zh)}</strong>
+                                    <span>{zh ? 'Tailscale 私有组网' : 'Tailscale private overlay'}</span><strong>{routeAvailabilityLabel(tailscaleAvailable, zh)}</strong>
                                     <small>{node?.network.tailnet || (zh ? '私有链路' : 'Private route')}</small>
                                 </div>
                             </div>

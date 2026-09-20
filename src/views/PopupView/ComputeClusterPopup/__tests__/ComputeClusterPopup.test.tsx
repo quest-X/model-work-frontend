@@ -664,6 +664,7 @@ describe('ComputeClusterPopup', () => {
         await user.hover(offlineNode);
         const offlineCard = screen.getByRole('status', {name: 'edge-offline 运维信息'});
         expect(within(offlineCard).getByText('异常 · 最后心跳 20 小时前')).toHaveClass('offline');
+        expect(within(offlineCard).getAllByText('异常')).toHaveLength(2);
 
         await user.unhover(offlineNode);
         await user.hover(camera);
