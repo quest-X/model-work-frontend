@@ -545,10 +545,12 @@ describe('ComputeClusterPopup', () => {
         expect(graphLegend).toHaveTextContent('主节点');
         expect(graphLegend).toHaveTextContent('边缘计算设备');
         expect(graphLegend).toHaveTextContent('摄像头');
+        expect(graphLegend).toHaveTextContent('计算群成员');
         expect(graphLegend).toHaveTextContent('数据包');
         expect(graphLegend).not.toHaveTextContent('实时任务流');
         expect(screen.queryByText('黄色 · 执行器（预留）')).not.toBeInTheDocument();
         expect(screen.getAllByTestId('resource-graph-region')).toHaveLength(2);
+        expect(screen.getAllByTestId('resource-graph-group-link')).toHaveLength(1);
         expect(screen.getByText('上海')).toBeInTheDocument();
         expect(screen.getByText('山东')).toBeInTheDocument();
         expect(screen.queryByText('绿色 · 在线')).not.toBeInTheDocument();

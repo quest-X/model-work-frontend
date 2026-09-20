@@ -310,6 +310,13 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     const points = topology.points;
     const codes = useMemo(() => displayCodes(graph.entities), [graph.entities]);
     const graphNodes = visibleEntities.filter(entity => entity.kind === 'compute_node');
+    const groupMembers = [...graphNodes]
+        .filter(entity => points.has(entity.entity_id))
+        .sort((left, right) => {
+            const leftPoint = points.get(left.entity_id) as GraphPoint;
+            const rightPoint = points.get(right.entity_id) as GraphPoint;
+            return leftPoint.x - rightPoint.x || leftPoint.y - rightPoint.y;
+        });
     const activeTaskFlows = tasks.flatMap(task => {
         const source = task.source_entity_id ? index.get(task.source_entity_id) : undefined;
         const target = task.target_entity_id ? index.get(task.target_entity_id) : undefined;
@@ -387,6 +394,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
             <span><i className='entity-shape circle'/>{zh ? '主节点' : 'Main node'}</span>
             <span><i className='entity-shape rounded-rectangle edge-device'/>{zh ? '边缘计算设备' : 'Edge device'}</span>
             <span><i className='entity-shape rounded-rectangle sensor'/>{zh ? '摄像头' : 'Camera'}</span>
+            <span><i className='entity-shape group-link'/>{zh ? '计算群成员' : 'Cluster membership'}</span>
             <span><i className='entity-shape task-flow'/>{zh ? '数据包' : 'Packet'}</span>
         </div>
 
@@ -427,6 +435,21 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     data-testid='resource-node-link-graph'
                     aria-label={zh ? '设备连接线' : 'Device connections'}
                 >
+                    {groupMembers.slice(1).map((target, linkIndex) => {
+                        const source = groupMembers[linkIndex];
+                        const sourcePoint = points.get(source.entity_id) as GraphPoint;
+                        const targetPoint = points.get(target.entity_id) as GraphPoint;
+                        return <line
+                            key={`${source.entity_id}:${target.entity_id}`}
+                            x1={sourcePoint.x * 10}
+                            y1={sourcePoint.y * 4.4}
+                            x2={targetPoint.x * 10}
+                            y2={targetPoint.y * 4.4}
+                            className='ComputeGraphGroupLink'
+                            data-testid='resource-graph-group-link'
+                            aria-hidden='true'
+                        />;
+                    })}
                     {visibleRelations.map(relation => {
                         const source = points.get(relation.source_id);
                         const target = points.get(relation.target_id);
