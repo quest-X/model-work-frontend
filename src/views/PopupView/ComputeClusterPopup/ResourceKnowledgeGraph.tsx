@@ -352,6 +352,9 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     }));
     const inspectedEntityId = pinnedEntityId || hoveredEntityId;
     const inspectedEntity = inspectedEntityId ? index.get(inspectedEntityId) : undefined;
+    const inspectedTone = inspectedEntity?.kind === 'compute_node'
+        ? nodeTones.get(inspectedEntity.entity_id)
+        : undefined;
     const inspectedPoint = inspectedEntityId ? points.get(inspectedEntityId) : undefined;
     const hoveredRelation = visibleRelations.find(relation => relation.relation_id === hoveredRelationId);
     const hoveredRelationSource = hoveredRelation ? index.get(hoveredRelation.source_id) : undefined;
@@ -663,7 +666,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                 </aside>}
 
                 {inspectedEntity && <aside
-                    className={`ComputeGraphHoverCard anchored ${pinnedEntityId === inspectedEntity.entity_id ? 'pinned' : ''}`}
+                    className={`ComputeGraphHoverCard anchored ${inspectedTone ? `tone-${inspectedTone}` : ''} ${pinnedEntityId === inspectedEntity.entity_id ? 'pinned' : ''}`}
                     style={{
                         '--hover-anchor-x': `${inspectedPoint?.x || 50}%`,
                         '--hover-anchor-y': `${inspectedPoint?.y || 50}%`,

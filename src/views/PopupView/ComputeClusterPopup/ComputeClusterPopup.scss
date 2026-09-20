@@ -734,6 +734,7 @@
 }
 
 .ComputeGraphHoverCard {
+  --node-status-color: 180, 139, 232;
   position: absolute;
   z-index: 7;
   display: flex;
@@ -741,16 +742,19 @@
   gap: 7px;
   width: 284px;
   box-sizing: border-box;
-  border: 1px solid rgba(180, 139, 232, 0.48);
+  border: 1px solid rgba(var(--node-status-color), 0.48);
   border-radius: 10px;
   background: rgba(17, 18, 23, 0.96);
   padding: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 24px rgba(133, 77, 199, 0.12);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 24px rgba(var(--node-status-color), 0.12);
   pointer-events: none;
   backdrop-filter: blur(12px);
+  &.tone-online { --node-status-color: 102, 221, 160; }
+  &.tone-warning { --node-status-color: 241, 189, 103; }
+  &.tone-offline { --node-status-color: 255, 112, 112; }
   &.pinned {
-    border-color: rgba(102, 221, 160, 0.72);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 26px rgba(102, 221, 160, 0.18);
+    border-color: rgba(var(--node-status-color), 0.72);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 26px rgba(var(--node-status-color), 0.18);
     pointer-events: auto;
   }
   &.align-left { left: 14px; }
@@ -783,16 +787,16 @@
     flex-direction: column;
     gap: 3px;
     min-width: 0;
-    border: 1px solid rgba(102, 221, 160, 0.24);
+    border: 1px solid rgba(var(--node-status-color), 0.24);
     border-radius: 7px;
-    background: rgba(102, 221, 160, 0.07);
+    background: rgba(var(--node-status-color), 0.07);
     padding: 8px;
     text-align: left;
     cursor: pointer;
-    > span { color: #7fe0a8; font-size: 7px; }
+    > span { color: rgba(var(--node-status-color), 0.95); font-size: 7px; }
     > strong { overflow: hidden; color: rgba(255, 255, 255, 0.88); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
     > small { overflow: hidden; color: rgba(255, 255, 255, 0.38); font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
-    &:hover, &:focus-visible { border-color: rgba(102, 221, 160, 0.68); background: rgba(102, 221, 160, 0.13); outline: none; }
+    &:hover, &:focus-visible { border-color: rgba(var(--node-status-color), 0.68); background: rgba(var(--node-status-color), 0.13); outline: none; }
     &:disabled { opacity: .42; cursor: not-allowed; }
   }
 }

@@ -630,6 +630,7 @@ describe('ComputeClusterPopup', () => {
         await user.hover(onlineNode);
         const operationsCard = screen.getByRole('status', {name: 'edge-01 运维信息'});
         expect(operationsCard).toHaveClass('anchored');
+        expect(operationsCard).toHaveClass('tone-online');
         expect(within(operationsCard).getByText('SSH 通路')).toBeInTheDocument();
         expect(within(operationsCard).getByText('公网出口')).toBeInTheDocument();
         expect(within(operationsCard).getByText('Tailscale 私有组网')).toBeInTheDocument();
@@ -664,6 +665,7 @@ describe('ComputeClusterPopup', () => {
 
         await user.hover(offlineNode);
         const offlineCard = screen.getByRole('status', {name: 'edge-offline 运维信息'});
+        expect(offlineCard).toHaveClass('tone-offline');
         expect(within(offlineCard).getByText('异常 · 最后心跳 20 小时前')).toHaveClass('offline');
         expect(within(offlineCard).getAllByText('异常')).toHaveLength(2);
 
@@ -682,7 +684,7 @@ describe('ComputeClusterPopup', () => {
         const graph = await service.resourceGraph();
         const nodes = await service.nodes();
         const onOpenNodeTool = jest.fn();
-        render(<ResourceKnowledgeGraph
+        const rendered = render(<ResourceKnowledgeGraph
             graph={graph}
             nodes={nodes}
             zh={true}
@@ -708,6 +710,15 @@ describe('ComputeClusterPopup', () => {
         expect((sent.mock.calls[0][0] as CustomEvent<string>).detail)
             .toBe('@edge-01 执行 等待诊断（system.wait） 服务，并将执行结果按表格输出');
         window.removeEventListener(AGENT_CHAT_SEND_EVENT, sent);
+
+        rendered.rerender(<ResourceKnowledgeGraph
+            graph={graph}
+            nodes={nodes.map(node => ({...node, communication_state: 'fault'}))}
+            zh={true}
+            onSelectWorkAgent={jest.fn()}
+            onOpenNodeTool={onOpenNodeTool}
+        />);
+        expect(screen.getByRole('status', {name: 'edge-01 运维信息'})).toHaveClass('tone-warning');
     });
 
     it('puts a direct camera owner at the top without changing the clockwise node order', async () => {
