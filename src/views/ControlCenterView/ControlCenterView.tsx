@@ -2658,10 +2658,6 @@ export const ControlCenterView: React.FC<IProps> = ({
                 node={selectedNode}
                 zh={zh}
                 maximized={programRunnerMaximized}
-                onClose={() => {
-                    setProgramRunnerOpen(false);
-                    setProgramRunnerMaximized(false);
-                }}
                 onToggleMaximized={() => setProgramRunnerMaximized(current => !current)}
             />
         </div>}

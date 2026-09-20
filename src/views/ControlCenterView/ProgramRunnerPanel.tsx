@@ -16,7 +16,6 @@ interface IProps {
     node: ComputeClusterNode;
     zh: boolean;
     maximized: boolean;
-    onClose: () => void;
     onToggleMaximized: () => void;
 }
 
@@ -154,7 +153,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     node,
     zh,
     maximized,
-    onClose,
     onToggleMaximized,
 }) => {
     const cached = programRunnerCache.get(node.node_id);
@@ -435,12 +433,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     aria-pressed={maximized}
                     onClick={onToggleMaximized}
                 ><i aria-hidden='true'/></button>
-                <button
-                    type='button'
-                    aria-label={zh ? '关闭程序运行器' : 'Close program runner'}
-                    title={zh ? '关闭' : 'Close'}
-                    onClick={onClose}
-                >×</button>
             </div>
         </header>
 
