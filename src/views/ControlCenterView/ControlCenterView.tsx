@@ -1237,8 +1237,8 @@ export const ControlCenterView: React.FC<IProps> = ({
         <div className='ControlMachineList'>
             <button
                 type='button'
-                className={`ControlMachineItem overview ${overviewBehindRunner || !selectedNodeId ? 'selected' : ''}`}
-                aria-pressed={overviewBehindRunner || !selectedNodeId}
+                className={`ControlMachineItem overview ${overviewBehindTool || !selectedNodeId ? 'selected' : ''}`}
+                aria-pressed={overviewBehindTool || !selectedNodeId}
                 onClick={() => {
                     overviewSelected.current = true;
                     setSelectedNodeId('');
@@ -1284,9 +1284,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                             <button
                                 type='button'
                                 className={`ControlMachineItem ${
-                                    !overviewBehindRunner && node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''
+                                    !overviewBehindTool && node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''
                                 }`}
-                                aria-pressed={!overviewBehindRunner && node.node_id === selectedNodeId && !cameraViewerId}
+                                aria-pressed={!overviewBehindTool && node.node_id === selectedNodeId && !cameraViewerId}
                                 onClick={() => selectSidebarNode(node.node_id)}
                             >
                                 <MachinePlatformIcon node={node}/>
