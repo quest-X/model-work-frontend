@@ -350,7 +350,7 @@ describe('ComputeClusterPopup', () => {
         const {container} = render(<ComputeClusterPopup language={Language.CHINESE}/>);
         await user.click(await screen.findByRole('button', {name: '节点管理 3'}));
 
-        const groups = Array.from(container.querySelectorAll('.ComputeNodeGroup'));
+        const groups = Array.from(container.querySelectorAll<HTMLElement>('.ComputeNodeGroup'));
         expect(groups.map(group => group.querySelector('header strong')?.textContent))
             .toEqual(['作业区 A', '作业区 B']);
         expect(groups.map(group => group.querySelector('.ComputeNodeGroupTitle span')?.textContent))
