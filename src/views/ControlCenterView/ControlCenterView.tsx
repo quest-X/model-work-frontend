@@ -401,10 +401,9 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [runtimeInventoryError, setRuntimeInventoryError] = useState('');
     const [dismissedRefreshWarningKey, setDismissedRefreshWarningKey] = useState('');
     const [inspectedServiceId, setInspectedServiceId] = useState('');
-    useEscapeToClose(() => setInspectedServiceId(''), Boolean(inspectedServiceId), 20);
+    const [toolOpenedFromOverview, setToolOpenedFromOverview] = useState(false);
+    const [pendingOverviewTool, setPendingOverviewTool] = useState<'monitor' | 'runner' | null>(null);
     const [monitorMaximized, setMonitorMaximized] = useState(false);
-    const [runnerOpenedFromOverview, setRunnerOpenedFromOverview] = useState(false);
-    const [pendingOverviewRunner, setPendingOverviewRunner] = useState(false);
     const [programRunnerOpen, setProgramRunnerOpen] = useState(false);
     const [programRunnerMaximized, setProgramRunnerMaximized] = useState(false);
     const [monitorView, setMonitorView] = useState<MonitorView>('performance');
@@ -449,12 +448,20 @@ export const ControlCenterView: React.FC<IProps> = ({
     const runtimeInventoryAbort = useRef<AbortController | null>(null);
     const conversationRequest = useRef(0);
     useEscapeToClose(() => {
-        setProgramRunnerOpen(false);
-        setProgramRunnerMaximized(false);
-        if (runnerOpenedFromOverview) {
+        setInspectedServiceId('');
+        if (toolOpenedFromOverview) {
             overviewSelected.current = true;
             setSelectedNodeId('');
-            setRunnerOpenedFromOverview(false);
+            setToolOpenedFromOverview(false);
+        }
+    }, Boolean(inspectedServiceId), 20);
+    useEscapeToClose(() => {
+        setProgramRunnerOpen(false);
+        setProgramRunnerMaximized(false);
+        if (toolOpenedFromOverview) {
+            overviewSelected.current = true;
+            setSelectedNodeId('');
+            setToolOpenedFromOverview(false);
         }
     }, programRunnerOpen, 21);
 
@@ -717,10 +724,10 @@ export const ControlCenterView: React.FC<IProps> = ({
         return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
     }, [nodeGrouping, nodeOrdering, nodeRegions, nodes, nodeVisibility, zh]);
     const selectedNode = nodes.find(node => node.node_id === selectedNodeId) || null;
-    const overviewBehindRunner = Boolean(
-        runnerOpenedFromOverview && programRunnerOpen,
+    const overviewBehindTool = Boolean(
+        toolOpenedFromOverview && (inspectedServiceId || programRunnerOpen),
     );
-    const backgroundNode = overviewBehindRunner ? null : selectedNode;
+    const backgroundNode = overviewBehindTool ? null : selectedNode;
     const runtimeInventoryCapable = Boolean(
         selectedNode?.online && selectedNode.capabilities.includes('runtime.inventory.v1'),
     );
@@ -848,10 +855,11 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [loadRuntimeInventory, selectedNode, selectedNodeId]);
 
     useEffect(() => {
-        if (!pendingOverviewRunner || !selectedNode) return;
-        setProgramRunnerOpen(true);
-        setPendingOverviewRunner(false);
-    }, [pendingOverviewRunner, selectedNode]);
+        if (!pendingOverviewTool || !selectedNode) return;
+        if (pendingOverviewTool === 'monitor') setInspectedServiceId('node-runtime');
+        else setProgramRunnerOpen(true);
+        setPendingOverviewTool(null);
+    }, [pendingOverviewTool, selectedNode]);
 
     useEffect(() => {
         if (!selectedNode) return;
@@ -2358,11 +2366,18 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 zh={zh}
                                 fitWindow
                                 onSelectWorkAgent={() => undefined}
-                                onOpenProgramRunner={node => {
+                                onOpenNodeTool={(node, tool) => {
                                     overviewSelected.current = false;
                                     setSelectedNodeId(node.node_id);
-                                    setRunnerOpenedFromOverview(true);
-                                    setPendingOverviewRunner(true);
+                                    if (tool === 'terminal') {
+                                        setToolOpenedFromOverview(false);
+                                        setTerminalAutoConnect(true);
+                                        setTerminalTransport(undefined);
+                                        setWorkspace('terminal');
+                                        return;
+                                    }
+                                    setToolOpenedFromOverview(true);
+                                    setPendingOverviewTool(tool);
                                     setWorkspace('node');
                                 }}
                             />
@@ -2382,7 +2397,14 @@ export const ControlCenterView: React.FC<IProps> = ({
         {selectedNode && inspectedServiceId && <div
             className={`ControlResourceMonitorBackdrop${monitorMaximized ? ' maximized' : ''}`}
             onMouseDown={event => {
-                if (event.target === event.currentTarget) setInspectedServiceId('');
+                if (event.target === event.currentTarget) {
+                    setInspectedServiceId('');
+                    if (toolOpenedFromOverview) {
+                        overviewSelected.current = true;
+                        setSelectedNodeId('');
+                        setToolOpenedFromOverview(false);
+                    }
+                }
             }}
         >
             <section
@@ -2675,10 +2697,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                 if (event.target === event.currentTarget) {
                     setProgramRunnerOpen(false);
                     setProgramRunnerMaximized(false);
-                    if (runnerOpenedFromOverview) {
+                    if (toolOpenedFromOverview) {
                         overviewSelected.current = true;
                         setSelectedNodeId('');
-                        setRunnerOpenedFromOverview(false);
+                        setToolOpenedFromOverview(false);
                     }
                 }
             }}

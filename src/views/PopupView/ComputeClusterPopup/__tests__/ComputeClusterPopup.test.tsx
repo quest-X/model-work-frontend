@@ -5,6 +5,7 @@ import {Language} from '../../../../data/LanguageConfig';
 import {ComputeClusterService} from '../../../../services/ComputeClusterService';
 import {ComputeClusterPopup} from '../ComputeClusterPopup';
 import {ResourceKnowledgeGraph} from '../ResourceKnowledgeGraph';
+import {AGENT_CHAT_SEND_EVENT} from '../../../Common/AgentSideChat/AgentSideChat';
 
 jest.mock('../../../../logic/actions/PopupActions', () => ({
     PopupActions: {close: jest.fn()},
@@ -680,6 +681,35 @@ describe('ComputeClusterPopup', () => {
         expect(within(sensorCard).getByText('2 个通道')).toBeInTheDocument();
         expect(within(sensorCard).getByText('上级设备 · AIPACK-01')).toBeInTheDocument();
         await waitFor(() => expect(service.resourceGraph).toHaveBeenCalledTimes(1));
+    });
+
+    it('opens the three classic node tools from a pinned graph card', async () => {
+        const user = userEvent.setup();
+        const graph = await service.resourceGraph();
+        const nodes = await service.nodes();
+        const onOpenNodeTool = jest.fn();
+        render(<ResourceKnowledgeGraph
+            graph={graph}
+            nodes={nodes}
+            zh={true}
+            onSelectWorkAgent={jest.fn()}
+            onOpenNodeTool={onOpenNodeTool}
+        />);
+
+        await user.dblClick(screen.getByRole('button', {name: '查看 edge-01 节点信息'}));
+        const card = screen.getByRole('status', {name: 'edge-01 运维信息'});
+        await user.click(within(card).getByRole('button', {name: /SSH \/ Tailscale/}));
+        await user.click(within(card).getByRole('button', {name: /资源监视器/}));
+        await user.click(within(card).getByRole('button', {name: /程序运行器/}));
+        expect(onOpenNodeTool.mock.calls.map(([, tool]) => tool))
+            .toEqual(['terminal', 'monitor', 'runner']);
+
+        const sent = jest.fn();
+        window.addEventListener(AGENT_CHAT_SEND_EVENT, sent);
+        await user.click(within(card).getByRole('button', {name: /通过 OpenSight Agent 执行 等待诊断/}));
+        expect((sent.mock.calls[0][0] as CustomEvent<string>).detail)
+            .toBe('@edge-01 执行 等待诊断（system.wait） 服务，并将执行结果按表格输出');
+        window.removeEventListener(AGENT_CHAT_SEND_EVENT, sent);
     });
 
     it('puts a direct camera owner at the top without changing the clockwise node order', async () => {

@@ -8,6 +8,7 @@ import {
     computeNodeLabel,
     aggregateCommunicationStates,
 } from '../../../services/ComputeClusterService';
+import {sendAgentMessage} from '../../Common/AgentSideChat/AgentSideChat';
 
 declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
 
@@ -23,7 +24,10 @@ interface ResourceKnowledgeGraphProps {
         agent: ComputeResourceGraphEntity,
         candidateNodeIds: string[],
     ) => void;
-    onOpenProgramRunner?: (node: ComputeClusterNode) => void;
+    onOpenNodeTool?: (
+        node: ComputeClusterNode,
+        tool: 'terminal' | 'monitor' | 'runner',
+    ) => void;
 }
 
 interface GraphPoint {
@@ -300,6 +304,9 @@ const agentLabel = (
 const availabilityLabel = (available: boolean, zh: boolean): string =>
     available ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
 
+const routeAvailabilityLabel = (available: boolean, zh: boolean): string =>
+    available ? (zh ? '正常' : 'Normal') : (zh ? '异常' : 'Abnormal');
+
 const sensorKindLabel = (entity: ComputeResourceGraphEntity, zh: boolean): string => {
     if (entity.device_kind === 'edge_compute') return zh ? '边缘计算设备' : 'Edge device';
     const classification = deviceClass(entity);
@@ -326,7 +333,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
         && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__
     ),
-    onOpenProgramRunner,
+    onOpenNodeTool,
 }) => {
     const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
     const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
@@ -693,6 +700,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         const sshAvailable = dependencyFor(inspectedEntity, 'control_ssh');
                         const publicAvailable = dependencyFor(inspectedEntity, 'public_http');
                         const tailscaleAvailable = dependencyFor(inspectedEntity, 'tailscale');
+                        const terminalAvailable = sshAvailable || tailscaleAvailable;
                         const runnerAvailable = Boolean(
                             node?.online && node.capabilities.includes('runtime.read.v1'),
                         );
@@ -704,38 +712,74 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                             <small className={tone}>{computeNodeLabel(node, zh)} · {node?.online
                                 ? (zh ? '心跳' : 'heartbeat')
                                 : (zh ? '最后心跳' : 'last heartbeat')}{' '}{heartbeatLabel(node?.heartbeat_age_seconds, zh)}</small>
-                            {node && onOpenProgramRunner && <div className='ComputeGraphNodeActions'>
+                            {node && onOpenNodeTool ? <div className='ComputeGraphNodeActions'>
+                                <button
+                                    type='button'
+                                    disabled={!terminalAvailable}
+                                    onClick={event => {
+                                        event.stopPropagation();
+                                        onOpenNodeTool(node, 'terminal');
+                                    }}
+                                >
+                                    <span>{routeAvailabilityLabel(terminalAvailable, zh)}</span>
+                                    <strong>SSH / Tailscale</strong>
+                                    <small>{zh ? '打开终端窗口' : 'Open terminal'}</small>
+                                </button>
                                 <button
                                     type='button'
                                     onClick={event => {
                                         event.stopPropagation();
-                                        onOpenProgramRunner(node);
+                                        onOpenNodeTool(node, 'monitor');
+                                    }}
+                                >
+                                    <span>{computeNodeLabel(node, zh)}</span>
+                                    <strong>{zh ? '资源监视器' : 'Resource monitor'}</strong>
+                                    <small>{zh ? '处理器 · 内存 · 显卡 · 磁盘 · 网络' : 'CPU · MEM · GPU · DISK · NETWORK'}</small>
+                                </button>
+                                <button
+                                    type='button'
+                                    onClick={event => {
+                                        event.stopPropagation();
+                                        onOpenNodeTool(node, 'runner');
                                     }}
                                 >
                                     <span>{runnerAvailable
                                         ? (zh ? '正常' : 'Normal')
                                         : node.online ? (zh ? '待升级' : 'Upgrade required') : computeNodeLabel(node, zh)}</span>
                                     <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
-                                    <small>{zh ? '程序 · 接口 · 结果 · 日志' : 'Programs · APIs · results · logs'}</small>
+                                    <small>{zh ? '程序 · 环境 · 接口 · 状态 · 结果 · 日志' : 'Programs · environments · APIs · status · results · logs'}</small>
                                 </button>
-                            </div>}
-                            <div className='ComputeGraphHoverRoutes'>
+                            </div> : <div className='ComputeGraphHoverRoutes'>
                                 <div className={sshAvailable ? 'available' : 'unavailable'}>
-                                    <span>{zh ? 'SSH 通路' : 'SSH route'}</span><strong>{availabilityLabel(sshAvailable, zh)}</strong>
+                                    <span>{zh ? 'SSH 通路' : 'SSH route'}</span><strong>{routeAvailabilityLabel(sshAvailable, zh)}</strong>
                                     <small>{node?.network.self_name || node?.network.addresses.join(' · ') || (zh ? '地址待节点上报' : 'Address pending')}</small>
                                 </div>
                                 <div className={publicAvailable ? 'available' : 'unavailable'}>
-                                    <span>{zh ? '公网出口' : 'Public egress'}</span><strong>{availabilityLabel(publicAvailable, zh)}</strong>
+                                    <span>{zh ? '公网出口' : 'Public egress'}</span><strong>{routeAvailabilityLabel(publicAvailable, zh)}</strong>
                                     <small>{zh ? '公开网络访问' : 'Public network access'}</small>
                                 </div>
                                 <div className={tailscaleAvailable ? 'available' : 'unavailable'}>
-                                    <span>{zh ? 'Tailscale 私有组网' : 'Tailscale private overlay'}</span><strong>{availabilityLabel(tailscaleAvailable, zh)}</strong>
+                                    <span>{zh ? 'Tailscale 私有组网' : 'Tailscale private overlay'}</span><strong>{routeAvailabilityLabel(tailscaleAvailable, zh)}</strong>
                                     <small>{node?.network.tailnet || (zh ? '私有链路' : 'Private route')}</small>
                                 </div>
-                            </div>
+                            </div>}
                             <div className='ComputeGraphHoverAgents'>
                                 <span>{zh ? '可调用任务执行器' : 'Callable task workers'}</span>
-                                {agents.length ? <div>{agents.map(agent => <em key={agent.entity_id}>{codes.get(agent.entity_id)} · {agentLabel(agent, zh)}</em>)}</div>
+                                {agents.length ? <div>{agents.map(agent => {
+                                    const service = agentLabel(agent, zh);
+                                    const command = zh
+                                        ? `@${node.name} 执行 ${service}${agent.task_type ? `（${agent.task_type}）` : ''} 服务，并将执行结果按表格输出`
+                                        : `@${node.name} run the ${service}${agent.task_type ? ` (${agent.task_type})` : ''} service and show the result as a table`;
+                                    return <button
+                                        type='button'
+                                        key={agent.entity_id}
+                                        aria-label={zh ? `通过 OpenSight Agent 执行 ${service}` : `Run ${service} with OpenSight Agent`}
+                                        onClick={event => {
+                                            event.stopPropagation();
+                                            sendAgentMessage(command);
+                                        }}
+                                    >{codes.get(agent.entity_id)} · {service}</button>;
+                                })}</div>
                                     : <small>{zh ? '暂无可调用任务执行器' : 'No callable task worker'}</small>}
                             </div>
                         </>;
