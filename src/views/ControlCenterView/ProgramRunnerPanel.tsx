@@ -191,6 +191,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [resultPreviewError, setResultPreviewError] = useState('');
     const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [refreshProgress, setRefreshProgress] = useState(0);
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
     const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
     const runtimeVisible = runtimeCapable || snapshot !== null;
@@ -228,6 +229,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setResultPreview('');
         setResultPreviewError('');
         setResultPreviewLoading(false);
+        setRefreshProgress(0);
     }, [node.node_id]);
 
     useEffect(() => {
@@ -239,15 +241,24 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             if (inFlight) return;
             inFlight = true;
             setRefreshing(true);
+            setRefreshProgress(0);
+            const requestCount = Number(runtimeCapable) * 2 + Number(programsCapable);
+            let completedRequests = 0;
+            const track = <T,>(request: Promise<T>): Promise<T> => request.finally(() => {
+                completedRequests += 1;
+                if (!controller.signal.aborted) {
+                    setRefreshProgress(Math.round(completedRequests / requestCount * 100));
+                }
+            });
             const [runtimeResult, programsResult, eventsResult] = await Promise.allSettled([
                 runtimeCapable
-                    ? ComputeClusterService.runtime(node.node_id, controller.signal)
+                    ? track(ComputeClusterService.runtime(node.node_id, controller.signal))
                     : Promise.resolve(null),
                 programsCapable
-                    ? ComputeClusterService.programs(node.node_id, controller.signal)
+                    ? track(ComputeClusterService.programs(node.node_id, controller.signal))
                     : Promise.resolve(null),
                 runtimeCapable
-                    ? ComputeClusterService.runtimeEvents(node.node_id, 0, 100, controller.signal)
+                    ? track(ComputeClusterService.runtimeEvents(node.node_id, 0, 100, controller.signal))
                     : Promise.resolve(null),
             ]);
             if (!controller.signal.aborted) {
@@ -960,7 +971,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             eventsError || programsError
                                 ? (zh ? '日志暂不可用' : 'Logs are unavailable')
                                 : refreshing
-                                    ? (zh ? '正在读取日志…' : 'Loading logs…')
+                                    ? (zh ? `正在读取日志… ${refreshProgress}%` : `Loading logs… ${refreshProgress}%`)
                                     : (zh ? '暂无结构化日志' : 'No structured logs'),
                         )}
                     </section>)}

@@ -442,4 +442,57 @@ describe('ProgramRunnerPanel', () => {
         expect(within(offlineDialog).getByLabelText('程序日志')).toBeInTheDocument();
         expect(runtime).toHaveBeenCalledTimes(2);
     });
+
+    it('shows request completion progress while logs are loading', async () => {
+        let resolveRuntime!: (value: Awaited<ReturnType<typeof ComputeClusterService.runtime>>) => void;
+        let resolvePrograms!: (value: Awaited<ReturnType<typeof ComputeClusterService.programs>>) => void;
+        let resolveEvents!: (value: Awaited<ReturnType<typeof ComputeClusterService.runtimeEvents>>) => void;
+        jest.spyOn(ComputeClusterService, 'runtime').mockImplementation(() =>
+            new Promise(resolve => { resolveRuntime = resolve; })
+        );
+        jest.spyOn(ComputeClusterService, 'programs').mockImplementation(() =>
+            new Promise(resolve => { resolvePrograms = resolve; })
+        );
+        jest.spyOn(ComputeClusterService, 'runtimeEvents').mockImplementation(() =>
+            new Promise(resolve => { resolveEvents = resolve; })
+        );
+
+        render(<ProgramRunnerPanel
+            node={{...node, node_id: 'aipack-progress'}}
+            zh
+            maximized={false}
+            onToggleMaximized={jest.fn()}
+        />);
+        const dialog = screen.getByRole('dialog', {name: 'AIPACK-13 程序运行器'});
+        fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
+        expect(await within(dialog).findByText('正在读取日志… 0%')).toBeInTheDocument();
+
+        resolveRuntime({
+            schema_version: 'runtime.snapshot.v1',
+            captured_at: 101,
+            summary: {
+                total: 0, healthy: 0, degraded: 0, unavailable: 0,
+                task_counts: {queued: 0, running: 0, paused: 0, succeeded: 0, failed: 0, cancelled: 0},
+            },
+            services: [],
+        });
+        expect(await within(dialog).findByText('正在读取日志… 33%')).toBeInTheDocument();
+
+        resolvePrograms({
+            schema_version: 'runtime.programs.v1',
+            captured_at: 101,
+            invalid_manifests: 0,
+            programs: [],
+        });
+        expect(await within(dialog).findByText('正在读取日志… 67%')).toBeInTheDocument();
+
+        resolveEvents({
+            schema_version: 'runtime.events.v1',
+            captured_at: 101,
+            cursor: 0,
+            has_more: false,
+            events: [],
+        });
+        expect(await within(dialog).findByText('暂无结构化日志')).toBeInTheDocument();
+    });
 });
