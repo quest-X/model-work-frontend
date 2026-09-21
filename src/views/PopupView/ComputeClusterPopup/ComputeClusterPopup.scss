@@ -523,10 +523,9 @@
   text-align: center;
   cursor: pointer;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
-  transform: translate(-50%, -50%) scale(var(--graph-node-scale, 1));
-  transform-origin: center;
+  transform: translate(-50%, -50%);
   transition: border-color .16s ease, box-shadow .16s ease, filter .16s ease, opacity .16s ease, transform .16s ease;
-  &:hover { z-index: 4; border-color: rgba(208, 171, 255, 0.72); box-shadow: 0 9px 25px rgba(0, 0, 0, 0.35), 0 0 15px rgba(174, 111, 245, 0.14); transform: translate(-50%, calc(-50% - 2px)) scale(var(--graph-node-scale, 1)); }
+  &:hover { z-index: 4; border-color: rgba(208, 171, 255, 0.72); box-shadow: 0 9px 25px rgba(0, 0, 0, 0.35), 0 0 15px rgba(174, 111, 245, 0.14); transform: translate(-50%, calc(-50% - 2px)); }
   &:focus-visible { z-index: 5; outline: 2px solid rgba(101, 191, 246, 0.84); outline-offset: 3px; }
   &.unavailable { border-color: rgba(255, 255, 255, 0.11); filter: saturate(.55); }
   &.state-unavailable { border-color: rgba(217, 76, 76, 0.72); }
