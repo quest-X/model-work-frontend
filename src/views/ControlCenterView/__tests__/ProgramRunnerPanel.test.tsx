@@ -268,6 +268,16 @@ describe('ProgramRunnerPanel', () => {
         expect(endpoints).toHaveTextContent('POST');
         expect(endpoints).toHaveTextContent('/display');
         expect(endpoints).toHaveTextContent('未检查');
+        expect(within(endpoints).getByRole('link', {name: '/health'})).toHaveAttribute(
+            'href',
+            expect.stringContaining(
+                '/runtime/programs/vision-ocr/interfaces?path=%2Fhealth',
+            ),
+        );
+        expect(within(endpoints).getByRole('link', {name: '/health'}))
+            .toHaveAttribute('target', '_blank');
+        expect(within(endpoints).queryByRole('link', {name: '/display'}))
+            .not.toBeInTheDocument();
         expect(endpoints).not.toHaveTextContent('节点服务');
         expect(endpoints).not.toHaveTextContent('任务执行器');
         expect(inventory).not.toHaveBeenCalled();

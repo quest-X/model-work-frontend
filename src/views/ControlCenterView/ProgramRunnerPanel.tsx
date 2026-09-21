@@ -307,6 +307,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         program.interfaces.map(endpoint => ({
             ...endpoint,
             key: `${program.program_id}-${endpoint.method}-${endpoint.path}`,
+            program_id: program.program_id,
             program_name: program.name,
         }))
     );
@@ -644,7 +645,18 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             <tbody>{endpointRows.map(endpoint => <tr key={endpoint.key}>
                                 <td>{endpoint.program_name}</td>
                                 <td><code>{endpoint.method}</code></td>
-                                <td><code>{endpoint.path}</code></td>
+                                <td>{endpoint.method === 'GET'
+                                    ? <a
+                                        className='ControlProgramEndpointLink'
+                                        href={ComputeClusterService.programInterfaceUrl(
+                                            node.node_id,
+                                            endpoint.program_id,
+                                            endpoint.path,
+                                        )}
+                                        target='_blank'
+                                        rel='noreferrer'
+                                    ><code>{endpoint.path}</code></a>
+                                    : <code>{endpoint.path}</code>}</td>
                                 <td><span className='ControlProgramEndpointName'>
                                     <span className={`ControlStatusDot ${interfaceTone(endpoint.state)}`} aria-hidden='true'/>
                                     <span><strong>{endpoint.name}</strong><small>{endpoint.description}</small></span>
