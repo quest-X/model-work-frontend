@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {
     ComputeClusterNode,
     ComputeResourceGraph,
@@ -334,6 +334,8 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
     const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
     const [pinnedEntityId, setPinnedEntityId] = useState<string | null>(null);
+    const [nodeScale, setNodeScale] = useState(1);
+    const sceneRef = useRef<HTMLDivElement>(null);
     const index = useMemo(
         () => new Map(graph.entities.map(entity => [entity.entity_id, entity])),
         [graph.entities],
@@ -376,6 +378,28 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         [nodeRoles, operationalGraph.entities, operationalGraph.relations],
     );
     const points = topology.points;
+    useLayoutEffect(() => {
+        if (!fitWindow) {
+            setNodeScale(1);
+            return;
+        }
+        const scene = sceneRef.current;
+        if (!scene) return;
+        const updateScale = () => {
+            const width = scene.clientWidth || 720;
+            const height = scene.clientHeight || 440;
+            const next = Math.max(.4, Math.min(1, width / topology.minWidth, height / topology.minHeight));
+            setNodeScale(current => Math.abs(current - next) < .01 ? current : next);
+        };
+        updateScale();
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', updateScale);
+            return () => window.removeEventListener('resize', updateScale);
+        }
+        const observer = new ResizeObserver(updateScale);
+        observer.observe(scene);
+        return () => observer.disconnect();
+    }, [fitWindow, topology.minHeight, topology.minWidth]);
     const codes = useMemo(
         () => displayCodes(operationalGraph.entities, nodeRoles),
         [nodeRoles, operationalGraph.entities],
@@ -471,12 +495,15 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         <div className={`ComputeGraphViewport${fitWindow ? ' fit-window' : ''}`}>
             <div className='ComputeGraphFit'>
             <div
+                ref={sceneRef}
                 className={`ComputeGraphScene operations-only${hoveredRelation || hoveredTaskFlow ? ' has-relation-focus' : ''}`}
                 data-layout='radial'
+                data-node-scale={nodeScale.toFixed(3)}
                 style={{
                     minWidth: fitWindow ? 0 : topology.minWidth,
                     minHeight: fitWindow ? 0 : topology.minHeight,
-                }}
+                    '--graph-node-scale': nodeScale,
+                } as React.CSSProperties}
                 role='figure'
                 aria-label={zh ? '主节点、计算节点与摄像头关系图' : 'Main node, compute node, and camera graph'}
                 onClick={event => {
