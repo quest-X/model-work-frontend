@@ -262,6 +262,24 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(artifacts).getByRole('button', {name: '加载视频预览'}));
         const video = artifacts.querySelector('video');
         expect(video?.getAttribute('src')).toContain('/runtime/programs/vision-ocr/artifacts/');
+        expect(within(artifacts).getByText('正在加载视频预览 0%')).toBeInTheDocument();
+        Object.defineProperties(video, {
+            duration: {configurable: true, value: 100},
+            buffered: {
+                configurable: true,
+                value: {
+                    length: 2,
+                    start: (index: number) => index === 0 ? 0 : 50,
+                    end: (index: number) => index === 0 ? 10 : 65,
+                },
+            },
+        });
+        fireEvent.progress(video as HTMLVideoElement);
+        expect(within(artifacts).getByText('正在加载视频预览 25%')).toBeInTheDocument();
+        fireEvent.loadedData(video as HTMLVideoElement);
+        expect(within(artifacts).getByText('视频加载 25%')).toBeInTheDocument();
+        fireEvent.canPlayThrough(video as HTMLVideoElement);
+        expect(within(artifacts).queryByText('视频加载 25%')).not.toBeInTheDocument();
         fireEvent.change(within(artifacts).getByRole('combobox', {name: '筛选结果类型'}), {
             target: {value: 'image'},
         });
