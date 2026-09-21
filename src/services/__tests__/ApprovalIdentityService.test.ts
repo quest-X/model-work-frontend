@@ -251,7 +251,10 @@ describe('personal approvals with native WebCrypto', () => {
         expect(JSON.stringify(calls)).not.toContain(document.private_key);
     });
 
-    const nodeSource = resolve(process.cwd(), '../model-work-node');
+    const nodeSource = [
+        resolve(process.cwd(), '../model-work-node'),
+        resolve(process.cwd(), '../../../repos/model-work-node'),
+    ].find(candidate => existsSync(resolve(candidate, 'model_work_node/authorization.py'))) || '';
     const nodePython = process.env.MODEL_WORK_NODE_PYTHON || (
         process.platform === 'win32' && existsSync(resolve(nodeSource, '.venv/Scripts/python.exe'))
             ? resolve(nodeSource, '.venv/Scripts/python.exe')

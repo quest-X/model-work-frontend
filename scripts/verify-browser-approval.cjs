@@ -29,6 +29,9 @@ print(json.dumps(sensitive_request(operation='camera.connect',payload=d['payload
 const moduleSource = ts.transpileModule(readFileSync('src/services/ApprovalIdentityService.ts', 'utf8'), {
     compilerOptions: {target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020},
 }).outputText;
+const sha256Source = ts.transpileModule(readFileSync('src/utils/Sha256.ts', 'utf8'), {
+    compilerOptions: {target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020},
+}).outputText;
 const html = `<!doctype html><meta charset="utf-8"><title>Approval smoke</title><pre id="result">Running</pre><script type="module">
 import {importApprovalIdentity,getApprovalIdentity,currentApprovalUser,clearApprovalIdentity,signAuthorization,sensitiveRequestDigest} from '/approval.js';
 try {
@@ -51,6 +54,7 @@ const server = createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     try {
         if (request.url === '/approval.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(moduleSource); }
+        else if (request.url === '/utils/Sha256') { response.setHeader('Content-Type', 'text/javascript'); response.end(sha256Source); }
         else if (request.url === '/fixture') { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({person, payload, challenge})); }
         else if (request.url === '/verify' && request.method === 'POST') {
             const chunks = [];
@@ -76,17 +80,23 @@ else: raise RuntimeError('tampered credentials accepted')
 });
 server.listen(0, '127.0.0.1', () => {
     const profile = mkdtempSync(join(tmpdir(), 'mwn-approval-chrome-'));
-    const browser = spawn(chrome, ['--headless', '--no-first-run', '--no-default-browser-check', `--user-data-dir=${profile}`,
+    const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--no-default-browser-check', `--user-data-dir=${profile}`,
         '--dump-dom', '--timeout=20000', '--virtual-time-budget=5000', `http://127.0.0.1:${server.address().port}/`], {stdio: ['ignore', 'pipe', 'pipe']});
     let output = '';
-    browser.stdout.on('data', chunk => { output += chunk; });
-    browser.stderr.resume();
+    let errors = '';
+    browser.stdout.on('data', chunk => {
+        output += chunk;
+        if (verified && output.includes('<pre id="result">PASS:')) browser.kill();
+    });
+    browser.stderr.on('data', chunk => { errors += chunk; });
     const timeout = setTimeout(() => browser.kill(), 30000);
     browser.on('error', () => { clearTimeout(timeout); server.close(); process.exitCode = 1; console.error('Chrome could not start'); });
     browser.on('close', code => {
         clearTimeout(timeout); server.close();
-        const pass = code === 0 && verified && output.includes('<pre id="result">PASS:');
+        const pass = verified && output.includes('<pre id="result">PASS:');
         console.log(pass ? 'PASS: real Chrome WebCrypto -> Python verification; changed credentials rejected' : 'FAIL: real browser approval smoke');
+        if (!pass && output) console.error(output.trim());
+        if (!pass && errors) console.error(errors.trim());
         console.log('Isolated test profile:', profile);
         process.exitCode = pass ? 0 : 1;
     });
