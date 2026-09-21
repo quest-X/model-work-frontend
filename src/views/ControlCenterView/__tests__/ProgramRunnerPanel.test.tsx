@@ -416,7 +416,7 @@ describe('ProgramRunnerPanel', () => {
         first.unmount();
 
         runtime.mockImplementation(() => new Promise(() => undefined));
-        render(<ProgramRunnerPanel
+        const reopened = render(<ProgramRunnerPanel
             node={cachedNode}
             zh
             maximized={false}
@@ -424,6 +424,22 @@ describe('ProgramRunnerPanel', () => {
         />);
 
         expect(screen.getAllByText('Cached Service').length).toBeGreaterThan(0);
+        expect(runtime).toHaveBeenCalledTimes(2);
+        reopened.unmount();
+
+        render(<ProgramRunnerPanel
+            node={{...cachedNode, online: false}}
+            zh
+            maximized={false}
+            onToggleMaximized={jest.fn()}
+        />);
+
+        const offlineDialog = screen.getByRole('dialog', {name: 'AIPACK-13 程序运行器'});
+        const offlineStatus = within(offlineDialog).getByRole('status', {name: /离线 · 显示最后缓存/});
+        expect(offlineStatus.querySelector('.ControlStatusDot')).toHaveClass('offline');
+        expect(within(offlineDialog).getAllByText('Cached Service').length).toBeGreaterThan(0);
+        fireEvent.click(within(offlineDialog).getByRole('button', {name: '日志'}));
+        expect(within(offlineDialog).getByLabelText('程序日志')).toBeInTheDocument();
         expect(runtime).toHaveBeenCalledTimes(2);
     });
 });

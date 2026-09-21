@@ -193,6 +193,15 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [refreshing, setRefreshing] = useState(false);
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
     const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
+    const runtimeVisible = runtimeCapable || snapshot !== null;
+    const programsVisible = programsCapable || programs !== null;
+    const logsVisible = runtimeVisible || programsVisible || events.length > 0;
+    const showingCache = !node.online && (snapshot !== null || programs !== null || events.length > 0);
+    const connectionLabel = node.online
+        ? (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
+        : showingCache
+            ? (zh ? '离线 · 显示最后缓存' : 'Offline · showing last cached data')
+            : (zh ? '离线' : 'Offline');
 
     useEffect(() => {
         const next = programRunnerCache.get(node.node_id);
@@ -438,7 +447,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                 <span>{zh ? '程序运行器' : 'Program Runner'}</span>
                 <h2>{node.name}</h2>
                 <p>
-                    {zh ? '程序状态每 5 秒刷新' : 'Program status refreshes every 5 seconds'}
+                    <span className='ControlProgramConnection' role='status' aria-label={connectionLabel}>
+                        <span className={`ControlStatusDot ${node.online ? 'healthy' : 'offline'}`} aria-hidden='true'/>
+                        {connectionLabel}
+                    </span>
                     {' · '}{dateTime(capturedAt, zh)}
                 </p>
             </div>
@@ -471,7 +483,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             </nav>
 
             <div className='ControlMonitorContent'>
-                {view === 'programs' && (!runtimeCapable
+                {view === 'programs' && (!runtimeVisible
                     ? unavailable(
                         zh ? '当前节点尚不支持程序状态' : 'Program status is not supported',
                         node.online
@@ -613,7 +625,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             runtimeError,
                         ))}
 
-                {view === 'endpoints' && (!programsCapable
+                {view === 'endpoints' && (!programsVisible
                     ? unavailable(
                         zh ? '当前节点尚不支持程序接口' : 'Program APIs are not supported',
                         node.online
@@ -675,7 +687,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         )}
                     </section>)}
 
-                {view === 'artifacts' && (!programsCapable
+                {view === 'artifacts' && (!programsVisible
                     ? unavailable(
                         zh ? '当前节点尚不支持程序结果' : 'Program results are not supported',
                         node.online
@@ -877,7 +889,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 )}
                     </section>)}
 
-                {view === 'logs' && (!runtimeCapable && !programsCapable
+                {view === 'logs' && (!logsVisible
                     ? unavailable(
                         zh ? '当前节点尚不支持结构化日志' : 'Structured logs are not supported',
                         node.online
