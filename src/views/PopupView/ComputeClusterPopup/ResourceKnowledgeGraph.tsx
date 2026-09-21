@@ -207,50 +207,45 @@ const operationsTopology = (
     let minHeight = 440;
     regions.forEach(region => {
         const regionalPoints = new Map<string, GraphPoint>();
-        const centerX = region.left + region.width / 2;
+        const centerX = 55;
         const centerY = 52;
         const rootNodeIds = region.nodeIds.filter(nodeId =>
             nodeRoles.get(nodeId) === 'main' || !ownerByTarget.has(nodeId));
         const layoutNodeIds = rootNodeIds.length ? rootNodeIds : region.nodeIds;
-        const directOwnerIndex = layoutNodeIds.findIndex(nodeId =>
-            (childrenByOwner.get(nodeId) || []).some(child => !isBranch(child)));
-        const orderedNodeIds = directOwnerIndex > 0
-            ? [...layoutNodeIds.slice(directOwnerIndex), ...layoutNodeIds.slice(0, directOwnerIndex)]
-            : layoutNodeIds;
-        const nodeCount = orderedNodeIds.length;
-        const sectorSize = Math.PI * 2 / Math.max(1, nodeCount);
-        const directSensors = orderedNodeIds.flatMap(nodeId =>
+        const ownershipWeight = (nodeId: string): number => (childrenByOwner.get(nodeId) || [])
+            .reduce((total, child) => total + branchWeight(child), 0);
+        const primaryNodeId = layoutNodeIds.reduce((primary, nodeId) =>
+            ownershipWeight(nodeId) > ownershipWeight(primary) ? nodeId : primary, layoutNodeIds[0]);
+        const satelliteNodeIds = layoutNodeIds.filter(nodeId => nodeId !== primaryNodeId);
+        regionalPoints.set(primaryNodeId, {x: centerX, y: centerY});
+        satelliteNodeIds.forEach((nodeId, index) => regionalPoints.set(nodeId, {
+            x: 5,
+            y: centerY + (index - (satelliteNodeIds.length - 1) / 2) * 18,
+        }));
+        const ringBranches = layoutNodeIds.flatMap(nodeId =>
+            (childrenByOwner.get(nodeId) || []).filter(isBranch));
+        const directSensors = layoutNodeIds.flatMap(nodeId =>
             (childrenByOwner.get(nodeId) || []).filter(child => !isBranch(child)));
-        let directSensorIndex = 0;
-        orderedNodeIds.forEach((nodeId, nodeIndex) => {
-            const nodeAngle = -Math.PI / 2 + sectorSize * nodeIndex;
-            regionalPoints.set(nodeId, nodeCount === 1
-                ? {x: centerX, y: centerY}
-                : radialPoint(centerX, centerY, region.width * .12, 10, nodeAngle));
-            const ownedChildren = childrenByOwner.get(nodeId) || [];
-            const childrenWeight = Math.max(1, ownedChildren.reduce((total, child) => total + branchWeight(child), 0));
-            let usedWeight = 0;
-            ownedChildren.forEach(child => {
-                const weight = branchWeight(child);
-                const childAngle = nodeCount === 1
-                    ? -Math.PI / 2 + Math.PI * 2 * (usedWeight + weight / 2) / childrenWeight
-                    : nodeAngle - sectorSize * .38 + sectorSize * .76 * (usedWeight + weight / 2) / childrenWeight;
-                regionalPoints.set(child.entity_id, isBranch(child)
-                    ? radialPoint(centerX, centerY, region.width * .24, 21, childAngle)
-                    : {
-                        x: centerX + region.width * .8 * ((directSensorIndex++ + .5) / directSensors.length - .5),
-                        y: 24,
-                    });
-                const grandchildren = childrenByOwner.get(child.entity_id) || [];
-                const branchArc = (nodeCount === 1 ? Math.PI * 2 : sectorSize * .76) * weight / childrenWeight;
-                grandchildren.forEach((grandchild, index) => regionalPoints.set(
-                    grandchild.entity_id,
-                    radialPoint(centerX, centerY, region.width * .4, 38,
-                        childAngle + branchArc * ((index + .5) / grandchildren.length - .5)),
-                ));
-                usedWeight += weight;
-            });
+        const ringWeight = Math.max(1, ringBranches.reduce((total, branch) => total + branchWeight(branch), 0));
+        let usedWeight = 0;
+        ringBranches.forEach(branch => {
+            const weight = branchWeight(branch);
+            const branchAngle = -Math.PI / 2 + Math.PI * 2 * (usedWeight + weight / 2) / ringWeight;
+            regionalPoints.set(branch.entity_id, radialPoint(centerX, centerY, 25, 25, branchAngle));
+            const grandchildren = childrenByOwner.get(branch.entity_id) || [];
+            const branchArc = Math.PI * 2 * weight / ringWeight;
+            grandchildren.forEach((grandchild, index) => regionalPoints.set(
+                grandchild.entity_id,
+                radialPoint(centerX, centerY, 40, 40,
+                    branchAngle + branchArc * .72 * ((index + .5) / grandchildren.length - .5)),
+            ));
+            usedWeight += weight;
         });
+        directSensors.forEach((sensor, index) => regionalPoints.set(
+            sensor.entity_id,
+            radialPoint(centerX, centerY, 40, 40,
+                -Math.PI / 2 + Math.PI * 2 * index / Math.max(1, directSensors.length)),
+        ));
         // Keep fixed-size cards readable; expanding the canvas preserves the radial ownership layout.
         // ponytail: pairwise bounds suit inventory-sized graphs; use spatial indexing for thousands of cards.
         const entries = [...regionalPoints.entries()];
@@ -479,8 +474,8 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                 className={`ComputeGraphScene operations-only${hoveredRelation || hoveredTaskFlow ? ' has-relation-focus' : ''}`}
                 data-layout='radial'
                 style={{
-                    minWidth: fitWindow ? 0 : topology.minWidth,
-                    minHeight: fitWindow ? 0 : topology.minHeight,
+                    minWidth: topology.minWidth,
+                    minHeight: topology.minHeight,
                 }}
                 role='figure'
                 aria-label={zh ? '主节点、计算节点与摄像头关系图' : 'Main node, compute node, and camera graph'}

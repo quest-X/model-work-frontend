@@ -712,7 +712,7 @@ describe('ComputeClusterPopup', () => {
         window.removeEventListener(AGENT_CHAT_SEND_EVENT, sent);
     });
 
-    it('puts a direct camera owner at the top without changing the clockwise node order', async () => {
+    it('centers a direct camera owner and keeps peer main nodes outside the ring', async () => {
         const base = await service.resourceGraph();
         const main = base.entities.find(entity => entity.kind === 'compute_node');
         const region = base.entities.find(entity => entity.kind === 'compute_region');
@@ -751,10 +751,12 @@ describe('ComputeClusterPopup', () => {
 
         const camera = screen.getByRole('button', {name: '查看 IP CAMERA 设备信息'});
         const owner = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
-        const clockwiseNext = screen.getByRole('button', {name: '查看 before-1 节点信息'});
-        expect(camera).toHaveStyle({top: '24%'});
+        const peer = screen.getByRole('button', {name: '查看 before-1 节点信息'});
+        expect(Number.parseFloat(owner.style.left)).toBeCloseTo(55, 0);
+        expect(owner).toHaveStyle({top: '52%'});
+        expect(camera).toHaveStyle({top: '12%'});
         expect(owner.style.left).toBe(camera.style.left);
-        expect(Number.parseFloat(clockwiseNext.style.left)).toBeGreaterThan(Number.parseFloat(owner.style.left));
+        expect(Number.parseFloat(peer.style.left)).toBeLessThan(Number.parseFloat(owner.style.left));
     });
 
     it('hides region and packet legend entries in the restricted commercial build', async () => {
@@ -916,6 +918,13 @@ describe('ComputeClusterPopup', () => {
                 && Math.abs(card.y - other.y) < (card.height + other.height) / 2 + 10)
             .map(other => `${card.label}/${other.label}`));
         expect(overlaps).toEqual([]);
+        const center = {x: 55, y: 52};
+        const ring = edges.map(edge => screen.getByRole('button', {name: `查看 ${edge.label} 设备信息`}))
+            .map(card => ({x: parseFloat(card.style.left), y: parseFloat(card.style.top)}));
+        expect(Math.min(...ring.map(point => point.x))).toBeLessThan(center.x);
+        expect(Math.max(...ring.map(point => point.x))).toBeGreaterThan(center.x);
+        expect(Math.min(...ring.map(point => point.y))).toBeLessThan(center.y);
+        expect(Math.max(...ring.map(point => point.y))).toBeGreaterThan(center.y);
     });
 
     it('shows Chinese region names in Chinese and pinyin region IDs in English', async () => {
