@@ -182,6 +182,11 @@ describe('ProgramRunnerPanel', () => {
                     level: 'info',
                     event_type: 'started',
                     message: 'Program started',
+                }, {
+                    created_at: 101,
+                    level: 'info',
+                    event_type: 'frame',
+                    message: '{"src":"ixcom","dir":"out","payload":"LK2"}',
                 }],
                 artifacts: [{
                     artifact_id: 'a'.repeat(32),
@@ -334,6 +339,12 @@ describe('ProgramRunnerPanel', () => {
         expect(logs).toHaveTextContent('任务执行器');
         expect(logs).toHaveTextContent('Program started');
         expect(logs).toHaveTextContent('Vision OCR');
+        const logFilter = within(logs).getByRole('combobox', {name: '筛选日志程序'});
+        expect(within(logFilter).getByRole('option', {name: '电文'})).toBeInTheDocument();
+        fireEvent.change(logFilter, {target: {value: '__telegram__'}});
+        expect(logs).toHaveTextContent('"src":"ixcom"');
+        expect(logs).not.toHaveTextContent('Task execution started');
+        expect(logs).not.toHaveTextContent('Program started');
 
         fireEvent.click(within(dialog).getByRole('button', {name: '放大程序运行器窗口'}));
         expect(toggleMaximized).toHaveBeenCalledTimes(1);

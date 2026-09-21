@@ -11,6 +11,7 @@ import {
 type ProgramRunnerView = 'programs' | 'endpoints' | 'artifacts' | 'logs';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
 type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'telegram' | 'log';
+const TELEGRAM_LOG_FILTER = '__telegram__';
 
 interface IProps {
     node: ComputeClusterNode;
@@ -129,6 +130,14 @@ const formatResultPreview = (contentType: string, value: string, truncated: bool
         }
     }
     return value;
+};
+
+const isTelegramLog = (message: string): boolean => {
+    try {
+        return JSON.parse(message)?.src === 'ixcom';
+    } catch {
+        return false;
+    }
 };
 
 const bufferedPercent = (media: HTMLMediaElement): number => {
@@ -299,12 +308,17 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             program_name: program.name,
         }))
     );
+    const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
+        !logServiceId
+        || (logServiceId === TELEGRAM_LOG_FILTER
+            ? isTelegramLog(event.message)
+            : event.service_id === logServiceId);
     const filteredEvents = [...events]
-        .filter(event => !logServiceId || event.service_id === logServiceId)
+        .filter(matchesLogFilter)
         .reverse();
     const programEvents = (programs?.programs || []).flatMap(program =>
         program.events.map(event => ({...event, service_id: program.program_id}))
-    ).filter(event => !logServiceId || event.service_id === logServiceId)
+    ).filter(matchesLogFilter)
         .sort((left, right) => right.created_at - left.created_at);
     const logRows = [
         ...filteredEvents.map(event => ({...event, key: `runtime-${event.cursor}`})),
@@ -868,6 +882,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 onChange={event => setLogServiceId(event.target.value)}
                             >
                                 <option value=''>{zh ? '全部程序' : 'All programs'}</option>
+                                <option value={TELEGRAM_LOG_FILTER}>{zh ? '电文' : 'Telegrams'}</option>
                                 {(snapshot?.services || []).map(service => <option
                                     key={service.service_id}
                                     value={service.service_id}
