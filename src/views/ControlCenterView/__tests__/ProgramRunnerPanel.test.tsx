@@ -207,6 +207,14 @@ describe('ProgramRunnerPanel', () => {
                     content_type: 'application/json; charset=utf-8',
                     size_bytes: 34,
                     modified_at: today - 2,
+                }, {
+                    artifact_id: 'd'.repeat(32),
+                    name: 'ixcom.jsonl',
+                    relative_path: 'runs/20260918/017/ixcom.jsonl',
+                    kind: 'data',
+                    content_type: 'application/x-ndjson',
+                    size_bytes: 128,
+                    modified_at: today - 3,
                 }],
             }],
         });
@@ -291,6 +299,12 @@ describe('ProgramRunnerPanel', () => {
         });
         expect(within(artifacts).getByRole('button', {name: /017.png/})).toBeInTheDocument();
         expect(within(artifacts).queryByRole('button', {name: /017.mp4/})).not.toBeInTheDocument();
+        fireEvent.change(within(artifacts).getByRole('combobox', {name: '筛选结果类型'}), {
+            target: {value: 'telegram'},
+        });
+        expect(within(artifacts).getByRole('option', {name: '电文'})).toBeInTheDocument();
+        expect(within(artifacts).getByRole('button', {name: /ixcom.jsonl/})).toBeInTheDocument();
+        expect(within(artifacts).queryByRole('button', {name: /017.json/})).not.toBeInTheDocument();
         fireEvent.change(within(artifacts).getByRole('combobox', {name: '筛选结果类型'}), {
             target: {value: 'all'},
         });

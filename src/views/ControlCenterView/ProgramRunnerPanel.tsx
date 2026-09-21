@@ -10,7 +10,7 @@ import {
 
 type ProgramRunnerView = 'programs' | 'endpoints' | 'artifacts' | 'logs';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
-type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'log';
+type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'telegram' | 'log';
 
 interface IProps {
     node: ComputeClusterNode;
@@ -96,6 +96,7 @@ type ProgramArtifact = ComputeProgramSnapshot['programs'][number]['artifacts'][n
 const artifactCategory = (artifact: ProgramArtifact): Exclude<ResultCategory, 'all'> => {
     if (artifact.kind === 'video') return 'video';
     if (artifact.kind === 'image') return 'image';
+    if (artifact.name.toLowerCase() === 'ixcom.jsonl') return 'telegram';
     if (artifact.name.toLowerCase().endsWith('.jsonl')) return 'log';
     return 'data';
 };
@@ -105,6 +106,7 @@ const artifactCategoryLabel = (category: ResultCategory, zh: boolean): string =>
     video: zh ? '视频' : 'Videos',
     image: zh ? '图片' : 'Images',
     data: zh ? '数据' : 'Data',
+    telegram: zh ? '电文' : 'Telegrams',
     log: zh ? '日志' : 'Logs',
 }[category]);
 
@@ -335,7 +337,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const selectedArtifact = filteredProgramArtifacts.find(artifact =>
         artifact.selection_id === selectedArtifactId
     ) || filteredProgramArtifacts[0] || null;
-    const artifactGroups = (['video', 'image', 'data', 'log'] as const).map(category => ({
+    const artifactGroups = (['video', 'image', 'data', 'telegram', 'log'] as const).map(category => ({
         category,
         artifacts: filteredProgramArtifacts.filter(artifact => artifactCategory(artifact) === category),
     }));
@@ -677,7 +679,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     value={artifactCategoryFilter}
                                     onChange={event => setArtifactCategoryFilter(event.target.value as ResultCategory)}
                                 >
-                                    {(['all', 'video', 'image', 'data', 'log'] as ResultCategory[]).map(category => <option
+                                    {(['all', 'video', 'image', 'data', 'telegram', 'log'] as ResultCategory[]).map(category => <option
                                         key={category}
                                         value={category}
                                     >{artifactCategoryLabel(category, zh)}</option>)}
