@@ -343,7 +343,7 @@
 .ComputeGraphFit { width: 100%; }
 
 .ComputeGraphViewport.fit-window {
-  overflow: auto;
+  overflow: hidden;
 
   .ComputeGraphFit {
     display: flex;

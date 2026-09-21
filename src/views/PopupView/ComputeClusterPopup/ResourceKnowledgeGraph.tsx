@@ -474,8 +474,8 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                 className={`ComputeGraphScene operations-only${hoveredRelation || hoveredTaskFlow ? ' has-relation-focus' : ''}`}
                 data-layout='radial'
                 style={{
-                    minWidth: topology.minWidth,
-                    minHeight: topology.minHeight,
+                    minWidth: fitWindow ? 0 : topology.minWidth,
+                    minHeight: fitWindow ? 0 : topology.minHeight,
                 }}
                 role='figure'
                 aria-label={zh ? '主节点、计算节点与摄像头关系图' : 'Main node, compute node, and camera graph'}
