@@ -403,12 +403,10 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [inspectedServiceId, setInspectedServiceId] = useState('');
     useEscapeToClose(() => setInspectedServiceId(''), Boolean(inspectedServiceId), 20);
     const [monitorMaximized, setMonitorMaximized] = useState(false);
+    const [runnerOpenedFromOverview, setRunnerOpenedFromOverview] = useState(false);
+    const [pendingOverviewRunner, setPendingOverviewRunner] = useState(false);
     const [programRunnerOpen, setProgramRunnerOpen] = useState(false);
     const [programRunnerMaximized, setProgramRunnerMaximized] = useState(false);
-    useEscapeToClose(() => {
-        setProgramRunnerOpen(false);
-        setProgramRunnerMaximized(false);
-    }, programRunnerOpen, 21);
     const [monitorView, setMonitorView] = useState<MonitorView>('performance');
     const [deviceManagementTab, setDeviceManagementTab] = useState<'camera' | 'edge' | null>(null);
     const [cameraViewerId, setCameraViewerId] = useState('');
@@ -450,6 +448,15 @@ export const ControlCenterView: React.FC<IProps> = ({
     const runtimeInventoryPendingNode = useRef('');
     const runtimeInventoryAbort = useRef<AbortController | null>(null);
     const conversationRequest = useRef(0);
+    useEscapeToClose(() => {
+        setProgramRunnerOpen(false);
+        setProgramRunnerMaximized(false);
+        if (runnerOpenedFromOverview) {
+            overviewSelected.current = true;
+            setSelectedNodeId('');
+            setRunnerOpenedFromOverview(false);
+        }
+    }, programRunnerOpen, 21);
 
     const loadRuntimeInventory = useCallback(async (nodeId: string) => {
         if (runtimeInventoryPendingNode.current === nodeId) return;
@@ -710,6 +717,10 @@ export const ControlCenterView: React.FC<IProps> = ({
         return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
     }, [nodeGrouping, nodeOrdering, nodeRegions, nodes, nodeVisibility, zh]);
     const selectedNode = nodes.find(node => node.node_id === selectedNodeId) || null;
+    const overviewBehindRunner = Boolean(
+        runnerOpenedFromOverview && programRunnerOpen,
+    );
+    const backgroundNode = overviewBehindRunner ? null : selectedNode;
     const runtimeInventoryCapable = Boolean(
         selectedNode?.online && selectedNode.capabilities.includes('runtime.inventory.v1'),
     );
@@ -835,6 +846,12 @@ export const ControlCenterView: React.FC<IProps> = ({
             void loadRuntimeInventory(selectedNodeId);
         }
     }, [loadRuntimeInventory, selectedNode, selectedNodeId]);
+
+    useEffect(() => {
+        if (!pendingOverviewRunner || !selectedNode) return;
+        setProgramRunnerOpen(true);
+        setPendingOverviewRunner(false);
+    }, [pendingOverviewRunner, selectedNode]);
 
     useEffect(() => {
         if (!selectedNode) return;
@@ -1212,8 +1229,8 @@ export const ControlCenterView: React.FC<IProps> = ({
         <div className='ControlMachineList'>
             <button
                 type='button'
-                className={`ControlMachineItem overview ${!selectedNodeId ? 'selected' : ''}`}
-                aria-pressed={!selectedNodeId}
+                className={`ControlMachineItem overview ${overviewBehindRunner || !selectedNodeId ? 'selected' : ''}`}
+                aria-pressed={overviewBehindRunner || !selectedNodeId}
                 onClick={() => {
                     overviewSelected.current = true;
                     setSelectedNodeId('');
@@ -1259,9 +1276,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                             <button
                                 type='button'
                                 className={`ControlMachineItem ${
-                                    node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''
+                                    !overviewBehindRunner && node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''
                                 }`}
-                                aria-pressed={node.node_id === selectedNodeId && !cameraViewerId}
+                                aria-pressed={!overviewBehindRunner && node.node_id === selectedNodeId && !cameraViewerId}
                                 onClick={() => selectSidebarNode(node.node_id)}
                             >
                                 <MachinePlatformIcon node={node}/>
@@ -2035,23 +2052,23 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 ? (zh ? '文件管理' : 'File manager')
                             : workspace === 'utilities'
                                 ? (zh ? '实用工具' : 'Utilities')
-                            : selectedNode?.name || activeGroupResources?.group.group_name || (overviewView === 'map'
+                            : backgroundNode?.name || activeGroupResources?.group.group_name || (overviewView === 'map'
                                 ? (zh ? '边缘集群地图' : 'Edge cluster map')
                                 : (zh ? '边缘集群图谱' : 'Edge cluster graph'))}</strong>
                     {workspace === 'groups'
                         ? <small>{zh ? '本机群成员关系' : 'Local group memberships'}</small>
                         : workspace === 'network'
                         ? <small>{zh ? '计算群资产台账' : 'Compute-cluster inventory'}</small>
-                        : selectedNode && workspace !== 'files' && <small>{workspace === 'terminal'
-                            ? selectedNode.name
-                            : selectedNode.node_id}</small>}
+                        : backgroundNode && workspace !== 'files' && <small>{workspace === 'terminal'
+                            ? backgroundNode.name
+                            : backgroundNode.node_id}</small>}
                 </div>
                 <div className='ControlToolbarGroup right'>
                     {queriedAt && <small>{zh ? '查询于' : 'Checked'} {queriedAt.toLocaleTimeString(zh ? 'zh-CN' : 'en-US')}</small>}
                     <span>{workspace === 'groups'
                         ? `${visibleGroups.length} ${zh ? '个群' : visibleGroups.length === 1 ? 'group' : 'groups'}`
                         : `${normalCount} / ${overviewNodes.length} ${zh ? '正常' : 'normal'}`}</span>
-                    {workspace === 'node' && !selectedNode
+                    {workspace === 'node' && !backgroundNode
                         ? <div className='ControlOverviewViewSwitch' role='group' aria-label={zh ? '总览视角' : 'Overview view'}>
                             <button
                                 type='button'
@@ -2309,12 +2326,12 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <strong>{zh ? '正在读取计算群' : 'Loading compute cluster'}</strong>
                     <span>{zh ? '正在获取已加入计算群的机器…' : 'Fetching enrolled machines…'}</span>
                 </div>}
-                {workspace === 'node' && !loading && !selectedNode && overviewNodes.length === 0 && <div className='ControlCenterMessage error'>
+                {workspace === 'node' && !loading && !backgroundNode && overviewNodes.length === 0 && <div className='ControlCenterMessage error'>
                     <strong>{error ? (zh ? '无法读取计算群' : 'Compute cluster unavailable') : (zh ? '暂无机器' : 'No machines')}</strong>
                     <span>{error || (zh ? '请先将机器加入计算群' : 'Enroll a machine in the compute cluster first')}</span>
                     <button type='button' onClick={() => void refresh()}>{zh ? '重试' : 'Retry'}</button>
                 </div>}
-                {workspace === 'node' && !loading && !selectedNode && overviewNodes.length > 0 && <div className='ControlNodeContent'>
+                {workspace === 'node' && !loading && !backgroundNode && overviewNodes.length > 0 && <div className='ControlNodeContent'>
                     {(error || graphError) && dismissedRefreshWarningKey !== refreshWarningKey && <div className='ControlRefreshWarning' role='status'>
                         <span>{error
                                 ? (zh ? '本次刷新失败，正在显示上一次数据：' : 'Refresh failed; showing the last snapshot: ')
@@ -2341,6 +2358,13 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 zh={zh}
                                 fitWindow
                                 onSelectWorkAgent={() => undefined}
+                                onOpenProgramRunner={node => {
+                                    overviewSelected.current = false;
+                                    setSelectedNodeId(node.node_id);
+                                    setRunnerOpenedFromOverview(true);
+                                    setPendingOverviewRunner(true);
+                                    setWorkspace('node');
+                                }}
                             />
                             : <div className='ControlCenterMessage error'>
                                 <strong>{zh ? '边缘集群图谱暂不可用' : 'Edge cluster graph unavailable'}</strong>
@@ -2348,9 +2372,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 <button type='button' onClick={() => void refresh()}>{zh ? '重试' : 'Retry'}</button>
                             </div>}
                 </div>}
-                {workspace === 'node' && selectedNode && <>
+                {workspace === 'node' && backgroundNode && <>
                     <div className='ControlNodeContent'>
-                        {renderNode(selectedNode)}
+                        {renderNode(backgroundNode)}
                     </div>
                 </>}
             </div>
@@ -2651,6 +2675,11 @@ export const ControlCenterView: React.FC<IProps> = ({
                 if (event.target === event.currentTarget) {
                     setProgramRunnerOpen(false);
                     setProgramRunnerMaximized(false);
+                    if (runnerOpenedFromOverview) {
+                        overviewSelected.current = true;
+                        setSelectedNodeId('');
+                        setRunnerOpenedFromOverview(false);
+                    }
                 }
             }}
         >

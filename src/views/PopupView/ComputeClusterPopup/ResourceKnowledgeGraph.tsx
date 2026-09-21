@@ -23,6 +23,7 @@ interface ResourceKnowledgeGraphProps {
         agent: ComputeResourceGraphEntity,
         candidateNodeIds: string[],
     ) => void;
+    onOpenProgramRunner?: (node: ComputeClusterNode) => void;
 }
 
 interface GraphPoint {
@@ -325,6 +326,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
         && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__
     ),
+    onOpenProgramRunner,
 }) => {
     const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
     const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
@@ -691,6 +693,9 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         const sshAvailable = dependencyFor(inspectedEntity, 'control_ssh');
                         const publicAvailable = dependencyFor(inspectedEntity, 'public_http');
                         const tailscaleAvailable = dependencyFor(inspectedEntity, 'tailscale');
+                        const runnerAvailable = Boolean(
+                            node?.online && node.capabilities.includes('runtime.read.v1'),
+                        );
                         return <>
                             <span>{zh
                                 ? `${nodeRole === 'main' ? '主节点' : '计算节点'} ${codes.get(inspectedEntity.entity_id)} · 运维信息${pinnedEntityId === inspectedEntity.entity_id ? ' · 已固定（双击节点或点击空白取消）' : ''}`
@@ -699,6 +704,21 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                             <small className={tone}>{computeNodeLabel(node, zh)} · {node?.online
                                 ? (zh ? '心跳' : 'heartbeat')
                                 : (zh ? '最后心跳' : 'last heartbeat')}{' '}{heartbeatLabel(node?.heartbeat_age_seconds, zh)}</small>
+                            {node && onOpenProgramRunner && <div className='ComputeGraphNodeActions'>
+                                <button
+                                    type='button'
+                                    onClick={event => {
+                                        event.stopPropagation();
+                                        onOpenProgramRunner(node);
+                                    }}
+                                >
+                                    <span>{runnerAvailable
+                                        ? (zh ? '正常' : 'Normal')
+                                        : node.online ? (zh ? '待升级' : 'Upgrade required') : computeNodeLabel(node, zh)}</span>
+                                    <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
+                                    <small>{zh ? '程序 · 接口 · 结果 · 日志' : 'Programs · APIs · results · logs'}</small>
+                                </button>
+                            </div>}
                             <div className='ComputeGraphHoverRoutes'>
                                 <div className={sshAvailable ? 'available' : 'unavailable'}>
                                     <span>{zh ? 'SSH 通路' : 'SSH route'}</span><strong>{availabilityLabel(sshAvailable, zh)}</strong>

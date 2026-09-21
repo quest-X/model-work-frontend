@@ -124,7 +124,7 @@ describe('ProgramRunnerPanel', () => {
         });
         const inventory = jest.spyOn(ComputeClusterService, 'runtimeInventory')
             .mockRejectedValue(new Error('program runner must not fetch the system process inventory'));
-        const programs = jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
+        jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
             schema_version: 'runtime.programs.v1',
             captured_at: 101,
             invalid_manifests: 0,
