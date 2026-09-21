@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-branch="${DEPLOY_BRANCH:-shangang-rizhao/commercial-ui}"
+branch="${DEPLOY_BRANCH:-commercial}"
 host="${DEPLOY_HOST:-Baosight-AIPAC01@10.168.10.6}"
 url="${DEPLOY_URL:-http://10.168.10.6:3001}"
 repo="$(git rev-parse --show-toplevel)"
