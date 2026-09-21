@@ -342,9 +342,15 @@ describe('ProgramRunnerPanel', () => {
         const logFilter = within(logs).getByRole('combobox', {name: '筛选日志程序'});
         expect(within(logFilter).getByRole('option', {name: '电文'})).toBeInTheDocument();
         fireEvent.change(logFilter, {target: {value: '__telegram__'}});
-        expect(logs).toHaveTextContent('"src":"ixcom"');
         expect(logs).not.toHaveTextContent('Task execution started');
         expect(logs).not.toHaveTextContent('Program started');
+        expect(within(logs).getByRole('button', {name: '美化格式'})).toHaveAttribute('aria-pressed', 'true');
+        expect(within(logs).getByLabelText('电文内容').textContent)
+            .toBe('{\n  "src": "ixcom",\n  "dir": "out",\n  "payload": "LK2"\n}');
+        fireEvent.click(within(logs).getByRole('button', {name: '原始格式'}));
+        expect(within(logs).getByRole('button', {name: '原始格式'})).toHaveAttribute('aria-pressed', 'true');
+        expect(within(logs).getByLabelText('电文内容').textContent)
+            .toBe('{"src":"ixcom","dir":"out","payload":"LK2"}');
 
         fireEvent.click(within(dialog).getByRole('button', {name: '放大程序运行器窗口'}));
         expect(toggleMaximized).toHaveBeenCalledTimes(1);

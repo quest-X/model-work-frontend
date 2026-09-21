@@ -176,6 +176,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [eventsError, setEventsError] = useState('');
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [logServiceId, setLogServiceId] = useState('');
+    const [prettyTelegramLogs, setPrettyTelegramLogs] = useState(true);
     const [selectedArtifactId, setSelectedArtifactId] = useState('');
     const [artifactDate, setArtifactDate] = useState(todayDateKey);
     const [artifactCategoryFilter, setArtifactCategoryFilter] = useState<ResultCategory>('all');
@@ -204,6 +205,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setEventsError('');
         setSelectedServiceId('');
         setLogServiceId('');
+        setPrettyTelegramLogs(true);
         setSelectedArtifactId('');
         setArtifactDate(todayDateKey());
         setArtifactCategoryFilter('all');
@@ -876,22 +878,40 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 <h3>{zh ? '结构化日志' : 'Structured logs'}</h3>
                                 <p>{zh ? '任务与程序运行事件' : 'Task and program runtime events'}</p>
                             </div>
-                            <select
-                                aria-label={zh ? '筛选日志程序' : 'Filter log program'}
-                                value={logServiceId}
-                                onChange={event => setLogServiceId(event.target.value)}
-                            >
-                                <option value=''>{zh ? '全部程序' : 'All programs'}</option>
-                                <option value={TELEGRAM_LOG_FILTER}>{zh ? '电文' : 'Telegrams'}</option>
-                                {(snapshot?.services || []).map(service => <option
-                                    key={service.service_id}
-                                    value={service.service_id}
-                                >{programName(service, zh)}</option>)}
-                                {(programs?.programs || []).map(program => <option
-                                    key={program.program_id}
-                                    value={program.program_id}
-                                >{program.name}</option>)}
-                            </select>
+                            <div className='ControlProgramLogTools'>
+                                {logServiceId === TELEGRAM_LOG_FILTER && <div
+                                    className='ControlProgramLogFormat'
+                                    role='group'
+                                    aria-label={zh ? '电文显示格式' : 'Telegram display format'}
+                                >
+                                    <button
+                                        type='button'
+                                        aria-pressed={prettyTelegramLogs}
+                                        onClick={() => setPrettyTelegramLogs(true)}
+                                    >{zh ? '美化格式' : 'Pretty'}</button>
+                                    <button
+                                        type='button'
+                                        aria-pressed={!prettyTelegramLogs}
+                                        onClick={() => setPrettyTelegramLogs(false)}
+                                    >{zh ? '原始格式' : 'Raw'}</button>
+                                </div>}
+                                <select
+                                    aria-label={zh ? '筛选日志程序' : 'Filter log program'}
+                                    value={logServiceId}
+                                    onChange={event => setLogServiceId(event.target.value)}
+                                >
+                                    <option value=''>{zh ? '全部程序' : 'All programs'}</option>
+                                    <option value={TELEGRAM_LOG_FILTER}>{zh ? '电文' : 'Telegrams'}</option>
+                                    {(snapshot?.services || []).map(service => <option
+                                        key={service.service_id}
+                                        value={service.service_id}
+                                    >{programName(service, zh)}</option>)}
+                                    {(programs?.programs || []).map(program => <option
+                                        key={program.program_id}
+                                        value={program.program_id}
+                                    >{program.name}</option>)}
+                                </select>
+                            </div>
                         </header>
                         {(eventsError || programsError) && <p className='ControlProgramError' role='status'>
                             {[eventsError, programsError].filter(Boolean).join(' · ')}
@@ -903,7 +923,13 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     {serviceNames.get(event.service_id) || event.service_id}
                                 </span>
                                 <span className='ControlProgramLogType'>{event.event_type}</span>
-                                <strong>{event.message}</strong>
+                                {logServiceId === TELEGRAM_LOG_FILTER
+                                    ? <pre className='ControlProgramLogMessage' aria-label={zh ? '电文内容' : 'Telegram content'}>
+                                        {prettyTelegramLogs
+                                            ? JSON.stringify(JSON.parse(event.message), null, 2)
+                                            : event.message}
+                                    </pre>
+                                    : <strong>{event.message}</strong>}
                                 <small>{event.task_id ? `${zh ? '任务' : 'Task'} ${event.task_id}` : ''}</small>
                             </li>)}
                         </ol> : unavailable(

@@ -1994,6 +1994,32 @@ button.ControlServiceCard {
 
     &:focus-visible { border-color: rgba(255, 255, 255, 0.42); }
   }
+  .ControlProgramLogTools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ControlProgramLogFormat {
+    display: inline-flex;
+    height: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 2px;
+    overflow: hidden;
+
+    button {
+      border: 0;
+      border-right: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(0, 0, 0, 0.12);
+      padding: 0 10px;
+      color: rgba(255, 255, 255, 0.48);
+      font-size: 9px;
+      cursor: pointer;
+
+      &:last-child { border-right: 0; }
+      &[aria-pressed='true'] { background: rgba(105, 198, 255, 0.16); color: #9bdcff; }
+      &:focus-visible { outline: 1px solid rgba(105, 198, 255, 0.75); outline-offset: -1px; }
+    }
+  }
 
   ol { margin: 0; padding: 0; list-style: none; }
   li {
@@ -2010,6 +2036,14 @@ button.ControlServiceCard {
     &.error { border-left: 2px solid #ef8b8b; }
   }
   strong { min-width: 0; color: rgba(255, 255, 255, 0.82); font-size: 9px; font-weight: 500; overflow-wrap: anywhere; }
+  .ControlProgramLogMessage {
+    min-width: 0;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.82);
+    font: 9px/1.55 SFMono-Regular, Consolas, monospace;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
   small { grid-column: 4; color: rgba(255, 255, 255, 0.28); font-size: 8px; }
 }
 
@@ -2595,6 +2629,7 @@ button.ControlServiceCard {
   .ControlProgramLogs li { grid-template-columns: 110px minmax(0, 1fr); }
   .ControlProgramLogType { grid-column: 1; }
   .ControlProgramLogs li strong { grid-column: 2; grid-row: 2; }
+  .ControlProgramLogs li .ControlProgramLogMessage { grid-column: 2; grid-row: 2; }
   .ControlProgramLogs li small { grid-column: 2; }
   .ControlProgramArtifactWorkspace { display: block; overflow: auto; }
   .ControlProgramArtifactWorkspace > aside { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-right: 0; }
