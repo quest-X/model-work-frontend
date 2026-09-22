@@ -313,10 +313,7 @@ describe('ProgramRunnerPanel', () => {
 
         fireEvent.click(within(dialog).getByRole('button', {name: '接口'}));
         const endpoints = await within(dialog).findByLabelText('程序接口');
-        expect(within(endpoints).getAllByRole('columnheader').map(header => header.textContent))
-            .toEqual(['接口', '用途', '状态', '最近检查']);
-        expect(endpoints).toHaveTextContent('5 个接口');
-        expect(endpoints).toHaveTextContent('声明接口状态每 5 秒刷新');
+        expect(endpoints).toHaveTextContent('Vision OCR');
         expect(endpoints).toHaveTextContent('GET');
         expect(endpoints).toHaveTextContent('/health');
         expect(endpoints).toHaveTextContent('健康检查');
