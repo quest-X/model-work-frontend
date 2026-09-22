@@ -87,6 +87,9 @@ const CameraTimeline: React.FC<IProps> = ({
             context.stroke();
             if (isLabelTick) {
                 const labelSeconds = windowStart + offset;
+                context.textAlign = offset === 0
+                    ? 'left'
+                    : offset === visibleDuration ? 'right' : 'center';
                 context.fillText(
                     dayTime ? formatDayTime(labelSeconds) : formatTime(labelSeconds),
                     x,
@@ -94,6 +97,7 @@ const CameraTimeline: React.FC<IProps> = ({
                 );
             }
         }
+        context.textAlign = 'center';
 
         context.strokeStyle = isPlaying ? '#2196f3' : '#d99a3d';
         context.lineWidth = 2;
