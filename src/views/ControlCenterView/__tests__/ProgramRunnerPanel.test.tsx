@@ -289,6 +289,37 @@ describe('ProgramRunnerPanel', () => {
             episodes: {small: 1, medium: 2, large: 1, unknown: 0},
             hourly: [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             latest_overflow_at: today,
+            heats: [{
+                heat_id: '026_1559_1604_5m07s',
+                sequence: 26,
+                label: '倾炉',
+                start_at: today - 307,
+                end_at: today,
+                duration_seconds: 307,
+                overflow_events: 2,
+                levels: {small: 1, medium: 0, large: 1, unknown: 0},
+                total_overflow_duration_seconds: 3.5,
+                max_event_duration_seconds: 2.5,
+                avg_overflow_intensity: 1.2,
+                max_overflow_intensity: 2.4,
+                camera_drops: 0,
+                result_folder: 'runs/20260922/026_1559_1604_5m07s',
+                events: [{
+                    start_at: today - 100,
+                    end_at: today - 99,
+                    duration_seconds: 1,
+                    level: 'small',
+                    max_intensity: 0.4,
+                    overflow_ratio: 1,
+                }, {
+                    start_at: today - 50,
+                    end_at: today - 47.5,
+                    duration_seconds: 2.5,
+                    level: 'large',
+                    max_intensity: 2.4,
+                    overflow_ratio: 1,
+                }],
+            }],
         });
         const toggleMaximized = jest.fn();
 
@@ -462,11 +493,17 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(dialog).getByRole('button', {name: '统计'}));
         const statisticsView = await within(dialog).findByLabelText('大炉口溢渣统计');
         expect(within(statisticsView).getByLabelText('统计日期')).toHaveValue(todayValue);
-        expect(await within(statisticsView).findByText('溢渣次数')).toBeInTheDocument();
+        expect(await within(statisticsView).findAllByText('溢渣次数')).toHaveLength(2);
         expect(statisticsView).toHaveTextContent('小溢渣1');
         expect(statisticsView).toHaveTextContent('中溢渣2');
         expect(statisticsView).toHaveTextContent('大溢渣1');
         expect(statisticsView).toHaveTextContent('12 / 100 · 12.0%');
+        expect(within(statisticsView).getByLabelText('炉次列表')).toHaveTextContent('第 026 次');
+        const heatReport = within(statisticsView).getByLabelText('炉次详细报告');
+        expect(heatReport).toHaveTextContent('溢渣次数2');
+        expect(heatReport).toHaveTextContent('小溢渣');
+        expect(heatReport).toHaveTextContent('大溢渣');
+        expect(heatReport).toHaveTextContent('最大强度2.400');
         expect(statistics).toHaveBeenCalledWith(
             node.node_id,
             'vision-ocr',

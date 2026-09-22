@@ -2166,6 +2166,128 @@ button.ControlServiceCard {
 
 .ControlProgramStatisticsNote { margin: 12px 0 0; color: #e8bd79; font-size: 9px; }
 
+.ControlProgramHeatReports {
+  margin-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 16px;
+
+  > header > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  > header strong { color: rgba(255, 255, 255, 0.72); font-size: 10px; }
+  > header span { color: rgba(255, 255, 255, 0.34); font-size: 8px; }
+}
+
+.ControlProgramHeatReportBody {
+  display: grid;
+  min-height: 280px;
+  grid-template-columns: 180px minmax(0, 1fr);
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+
+  > nav {
+    max-height: 430px;
+    overflow: auto;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  > nav button {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 1fr auto;
+    gap: 5px 8px;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: transparent;
+    padding: 10px 12px;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  > nav button:hover,
+  > nav button.active { background: rgba(105, 198, 255, 0.09); }
+  > nav button:focus-visible { outline: 1px solid #69c6ff; outline-offset: -1px; }
+  > nav strong { color: rgba(255, 255, 255, 0.74); font-size: 9px; font-weight: 500; }
+  > nav span { grid-row: 2; color: rgba(255, 255, 255, 0.34); font-size: 8px; }
+  > nav em {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    align-self: center;
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 8px;
+    font-style: normal;
+  }
+  > nav em.small { color: #79d89e; }
+  > nav em.medium { color: #e8bd79; }
+  > nav em.large { color: #ef8b8b; }
+
+  > article {
+    min-width: 0;
+    padding: 16px 18px;
+  }
+  > article > header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  > article h4 { margin: 0; color: white; font-size: 13px; font-weight: 500; }
+  > article header p { margin: 5px 0 0; color: rgba(255, 255, 255, 0.38); font-size: 8px; }
+  > article header > span {
+    overflow: hidden;
+    max-width: 50%;
+    color: rgba(255, 255, 255, 0.28);
+    font: 8px SFMono-Regular, Consolas, monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  > article dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 16px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-left: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  > article dl div {
+    border-right: 1px solid rgba(255, 255, 255, 0.07);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    padding: 9px 10px;
+  }
+  > article dt { color: rgba(255, 255, 255, 0.32); font-size: 8px; }
+  > article dd { margin: 5px 0 0; color: rgba(255, 255, 255, 0.72); font-size: 10px; }
+  > article > strong { color: rgba(255, 255, 255, 0.5); font-size: 9px; }
+  > article > p,
+  > article ol { margin: 10px 0 0; }
+  > article > p { color: rgba(255, 255, 255, 0.34); font-size: 9px; }
+  > article ol {
+    max-height: 180px;
+    overflow: auto;
+    padding: 0;
+    list-style: none;
+  }
+  > article li {
+    display: grid;
+    grid-template-columns: 72px 70px 70px minmax(90px, 1fr);
+    gap: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 7px 0;
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 8px;
+  }
+  > article li em { font-style: normal; }
+  > article li em.small { color: #79d89e; }
+  > article li em.medium { color: #e8bd79; }
+  > article li em.large { color: #ef8b8b; }
+}
+
+.ControlProgramHeatEmpty {
+  margin: 12px 0 0;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 9px;
+}
+
 .ControlProgramArtifacts {
   display: flex;
   min-width: 0;

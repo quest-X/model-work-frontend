@@ -68,6 +68,13 @@ const dateTime = (timestamp: number, zh: boolean): string => timestamp
     ? new Date(timestamp * 1000).toLocaleString(zh ? 'zh-CN' : 'en-US')
     : (zh ? '未知' : 'Unknown');
 
+const time = (timestamp: number, zh: boolean): string => new Date(timestamp * 1000)
+    .toLocaleTimeString(zh ? 'zh-CN' : 'en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+    });
+
 const duration = (seconds: number | null, zh: boolean): string => {
     if (seconds === null) return zh ? '未上报' : 'Not reported';
     if (seconds < 60) return zh ? `${Math.round(seconds)} 秒` : `${Math.round(seconds)}s`;
@@ -198,6 +205,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [overflowStatistics, setOverflowStatistics] = useState<ComputeProgramOverflowStatistics | null>(null);
     const [statisticsError, setStatisticsError] = useState('');
     const [statisticsLoading, setStatisticsLoading] = useState(false);
+    const [selectedHeatId, setSelectedHeatId] = useState('');
     const [selectedArtifactId, setSelectedArtifactId] = useState('');
     const [artifactDate, setArtifactDate] = useState(todayDateKey);
     const [artifactCategoryFilter, setArtifactCategoryFilter] = useState<ResultCategory>('all');
@@ -557,6 +565,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const capturedAt = snapshot?.captured_at
         || programs?.captured_at
         || node.resources.captured_at;
+    const selectedHeat = overflowStatistics?.heats.find(heat => heat.heat_id === selectedHeatId)
+        || overflowStatistics?.heats[0]
+        || null;
 
     const unavailable = (title: string, detail = '') => <div className='ControlMonitorUnavailable'>
         <strong>{title}</strong>
@@ -1253,6 +1264,105 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                     </span>)}
                                                 </div>
                                             </div>
+                                            <section className='ControlProgramHeatReports'>
+                                                <header>
+                                                    <div>
+                                                        <strong>{zh ? '炉次报告' : 'Heat reports'}</strong>
+                                                        <span>{zh
+                                                            ? `按倾炉会话编号 · ${overflowStatistics.heats.length} 炉次`
+                                                            : `Session identifiers · ${overflowStatistics.heats.length} heats`}</span>
+                                                    </div>
+                                                </header>
+                                                {selectedHeat
+                                                    ? <div className='ControlProgramHeatReportBody'>
+                                                        <nav aria-label={zh ? '炉次列表' : 'Heat list'}>
+                                                            {overflowStatistics.heats.map(heat => <button
+                                                                type='button'
+                                                                className={heat.heat_id === selectedHeat.heat_id ? 'active' : ''}
+                                                                key={heat.heat_id}
+                                                                onClick={() => setSelectedHeatId(heat.heat_id)}
+                                                            >
+                                                                <strong>{zh
+                                                                    ? `第 ${`${heat.sequence}`.padStart(3, '0')} 次`
+                                                                    : `Heat ${`${heat.sequence}`.padStart(3, '0')}`}</strong>
+                                                                <span>{time(heat.start_at, zh)}–{time(heat.end_at, zh)}</span>
+                                                                <em className={heat.levels.large > 0
+                                                                    ? 'large'
+                                                                    : heat.levels.medium > 0
+                                                                        ? 'medium'
+                                                                        : heat.levels.small > 0
+                                                                            ? 'small'
+                                                                            : ''}
+                                                                >
+                                                                    {heat.overflow_events > 0
+                                                                        ? `${heat.overflow_events} ${zh ? '次' : 'events'}`
+                                                                        : (zh ? '无溢渣' : 'No overflow')}
+                                                                </em>
+                                                            </button>)}
+                                                        </nav>
+                                                        <article aria-label={zh ? '炉次详细报告' : 'Heat detail report'}>
+                                                            <header>
+                                                                <div>
+                                                                    <h4>{zh
+                                                                        ? `第 ${`${selectedHeat.sequence}`.padStart(3, '0')} 次出钢`
+                                                                        : `Heat ${`${selectedHeat.sequence}`.padStart(3, '0')}`}</h4>
+                                                                    <p>{dateTime(selectedHeat.start_at, zh)}
+                                                                        {' · '}{duration(selectedHeat.duration_seconds, zh)}</p>
+                                                                </div>
+                                                                <span>{selectedHeat.heat_id}</span>
+                                                            </header>
+                                                            <dl>
+                                                                <div>
+                                                                    <dt>{zh ? '溢渣次数' : 'Overflow events'}</dt>
+                                                                    <dd>{selectedHeat.overflow_events}</dd>
+                                                                </div>
+                                                                <div>
+                                                                    <dt>{zh ? '等级构成' : 'Levels'}</dt>
+                                                                    <dd>{zh ? '小' : 'S'} {selectedHeat.levels.small}
+                                                                        {' · '}{zh ? '中' : 'M'} {selectedHeat.levels.medium}
+                                                                        {' · '}{zh ? '大' : 'L'} {selectedHeat.levels.large}</dd>
+                                                                </div>
+                                                                <div>
+                                                                    <dt>{zh ? '累计溢渣' : 'Overflow duration'}</dt>
+                                                                    <dd>{selectedHeat.total_overflow_duration_seconds.toFixed(1)} {zh ? '秒' : 's'}</dd>
+                                                                </div>
+                                                                <div>
+                                                                    <dt>{zh ? '最长一次' : 'Longest event'}</dt>
+                                                                    <dd>{selectedHeat.max_event_duration_seconds.toFixed(1)} {zh ? '秒' : 's'}</dd>
+                                                                </div>
+                                                                <div>
+                                                                    <dt>{zh ? '最大强度' : 'Peak intensity'}</dt>
+                                                                    <dd>{selectedHeat.max_overflow_intensity.toFixed(3)}</dd>
+                                                                </div>
+                                                                <div>
+                                                                    <dt>{zh ? '相机丢帧' : 'Camera drops'}</dt>
+                                                                    <dd>{selectedHeat.camera_drops}</dd>
+                                                                </div>
+                                                            </dl>
+                                                            <strong>{zh ? '溢渣明细' : 'Overflow detail'}</strong>
+                                                            {selectedHeat.events.length > 0
+                                                                ? <ol>
+                                                                    {selectedHeat.events.map((event, index) => <li key={`${event.start_at}-${index}`}>
+                                                                        <span>{time(event.start_at, zh)}</span>
+                                                                        <em className={event.level}>
+                                                                            {({
+                                                                                small: zh ? '小溢渣' : 'Small',
+                                                                                medium: zh ? '中溢渣' : 'Medium',
+                                                                                large: zh ? '大溢渣' : 'Large',
+                                                                                unknown: zh ? '未分级' : 'Unknown',
+                                                                            })[event.level]}
+                                                                        </em>
+                                                                        <span>{event.duration_seconds.toFixed(1)} {zh ? '秒' : 's'}</span>
+                                                                        <span>{zh ? '强度' : 'Intensity'} {event.max_intensity.toFixed(3)}</span>
+                                                                    </li>)}
+                                                                </ol>
+                                                                : <p>{zh ? '本炉次未检测到溢渣。' : 'No overflow was detected for this heat.'}</p>}
+                                                        </article>
+                                                    </div>
+                                                    : <p className='ControlProgramHeatEmpty'>
+                                                        {zh ? '当日没有完整的倾炉会话报告。' : 'No completed heat report for this day.'}
+                                                    </p>}
+                                            </section>
                                             {overflowStatistics.episodes.unknown > 0 && <p className='ControlProgramStatisticsNote'>
                                                 {zh
                                                     ? `${overflowStatistics.episodes.unknown} 次溢渣缺少等级，未计入小/中/大分类。`
