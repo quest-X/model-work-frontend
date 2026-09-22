@@ -264,42 +264,33 @@
   gap: 4px;
 
   h3 {
-    margin: 8px 10px 2px;
+    margin: 8px 0 2px;
     color: rgba(255, 255, 255, 0.46);
     font-size: 9px;
     font-weight: 500;
 
     button {
       display: flex;
+      box-sizing: border-box;
       width: 100%;
+      min-height: 25px;
       align-items: center;
       justify-content: space-between;
       border: 0;
-      background: transparent;
-      padding: 0;
+      background: rgba(255, 255, 255, 0.035);
+      padding: 0 10px 0 13px;
       color: inherit;
       font: inherit;
       text-align: left;
       cursor: pointer;
 
       &:hover,
-      &:focus-visible { color: rgba(255, 255, 255, 0.82); outline: 0; }
+      &:focus-visible { color: rgba(255, 255, 255, 0.82); }
+      &:focus-visible { outline: 1px solid rgba(0, 154, 255, 0.55); outline-offset: -1px; }
     }
 
-    svg {
-      display: block;
-      width: 10px;
-      height: 10px;
-      flex: 0 0 10px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.5;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-      transform-origin: center;
-    }
-
-    button[aria-expanded='false'] svg { transform: rotate(-90deg); }
+    .AgentSideChatHistoryChevron { font-size: 16px; }
+    button[aria-expanded='true'] .AgentSideChatHistoryChevron { transform: rotate(90deg); }
   }
 
   &:first-of-type h3 { margin-top: 2px; }
