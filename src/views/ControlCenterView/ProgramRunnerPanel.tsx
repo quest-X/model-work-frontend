@@ -8,7 +8,7 @@ import {
     ComputeRuntimeSnapshot,
 } from '../../services/ComputeClusterService';
 
-type ProgramRunnerView = 'programs' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs';
+type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
 type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'telegram' | 'log';
 
@@ -483,6 +483,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             <nav className='ControlMonitorNav' aria-label={zh ? '程序运行器导航' : 'Program runner navigation'}>
                 {([
                     ['programs', zh ? '程序' : 'Programs'],
+                    ['preview', zh ? '预览' : 'Preview'],
                     ['endpoints', zh ? '接口' : 'APIs'],
                     ['artifacts', zh ? '结果' : 'Results'],
                     ['telegrams', zh ? '电文' : 'Telegrams'],
@@ -644,6 +645,41 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             runtimeError,
                         ))}
 
+                {view === 'preview' && (!programsVisible
+                    ? unavailable(
+                        zh ? '当前节点尚不支持实时预览' : 'Live preview is not supported',
+                        node.online
+                            ? (zh ? '升级节点程序后可查看实时画面。' : 'Upgrade the node software to view the live stream.')
+                            : (zh ? '节点恢复在线后才能读取实时画面。' : 'The node must return online before the live stream can be read.'),
+                    )
+                    : livePreview
+                        ? <section className='ControlProgramPreview' aria-label={zh ? '程序预览' : 'Program preview'}>
+                            <figure className='ControlProgramLivePreview'>
+                                <figcaption>
+                                    <strong>{zh ? '现场实时画面' : 'Live site preview'}</strong>
+                                    <span>{livePreview.program_name} · /rtsp</span>
+                                </figcaption>
+                                <img
+                                    src={ComputeClusterService.programInterfaceStreamUrl(
+                                        node.node_id,
+                                        livePreview.program_id,
+                                        livePreview.path,
+                                    )}
+                                    alt={zh ? `${livePreview.program_name} 现场实时画面` : `${livePreview.program_name} live site preview`}
+                                />
+                            </figure>
+                        </section>
+                        : unavailable(
+                            programsError
+                                ? (zh ? '实时预览暂不可用' : 'Live preview is unavailable')
+                                : refreshing && !programs
+                                    ? (zh
+                                        ? `正在读取实时预览… ${refreshProgress}%`
+                                        : `Loading live preview… ${refreshProgress}%`)
+                                    : (zh ? '该程序未声明 /rtsp 预览接口' : 'The program has not declared a /rtsp preview API'),
+                            programsError,
+                        ))}
+
                 {view === 'endpoints' && (!programsVisible
                     ? unavailable(
                         zh ? '当前节点尚不支持程序接口' : 'Program APIs are not supported',
@@ -659,20 +695,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             </div>
                             <span className='ControlProgramEndpointCount'>{endpointRows.length}</span>
                         </header>
-                        {livePreview && <figure className='ControlProgramLivePreview'>
-                            <figcaption>
-                                <strong>{zh ? '现场实时画面' : 'Live site preview'}</strong>
-                                <span>{livePreview.program_name} · /rtsp</span>
-                            </figcaption>
-                            <img
-                                src={ComputeClusterService.programInterfaceUrl(
-                                    node.node_id,
-                                    livePreview.program_id,
-                                    livePreview.path,
-                                )}
-                                alt={zh ? `${livePreview.program_name} 现场实时画面` : `${livePreview.program_name} live site preview`}
-                            />
-                        </figure>}
                         {programsError && <p className='ControlProgramError' role='status'>
                             {programsError}
                         </p>}

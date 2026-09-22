@@ -265,6 +265,16 @@ describe('ProgramRunnerPanel', () => {
         expect(within(dialog).getByText(/启停及模式切换仍需一次性授权接口/))
             .toBeInTheDocument();
 
+        fireEvent.click(within(dialog).getByRole('button', {name: '预览'}));
+        const preview = await within(dialog).findByLabelText('程序预览');
+        expect(within(preview).getByRole('img', {name: 'Vision OCR 现场实时画面'}))
+            .toHaveAttribute(
+                'src',
+                expect.stringContaining(
+                    '/runtime/programs/vision-ocr/interfaces/stream?path=%2Frtsp',
+                ),
+            );
+
         fireEvent.click(within(dialog).getByRole('button', {name: '接口'}));
         const endpoints = await within(dialog).findByLabelText('程序接口');
         expect(endpoints).toHaveTextContent('Vision OCR');
@@ -277,13 +287,7 @@ describe('ProgramRunnerPanel', () => {
         expect(endpoints).toHaveTextContent('POST');
         expect(endpoints).toHaveTextContent('/display');
         expect(endpoints).toHaveTextContent('未检查');
-        expect(within(endpoints).getByRole('img', {name: 'Vision OCR 现场实时画面'}))
-            .toHaveAttribute(
-                'src',
-                expect.stringContaining(
-                    '/runtime/programs/vision-ocr/interfaces?path=%2Frtsp',
-                ),
-            );
+        expect(within(endpoints).queryByRole('img')).not.toBeInTheDocument();
         expect(within(endpoints).getByRole('link', {name: '/health'})).toHaveAttribute(
             'href',
             expect.stringContaining(
