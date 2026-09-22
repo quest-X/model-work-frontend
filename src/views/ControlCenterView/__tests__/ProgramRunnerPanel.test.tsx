@@ -299,9 +299,14 @@ describe('ProgramRunnerPanel', () => {
                 ),
             );
         expect(preview).toHaveTextContent('正在建立实时画面');
-        expect(preview).toHaveTextContent('直播会话进度');
+        const timeline = within(preview).getByLabelText('全天直播时间轴');
+        expect(timeline).toHaveTextContent('00:00');
+        expect(timeline).toHaveTextContent('24:00');
+        expect(preview).not.toHaveTextContent('直播会话进度');
         fireEvent.load(previewImage);
         expect(preview).toHaveTextContent('LIVE');
+        expect(within(preview).queryByRole('button', {name: /播放|暂停|静音/}))
+            .not.toBeInTheDocument();
         fireEvent.click(within(preview).getByRole('button', {name: '重新连接'}));
         expect(preview).toHaveTextContent('连接中');
 

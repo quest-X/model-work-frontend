@@ -1,5 +1,4 @@
-import React, {useEffect, useRef, useState} from 'react';
-import {Language} from '../../data/LanguageConfig';
+import React, {useEffect, useState} from 'react';
 import {
     ComputeClusterNode,
     ComputeClusterService,
@@ -8,7 +7,6 @@ import {
     ComputeRuntimeService,
     ComputeRuntimeSnapshot,
 } from '../../services/ComputeClusterService';
-import CameraTimeline from '../EditorView/CameraTimeline/CameraTimeline';
 import '../EditorView/CameraPlayer/CameraPlayer.scss';
 
 type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs';
@@ -194,13 +192,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [refreshProgress, setRefreshProgress] = useState(0);
-    const previewImageRef = useRef<HTMLImageElement>(null);
-    const previewCanvasRef = useRef<HTMLCanvasElement>(null);
-    const previewStartedAtRef = useRef<number | null>(null);
-    const previewAccumulatedSecondsRef = useRef(0);
     const [previewNonce, setPreviewNonce] = useState(Date.now());
-    const [previewState, setPreviewState] = useState<'loading' | 'playing' | 'paused' | 'error'>('loading');
-    const [previewElapsedSeconds, setPreviewElapsedSeconds] = useState(0);
+    const [previewState, setPreviewState] = useState<'loading' | 'playing' | 'error'>('loading');
+    const [previewNow, setPreviewNow] = useState(() => new Date());
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
     const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
     const runtimeVisible = runtimeCapable || snapshot !== null;
@@ -239,9 +233,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setResultPreviewError('');
         setResultPreviewLoading(false);
         setRefreshProgress(0);
-        previewStartedAtRef.current = null;
-        previewAccumulatedSecondsRef.current = 0;
-        setPreviewElapsedSeconds(0);
         setPreviewState('loading');
         setPreviewNonce(Date.now());
     }, [node.node_id]);
@@ -358,63 +349,31 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         )}&v=${previewNonce}`
         : '';
     const reconnectPreview = () => {
-        previewStartedAtRef.current = null;
-        previewAccumulatedSecondsRef.current = 0;
-        setPreviewElapsedSeconds(0);
         setPreviewState('loading');
         setPreviewNonce(previous => previous + 1);
     };
-    const togglePreview = () => {
-        if (previewState === 'paused') {
-            setPreviewState('loading');
-            setPreviewNonce(previous => previous + 1);
-            return;
-        }
-        const image = previewImageRef.current;
-        const canvas = previewCanvasRef.current;
-        if (previewState !== 'playing' || !image || !canvas || !image.naturalWidth || !image.naturalHeight) return;
-        canvas.width = image.naturalWidth;
-        canvas.height = image.naturalHeight;
-        canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
-        const startedAt = previewStartedAtRef.current;
-        if (startedAt !== null) {
-            previewAccumulatedSecondsRef.current += (performance.now() - startedAt) / 1000;
-            previewStartedAtRef.current = null;
-            setPreviewElapsedSeconds(previewAccumulatedSecondsRef.current);
-        }
-        setPreviewState('paused');
-    };
 
     useEffect(() => {
-        if (previewState !== 'playing' || previewStartedAtRef.current === null) return undefined;
-        const updateElapsed = () => {
-            const startedAt = previewStartedAtRef.current;
-            if (startedAt === null) return;
-            setPreviewElapsedSeconds(
-                previewAccumulatedSecondsRef.current + (performance.now() - startedAt) / 1000,
-            );
-        };
-        const timer = window.setInterval(updateElapsed, 250);
+        if (view !== 'preview') return undefined;
+        const updateNow = () => setPreviewNow(new Date());
+        updateNow();
+        const timer = window.setInterval(updateNow, 1000);
         return () => window.clearInterval(timer);
-    }, [previewState]);
-
-    useEffect(() => {
-        const handleKeyDown = (event: KeyboardEvent) => {
-            const target = event.target;
-            if (
-                view !== 'preview'
-                || event.code !== 'Space'
-                || (previewState !== 'playing' && previewState !== 'paused')
-                || target instanceof HTMLInputElement
-                || target instanceof HTMLTextAreaElement
-                || target instanceof HTMLButtonElement
-            ) return;
-            event.preventDefault();
-            togglePreview();
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [previewState, view]);
+    }, [view]);
+    const previewSeconds = previewNow.getHours() * 3600
+        + previewNow.getMinutes() * 60
+        + previewNow.getSeconds();
+    const previewDayPercent = previewSeconds / 864;
+    const previewClock = [
+        previewNow.getHours(),
+        previewNow.getMinutes(),
+        previewNow.getSeconds(),
+    ].map(value => `${value}`.padStart(2, '0')).join(':');
+    const previewDate = [
+        previewNow.getFullYear(),
+        `${previewNow.getMonth() + 1}`.padStart(2, '0'),
+        `${previewNow.getDate()}`.padStart(2, '0'),
+    ].join('/');
     const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
         view === 'telegrams'
             ? isTelegramLog(event.message)
@@ -741,14 +700,12 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     <div className='CameraPlayerIdentity'>
                                         <span className={`CameraLiveDot ${previewState}`}/>
                                         <strong>{livePreview.program_name}</strong>
-                                        <span className={`CameraLiveBadge ${previewState === 'paused' ? 'paused' : ''}`}>
-                                            {previewState === 'paused'
-                                                ? (zh ? '已暂停' : 'PAUSED')
-                                                : previewState === 'playing'
-                                                    ? 'LIVE'
-                                                    : previewState === 'error'
-                                                        ? (zh ? '连接失败' : 'FAILED')
-                                                        : (zh ? '连接中' : 'CONNECTING')}
+                                        <span className='CameraLiveBadge'>
+                                            {previewState === 'playing'
+                                                ? 'LIVE'
+                                                : previewState === 'error'
+                                                    ? (zh ? '连接失败' : 'FAILED')
+                                                    : (zh ? '连接中' : 'CONNECTING')}
                                         </span>
                                     </div>
                                     <div className='CameraPlayerMeta'>
@@ -774,41 +731,44 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                 {zh ? '重试' : 'Retry'}
                                             </button>
                                         </div>}
-                                        <canvas
-                                            ref={previewCanvasRef}
-                                            className={previewState === 'paused'
-                                                ? 'CameraFrozenFrame visible'
-                                                : 'CameraFrozenFrame'}
-                                            aria-label={zh
-                                                ? `${livePreview.program_name} 暂停画面`
-                                                : `${livePreview.program_name} paused frame`}
-                                        />
-                                        {previewState !== 'paused' && <img
-                                            ref={previewImageRef}
+                                        <img
                                             key={previewNonce}
                                             src={previewUrl}
                                             alt={zh
                                                 ? `${livePreview.program_name} 现场实时画面`
                                                 : `${livePreview.program_name} live site preview`}
-                                            onLoad={() => {
-                                                if (previewStartedAtRef.current === null) {
-                                                    previewStartedAtRef.current = performance.now();
-                                                }
-                                                setPreviewState('playing');
-                                            }}
+                                            onLoad={() => setPreviewState('playing')}
                                             onError={() => setPreviewState('error')}
                                             draggable={false}
-                                        />}
+                                        />
                                     </div>
                                 </div>
-                                <CameraTimeline
-                                    language={zh ? Language.CHINESE : Language.ENGLISH}
-                                    elapsedSeconds={previewElapsedSeconds}
-                                    fps={15}
-                                    isPlaying={previewState === 'playing'}
-                                    canPlayPause={previewState === 'playing' || previewState === 'paused'}
-                                    onPlayPause={togglePreview}
-                                />
+                                <div
+                                    className='ControlLiveDayTimeline'
+                                    aria-label={zh ? '全天直播时间轴' : '24-hour live timeline'}
+                                >
+                                    <div className='ControlLiveDayTrack'>
+                                        <span
+                                            className='ControlLiveDayProgress'
+                                            style={{width: `${previewDayPercent}%`}}
+                                        />
+                                        <span
+                                            className='ControlLiveDayPointer'
+                                            style={{left: `${previewDayPercent}%`}}
+                                        >
+                                            <time dateTime={previewNow.toISOString()}>{previewClock}</time>
+                                        </span>
+                                    </div>
+                                    <div className='ControlLiveDayTicks' aria-hidden='true'>
+                                        {['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00']
+                                            .map(label => <span key={label}>{label}</span>)}
+                                    </div>
+                                    <div className='ControlLiveDayFooter'>
+                                        <span>{previewDate}</span>
+                                        <strong>LIVE</strong>
+                                        <span>{zh ? '当前时间' : 'Current time'} {previewClock}</span>
+                                    </div>
+                                </div>
                             </div>
                         </section>
                         : unavailable(
