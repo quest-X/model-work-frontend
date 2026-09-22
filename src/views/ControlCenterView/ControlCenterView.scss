@@ -1844,58 +1844,6 @@ button.ControlServiceCard {
     min-height: 360px;
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
-  .ControlLiveDayTimeline {
-    flex: 0 0 82px;
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-    background: #202124;
-    padding: 16px 12px 9px;
-    color: rgba(255, 255, 255, 0.52);
-    font-size: 9px;
-  }
-  .ControlLiveDayTrack {
-    position: relative;
-    height: 3px;
-    background: rgba(255, 255, 255, 0.14);
-  }
-  .ControlLiveDayProgress {
-    position: absolute;
-    inset: 0 auto 0 0;
-    background: #168bd2;
-  }
-  .ControlLiveDayPointer {
-    position: absolute;
-    top: -7px;
-    width: 2px;
-    height: 17px;
-    transform: translateX(-1px);
-    background: #31adfa;
-
-    time {
-      position: absolute;
-      right: 0;
-      bottom: 19px;
-      color: rgba(255, 255, 255, 0.9);
-      font: inherit;
-      white-space: nowrap;
-    }
-  }
-  .ControlLiveDayTicks {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 8px;
-  }
-  .ControlLiveDayFooter {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 10px;
-
-    strong {
-      color: #62d990;
-      font-size: 9px;
-      font-weight: 600;
-    }
-  }
   .ControlProgramInterfaces table { min-width: 980px; }
   .ControlProgramInterfaces code {
     color: rgba(255, 255, 255, 0.72);

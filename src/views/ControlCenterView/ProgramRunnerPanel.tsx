@@ -1,4 +1,5 @@
 import React, {useEffect, useState} from 'react';
+import {Language} from '../../data/LanguageConfig';
 import {
     ComputeClusterNode,
     ComputeClusterService,
@@ -7,6 +8,7 @@ import {
     ComputeRuntimeService,
     ComputeRuntimeSnapshot,
 } from '../../services/ComputeClusterService';
+import CameraTimeline from '../EditorView/CameraTimeline/CameraTimeline';
 import '../EditorView/CameraPlayer/CameraPlayer.scss';
 
 type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs';
@@ -360,20 +362,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         const timer = window.setInterval(updateNow, 1000);
         return () => window.clearInterval(timer);
     }, [view]);
-    const previewSeconds = previewNow.getHours() * 3600
-        + previewNow.getMinutes() * 60
-        + previewNow.getSeconds();
-    const previewDayPercent = previewSeconds / 864;
-    const previewClock = [
-        previewNow.getHours(),
-        previewNow.getMinutes(),
-        previewNow.getSeconds(),
-    ].map(value => `${value}`.padStart(2, '0')).join(':');
-    const previewDate = [
-        previewNow.getFullYear(),
-        `${previewNow.getMonth() + 1}`.padStart(2, '0'),
-        `${previewNow.getDate()}`.padStart(2, '0'),
-    ].join('/');
     const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
         view === 'telegrams'
             ? isTelegramLog(event.message)
@@ -743,32 +731,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         />
                                     </div>
                                 </div>
-                                <div
-                                    className='ControlLiveDayTimeline'
-                                    aria-label={zh ? '全天直播时间轴' : '24-hour live timeline'}
-                                >
-                                    <div className='ControlLiveDayTrack'>
-                                        <span
-                                            className='ControlLiveDayProgress'
-                                            style={{width: `${previewDayPercent}%`}}
-                                        />
-                                        <span
-                                            className='ControlLiveDayPointer'
-                                            style={{left: `${previewDayPercent}%`}}
-                                        >
-                                            <time dateTime={previewNow.toISOString()}>{previewClock}</time>
-                                        </span>
-                                    </div>
-                                    <div className='ControlLiveDayTicks' aria-hidden='true'>
-                                        {['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00']
-                                            .map(label => <span key={label}>{label}</span>)}
-                                    </div>
-                                    <div className='ControlLiveDayFooter'>
-                                        <span>{previewDate}</span>
-                                        <strong>LIVE</strong>
-                                        <span>{zh ? '当前时间' : 'Current time'} {previewClock}</span>
-                                    </div>
-                                </div>
+                                <CameraTimeline
+                                    language={zh ? Language.CHINESE : Language.ENGLISH}
+                                    dayTime={previewNow}
+                                />
                             </div>
                         </section>
                         : unavailable(

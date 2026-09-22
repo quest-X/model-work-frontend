@@ -299,9 +299,9 @@ describe('ProgramRunnerPanel', () => {
                 ),
             );
         expect(preview).toHaveTextContent('正在建立实时画面');
-        const timeline = within(preview).getByLabelText('全天直播时间轴');
-        expect(timeline).toHaveTextContent('00:00');
-        expect(timeline).toHaveTextContent('24:00');
+        expect(within(preview).getByLabelText('全天直播时间轴 00:00 至 24:00'))
+            .toBeInTheDocument();
+        expect(preview).toHaveTextContent('当前时间');
         expect(preview).not.toHaveTextContent('直播会话进度');
         fireEvent.load(previewImage);
         expect(preview).toHaveTextContent('LIVE');

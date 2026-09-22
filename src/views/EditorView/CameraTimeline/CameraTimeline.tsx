@@ -5,11 +5,12 @@ import './CameraTimeline.scss';
 
 interface IProps {
     language: Language;
-    elapsedSeconds: number;
-    fps: number;
-    isPlaying: boolean;
-    canPlayPause: boolean;
-    onPlayPause: () => void;
+    elapsedSeconds?: number;
+    fps?: number;
+    isPlaying?: boolean;
+    canPlayPause?: boolean;
+    onPlayPause?: () => void;
+    dayTime?: Date;
 }
 
 const WINDOW_SECONDS = 5 * 60;
@@ -21,18 +22,30 @@ const formatTime = (seconds: number): string => {
     return `${minutes}:${(value % 60).toString().padStart(2, '0')}`;
 };
 
+const formatDayTime = (seconds: number, includeSeconds = false): string => {
+    if (seconds >= 24 * 60 * 60) return '24:00';
+    const value = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(value / 3600).toString().padStart(2, '0');
+    const minutes = Math.floor((value % 3600) / 60).toString().padStart(2, '0');
+    if (!includeSeconds) return `${hours}:${minutes}`;
+    return `${hours}:${minutes}:${(value % 60).toString().padStart(2, '0')}`;
+};
+
+// eslint-disable-next-line complexity
 const CameraTimeline: React.FC<IProps> = ({
     language,
-    elapsedSeconds,
-    fps,
-    isPlaying,
-    canPlayPause,
+    elapsedSeconds = 0,
+    fps = 0,
+    isPlaying = true,
+    canPlayPause = false,
     onPlayPause,
+    dayTime,
 }) => {
     const chinese = language === Language.CHINESE;
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
+    // eslint-disable-next-line complexity
     const drawTimeline = useCallback(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -41,10 +54,14 @@ const CameraTimeline: React.FC<IProps> = ({
 
         const width = canvas.width;
         const height = canvas.height;
-        const current = Math.max(0, elapsedSeconds);
-        const windowStart = Math.max(0, current - WINDOW_SECONDS);
-        const visibleDuration = WINDOW_SECONDS;
-        const position = current < WINDOW_SECONDS ? current / WINDOW_SECONDS : 1;
+        const current = dayTime
+            ? dayTime.getHours() * 3600 + dayTime.getMinutes() * 60 + dayTime.getSeconds()
+            : Math.max(0, elapsedSeconds);
+        const windowStart = dayTime ? 0 : Math.max(0, current - WINDOW_SECONDS);
+        const visibleDuration = dayTime ? 24 * 60 * 60 : WINDOW_SECONDS;
+        const position = dayTime
+            ? current / visibleDuration
+            : current < WINDOW_SECONDS ? current / WINDOW_SECONDS : 1;
         const currentX = Math.min(width, Math.max(0, position * width));
 
         context.clearRect(0, 0, width, height);
@@ -54,8 +71,8 @@ const CameraTimeline: React.FC<IProps> = ({
         context.fillStyle = 'rgba(33, 150, 243, 0.3)';
         context.fillRect(0, 0, currentX, height - 30);
 
-        const labelInterval = width >= 900 ? 30 : 60;
-        const tickInterval = labelInterval / 5;
+        const labelInterval = dayTime ? 4 * 60 * 60 : width >= 900 ? 30 : 60;
+        const tickInterval = dayTime ? 60 * 60 : labelInterval / 5;
         context.strokeStyle = '#444';
         context.fillStyle = '#999';
         context.font = '10px sans-serif';
@@ -68,7 +85,14 @@ const CameraTimeline: React.FC<IProps> = ({
             context.moveTo(x, height - tickHeight);
             context.lineTo(x, height);
             context.stroke();
-            if (isLabelTick) context.fillText(formatTime(windowStart + offset), x, height - 20);
+            if (isLabelTick) {
+                const labelSeconds = windowStart + offset;
+                context.fillText(
+                    dayTime ? formatDayTime(labelSeconds) : formatTime(labelSeconds),
+                    x,
+                    height - 20,
+                );
+            }
         }
 
         context.strokeStyle = isPlaying ? '#2196f3' : '#d99a3d';
@@ -88,8 +112,12 @@ const CameraTimeline: React.FC<IProps> = ({
         context.fillStyle = '#fff';
         context.font = '12px sans-serif';
         context.textAlign = 'right';
-        context.fillText(`${formatTime(current)} / LIVE`, width - 10, 20);
-    }, [elapsedSeconds, isPlaying]);
+        context.fillText(
+            `${dayTime ? formatDayTime(current, true) : formatTime(current)} / LIVE`,
+            width - 10,
+            20,
+        );
+    }, [dayTime, elapsedSeconds, isPlaying]);
 
     useEffect(() => {
         drawTimeline();
@@ -111,14 +139,35 @@ const CameraTimeline: React.FC<IProps> = ({
     }, [drawTimeline]);
 
     const currentFrame = Math.max(1, Math.floor(elapsedSeconds * fps) + 1);
+    const dateLabel = dayTime
+        ? [
+            dayTime.getFullYear(),
+            `${dayTime.getMonth() + 1}`.padStart(2, '0'),
+            `${dayTime.getDate()}`.padStart(2, '0'),
+        ].join('/')
+        : '';
+    const clockLabel = dayTime
+        ? formatDayTime(
+            dayTime.getHours() * 3600 + dayTime.getMinutes() * 60 + dayTime.getSeconds(),
+            true,
+        )
+        : '';
 
     return <div className='VideoTimeline CameraTimeline' ref={containerRef}>
         <canvas
             ref={canvasRef}
             className='TimelineCanvas CameraTimelineCanvas'
-            aria-label={chinese ? '相机直播进度条' : 'Camera live timeline'}
+            aria-label={dayTime
+                ? (chinese ? '全天直播时间轴 00:00 至 24:00' : '24-hour live timeline, 00:00 to 24:00')
+                : (chinese ? '相机直播进度条' : 'Camera live timeline')}
         />
-        <div className='TimelineControls'>
+        {dayTime ? <div className='TimelineControls'>
+            <div className='LeftInfo'><span>{dateLabel}</span></div>
+            <div className='CenterControls'><strong>LIVE</strong></div>
+            <div className='RightInfo'>
+                <span>{chinese ? '当前时间' : 'Current time'} {clockLabel}</span>
+            </div>
+        </div> : <div className='TimelineControls'>
             <div className='LeftInfo'>
                 <span>{chinese ? '帧率' : 'FPS'}: {fps}</span>
                 <span>{chinese ? '帧' : 'Frame'}: {currentFrame} / LIVE</span>
@@ -154,7 +203,7 @@ const CameraTimeline: React.FC<IProps> = ({
                     <span>{chinese ? '空格: 播放/暂停' : 'Space: Play/Pause'}</span>
                 </div>
             </div>
-        </div>
+        </div>}
     </div>;
 };
 
