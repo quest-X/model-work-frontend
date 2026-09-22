@@ -255,7 +255,10 @@ span.ControlMachineIcon {
 }
 
 .ControlMachineProgramStatus {
-  margin: 0 9px 0 0;
+  flex-basis: 5px;
+  width: 5px;
+  height: 5px;
+  margin: 0 7px 0 0;
   vertical-align: 1px;
 }
 
