@@ -427,6 +427,10 @@ describe('ProgramRunnerPanel', () => {
 
         expect(screen.getAllByText('Cached Service').length).toBeGreaterThan(0);
         expect(runtime).toHaveBeenCalledTimes(2);
+        const reopenedDialog = screen.getByRole('dialog', {name: 'AIPACK-13 程序运行器'});
+        fireEvent.click(within(reopenedDialog).getByRole('button', {name: '结果'}));
+        expect(within(reopenedDialog).getByText('暂无录像、图片或数据文件')).toBeInTheDocument();
+        expect(within(reopenedDialog).queryByText(/正在读取程序结果/)).not.toBeInTheDocument();
         reopened.unmount();
 
         render(<ProgramRunnerPanel
@@ -445,7 +449,7 @@ describe('ProgramRunnerPanel', () => {
         expect(runtime).toHaveBeenCalledTimes(2);
     });
 
-    it('shows request completion progress while logs are loading', async () => {
+    it('shows request completion progress while results are loading', async () => {
         let resolveRuntime!: (value: Awaited<ReturnType<typeof ComputeClusterService.runtime>>) => void;
         let resolvePrograms!: (value: Awaited<ReturnType<typeof ComputeClusterService.programs>>) => void;
         let resolveEvents!: (value: Awaited<ReturnType<typeof ComputeClusterService.runtimeEvents>>) => void;
@@ -466,8 +470,8 @@ describe('ProgramRunnerPanel', () => {
             onToggleMaximized={jest.fn()}
         />);
         const dialog = screen.getByRole('dialog', {name: 'AIPACK-13 程序运行器'});
-        fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
-        expect(await within(dialog).findByText('正在读取日志… 0%')).toBeInTheDocument();
+        fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
+        expect(await within(dialog).findByText('正在读取程序结果… 0%')).toBeInTheDocument();
 
         resolveRuntime({
             schema_version: 'runtime.snapshot.v1',
@@ -478,7 +482,7 @@ describe('ProgramRunnerPanel', () => {
             },
             services: [],
         });
-        expect(await within(dialog).findByText('正在读取日志… 33%')).toBeInTheDocument();
+        expect(await within(dialog).findByText('正在读取程序结果… 33%')).toBeInTheDocument();
 
         resolvePrograms({
             schema_version: 'runtime.programs.v1',
@@ -486,7 +490,7 @@ describe('ProgramRunnerPanel', () => {
             invalid_manifests: 0,
             programs: [],
         });
-        expect(await within(dialog).findByText('正在读取日志… 67%')).toBeInTheDocument();
+        expect(await within(dialog).findByText('正在读取程序结果… 67%')).toBeInTheDocument();
 
         resolveEvents({
             schema_version: 'runtime.events.v1',
@@ -495,6 +499,6 @@ describe('ProgramRunnerPanel', () => {
             has_more: false,
             events: [],
         });
-        expect(await within(dialog).findByText('暂无结构化日志')).toBeInTheDocument();
+        expect(await within(dialog).findByText('暂无录像、图片或数据文件')).toBeInTheDocument();
     });
 });

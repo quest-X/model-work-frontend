@@ -891,8 +891,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     </div>
                                 </div>
                                 : unavailable(
-                                    refreshing
-                                        ? (zh ? '正在读取程序结果…' : 'Loading program results…')
+                                    refreshing && !programs
+                                        ? (zh
+                                            ? `正在读取程序结果… ${refreshProgress}%`
+                                            : `Loading program results… ${refreshProgress}%`)
                                         : programArtifacts.length > 0
                                             ? (zh ? '没有符合筛选条件的结果' : 'No results match the filters')
                                             : (zh ? '暂无录像、图片或数据文件' : 'No recordings, images, or data files'),
