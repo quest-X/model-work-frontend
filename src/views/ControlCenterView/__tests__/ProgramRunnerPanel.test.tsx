@@ -329,14 +329,20 @@ describe('ProgramRunnerPanel', () => {
             'vision-ocr',
             '/health',
         );
-        expect(endpoints).toHaveTextContent('/display');
-        expect(within(endpoints).getByRole('link', {name: '/health'})).toHaveAttribute(
+        expect(endpoints).toHaveTextContent('http://10.168.10.10/display');
+        expect(within(endpoints).getByRole('link', {
+            name: 'http://10.168.10.10/health',
+        })).toHaveAttribute(
             'href',
             healthUrl,
         );
-        expect(within(endpoints).getByRole('link', {name: '/health'}))
+        expect(within(endpoints).getByRole('link', {
+            name: 'http://10.168.10.10/health',
+        }))
             .toHaveAttribute('target', '_blank');
-        expect(within(endpoints).queryByRole('link', {name: '/display'}))
+        expect(within(endpoints).queryByRole('link', {
+            name: 'http://10.168.10.10/display',
+        }))
             .not.toBeInTheDocument();
         expect(endpoints).not.toHaveTextContent('节点服务');
         expect(endpoints).not.toHaveTextContent('任务执行器');
