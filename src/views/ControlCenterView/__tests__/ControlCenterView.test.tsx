@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {Language} from '../../../data/LanguageConfig';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {
@@ -196,6 +196,23 @@ describe('ControlCenterView', () => {
         jest.restoreAllMocks();
         Object.defineProperty(global, 'fetch', {configurable: true, writable: true, value: originalFetch});
         window.localStorage.clear();
+    });
+
+    it('shows request completion progress while loading the compute cluster', async () => {
+        const machine = node('进度节点', true);
+        let resolveNodes!: (value: ComputeClusterNode[]) => void;
+        jest.spyOn(ComputeClusterService, 'nodes').mockImplementation(() =>
+            new Promise(resolve => { resolveNodes = resolve; })
+        );
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(machine));
+
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        expect(await screen.findByText('正在获取已加入计算群的机器… 80%')).toBeInTheDocument();
+
+        await act(async () => resolveNodes([machine]));
+        await waitFor(() => expect(
+            screen.queryByText(/正在获取已加入计算群的机器/),
+        ).not.toBeInTheDocument());
     });
 
     it('cycles status regions from the highest node count', () => {

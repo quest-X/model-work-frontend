@@ -39,6 +39,12 @@ type PendingOptimization = {
     created: ComputePerformanceModeAuthorizationResult;
 };
 
+type LoadingProgress = {
+    action: 'scan' | 'prepare' | 'optimize';
+    completed: number;
+    total: number;
+};
+
 const PERFORMANCE_MODE_SCAN_KEY = 'opensight.control-center.performance-mode-scan.v1';
 
 const local = (zh: boolean, chinese: string, english: string): string =>
@@ -238,6 +244,7 @@ export const PerformanceModePanel: React.FC<IProps> = ({nodes, lanAssets = [], z
     const [scan, setScan] = useState<PerformanceModeScan>(() => cachedPerformanceModeScan(nodes));
     const [selectedNodes, setSelectedNodes] = useState<Record<string, boolean>>({});
     const [loading, setLoading] = useState(false);
+    const [loadingProgress, setLoadingProgress] = useState<LoadingProgress>();
     const [pending, setPending] = useState<PendingOptimization[]>();
     const [actionMessage, setActionMessage] = useState('');
     const activeScan = scan.nodeKey === nodeKey ? scan : {nodeKey, inspections: {}};
@@ -247,7 +254,18 @@ export const PerformanceModePanel: React.FC<IProps> = ({nodes, lanAssets = [], z
     const load = async (signal?: AbortSignal) => {
         if (!visible) return;
         setLoading(true);
-        const entries = await Promise.all(nodes.map(node => inspectNode(node, signal)));
+        let completed = 0;
+        setLoadingProgress({action: 'scan', completed, total: nodes.length});
+        const entries = await Promise.all(nodes.map(async node => {
+            try {
+                return await inspectNode(node, signal);
+            } finally {
+                completed += 1;
+                if (!signal?.aborted) {
+                    setLoadingProgress({action: 'scan', completed, total: nodes.length});
+                }
+            }
+        }));
         if (!signal?.aborted) {
             const completedScan: Required<PerformanceModeScan> = {
                 nodeKey,
@@ -258,6 +276,7 @@ export const PerformanceModePanel: React.FC<IProps> = ({nodes, lanAssets = [], z
             cachePerformanceModeScan(completedScan);
             setSelectedNodes({});
             setLoading(false);
+            setLoadingProgress(undefined);
         }
     };
 
@@ -319,6 +338,7 @@ export const PerformanceModePanel: React.FC<IProps> = ({nodes, lanAssets = [], z
         setLoading(true);
         setActionMessage('');
         const prepared: PendingOptimization[] = [];
+        setLoadingProgress({action: 'prepare', completed: 0, total: selectedOptimizable.length});
         try {
             const identity = getApprovalIdentity();
             for (const node of selectedOptimizable) {
@@ -364,6 +384,11 @@ export const PerformanceModePanel: React.FC<IProps> = ({nodes, lanAssets = [], z
                     || created.evidence.target_mode !== request.arguments.target_mode
                 ) throw new Error('performance_mode_authorization_mismatch');
                 prepared.push({node, created});
+                setLoadingProgress({
+                    action: 'prepare',
+                    completed: prepared.length,
+                    total: selectedOptimizable.length,
+                });
             }
             setPending(prepared);
         } catch (reason) {
@@ -374,6 +399,7 @@ export const PerformanceModePanel: React.FC<IProps> = ({nodes, lanAssets = [], z
             setActionMessage(actionError(reason, zh));
         } finally {
             setLoading(false);
+            setLoadingProgress(undefined);
         }
     };
 
@@ -381,7 +407,9 @@ export const PerformanceModePanel: React.FC<IProps> = ({nodes, lanAssets = [], z
         if (!pending?.length || loading) return;
         setLoading(true);
         let succeeded = 0;
+        let completed = 0;
         const failures: string[] = [];
+        setLoadingProgress({action: 'optimize', completed, total: pending.length});
         for (const item of pending) {
             const authorization = item.created.authorization;
             try {
@@ -410,6 +438,9 @@ export const PerformanceModePanel: React.FC<IProps> = ({nodes, lanAssets = [], z
                 succeeded += 1;
             } catch {
                 failures.push(item.node.name);
+            } finally {
+                completed += 1;
+                setLoadingProgress({action: 'optimize', completed, total: pending.length});
             }
         }
         setPending(undefined);
@@ -422,7 +453,20 @@ export const PerformanceModePanel: React.FC<IProps> = ({nodes, lanAssets = [], z
             : local(zh, `已优化 ${succeeded} 台机器。`, `Optimized ${succeeded} machines.`));
         await load();
         setLoading(false);
+        setLoadingProgress(undefined);
     };
+
+    const progressText = loadingProgress && loadingProgress.total > 0
+        ? local(
+            zh,
+            `${loadingProgress.action === 'scan' ? '扫描中' : loadingProgress.action === 'prepare' ? '正在准备' : '正在优化'}`
+                + ` ${loadingProgress.completed}/${loadingProgress.total}`
+                + ` (${Math.round(loadingProgress.completed / loadingProgress.total * 100)}%)`,
+            `${loadingProgress.action === 'scan' ? 'Scanning' : loadingProgress.action === 'prepare' ? 'Preparing' : 'Optimizing'}`
+                + ` ${loadingProgress.completed}/${loadingProgress.total}`
+                + ` (${Math.round(loadingProgress.completed / loadingProgress.total * 100)}%)`,
+        )
+        : local(zh, '处理中…', 'Working…');
 
     return <section className='ControlPerformanceMode' aria-label={local(zh, '性能模式检查', 'Performance mode inspection')}>
         <header className='ControlPerformanceModeHeader'>
@@ -436,7 +480,7 @@ export const PerformanceModePanel: React.FC<IProps> = ({nodes, lanAssets = [], z
             <div className='ControlPerformanceModeActions'>
                 <button type='button' onClick={() => void load()} disabled={loading || nodes.length === 0}>
                     {loading
-                        ? local(zh, '扫描中…', 'Scanning…')
+                        ? progressText
                         : hasScanned
                             ? local(zh, '重新扫描', 'Scan again')
                             : local(zh, '开始扫描', 'Start scan')}
@@ -447,11 +491,13 @@ export const PerformanceModePanel: React.FC<IProps> = ({nodes, lanAssets = [], z
                     onClick={() => void prepareOptimization()}
                     disabled={loading || selectedOptimizable.length === 0}
                 >
-                    {local(
-                        zh,
-                        `优化已选（${selectedOptimizable.length}）`,
-                        `Optimize selected (${selectedOptimizable.length})`,
-                    )}
+                    {loading && loadingProgress?.action === 'prepare'
+                        ? progressText
+                        : local(
+                            zh,
+                            `优化已选（${selectedOptimizable.length}）`,
+                            `Optimize selected (${selectedOptimizable.length})`,
+                        )}
                 </button>
             </div>
         </header>
@@ -609,7 +655,7 @@ export const PerformanceModePanel: React.FC<IProps> = ({nodes, lanAssets = [], z
                     disabled={loading}
                 >
                     {loading
-                        ? local(zh, '正在优化…', 'Optimizing…')
+                        ? progressText
                         : local(zh, '授权并优化', 'Approve and optimize')}
                 </Button>
             </DialogActions>

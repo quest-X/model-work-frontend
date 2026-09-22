@@ -470,6 +470,9 @@ describe('ProgramRunnerPanel', () => {
             onToggleMaximized={jest.fn()}
         />);
         const dialog = screen.getByRole('dialog', {name: 'AIPACK-13 程序运行器'});
+        expect(await within(dialog).findByText('正在读取程序状态… 0%')).toBeInTheDocument();
+        fireEvent.click(within(dialog).getByRole('button', {name: '接口'}));
+        expect(await within(dialog).findByText('正在读取程序接口… 0%')).toBeInTheDocument();
         fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
         expect(await within(dialog).findByText('正在读取程序结果… 0%')).toBeInTheDocument();
 

@@ -394,6 +394,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [computeTasks, setComputeTasks] = useState<ComputeTask[]>([]);
     const [selectedNodeId, setSelectedNodeId] = useState('');
     const [loading, setLoading] = useState(true);
+    const [loadProgress, setLoadProgress] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
     const [graphError, setGraphError] = useState('');
@@ -493,29 +494,41 @@ export const ControlCenterView: React.FC<IProps> = ({
     const refresh = useCallback(async (initial = false) => {
         if (refreshInFlight.current) return;
         refreshInFlight.current = true;
-        if (mounted.current) initial ? setLoading(true) : setRefreshing(true);
+        if (mounted.current) {
+            if (initial) {
+                setLoading(true);
+                setLoadProgress(0);
+            } else {
+                setRefreshing(true);
+            }
+        }
         try {
+            let completed = 0;
+            const track = <T,>(request: Promise<T>): Promise<T> => request.finally(() => {
+                completed += 1;
+                if (initial && mounted.current) setLoadProgress(completed * 20);
+            });
             const [nextNodes, graphResult, assetResult, memberships, targets] = await Promise.all([
-                ComputeClusterService.nodes(),
-                ComputeClusterService.resourceGraph().then(
+                track(ComputeClusterService.nodes()),
+                track(ComputeClusterService.resourceGraph().then(
                     value => ({value, error: ''}),
                     reason => ({
                         value: null,
                         error: reason instanceof Error ? reason.message : String(reason),
                     }),
-                ),
-                ComputeClusterService.lanAssets().then(
+                )),
+                track(ComputeClusterService.lanAssets().then(
                     value => value.assets,
                     () => null,
-                ),
-                ComputeClusterService.groups().then(
+                )),
+                track(ComputeClusterService.groups().then(
                     value => value.groups,
                     () => [] as ComputeGroupMembership[],
-                ),
-                ComputeClusterService.terminalTargets().then(
+                )),
+                track(ComputeClusterService.terminalTargets().then(
                     value => value.targets,
                     () => [] as ComputeTerminalTarget[],
-                ),
+                )),
             ]);
             if (!mounted.current) return;
             setNodes(nextNodes);
@@ -2332,7 +2345,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </div>}
                 {workspace === 'node' && loading && nodes.length === 0 && <div className='ControlCenterMessage'>
                     <strong>{zh ? '正在读取计算群' : 'Loading compute cluster'}</strong>
-                    <span>{zh ? '正在获取已加入计算群的机器…' : 'Fetching enrolled machines…'}</span>
+                    <span>{zh
+                        ? `正在获取已加入计算群的机器… ${loadProgress}%`
+                        : `Fetching enrolled machines… ${loadProgress}%`}</span>
                 </div>}
                 {workspace === 'node' && !loading && !backgroundNode && overviewNodes.length === 0 && <div className='ControlCenterMessage error'>
                     <strong>{error ? (zh ? '无法读取计算群' : 'Compute cluster unavailable') : (zh ? '暂无机器' : 'No machines')}</strong>

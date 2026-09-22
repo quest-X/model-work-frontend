@@ -235,6 +235,28 @@ describe('ComputeClusterPopup', () => {
         service.terminalControl.mockResolvedValue({...terminalSession, state: 'closed'});
     });
 
+    it('shows staged progress while loading nodes', async () => {
+        let resolveStatus!: (value: Awaited<ReturnType<typeof service.status>>) => void;
+        let resolveNodes!: (value: Awaited<ReturnType<typeof service.nodes>>) => void;
+        service.status.mockImplementation(() => new Promise(resolve => { resolveStatus = resolve; }));
+        service.nodes.mockImplementation(() => new Promise(resolve => { resolveNodes = resolve; }));
+
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        expect(screen.getByText('正在读取节点… 0%')).toBeInTheDocument();
+
+        await act(async () => resolveStatus({
+            state: 'ready',
+            version: '9.9.9',
+            protocol_version: 1,
+            admin_configured: true,
+            nodes: {total: 0, online: 0, gpu_total: 0, device_total: 0},
+        }));
+        expect(await screen.findByText('正在读取节点… 25%')).toBeInTheDocument();
+
+        await act(async () => resolveNodes([]));
+        await waitFor(() => expect(screen.queryByText(/正在读取节点/)).not.toBeInTheDocument());
+    });
+
     it('shows node, aggregate resources, and the phase-six boundary', async () => {
         const user = userEvent.setup();
         const {container} = render(<ComputeClusterPopup language={Language.CHINESE}/>);

@@ -602,7 +602,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                         </dl>
                                                     </article>)}</div>
                                                     : <p>{zh ? '节点尚未注册部署程序。' : 'No deployed programs are registered on this node.'}</p>
-                                                : <p>{zh ? '正在读取受控程序目录…' : 'Loading the managed program directory…'}</p>}
+                                                : <p>{zh
+                                                    ? `正在读取受控程序目录… ${refreshProgress}%`
+                                                    : `Loading the managed program directory… ${refreshProgress}%`}</p>}
                                     {Boolean(programs?.invalid_manifests) && <p className='warning'>
                                         {zh
                                             ? `${programs?.invalid_manifests} 个程序清单未通过安全校验`
@@ -631,7 +633,11 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         : unavailable(
                             runtimeError
                                 ? (zh ? '程序状态暂不可用' : 'Program status is unavailable')
-                                : (zh ? '正在读取程序状态…' : 'Loading program status…'),
+                                : refreshing && !snapshot
+                                    ? (zh
+                                        ? `正在读取程序状态… ${refreshProgress}%`
+                                        : `Loading program status… ${refreshProgress}%`)
+                                    : (zh ? '暂无程序状态' : 'No program status'),
                             runtimeError,
                         ))}
 
@@ -691,8 +697,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         </table> : unavailable(
                             programsError
                                 ? (zh ? '程序接口暂不可用' : 'Program APIs are unavailable')
-                                : refreshing
-                                    ? (zh ? '正在读取程序接口…' : 'Loading program APIs…')
+                                : refreshing && !programs
+                                    ? (zh
+                                        ? `正在读取程序接口… ${refreshProgress}%`
+                                        : `Loading program APIs… ${refreshProgress}%`)
                                     : (zh ? '该程序未声明接口' : 'The program has not declared any APIs'),
                         )}
                     </section>)}
@@ -987,7 +995,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 ? (view === 'telegrams'
                                     ? (zh ? '电文暂不可用' : 'Telegrams are unavailable')
                                     : (zh ? '日志暂不可用' : 'Logs are unavailable'))
-                                : refreshing
+                                : refreshing && !snapshot && !programs && events.length === 0
                                     ? (view === 'telegrams'
                                         ? (zh ? `正在读取电文… ${refreshProgress}%` : `Loading telegrams… ${refreshProgress}%`)
                                         : (zh ? `正在读取日志… ${refreshProgress}%` : `Loading logs… ${refreshProgress}%`))
