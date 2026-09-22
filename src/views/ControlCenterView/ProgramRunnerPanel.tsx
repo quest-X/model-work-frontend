@@ -2,6 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {
     ComputeClusterNode,
     ComputeClusterService,
+    ComputeProgramOverflowStatistics,
     ComputeProgramSnapshot,
     ComputeRuntimeEvent,
     ComputeRuntimeService,
@@ -9,7 +10,7 @@ import {
 } from '../../services/ComputeClusterService';
 import {ProgramLivePreview} from './ProgramLivePreview';
 
-type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs';
+type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs' | 'statistics';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
 type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'telegram' | 'log';
 
@@ -193,6 +194,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [logServiceId, setLogServiceId] = useState('');
     const [prettyTelegramLogs, setPrettyTelegramLogs] = useState(true);
+    const [statisticsDate, setStatisticsDate] = useState(todayDateKey);
+    const [overflowStatistics, setOverflowStatistics] = useState<ComputeProgramOverflowStatistics | null>(null);
+    const [statisticsError, setStatisticsError] = useState('');
+    const [statisticsLoading, setStatisticsLoading] = useState(false);
     const [selectedArtifactId, setSelectedArtifactId] = useState('');
     const [artifactDate, setArtifactDate] = useState(todayDateKey);
     const [artifactCategoryFilter, setArtifactCategoryFilter] = useState<ResultCategory>('all');
@@ -237,6 +242,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setSelectedServiceId('');
         setLogServiceId('');
         setPrettyTelegramLogs(true);
+        setStatisticsDate(todayDateKey());
+        setOverflowStatistics(null);
+        setStatisticsError('');
+        setStatisticsLoading(false);
         setSelectedArtifactId('');
         setArtifactDate(todayDateKey());
         setArtifactCategoryFilter('all');
@@ -375,6 +384,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     ) || endpointRows.find(endpoint =>
         endpoint.method === 'GET' && endpoint.path === '/rtsp'
     );
+    const overflowProgram = (programs?.programs || []).find(program =>
+        /dlk|overflow|溢渣/i.test(`${program.program_id} ${program.name}`)
+        || program.events.some(event => event.event_type === 'frame')
+    ) || null;
     const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
         view === 'telegrams'
             ? isTelegramLog(event.message)
@@ -515,6 +528,32 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         selectedArtifactUrl,
     ]);
 
+    useEffect(() => {
+        if (view !== 'statistics' || !node.online || !overflowProgram) return undefined;
+        const controller = new AbortController();
+        setStatisticsLoading(true);
+        setStatisticsError('');
+        setOverflowStatistics(null);
+        void ComputeClusterService.programOverflowStatistics(
+            node.node_id,
+            overflowProgram.program_id,
+            statisticsDate,
+            -new Date(`${statisticsDate}T12:00:00`).getTimezoneOffset(),
+            controller.signal,
+        ).then(value => {
+            if (!controller.signal.aborted) {
+                setOverflowStatistics(value);
+                setStatisticsLoading(false);
+            }
+        }).catch(error => {
+            if (!controller.signal.aborted) {
+                setStatisticsError(error instanceof Error ? error.message : String(error));
+                setStatisticsLoading(false);
+            }
+        });
+        return () => controller.abort();
+    }, [node.node_id, node.online, overflowProgram?.program_id, statisticsDate, view]);
+
     const capturedAt = snapshot?.captured_at
         || programs?.captured_at
         || node.resources.captured_at;
@@ -564,6 +603,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     ['artifacts', zh ? '结果' : 'Results'],
                     ['telegrams', zh ? '电文' : 'Telegrams'],
                     ['logs', zh ? '日志' : 'Logs'],
+                    ['statistics', zh ? '统计' : 'Statistics'],
                 ] as [ProgramRunnerView, string][]).map(([item, label]) => <button
                     type='button'
                     key={item}
@@ -1138,6 +1178,89 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         : (zh ? '暂无结构化日志' : 'No structured logs')),
                         )}
                     </section>)}
+
+                {view === 'statistics' && (!programsVisible
+                    ? unavailable(
+                        zh ? '当前节点尚不支持溢渣统计' : 'Overflow statistics are not supported',
+                        node.online
+                            ? (zh ? '升级节点程序后可读取每日溢渣统计。' : 'Upgrade the node software to read daily overflow statistics.')
+                            : (zh ? '节点恢复在线后才能读取每日统计。' : 'The node must return online before daily statistics can be read.'),
+                    )
+                    : !overflowProgram
+                        ? unavailable(
+                            zh ? '未找到大炉口溢渣程序' : 'Overflow program not found',
+                            zh ? '当前节点没有注册 DLK 溢渣检测程序。' : 'No DLK overflow program is registered on this node.',
+                        )
+                        : <section className='ControlProgramStatistics' aria-label={zh ? '大炉口溢渣统计' : 'Furnace overflow statistics'}>
+                            <header className='ControlMonitorSearchHeader'>
+                                <div>
+                                    <h3>{zh ? '每日溢渣统计' : 'Daily overflow statistics'}</h3>
+                                    <p>{zh ? '连续溢渣帧合并为一次，并按最高等级统计' : 'Consecutive overflow frames are merged and counted by peak level'}</p>
+                                </div>
+                                <input
+                                    type='date'
+                                    aria-label={zh ? '统计日期' : 'Statistics date'}
+                                    max={todayDateKey()}
+                                    value={statisticsDate}
+                                    onChange={event => event.target.value && setStatisticsDate(event.target.value)}
+                                />
+                            </header>
+                            {statisticsError
+                                ? unavailable(zh ? '每日统计暂不可用' : 'Daily statistics are unavailable', statisticsError)
+                                : statisticsLoading && !overflowStatistics
+                                    ? unavailable(zh ? '正在统计当日溢渣…' : 'Calculating daily overflow…')
+                                    : overflowStatistics
+                                        ? <>
+                                            <div className='ControlProgramStatisticCards'>
+                                                <article>
+                                                    <span>{zh ? '溢渣次数' : 'Episodes'}</span>
+                                                    <strong>{Object.values(overflowStatistics.episodes)
+                                                        .reduce((sum, value) => sum + value, 0)}</strong>
+                                                </article>
+                                                {([
+                                                    ['small', zh ? '小溢渣' : 'Small'],
+                                                    ['medium', zh ? '中溢渣' : 'Medium'],
+                                                    ['large', zh ? '大溢渣' : 'Large'],
+                                                ] as const).map(([level, label]) => <article className={level} key={level}>
+                                                    <span>{label}</span>
+                                                    <strong>{overflowStatistics.episodes[level]}</strong>
+                                                </article>)}
+                                            </div>
+                                            <dl className='ControlProgramStatisticSummary'>
+                                                <div>
+                                                    <dt>{zh ? '溢渣帧' : 'Overflow frames'}</dt>
+                                                    <dd>{overflowStatistics.overflow_frames} / {overflowStatistics.total_frames}
+                                                        {' · '}{overflowStatistics.total_frames > 0
+                                                            ? `${(overflowStatistics.overflow_frames / overflowStatistics.total_frames * 100).toFixed(1)}%`
+                                                            : '0.0%'}</dd>
+                                                </div>
+                                                <div>
+                                                    <dt>{zh ? '最近溢渣' : 'Latest overflow'}</dt>
+                                                    <dd>{overflowStatistics.latest_overflow_at
+                                                        ? dateTime(overflowStatistics.latest_overflow_at, zh)
+                                                        : (zh ? '当日无溢渣' : 'No overflow that day')}</dd>
+                                                </div>
+                                            </dl>
+                                            <div className='ControlProgramHourlyStatistics'>
+                                                <strong>{zh ? '时段分布' : 'Hourly distribution'}</strong>
+                                                <div>
+                                                    {overflowStatistics.hourly.map((count, hour) => <span
+                                                        key={hour}
+                                                        title={`${`${hour}`.padStart(2, '0')}:00 · ${count}`}
+                                                    >
+                                                        <i style={{height: `${Math.max(2, count / Math.max(...overflowStatistics.hourly, 1) * 100)}%`}}/>
+                                                        <small>{hour % 3 === 0 ? `${`${hour}`.padStart(2, '0')}` : ''}</small>
+                                                    </span>)}
+                                                </div>
+                                            </div>
+                                            {overflowStatistics.episodes.unknown > 0 && <p className='ControlProgramStatisticsNote'>
+                                                {zh
+                                                    ? `${overflowStatistics.episodes.unknown} 次溢渣缺少等级，未计入小/中/大分类。`
+                                                    : `${overflowStatistics.episodes.unknown} episodes had no level and are excluded from small/medium/large.`}
+                                            </p>}
+                                        </>
+                                        : unavailable(zh ? '暂无每日统计' : 'No daily statistics')}
+                        </section>)}
             </div>
         </div>
     </section>;

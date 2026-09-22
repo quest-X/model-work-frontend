@@ -278,6 +278,18 @@ describe('ProgramRunnerPanel', () => {
                 task_id: '00000000-0000-4000-8000-000000000007',
             }],
         });
+        const statistics = jest.spyOn(ComputeClusterService, 'programOverflowStatistics').mockResolvedValue({
+            schema_version: 'runtime.program-overflow-statistics.v1',
+            captured_at: today,
+            program_id: 'vision-ocr',
+            date: todayValue,
+            timezone_offset_minutes: -new Date().getTimezoneOffset(),
+            total_frames: 100,
+            overflow_frames: 12,
+            episodes: {small: 1, medium: 2, large: 1, unknown: 0},
+            hourly: [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            latest_overflow_at: today,
+        });
         const toggleMaximized = jest.fn();
 
         const {unmount} = render(<ProgramRunnerPanel
@@ -446,6 +458,22 @@ describe('ProgramRunnerPanel', () => {
         expect(logs).toHaveTextContent('Vision OCR');
         const logFilter = within(logs).getByRole('combobox', {name: '筛选日志程序'});
         expect(within(logFilter).queryByRole('option', {name: '电文'})).not.toBeInTheDocument();
+
+        fireEvent.click(within(dialog).getByRole('button', {name: '统计'}));
+        const statisticsView = await within(dialog).findByLabelText('大炉口溢渣统计');
+        expect(within(statisticsView).getByLabelText('统计日期')).toHaveValue(todayValue);
+        expect(await within(statisticsView).findByText('溢渣次数')).toBeInTheDocument();
+        expect(statisticsView).toHaveTextContent('小溢渣1');
+        expect(statisticsView).toHaveTextContent('中溢渣2');
+        expect(statisticsView).toHaveTextContent('大溢渣1');
+        expect(statisticsView).toHaveTextContent('12 / 100 · 12.0%');
+        expect(statistics).toHaveBeenCalledWith(
+            node.node_id,
+            'vision-ocr',
+            todayValue,
+            -new Date().getTimezoneOffset(),
+            expect.any(AbortSignal),
+        );
 
         fireEvent.click(within(dialog).getByRole('button', {name: '放大程序运行器窗口'}));
         expect(toggleMaximized).toHaveBeenCalledTimes(1);

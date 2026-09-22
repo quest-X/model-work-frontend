@@ -2094,6 +2094,78 @@ button.ControlServiceCard {
 .ControlProgramLogType { color: rgba(255, 255, 255, 0.46); font-family: SFMono-Regular, Consolas, monospace; }
 .ControlProgramError { margin: 0 0 12px; color: #ef8b8b; font-size: 9px; }
 
+.ControlProgramStatistics {
+  min-width: 0;
+  overflow: auto;
+  padding: 18px 20px;
+
+  input[type='date'] {
+    box-sizing: border-box;
+    height: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 2px;
+    outline: 0;
+    background: rgba(0, 0, 0, 0.16);
+    padding: 0 8px;
+    color: rgba(255, 255, 255, 0.82);
+    color-scheme: dark;
+    font-size: 10px;
+
+    &:focus-visible { border-color: rgba(255, 255, 255, 0.42); }
+  }
+}
+
+.ControlProgramStatisticCards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+
+  article {
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 14px;
+  }
+  article.small { border-top-color: #79d89e; }
+  article.medium { border-top-color: #e8bd79; }
+  article.large { border-top-color: #ef8b8b; }
+  span { display: block; color: rgba(255, 255, 255, 0.42); font-size: 9px; }
+  strong { display: block; margin-top: 8px; color: white; font-size: 26px; font-weight: 500; }
+}
+
+.ControlProgramStatisticSummary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 18px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+  div { padding: 13px 0; }
+  div + div { border-left: 1px solid rgba(255, 255, 255, 0.08); padding-left: 18px; }
+  dt { color: rgba(255, 255, 255, 0.36); font-size: 8px; }
+  dd { margin: 6px 0 0; color: rgba(255, 255, 255, 0.78); font-size: 11px; }
+}
+
+.ControlProgramHourlyStatistics {
+  margin-top: 18px;
+
+  > strong { color: rgba(255, 255, 255, 0.52); font-size: 9px; }
+  > div {
+    display: grid;
+    height: 130px;
+    grid-template-columns: repeat(24, minmax(4px, 1fr));
+    align-items: end;
+    gap: 3px;
+    margin-top: 12px;
+  }
+  span { display: grid; height: 100%; grid-template-rows: minmax(0, 1fr) 14px; align-items: end; }
+  i { display: block; min-height: 2px; background: #69c6ff; }
+  small { color: rgba(255, 255, 255, 0.28); font-size: 7px; font-style: normal; text-align: center; }
+}
+
+.ControlProgramStatisticsNote { margin: 12px 0 0; color: #e8bd79; font-size: 9px; }
+
 .ControlProgramArtifacts {
   display: flex;
   min-width: 0;
@@ -2705,6 +2777,7 @@ button.ControlServiceCard {
   .ControlProgramLogs li strong { grid-column: 2; grid-row: 2; }
   .ControlProgramLogs li .ControlProgramLogMessage { grid-column: 2; grid-row: 2; }
   .ControlProgramLogs li small { grid-column: 2; }
+  .ControlProgramStatisticCards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ControlProgramArtifactWorkspace { display: block; overflow: auto; }
   .ControlProgramArtifactWorkspace > aside { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-right: 0; }
   .ControlProgramArtifactWorkspace > aside > details { flex: 0 0 250px; }

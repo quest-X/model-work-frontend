@@ -300,6 +300,24 @@ export type ComputeProgramSnapshot = {
     }[];
 };
 
+export type ComputeProgramOverflowStatistics = {
+    schema_version: 'runtime.program-overflow-statistics.v1';
+    captured_at: number;
+    program_id: string;
+    date: string;
+    timezone_offset_minutes: number;
+    total_frames: number;
+    overflow_frames: number;
+    episodes: {
+        small: number;
+        medium: number;
+        large: number;
+        unknown: number;
+    };
+    hourly: number[];
+    latest_overflow_at: number | null;
+};
+
 export type ComputeStartupItem = {
     item_id: string;
     name: string;
@@ -1417,6 +1435,21 @@ export class ComputeClusterService {
 
     public static programs(nodeId: string, signal?: AbortSignal): Promise<ComputeProgramSnapshot> {
         return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/programs`, signal);
+    }
+
+    public static programOverflowStatistics(
+        nodeId: string,
+        programId: string,
+        date: string,
+        timezoneOffsetMinutes: number,
+        signal?: AbortSignal,
+    ): Promise<ComputeProgramOverflowStatistics> {
+        return request(
+            `/nodes/${encodeURIComponent(nodeId)}/runtime/programs/${encodeURIComponent(programId)}`
+            + `/overflow-statistics?date=${encodeURIComponent(date)}`
+            + `&timezone_offset_minutes=${timezoneOffsetMinutes}`,
+            signal,
+        );
     }
 
     public static programInterfaceUrl(
