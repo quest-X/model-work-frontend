@@ -203,8 +203,11 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const programsVisible = programsCapable || programs !== null;
     const logsVisible = runtimeVisible || programsVisible || events.length > 0;
     const showingCache = !node.online && (snapshot !== null || programs !== null || events.length > 0);
+    const pollingPaused = loadedVideoId !== '';
     const connectionLabel = node.online
-        ? (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
+        ? pollingPaused
+            ? (zh ? '在线 · 视频预览期间暂停状态刷新' : 'Online · status refresh paused during video preview')
+            : (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
         : showingCache
             ? (zh ? '离线 · 显示最后缓存' : 'Offline · showing last cached data')
             : (zh ? '离线' : 'Offline');
@@ -240,7 +243,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     }, [node.node_id]);
 
     useEffect(() => {
-        if (!runtimeCapable && !programsCapable) return undefined;
+        if (pollingPaused || !runtimeCapable && !programsCapable) return undefined;
         const controller = new AbortController();
         let inFlight = false;
         // eslint-disable-next-line complexity
@@ -319,7 +322,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [node.node_id, programsCapable, runtimeCapable]);
+    }, [node.node_id, pollingPaused, programsCapable, runtimeCapable]);
 
     const selectedService = snapshot?.services.find(service =>
         service.service_id === selectedServiceId
