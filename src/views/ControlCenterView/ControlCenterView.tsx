@@ -76,17 +76,9 @@ const DLK_NODE_NAMES = new Set(['AIPACK-05', 'AIPACK-06', 'AIPACK-07']);
 const dlkProgramTone = (snapshot: ComputeProgramSnapshot): ProgramIndicatorTone => {
     const program = snapshot.programs.find(item => /dlk/i.test(`${item.program_id} ${item.name}`));
     if (!program) return 'offline';
-    if (
-        program.state === 'healthy'
-        && program.service.state === 'running'
-        && program.health.state === 'healthy'
-    ) return 'healthy';
-    if (
-        program.service.state === 'running'
-        && program.state !== 'unavailable'
-        && program.health.state !== 'unavailable'
-    ) return 'warning';
-    return 'offline';
+    return program.state === 'healthy'
+        ? 'healthy'
+        : program.state === 'unavailable' ? 'offline' : 'warning';
 };
 
 const dlkProgramLabel = (tone: ProgramIndicatorTone, zh: boolean): string => ({
