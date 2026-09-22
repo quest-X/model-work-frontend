@@ -44,6 +44,9 @@ const CameraTimeline: React.FC<IProps> = ({
     const chinese = language === Language.CHINESE;
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const daySeconds = dayTime
+        ? dayTime.getHours() * 3600 + dayTime.getMinutes() * 60 + dayTime.getSeconds()
+        : 0;
 
     // eslint-disable-next-line complexity
     const drawTimeline = useCallback(() => {
@@ -54,9 +57,7 @@ const CameraTimeline: React.FC<IProps> = ({
 
         const width = canvas.width;
         const height = canvas.height;
-        const current = dayTime
-            ? dayTime.getHours() * 3600 + dayTime.getMinutes() * 60 + dayTime.getSeconds()
-            : Math.max(0, elapsedSeconds);
+        const current = dayTime ? daySeconds : Math.max(0, elapsedSeconds);
         const windowStart = dayTime ? 0 : Math.max(0, current - WINDOW_SECONDS);
         const visibleDuration = dayTime ? 24 * 60 * 60 : WINDOW_SECONDS;
         const position = dayTime
@@ -121,7 +122,7 @@ const CameraTimeline: React.FC<IProps> = ({
             width - 10,
             20,
         );
-    }, [dayTime, elapsedSeconds, isPlaying]);
+    }, [daySeconds, dayTime, elapsedSeconds, isPlaying]);
 
     useEffect(() => {
         drawTimeline();
@@ -150,12 +151,8 @@ const CameraTimeline: React.FC<IProps> = ({
             `${dayTime.getDate()}`.padStart(2, '0'),
         ].join('/')
         : '';
-    const clockLabel = dayTime
-        ? formatDayTime(
-            dayTime.getHours() * 3600 + dayTime.getMinutes() * 60 + dayTime.getSeconds(),
-            true,
-        )
-        : '';
+    const clockLabel = dayTime ? formatDayTime(daySeconds, true) : '';
+    const dayProgressLabel = dayTime ? `${(daySeconds / 864).toFixed(2)}%` : '';
 
     return <div className='VideoTimeline CameraTimeline' ref={containerRef}>
         <canvas
@@ -169,7 +166,11 @@ const CameraTimeline: React.FC<IProps> = ({
             <div className='LeftInfo'><span>{dateLabel}</span></div>
             <div className='CenterControls'><strong>LIVE</strong></div>
             <div className='RightInfo'>
-                <span>{chinese ? '当前时间' : 'Current time'} {clockLabel}</span>
+                <span>
+                    {chinese ? '当前时间' : 'Current time'} {clockLabel}
+                    {' · '}
+                    {chinese ? '今日进度' : 'Day progress'} {dayProgressLabel}
+                </span>
             </div>
         </div> : <div className='TimelineControls'>
             <div className='LeftInfo'>

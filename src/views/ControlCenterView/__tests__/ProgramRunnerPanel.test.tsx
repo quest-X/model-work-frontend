@@ -302,6 +302,7 @@ describe('ProgramRunnerPanel', () => {
         expect(within(preview).getByLabelText('全天直播时间轴 00:00 至 24:00'))
             .toBeInTheDocument();
         expect(preview).toHaveTextContent('当前时间');
+        expect(preview).toHaveTextContent(/今日进度 \d+\.\d{2}%/);
         expect(preview).not.toHaveTextContent('直播会话进度');
         fireEvent.load(previewImage);
         expect(preview).toHaveTextContent('LIVE');
