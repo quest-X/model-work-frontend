@@ -330,6 +330,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             program_name: program.name,
         }))
     );
+    const livePreview = endpointRows.find(endpoint =>
+        endpoint.method === 'GET' && endpoint.path === '/rtsp'
+    );
     const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
         view === 'telegrams'
             ? isTelegramLog(event.message)
@@ -656,6 +659,20 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             </div>
                             <span className='ControlProgramEndpointCount'>{endpointRows.length}</span>
                         </header>
+                        {livePreview && <figure className='ControlProgramLivePreview'>
+                            <figcaption>
+                                <strong>{zh ? '现场实时画面' : 'Live site preview'}</strong>
+                                <span>{livePreview.program_name} · /rtsp</span>
+                            </figcaption>
+                            <img
+                                src={ComputeClusterService.programInterfaceUrl(
+                                    node.node_id,
+                                    livePreview.program_id,
+                                    livePreview.path,
+                                )}
+                                alt={zh ? `${livePreview.program_name} 现场实时画面` : `${livePreview.program_name} live site preview`}
+                            />
+                        </figure>}
                         {programsError && <p className='ControlProgramError' role='status'>
                             {programsError}
                         </p>}

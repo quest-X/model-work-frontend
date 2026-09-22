@@ -160,6 +160,15 @@ describe('ProgramRunnerPanel', () => {
                     latency_ms: 3.5,
                 }, {
                     method: 'GET',
+                    path: '/rtsp',
+                    name: '实时标注画面',
+                    description: 'MJPEG 视频流',
+                    state: 'healthy',
+                    checked_at: 101,
+                    status_code: 200,
+                    latency_ms: 7.7,
+                }, {
+                    method: 'GET',
                     path: '/furnace',
                     name: '转炉生产数据',
                     description: '角度、炉次、钢种及车辆位置',
@@ -268,6 +277,13 @@ describe('ProgramRunnerPanel', () => {
         expect(endpoints).toHaveTextContent('POST');
         expect(endpoints).toHaveTextContent('/display');
         expect(endpoints).toHaveTextContent('未检查');
+        expect(within(endpoints).getByRole('img', {name: 'Vision OCR 现场实时画面'}))
+            .toHaveAttribute(
+                'src',
+                expect.stringContaining(
+                    '/runtime/programs/vision-ocr/interfaces?path=%2Frtsp',
+                ),
+            );
         expect(within(endpoints).getByRole('link', {name: '/health'})).toHaveAttribute(
             'href',
             expect.stringContaining(

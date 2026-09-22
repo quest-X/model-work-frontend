@@ -1829,6 +1829,29 @@ button.ControlServiceCard {
   .ControlProgramEndpointLink:hover { text-decoration: underline; }
   .ControlProgramEndpointLink:focus-visible { outline: 1px solid #73caff; outline-offset: 2px; }
   .ControlProgramInterfaces { overflow: auto; }
+  .ControlProgramLivePreview {
+    width: min(calc(100% - 40px), 960px);
+    margin: 0 20px 18px;
+
+    figcaption {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    strong { color: rgba(255, 255, 255, 0.84); font-size: 10px; }
+    span { color: rgba(255, 255, 255, 0.42); font-size: 9px; }
+    img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: #080a0c;
+      object-fit: contain;
+    }
+  }
   .ControlProgramInterfaces table { min-width: 980px; }
   .ControlProgramInterfaces code {
     color: rgba(255, 255, 255, 0.72);
