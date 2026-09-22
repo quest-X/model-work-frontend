@@ -346,7 +346,7 @@ describe('ProgramRunnerPanel', () => {
             .toBeInTheDocument();
         expect(jest.mocked(ComputeClusterService.runtime).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.programs).mock.calls[0][1]?.aborted).toBe(true);
-        expect(jest.mocked(ComputeClusterService.runtimeEvents).mock.calls[0][3]?.aborted).toBe(true);
+        expect(ComputeClusterService.runtimeEvents).not.toHaveBeenCalled();
         expect(within(artifacts).getByRole('button', {name: '加载视频预览'})).toBeInTheDocument();
         expect(artifacts.querySelector('video')).not.toBeInTheDocument();
         fireEvent.click(within(artifacts).getByRole('button', {name: '加载视频预览'}));
@@ -421,7 +421,7 @@ describe('ProgramRunnerPanel', () => {
 
         fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
         const logs = await within(dialog).findByLabelText('程序日志');
-        expect(logs).toHaveTextContent('Task execution started');
+        expect(await within(logs).findByText('Task execution started')).toBeInTheDocument();
         expect(logs).toHaveTextContent('任务执行器');
         expect(logs).toHaveTextContent('Program started');
         expect(logs).toHaveTextContent('Vision OCR');
@@ -516,16 +516,14 @@ describe('ProgramRunnerPanel', () => {
     it('shows request completion progress while results are loading', async () => {
         let resolveRuntime!: (value: Awaited<ReturnType<typeof ComputeClusterService.runtime>>) => void;
         let resolvePrograms!: (value: Awaited<ReturnType<typeof ComputeClusterService.programs>>) => void;
-        let resolveEvents!: (value: Awaited<ReturnType<typeof ComputeClusterService.runtimeEvents>>) => void;
         jest.spyOn(ComputeClusterService, 'runtime').mockImplementation(() =>
             new Promise(resolve => { resolveRuntime = resolve; })
         );
         jest.spyOn(ComputeClusterService, 'programs').mockImplementation(() =>
             new Promise(resolve => { resolvePrograms = resolve; })
         );
-        jest.spyOn(ComputeClusterService, 'runtimeEvents').mockImplementation(() =>
-            new Promise(resolve => { resolveEvents = resolve; })
-        );
+        const runtimeEvents = jest.spyOn(ComputeClusterService, 'runtimeEvents')
+            .mockImplementation(() => new Promise(() => undefined));
 
         render(<ProgramRunnerPanel
             node={{...node, node_id: 'aipack-progress'}}
@@ -535,21 +533,32 @@ describe('ProgramRunnerPanel', () => {
         />);
         const dialog = screen.getByRole('dialog', {name: 'AIPACK-13 程序运行器'});
         expect(await within(dialog).findByText('正在读取程序状态… 0%')).toBeInTheDocument();
-        fireEvent.click(within(dialog).getByRole('button', {name: '接口'}));
-        expect(await within(dialog).findByText('正在读取程序接口… 0%')).toBeInTheDocument();
-        fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
-        expect(await within(dialog).findByText('正在读取程序结果… 0%')).toBeInTheDocument();
 
         resolveRuntime({
             schema_version: 'runtime.snapshot.v1',
             captured_at: 101,
             summary: {
-                total: 0, healthy: 0, degraded: 0, unavailable: 0,
+                total: 1, healthy: 1, degraded: 0, unavailable: 0,
                 task_counts: {queued: 0, running: 0, paused: 0, succeeded: 0, failed: 0, cancelled: 0},
             },
-            services: [],
+            services: [{
+                service_id: 'fast-service',
+                name: 'Fast Service',
+                kind: 'service',
+                state: 'healthy',
+                version: '1.0.0',
+                uptime_seconds: 10,
+                restart_count: 0,
+                health: {state: 'healthy', checked_at: 101, status_code: 200, latency_ms: 1},
+                process: {pid: 1, state: 'running'},
+            }],
         });
-        expect(await within(dialog).findByText('正在读取程序结果… 33%')).toBeInTheDocument();
+        expect((await within(dialog).findAllByText('Fast Service')).length).toBeGreaterThan(0);
+        expect(within(dialog).getByText('正在读取受控程序目录… 50%')).toBeInTheDocument();
+        expect(runtimeEvents).not.toHaveBeenCalled();
+
+        fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
+        expect(await within(dialog).findByText('正在读取程序结果… 50%')).toBeInTheDocument();
 
         resolvePrograms({
             schema_version: 'runtime.programs.v1',
@@ -557,15 +566,7 @@ describe('ProgramRunnerPanel', () => {
             invalid_manifests: 0,
             programs: [],
         });
-        expect(await within(dialog).findByText('正在读取程序结果… 67%')).toBeInTheDocument();
-
-        resolveEvents({
-            schema_version: 'runtime.events.v1',
-            captured_at: 101,
-            cursor: 0,
-            has_more: false,
-            events: [],
-        });
         expect(await within(dialog).findByText('暂无录像、图片或数据文件')).toBeInTheDocument();
+        expect(runtimeEvents).not.toHaveBeenCalled();
     });
 });

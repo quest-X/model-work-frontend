@@ -204,6 +204,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const logsVisible = runtimeVisible || programsVisible || events.length > 0;
     const showingCache = !node.online && (snapshot !== null || programs !== null || events.length > 0);
     const pollingPaused = view === 'artifacts' && programs !== null;
+    const eventsRequested = view === 'telegrams' || view === 'logs';
     const connectionLabel = node.online
         ? pollingPaused
             ? (zh ? '在线 · 结果预览期间暂停状态刷新' : 'Online · status refresh paused during result preview')
@@ -252,7 +253,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             inFlight = true;
             setRefreshing(true);
             setRefreshProgress(0);
-            const requestCount = Number(runtimeCapable) * 2 + Number(programsCapable);
+            const requestCount = Number(runtimeCapable)
+                + Number(programsCapable)
+                + Number(runtimeCapable && eventsRequested);
             let completedRequests = 0;
             const track = <T,>(request: Promise<T>): Promise<T> => request.finally(() => {
                 completedRequests += 1;
@@ -260,58 +263,74 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     setRefreshProgress(Math.round(completedRequests / requestCount * 100));
                 }
             });
-            const [runtimeResult, programsResult, eventsResult] = await Promise.allSettled([
-                runtimeCapable
-                    ? track(ComputeClusterService.runtime(node.node_id, controller.signal))
-                    : Promise.resolve(null),
-                programsCapable
-                    ? track(ComputeClusterService.programs(node.node_id, controller.signal))
-                    : Promise.resolve(null),
-                runtimeCapable
-                    ? track(ComputeClusterService.runtimeEvents(node.node_id, 0, 100, controller.signal))
-                    : Promise.resolve(null),
-            ]);
+            const updateCache = (patch: Partial<ProgramRunnerCache>) => {
+                const current = programRunnerCache.get(node.node_id);
+                programRunnerCache.set(node.node_id, {
+                    snapshot: current?.snapshot || null,
+                    programs: current?.programs || null,
+                    events: current?.events || [],
+                    ...patch,
+                });
+            };
+            const requests: Promise<void>[] = [];
+            if (runtimeCapable) {
+                requests.push(track(ComputeClusterService.runtime(node.node_id, controller.signal)).then(
+                    value => {
+                        if (controller.signal.aborted) return;
+                        updateCache({snapshot: value});
+                        setSnapshot(value);
+                        setRuntimeError('');
+                    },
+                    reason => {
+                        if (controller.signal.aborted) return;
+                        setRuntimeError(reason instanceof Error ? reason.message : String(reason));
+                    },
+                ));
+            }
+            if (programsCapable) {
+                requests.push(track(ComputeClusterService.programs(node.node_id, controller.signal)).then(
+                    value => {
+                        if (controller.signal.aborted) return;
+                        updateCache({programs: value});
+                        setPrograms(value);
+                        setProgramsError('');
+                    },
+                    reason => {
+                        if (controller.signal.aborted) return;
+                        setProgramsError(reason instanceof Error ? reason.message : String(reason));
+                    },
+                ));
+            }
+            if (runtimeCapable && eventsRequested) {
+                requests.push(track(ComputeClusterService.runtimeEvents(
+                    node.node_id,
+                    0,
+                    100,
+                    controller.signal,
+                )).then(
+                    value => {
+                        if (controller.signal.aborted) return;
+                        updateCache({events: value.events});
+                        setEvents(value.events);
+                        setEventsError('');
+                    },
+                    reason => {
+                        if (controller.signal.aborted) return;
+                        setEventsError(reason instanceof Error ? reason.message : String(reason));
+                    },
+                ));
+            }
+            await Promise.all(requests);
             if (!controller.signal.aborted) {
-                const cachedResult = programRunnerCache.get(node.node_id);
-                const nextCache: ProgramRunnerCache = {
-                    snapshot: cachedResult?.snapshot || null,
-                    programs: cachedResult?.programs || null,
-                    events: cachedResult?.events || [],
-                };
-                if (runtimeResult.status === 'fulfilled') {
-                    if (runtimeResult.value) {
-                        nextCache.snapshot = runtimeResult.value;
-                        setSnapshot(runtimeResult.value);
-                    }
+                if (!runtimeCapable) {
                     setRuntimeError('');
-                } else {
-                    setRuntimeError(runtimeResult.reason instanceof Error
-                        ? runtimeResult.reason.message
-                        : String(runtimeResult.reason));
                 }
-                if (programsResult.status === 'fulfilled') {
-                    if (programsResult.value) {
-                        nextCache.programs = programsResult.value;
-                        setPrograms(programsResult.value);
-                    }
+                if (!programsCapable) {
                     setProgramsError('');
-                } else {
-                    setProgramsError(programsResult.reason instanceof Error
-                        ? programsResult.reason.message
-                        : String(programsResult.reason));
                 }
-                if (eventsResult.status === 'fulfilled') {
-                    if (eventsResult.value) {
-                        nextCache.events = eventsResult.value.events;
-                        setEvents(eventsResult.value.events);
-                    }
+                if (!eventsRequested) {
                     setEventsError('');
-                } else {
-                    setEventsError(eventsResult.reason instanceof Error
-                        ? eventsResult.reason.message
-                        : String(eventsResult.reason));
                 }
-                programRunnerCache.set(node.node_id, nextCache);
                 setRefreshing(false);
             }
             inFlight = false;
@@ -322,7 +341,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [node.node_id, pollingPaused, programsCapable, runtimeCapable]);
+    }, [eventsRequested, node.node_id, pollingPaused, programsCapable, runtimeCapable]);
 
     const selectedService = snapshot?.services.find(service =>
         service.service_id === selectedServiceId
