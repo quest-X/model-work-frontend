@@ -343,6 +343,18 @@ describe('ProgramRunnerPanel', () => {
 
         expect(within(dialog).queryByRole('button', {name: '刷新程序运行器'})).not.toBeInTheDocument();
 
+        fireEvent.click(within(dialog).getByRole('button', {name: '电文'}));
+        const telegrams = await within(dialog).findByLabelText('程序电文');
+        expect(telegrams).not.toHaveTextContent('Task execution started');
+        expect(telegrams).not.toHaveTextContent('Program started');
+        expect(within(telegrams).getByRole('button', {name: '美化格式'})).toHaveAttribute('aria-pressed', 'true');
+        expect(within(telegrams).getByLabelText('电文内容').textContent)
+            .toBe('{\n  "src": "ixcom",\n  "dir": "out",\n  "payload": "LK2"\n}');
+        fireEvent.click(within(telegrams).getByRole('button', {name: '原始格式'}));
+        expect(within(telegrams).getByRole('button', {name: '原始格式'})).toHaveAttribute('aria-pressed', 'true');
+        expect(within(telegrams).getByLabelText('电文内容').textContent)
+            .toBe('{"src":"ixcom","dir":"out","payload":"LK2"}');
+
         fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
         const logs = await within(dialog).findByLabelText('程序日志');
         expect(logs).toHaveTextContent('Task execution started');
@@ -350,17 +362,7 @@ describe('ProgramRunnerPanel', () => {
         expect(logs).toHaveTextContent('Program started');
         expect(logs).toHaveTextContent('Vision OCR');
         const logFilter = within(logs).getByRole('combobox', {name: '筛选日志程序'});
-        expect(within(logFilter).getByRole('option', {name: '电文'})).toBeInTheDocument();
-        fireEvent.change(logFilter, {target: {value: '__telegram__'}});
-        expect(logs).not.toHaveTextContent('Task execution started');
-        expect(logs).not.toHaveTextContent('Program started');
-        expect(within(logs).getByRole('button', {name: '美化格式'})).toHaveAttribute('aria-pressed', 'true');
-        expect(within(logs).getByLabelText('电文内容').textContent)
-            .toBe('{\n  "src": "ixcom",\n  "dir": "out",\n  "payload": "LK2"\n}');
-        fireEvent.click(within(logs).getByRole('button', {name: '原始格式'}));
-        expect(within(logs).getByRole('button', {name: '原始格式'})).toHaveAttribute('aria-pressed', 'true');
-        expect(within(logs).getByLabelText('电文内容').textContent)
-            .toBe('{"src":"ixcom","dir":"out","payload":"LK2"}');
+        expect(within(logFilter).queryByRole('option', {name: '电文'})).not.toBeInTheDocument();
 
         fireEvent.click(within(dialog).getByRole('button', {name: '放大程序运行器窗口'}));
         expect(toggleMaximized).toHaveBeenCalledTimes(1);

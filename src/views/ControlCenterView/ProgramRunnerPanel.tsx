@@ -8,10 +8,9 @@ import {
     ComputeRuntimeSnapshot,
 } from '../../services/ComputeClusterService';
 
-type ProgramRunnerView = 'programs' | 'endpoints' | 'artifacts' | 'logs';
+type ProgramRunnerView = 'programs' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
 type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'telegram' | 'log';
-const TELEGRAM_LOG_FILTER = '__telegram__';
 
 interface IProps {
     node: ComputeClusterNode;
@@ -332,10 +331,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         }))
     );
     const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
-        !logServiceId
-        || (logServiceId === TELEGRAM_LOG_FILTER
+        view === 'telegrams'
             ? isTelegramLog(event.message)
-            : event.service_id === logServiceId);
+            : !logServiceId || event.service_id === logServiceId;
     const filteredEvents = [...events]
         .filter(matchesLogFilter)
         .reverse();
@@ -484,6 +482,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     ['programs', zh ? '程序' : 'Programs'],
                     ['endpoints', zh ? '接口' : 'APIs'],
                     ['artifacts', zh ? '结果' : 'Results'],
+                    ['telegrams', zh ? '电文' : 'Telegrams'],
                     ['logs', zh ? '日志' : 'Logs'],
                 ] as [ProgramRunnerView, string][]).map(([item, label]) => <button
                     type='button'
@@ -900,21 +899,36 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 )}
                     </section>)}
 
-                {view === 'logs' && (!logsVisible
+                {(view === 'telegrams' || view === 'logs') && (!logsVisible
                     ? unavailable(
-                        zh ? '当前节点尚不支持结构化日志' : 'Structured logs are not supported',
+                        view === 'telegrams'
+                            ? (zh ? '当前节点尚不支持电文' : 'Telegrams are not supported')
+                            : (zh ? '当前节点尚不支持结构化日志' : 'Structured logs are not supported'),
                         node.online
-                            ? (zh ? '升级节点程序后可查看日志。' : 'Upgrade the node software to view logs.')
-                            : (zh ? '节点恢复在线后才能读取日志。' : 'The node must return online before logs can be read.'),
+                            ? (view === 'telegrams'
+                                ? (zh ? '升级节点程序后可查看电文。' : 'Upgrade the node software to view telegrams.')
+                                : (zh ? '升级节点程序后可查看日志。' : 'Upgrade the node software to view logs.'))
+                            : (view === 'telegrams'
+                                ? (zh ? '节点恢复在线后才能读取电文。' : 'The node must return online before telegrams can be read.')
+                                : (zh ? '节点恢复在线后才能读取日志。' : 'The node must return online before logs can be read.')),
                     )
-                    : <section className='ControlProgramLogs' aria-label={zh ? '程序日志' : 'Program logs'}>
+                    : <section
+                        className='ControlProgramLogs'
+                        aria-label={view === 'telegrams'
+                            ? (zh ? '程序电文' : 'Program telegrams')
+                            : (zh ? '程序日志' : 'Program logs')}
+                    >
                         <header className='ControlMonitorSearchHeader'>
                             <div>
-                                <h3>{zh ? '结构化日志' : 'Structured logs'}</h3>
-                                <p>{zh ? '任务与程序运行事件' : 'Task and program runtime events'}</p>
+                                <h3>{view === 'telegrams'
+                                    ? (zh ? '电文' : 'Telegrams')
+                                    : (zh ? '结构化日志' : 'Structured logs')}</h3>
+                                <p>{view === 'telegrams'
+                                    ? (zh ? '程序收发电文' : 'Program telegram traffic')
+                                    : (zh ? '任务与程序运行事件' : 'Task and program runtime events')}</p>
                             </div>
                             <div className='ControlProgramLogTools'>
-                                {logServiceId === TELEGRAM_LOG_FILTER && <div
+                                {view === 'telegrams' && <div
                                     className='ControlProgramLogFormat'
                                     role='group'
                                     aria-label={zh ? '电文显示格式' : 'Telegram display format'}
@@ -930,13 +944,12 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         onClick={() => setPrettyTelegramLogs(false)}
                                     >{zh ? '原始格式' : 'Raw'}</button>
                                 </div>}
-                                <select
+                                {view === 'logs' && <select
                                     aria-label={zh ? '筛选日志程序' : 'Filter log program'}
                                     value={logServiceId}
                                     onChange={event => setLogServiceId(event.target.value)}
                                 >
                                     <option value=''>{zh ? '全部程序' : 'All programs'}</option>
-                                    <option value={TELEGRAM_LOG_FILTER}>{zh ? '电文' : 'Telegrams'}</option>
                                     {(snapshot?.services || []).map(service => <option
                                         key={service.service_id}
                                         value={service.service_id}
@@ -945,7 +958,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         key={program.program_id}
                                         value={program.program_id}
                                     >{program.name}</option>)}
-                                </select>
+                                </select>}
                             </div>
                         </header>
                         {(eventsError || programsError) && <p className='ControlProgramError' role='status'>
@@ -958,7 +971,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     {serviceNames.get(event.service_id) || event.service_id}
                                 </span>
                                 <span className='ControlProgramLogType'>{event.event_type}</span>
-                                {logServiceId === TELEGRAM_LOG_FILTER
+                                {view === 'telegrams'
                                     ? <pre className='ControlProgramLogMessage' aria-label={zh ? '电文内容' : 'Telegram content'}>
                                         {prettyTelegramLogs
                                             ? JSON.stringify(JSON.parse(event.message), null, 2)
@@ -969,10 +982,16 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             </li>)}
                         </ol> : unavailable(
                             eventsError || programsError
-                                ? (zh ? '日志暂不可用' : 'Logs are unavailable')
+                                ? (view === 'telegrams'
+                                    ? (zh ? '电文暂不可用' : 'Telegrams are unavailable')
+                                    : (zh ? '日志暂不可用' : 'Logs are unavailable'))
                                 : refreshing
-                                    ? (zh ? `正在读取日志… ${refreshProgress}%` : `Loading logs… ${refreshProgress}%`)
-                                    : (zh ? '暂无结构化日志' : 'No structured logs'),
+                                    ? (view === 'telegrams'
+                                        ? (zh ? `正在读取电文… ${refreshProgress}%` : `Loading telegrams… ${refreshProgress}%`)
+                                        : (zh ? `正在读取日志… ${refreshProgress}%` : `Loading logs… ${refreshProgress}%`))
+                                    : (view === 'telegrams'
+                                        ? (zh ? '暂无电文' : 'No telegrams')
+                                        : (zh ? '暂无结构化日志' : 'No structured logs')),
                         )}
                     </section>)}
             </div>
