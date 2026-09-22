@@ -47,6 +47,20 @@ const node: ComputeClusterNode = {
 const originalFetch = global.fetch;
 
 describe('ProgramRunnerPanel', () => {
+    beforeEach(() => {
+        jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+            beginPath: jest.fn(),
+            clearRect: jest.fn(),
+            closePath: jest.fn(),
+            fill: jest.fn(),
+            fillRect: jest.fn(),
+            fillText: jest.fn(),
+            lineTo: jest.fn(),
+            moveTo: jest.fn(),
+            stroke: jest.fn(),
+        } as unknown as CanvasRenderingContext2D);
+    });
+
     afterEach(() => {
         global.fetch = originalFetch;
         jest.restoreAllMocks();
@@ -267,13 +281,20 @@ describe('ProgramRunnerPanel', () => {
 
         fireEvent.click(within(dialog).getByRole('button', {name: '预览'}));
         const preview = await within(dialog).findByLabelText('程序预览');
-        expect(within(preview).getByRole('img', {name: 'Vision OCR 现场实时画面'}))
+        const previewImage = within(preview).getByRole('img', {name: 'Vision OCR 现场实时画面'});
+        expect(previewImage)
             .toHaveAttribute(
                 'src',
                 expect.stringContaining(
                     '/runtime/programs/vision-ocr/interfaces/stream?path=%2Frtsp',
                 ),
             );
+        expect(preview).toHaveTextContent('正在建立实时画面');
+        expect(preview).toHaveTextContent('直播会话进度');
+        fireEvent.load(previewImage);
+        expect(preview).toHaveTextContent('LIVE');
+        fireEvent.click(within(preview).getByRole('button', {name: '重新连接'}));
+        expect(preview).toHaveTextContent('连接中');
 
         fireEvent.click(within(dialog).getByRole('button', {name: '接口'}));
         const endpoints = await within(dialog).findByLabelText('程序接口');

@@ -1,4 +1,5 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
+import {Language} from '../../data/LanguageConfig';
 import {
     ComputeClusterNode,
     ComputeClusterService,
@@ -7,6 +8,8 @@ import {
     ComputeRuntimeService,
     ComputeRuntimeSnapshot,
 } from '../../services/ComputeClusterService';
+import CameraTimeline from '../EditorView/CameraTimeline/CameraTimeline';
+import '../EditorView/CameraPlayer/CameraPlayer.scss';
 
 type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
@@ -191,6 +194,13 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [refreshProgress, setRefreshProgress] = useState(0);
+    const previewImageRef = useRef<HTMLImageElement>(null);
+    const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+    const previewStartedAtRef = useRef<number | null>(null);
+    const previewAccumulatedSecondsRef = useRef(0);
+    const [previewNonce, setPreviewNonce] = useState(Date.now());
+    const [previewState, setPreviewState] = useState<'loading' | 'playing' | 'paused' | 'error'>('loading');
+    const [previewElapsedSeconds, setPreviewElapsedSeconds] = useState(0);
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
     const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
     const runtimeVisible = runtimeCapable || snapshot !== null;
@@ -229,6 +239,11 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setResultPreviewError('');
         setResultPreviewLoading(false);
         setRefreshProgress(0);
+        previewStartedAtRef.current = null;
+        previewAccumulatedSecondsRef.current = 0;
+        setPreviewElapsedSeconds(0);
+        setPreviewState('loading');
+        setPreviewNonce(Date.now());
     }, [node.node_id]);
 
     useEffect(() => {
@@ -333,6 +348,71 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const livePreview = endpointRows.find(endpoint =>
         endpoint.method === 'GET' && endpoint.path === '/rtsp'
     );
+    const previewUrl = livePreview
+        ? `${ComputeClusterService.programInterfaceStreamUrl(
+            node.node_id,
+            livePreview.program_id,
+            livePreview.path,
+        )}&v=${previewNonce}`
+        : '';
+    const reconnectPreview = () => {
+        previewStartedAtRef.current = null;
+        previewAccumulatedSecondsRef.current = 0;
+        setPreviewElapsedSeconds(0);
+        setPreviewState('loading');
+        setPreviewNonce(previous => previous + 1);
+    };
+    const togglePreview = () => {
+        if (previewState === 'paused') {
+            setPreviewState('loading');
+            setPreviewNonce(previous => previous + 1);
+            return;
+        }
+        const image = previewImageRef.current;
+        const canvas = previewCanvasRef.current;
+        if (previewState !== 'playing' || !image || !canvas || !image.naturalWidth || !image.naturalHeight) return;
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const startedAt = previewStartedAtRef.current;
+        if (startedAt !== null) {
+            previewAccumulatedSecondsRef.current += (performance.now() - startedAt) / 1000;
+            previewStartedAtRef.current = null;
+            setPreviewElapsedSeconds(previewAccumulatedSecondsRef.current);
+        }
+        setPreviewState('paused');
+    };
+
+    useEffect(() => {
+        if (previewState !== 'playing' || previewStartedAtRef.current === null) return undefined;
+        const updateElapsed = () => {
+            const startedAt = previewStartedAtRef.current;
+            if (startedAt === null) return;
+            setPreviewElapsedSeconds(
+                previewAccumulatedSecondsRef.current + (performance.now() - startedAt) / 1000,
+            );
+        };
+        const timer = window.setInterval(updateElapsed, 250);
+        return () => window.clearInterval(timer);
+    }, [previewState]);
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const target = event.target;
+            if (
+                view !== 'preview'
+                || event.code !== 'Space'
+                || (previewState !== 'playing' && previewState !== 'paused')
+                || target instanceof HTMLInputElement
+                || target instanceof HTMLTextAreaElement
+                || target instanceof HTMLButtonElement
+            ) return;
+            event.preventDefault();
+            togglePreview();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [previewState, view]);
     const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
         view === 'telegrams'
             ? isTelegramLog(event.message)
@@ -654,20 +734,78 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     )
                     : livePreview
                         ? <section className='ControlProgramPreview' aria-label={zh ? '程序预览' : 'Program preview'}>
-                            <figure className='ControlProgramLivePreview'>
-                                <figcaption>
-                                    <strong>{zh ? '现场实时画面' : 'Live site preview'}</strong>
-                                    <span>{livePreview.program_name} · /rtsp</span>
-                                </figcaption>
-                                <img
-                                    src={ComputeClusterService.programInterfaceStreamUrl(
-                                        node.node_id,
-                                        livePreview.program_id,
-                                        livePreview.path,
-                                    )}
-                                    alt={zh ? `${livePreview.program_name} 现场实时画面` : `${livePreview.program_name} live site preview`}
+                            <div className='ControlProgramLivePreview CameraPlayer'>
+                                <div className='CameraPlayerHeader'>
+                                    <div className='CameraPlayerIdentity'>
+                                        <span className={`CameraLiveDot ${previewState}`}/>
+                                        <strong>{livePreview.program_name}</strong>
+                                        <span className={`CameraLiveBadge ${previewState === 'paused' ? 'paused' : ''}`}>
+                                            {previewState === 'paused'
+                                                ? (zh ? '已暂停' : 'PAUSED')
+                                                : previewState === 'playing'
+                                                    ? 'LIVE'
+                                                    : previewState === 'error'
+                                                        ? (zh ? '连接失败' : 'FAILED')
+                                                        : (zh ? '连接中' : 'CONNECTING')}
+                                        </span>
+                                    </div>
+                                    <div className='CameraPlayerMeta'>
+                                        <span>{livePreview.name}</span>
+                                        <span>/rtsp</span>
+                                        <button type='button' onClick={reconnectPreview}>
+                                            {zh ? '重新连接' : 'Reconnect'}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className='CameraPlayerStage'>
+                                    <div className='CameraComparePane effect'>
+                                        {previewState === 'loading' && <div className='CameraPlayerNotice'>
+                                            <span className='CameraPlayerSpinner'/>
+                                            {zh ? '正在建立实时画面…' : 'Opening live stream…'}
+                                        </div>}
+                                        {previewState === 'error' && <div className='CameraPlayerNotice error'>
+                                            <strong>{zh ? '实时画面连接失败' : 'Unable to open live stream'}</strong>
+                                            <span>{zh ? '请检查程序状态和 /rtsp 接口。' : 'Check the program and /rtsp API.'}</span>
+                                            <button type='button' onClick={reconnectPreview}>
+                                                {zh ? '重试' : 'Retry'}
+                                            </button>
+                                        </div>}
+                                        <canvas
+                                            ref={previewCanvasRef}
+                                            className={previewState === 'paused'
+                                                ? 'CameraFrozenFrame visible'
+                                                : 'CameraFrozenFrame'}
+                                            aria-label={zh
+                                                ? `${livePreview.program_name} 暂停画面`
+                                                : `${livePreview.program_name} paused frame`}
+                                        />
+                                        {previewState !== 'paused' && <img
+                                            ref={previewImageRef}
+                                            key={previewNonce}
+                                            src={previewUrl}
+                                            alt={zh
+                                                ? `${livePreview.program_name} 现场实时画面`
+                                                : `${livePreview.program_name} live site preview`}
+                                            onLoad={() => {
+                                                if (previewStartedAtRef.current === null) {
+                                                    previewStartedAtRef.current = performance.now();
+                                                }
+                                                setPreviewState('playing');
+                                            }}
+                                            onError={() => setPreviewState('error')}
+                                            draggable={false}
+                                        />}
+                                    </div>
+                                </div>
+                                <CameraTimeline
+                                    language={zh ? Language.CHINESE : Language.ENGLISH}
+                                    elapsedSeconds={previewElapsedSeconds}
+                                    fps={15}
+                                    isPlaying={previewState === 'playing'}
+                                    canPlayPause={previewState === 'playing' || previewState === 'paused'}
+                                    onPlayPause={togglePreview}
                                 />
-                            </figure>
+                            </div>
                         </section>
                         : unavailable(
                             programsError
