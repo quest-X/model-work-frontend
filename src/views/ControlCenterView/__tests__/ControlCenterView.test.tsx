@@ -463,11 +463,14 @@ describe('ControlCenterView', () => {
         const dlk07 = runtimeNode('AIPACK-07');
         const other = runtimeNode('AIPACK-08');
         const empty = runtimeNode('AIPACK-09');
-        for (const machine of [dlk05, dlk06, dlk07, other, empty]) {
+        const failed = runtimeNode('AIPACK-10');
+        for (const machine of [dlk05, dlk06, dlk07, other, empty, failed]) {
             machine.capabilities.push('runtime.programs.read.v1');
         }
         dlk07.network.lan_address = '10.168.10.26';
-        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([dlk05, dlk06, dlk07, other, empty]);
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            dlk05, dlk06, dlk07, other, empty, failed,
+        ]);
         jest.mocked(ComputeClusterService.lanAssets).mockResolvedValue({
             version: 1,
             group_id: 'group-1',
@@ -493,8 +496,10 @@ describe('ControlCenterView', () => {
                 change_type: 'unchanged',
             }],
         });
-        jest.spyOn(ComputeClusterService, 'programs').mockImplementation(nodeId => Promise.resolve(
-            nodeId === dlk05.node_id
+        jest.spyOn(ComputeClusterService, 'programs').mockImplementation(nodeId => (
+            nodeId === failed.node_id
+                ? Promise.reject(new Error('unavailable'))
+                : Promise.resolve(nodeId === dlk05.node_id
                 ? programSnapshot('healthy', 'running')
                 : nodeId === dlk06.node_id
                     ? programSnapshot('degraded', 'running')
@@ -502,7 +507,7 @@ describe('ControlCenterView', () => {
                         ? programSnapshot('unavailable', 'stopped')
                         : nodeId === other.node_id
                             ? programSnapshot('healthy', 'running', 'vision-ocr', 'Vision OCR')
-                            : {...programSnapshot('healthy', 'running'), programs: []},
+                            : {...programSnapshot('healthy', 'running'), programs: []})
         ));
 
         render(<ControlCenterView language={Language.CHINESE}/>);
@@ -518,7 +523,9 @@ describe('ControlCenterView', () => {
         const machines = screen.getByRole('complementary', {name: '机器列表'});
         const noProgram = within(machines).getByText('AIPACK-09').closest('button') as HTMLElement;
         expect(noProgram.querySelector('.ControlMachineProgramStatus')).not.toBeInTheDocument();
-        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(5);
+        const failedProgram = within(machines).getByText('AIPACK-10').closest('button') as HTMLElement;
+        expect(failedProgram.querySelector('.ControlMachineProgramStatus')).not.toBeInTheDocument();
+        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(6);
         fireEvent.click(warning);
         expect(document.querySelector('.ControlToolbarGroup > .ControlStatusDot')).toHaveClass('warning');
         fireEvent.click(noProgram);

@@ -657,7 +657,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     const snapshot = await ComputeClusterService.programs(node.node_id, controller.signal);
                     return [node.node_id, programTone(snapshot)] as const;
                 } catch {
-                    return [node.node_id, 'unknown'] as const;
+                    return [node.node_id, null] as const;
                 }
             }));
             if (!controller.signal.aborted) {
