@@ -309,6 +309,12 @@ span.ControlMachineIcon {
   color: rgba(255, 255, 255, 0.7);
   font-size: 10px;
 
+  > .ControlStatusDot {
+    flex-basis: 5px;
+    width: 5px;
+    height: 5px;
+  }
+
   strong {
     overflow: hidden;
     color: rgba(255, 255, 255, 0.88);
