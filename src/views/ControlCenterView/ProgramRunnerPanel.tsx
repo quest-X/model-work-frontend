@@ -203,10 +203,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const programsVisible = programsCapable || programs !== null;
     const logsVisible = runtimeVisible || programsVisible || events.length > 0;
     const showingCache = !node.online && (snapshot !== null || programs !== null || events.length > 0);
-    const pollingPaused = loadedVideoId !== '';
+    const pollingPaused = view === 'artifacts' && programs !== null;
     const connectionLabel = node.online
         ? pollingPaused
-            ? (zh ? '在线 · 视频预览期间暂停状态刷新' : 'Online · status refresh paused during video preview')
+            ? (zh ? '在线 · 结果预览期间暂停状态刷新' : 'Online · status refresh paused during result preview')
             : (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
         : showingCache
             ? (zh ? '离线 · 显示最后缓存' : 'Offline · showing last cached data')

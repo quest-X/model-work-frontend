@@ -342,16 +342,16 @@ describe('ProgramRunnerPanel', () => {
         expect(within(dialog).getByLabelText('筛选结果日期')).toHaveValue(todayValue);
         const artifacts = await within(dialog).findByLabelText('程序结果');
         expect(artifacts).toHaveTextContent('017.mp4');
+        expect(within(dialog).getByRole('status', {name: '在线 · 结果预览期间暂停状态刷新'}))
+            .toBeInTheDocument();
+        expect(jest.mocked(ComputeClusterService.runtime).mock.calls[0][1]?.aborted).toBe(true);
+        expect(jest.mocked(ComputeClusterService.programs).mock.calls[0][1]?.aborted).toBe(true);
+        expect(jest.mocked(ComputeClusterService.runtimeEvents).mock.calls[0][3]?.aborted).toBe(true);
         expect(within(artifacts).getByRole('button', {name: '加载视频预览'})).toBeInTheDocument();
         expect(artifacts.querySelector('video')).not.toBeInTheDocument();
         fireEvent.click(within(artifacts).getByRole('button', {name: '加载视频预览'}));
         const video = artifacts.querySelector('video');
         expect(video?.getAttribute('src')).toContain('/runtime/programs/vision-ocr/artifacts/');
-        expect(within(dialog).getByRole('status', {name: '在线 · 视频预览期间暂停状态刷新'}))
-            .toBeInTheDocument();
-        expect(jest.mocked(ComputeClusterService.runtime).mock.calls[0][1]?.aborted).toBe(true);
-        expect(jest.mocked(ComputeClusterService.programs).mock.calls[0][1]?.aborted).toBe(true);
-        expect(jest.mocked(ComputeClusterService.runtimeEvents).mock.calls[0][3]?.aborted).toBe(true);
         expect(within(artifacts).getByText('正在加载视频预览 0%')).toBeInTheDocument();
         Object.defineProperties(video, {
             duration: {configurable: true, value: 100},
