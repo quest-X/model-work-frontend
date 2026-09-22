@@ -1010,7 +1010,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                             aria-label={zh ? '下载原文件' : 'Download original file'}
                                             title={zh ? '下载原文件' : 'Download original file'}
                                         >
-                                            <img src='/ico/download.png' alt=''/>
                                             <span>{zh ? '下载' : 'Download'}</span>
                                         </a>
                                     </div>
