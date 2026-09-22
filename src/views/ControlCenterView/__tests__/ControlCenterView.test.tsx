@@ -463,7 +463,33 @@ describe('ControlCenterView', () => {
         for (const machine of [dlk05, dlk06, dlk07, other]) {
             machine.capabilities.push('runtime.programs.read.v1');
         }
+        dlk07.network.lan_address = '10.168.10.26';
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([dlk05, dlk06, dlk07, other]);
+        jest.mocked(ComputeClusterService.lanAssets).mockResolvedValue({
+            version: 1,
+            group_id: 'group-1',
+            summary: {total: 1, online: 1, offline: 0, new: 0, changed: 0, networks: 1},
+            latest_scans: [],
+            assets: [{
+                asset_id: 'edge-07',
+                node_id: dlk05.node_id,
+                node_name: dlk05.name,
+                cidr: '10.168.10.0/24',
+                address: '10.168.10.26',
+                hostname: 'aipack-07',
+                mac: '00:04:4b:00:00:07',
+                device_kind: 'edge_compute',
+                display_name: 'AIPACK-07',
+                device_model: 'Orin',
+                ssh_username: 'nvidia',
+                ports: [{port: 22, service: 'ssh'}],
+                online: true,
+                first_seen_at: 1,
+                last_seen_at: 1,
+                last_changed_at: 1,
+                change_type: 'unchanged',
+            }],
+        });
         jest.spyOn(ComputeClusterService, 'programs').mockImplementation(nodeId => Promise.resolve(
             nodeId === dlk05.node_id
                 ? dlkProgram('healthy', 'running')
@@ -1438,7 +1464,7 @@ describe('ControlCenterView', () => {
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         const list = screen.getByRole('complementary', {name: '机器列表'});
-        const installed = await within(list).findByRole('button', {name: '查看 AIPACK-05 节点信息'});
+        const installed = await within(list).findByRole('button', {name: /查看 AIPACK-05 节点信息/});
         expect(installed).toHaveClass('edge-device', 'tree-depth-0');
         expect(installed.querySelector('img')).toHaveAttribute('src', '/ico/jetson-agx-orin.png');
         expect(within(list).getAllByText('AIPACK-05')).toHaveLength(1);
@@ -1448,17 +1474,17 @@ describe('ControlCenterView', () => {
 
         fireEvent(window, new CustomEvent('opensight:edge-device-updated'));
         await waitFor(() => expect(lanAssets).toHaveBeenCalledTimes(2));
-        expect(within(list).getByRole('button', {name: '查看 AIPACK-05 节点信息'}))
+        expect(within(list).getByRole('button', {name: /查看 AIPACK-05 节点信息/}))
             .toBeInTheDocument();
 
         fireEvent.click(installed);
         expect(await screen.findByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
         fireEvent.click(within(list).getByRole('button', {name: '收起炉后作业区'}));
-        expect(within(list).queryByRole('button', {name: '查看 AIPACK-05 节点信息'}))
+        expect(within(list).queryByRole('button', {name: /查看 AIPACK-05 节点信息/}))
             .not.toBeInTheDocument();
         expect(screen.getByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
         fireEvent.click(within(list).getByRole('button', {name: '展开炉后作业区'}));
-        expect(within(list).getByRole('button', {name: '查看 AIPACK-05 节点信息'}))
+        expect(within(list).getByRole('button', {name: /查看 AIPACK-05 节点信息/}))
             .toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByLabelText('1 个相关设备')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '打开车间相机实时画面'}));

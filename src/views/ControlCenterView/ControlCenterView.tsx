@@ -96,6 +96,41 @@ const dlkProgramLabel = (tone: ProgramIndicatorTone, zh: boolean): string => ({
     unknown: zh ? 'DLK 程序状态未知' : 'DLK program status is unknown',
 })[tone];
 
+const dlkProgramStatus = (
+    node: ComputeClusterNode | undefined,
+    tones: Record<string, ProgramIndicatorTone>,
+    zh: boolean,
+) => {
+    if (!node || !DLK_NODE_NAMES.has(node.name.trim().toUpperCase())) return null;
+    const tone = tones[node.node_id] || 'unknown';
+    return {tone, label: dlkProgramLabel(tone, zh)};
+};
+
+const dlkProgramAriaLabel = (
+    node: ComputeClusterNode | undefined,
+    tones: Record<string, ProgramIndicatorTone>,
+    zh: boolean,
+    label: string,
+    fallback?: string,
+) => {
+    const status = dlkProgramStatus(node, tones, zh);
+    return status ? `${label} · ${status.label}` : fallback;
+};
+
+const dlkProgramIndicator = (
+    node: ComputeClusterNode | undefined,
+    tones: Record<string, ProgramIndicatorTone>,
+    zh: boolean,
+) => {
+    const status = dlkProgramStatus(node, tones, zh);
+    if (!status) return null;
+    return <span
+        className={`ControlStatusDot ControlMachineProgramStatus ${status.tone}`}
+        aria-hidden='true'
+        title={status.label}
+    />;
+};
+
 const toneLabel = (tone: Tone, zh: boolean): string => tone === 'healthy'
     ? zh ? '正常' : 'Normal'
     : zh ? '故障' : 'Fault';
@@ -1217,7 +1252,14 @@ export const ControlCenterView: React.FC<IProps> = ({
         let stateLabel = toneLabel(stateTone, zh);
         if (installedNode) {
             selected = installedNode.node_id === selectedNodeId && !cameraViewerId;
-            ariaLabel = zh ? `查看 ${label} 节点信息` : `View node details for ${label}`;
+            const nodeAriaLabel = zh ? `查看 ${label} 节点信息` : `View node details for ${label}`;
+            ariaLabel = dlkProgramAriaLabel(
+                installedNode,
+                dlkProgramTones,
+                zh,
+                nodeAriaLabel,
+                nodeAriaLabel,
+            );
             stateTone = machineTone(installedNode);
             stateLabel = computeNodeLabel(installedNode, zh);
         }
@@ -1241,7 +1283,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     draggable={false}
                 />
                 <span className='ControlMachineIdentity'>
-                    <strong>{label}</strong>
+                    <strong>{label}{dlkProgramIndicator(installedNode, dlkProgramTones, zh)}</strong>
                     <small>node · {device.device_model || 'SSH'} · {device.address}</small>
                 </span>
                 <span className={`ControlMachineState ${stateTone}`}>
@@ -1358,26 +1400,20 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 className={`ControlMachineItem ${
                                     !overviewBehindTool && node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''
                                 }`}
-                                aria-label={DLK_NODE_NAMES.has(node.name.trim().toUpperCase())
-                                    ? `${zh ? '查看' : 'View'} ${node.name} ${zh ? '节点信息' : 'node details'} · ${
-                                        dlkProgramLabel(dlkProgramTones[node.node_id] || 'unknown', zh)
-                                    }`
-                                    : undefined}
+                                aria-label={dlkProgramAriaLabel(
+                                    node,
+                                    dlkProgramTones,
+                                    zh,
+                                    `${zh ? '查看' : 'View'} ${node.name} ${
+                                        zh ? '节点信息' : 'node details'
+                                    }`,
+                                )}
                                 aria-pressed={!overviewBehindTool && node.node_id === selectedNodeId && !cameraViewerId}
                                 onClick={() => selectSidebarNode(node.node_id)}
                             >
                                 <MachinePlatformIcon node={node}/>
                                 <span className='ControlMachineIdentity'>
-                                    <strong>{node.name}{DLK_NODE_NAMES.has(node.name.trim().toUpperCase()) && <span
-                                        className={`ControlStatusDot ControlMachineProgramStatus ${
-                                            dlkProgramTones[node.node_id] || 'unknown'
-                                        }`}
-                                        aria-hidden='true'
-                                        title={dlkProgramLabel(
-                                            dlkProgramTones[node.node_id] || 'unknown',
-                                            zh,
-                                        )}
-                                    />}</strong>
+                                    <strong>{node.name}{dlkProgramIndicator(node, dlkProgramTones, zh)}</strong>
                                     <small>{node.role === 'main' ? 'main' : 'node'} · {zh
                                         ? '活跃于 '
                                         : 'Active '}{lastSeen(node.heartbeat_age_seconds, zh)}</small>
