@@ -370,9 +370,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             program_name: program.name,
         }))
     );
-    const endpointHost = node.network.lan_address
-        || node.network.addresses.find(address => address.includes('.'))
-        || node.network.addresses[0];
     const livePreview = endpointRows.find(endpoint =>
         endpoint.method === 'GET' && endpoint.path === '/stream.mjpeg'
     ) || endpointRows.find(endpoint =>
@@ -785,9 +782,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     endpoint.program_id,
                                     endpoint.path,
                                 );
-                                const originalUrl = endpointHost
-                                    ? `http://${endpointHost}${endpoint.path}`
-                                    : endpoint.path;
                                 return <tr key={endpoint.key}>
                                 <td><code>{endpoint.method}</code></td>
                                 <td className='ControlProgramEndpointAddress'>{endpoint.method === 'GET'
@@ -796,8 +790,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         href={url}
                                         target='_blank'
                                         rel='noreferrer'
-                                    ><code title={originalUrl}>{originalUrl}</code></a>
-                                    : <code title={originalUrl}>{originalUrl}</code>}</td>
+                                    ><code title={endpoint.path}>{endpoint.path}</code></a>
+                                    : <code title={endpoint.path}>{endpoint.path}</code>}</td>
                                 <td><span className='ControlProgramEndpointName'>
                                     <span className={`ControlStatusDot ${interfaceTone(endpoint.state)}`} aria-hidden='true'/>
                                     <span><strong>{endpoint.name}</strong><small>{endpoint.description}</small></span>
