@@ -474,10 +474,13 @@ describe('ControlCenterView', () => {
 
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        expect(await screen.findByRole('img', {name: 'DLK 程序运行正常'})).toHaveClass('healthy');
-        expect(screen.getByRole('img', {name: 'DLK 程序运行异常'})).toHaveClass('warning');
-        expect(screen.getByRole('img', {name: 'DLK 程序已停止或不可用'})).toHaveClass('offline');
-        expect(screen.queryAllByRole('img', {name: /DLK 程序/})).toHaveLength(3);
+        const healthy = await screen.findByRole('button', {name: /AIPACK-05.*DLK 程序运行正常/});
+        const warning = screen.getByRole('button', {name: /AIPACK-06.*DLK 程序运行异常/});
+        const offline = screen.getByRole('button', {name: /AIPACK-07.*DLK 程序已停止或不可用/});
+        expect(healthy.querySelector('.ControlMachineProgramStatus')).toHaveClass('healthy');
+        expect(warning.querySelector('.ControlMachineProgramStatus')).toHaveClass('warning');
+        expect(offline.querySelector('.ControlMachineProgramStatus')).toHaveClass('offline');
+        expect(screen.queryAllByLabelText(/DLK 程序/)).toHaveLength(3);
         expect(ComputeClusterService.programs).toHaveBeenCalledTimes(3);
         expect(ComputeClusterService.programs).not.toHaveBeenCalledWith(
             other.node_id,

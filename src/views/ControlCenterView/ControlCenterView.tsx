@@ -1358,6 +1358,11 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 className={`ControlMachineItem ${
                                     !overviewBehindTool && node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''
                                 }`}
+                                aria-label={DLK_NODE_NAMES.has(node.name.trim().toUpperCase())
+                                    ? `${zh ? '查看' : 'View'} ${node.name} ${zh ? '节点信息' : 'node details'} · ${
+                                        dlkProgramLabel(dlkProgramTones[node.node_id] || 'unknown', zh)
+                                    }`
+                                    : undefined}
                                 aria-pressed={!overviewBehindTool && node.node_id === selectedNodeId && !cameraViewerId}
                                 onClick={() => selectSidebarNode(node.node_id)}
                             >
@@ -1367,11 +1372,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                         className={`ControlStatusDot ControlMachineProgramStatus ${
                                             dlkProgramTones[node.node_id] || 'unknown'
                                         }`}
-                                        role='img'
-                                        aria-label={dlkProgramLabel(
-                                            dlkProgramTones[node.node_id] || 'unknown',
-                                            zh,
-                                        )}
+                                        aria-hidden='true'
                                         title={dlkProgramLabel(
                                             dlkProgramTones[node.node_id] || 'unknown',
                                             zh,
