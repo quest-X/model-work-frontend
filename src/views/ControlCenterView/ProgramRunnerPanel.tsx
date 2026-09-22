@@ -1011,6 +1011,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                             title={zh ? '下载原文件' : 'Download original file'}
                                         >
                                             <img src='/ico/download.png' alt=''/>
+                                            <span>{zh ? '下载' : 'Download'}</span>
                                         </a>
                                     </div>
                                 </div>

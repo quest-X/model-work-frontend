@@ -2298,16 +2298,22 @@ button.ControlServiceCard {
     right: 0;
     bottom: 0;
     display: flex;
-    width: 34px;
     height: 28px;
     align-items: center;
     justify-content: center;
+    gap: 5px;
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 2px;
     background: rgba(0, 0, 0, 0.16);
+    padding: 0 9px;
+    color: rgba(255, 255, 255, 0.74);
+    font-size: 9px;
+    text-decoration: none;
 
     &:hover,
     &:focus-visible { border-color: rgba(0, 154, 255, 0.72); }
+
+    span { margin: 0; color: inherit; font-size: inherit; }
 
     img {
       width: 14px;
