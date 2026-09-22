@@ -781,48 +781,53 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         <header className='ControlMonitorSearchHeader'>
                             <div>
                                 <h3>{zh ? '接口' : 'APIs'}</h3>
-                                <p>{zh ? '每 5 秒检查程序声明的安全只读接口' : 'Declared safe read-only APIs refresh every 5 seconds'}</p>
+                                <p>{zh ? '声明接口状态每 5 秒刷新' : 'Declared API status refreshes every 5 seconds'}</p>
                             </div>
-                            <span className='ControlProgramEndpointCount'>{endpointRows.length}</span>
+                            <span className='ControlProgramEndpointCount'>
+                                {endpointRows.length} {zh ? '个接口' : endpointRows.length === 1 ? 'API' : 'APIs'}
+                            </span>
                         </header>
                         {programsError && <p className='ControlProgramError' role='status'>
                             {programsError}
                         </p>}
                         {endpointRows.length > 0 ? <table>
                             <thead><tr>
-                                <th>{zh ? '程序' : 'Program'}</th>
-                                <th>{zh ? '方法' : 'Method'}</th>
-                                <th>{zh ? '路径' : 'Path'}</th>
-                                <th>{zh ? '功能' : 'Function'}</th>
+                                <th>{zh ? '提交方式' : 'Method'}</th>
+                                <th>{zh ? '完整地址' : 'Full URL'}</th>
+                                <th>{zh ? '用途' : 'Purpose'}</th>
                                 <th>{zh ? '状态' : 'Status'}</th>
-                                <th>{zh ? '响应' : 'Response'}</th>
-                                <th>{zh ? '延迟' : 'Latency'}</th>
                                 <th>{zh ? '最近检查' : 'Last checked'}</th>
                             </tr></thead>
-                            <tbody>{endpointRows.map(endpoint => <tr key={endpoint.key}>
-                                <td>{endpoint.program_name}</td>
+                            <tbody>{endpointRows.map(endpoint => {
+                                const url = ComputeClusterService.programInterfaceUrl(
+                                    node.node_id,
+                                    endpoint.program_id,
+                                    endpoint.path,
+                                );
+                                return <tr key={endpoint.key}>
                                 <td><code>{endpoint.method}</code></td>
-                                <td>{endpoint.method === 'GET'
+                                <td className='ControlProgramEndpointAddress'>{endpoint.method === 'GET'
                                     ? <a
                                         className='ControlProgramEndpointLink'
-                                        href={ComputeClusterService.programInterfaceUrl(
-                                            node.node_id,
-                                            endpoint.program_id,
-                                            endpoint.path,
-                                        )}
+                                        href={url}
                                         target='_blank'
                                         rel='noreferrer'
-                                    ><code>{endpoint.path}</code></a>
-                                    : <code>{endpoint.path}</code>}</td>
+                                    ><code>{url}</code></a>
+                                    : <code>{url}</code>}</td>
                                 <td><span className='ControlProgramEndpointName'>
                                     <span className={`ControlStatusDot ${interfaceTone(endpoint.state)}`} aria-hidden='true'/>
                                     <span><strong>{endpoint.name}</strong><small>{endpoint.description}</small></span>
                                 </span></td>
-                                <td>{interfaceStateLabel(endpoint.state, zh)}</td>
-                                <td>{endpoint.status_code === null ? '—' : `HTTP ${endpoint.status_code}`}</td>
-                                <td>{endpoint.latency_ms === null ? '—' : `${endpoint.latency_ms} ms`}</td>
+                                <td><span className='ControlProgramEndpointStatus'>
+                                    <strong>{interfaceStateLabel(endpoint.state, zh)}</strong>
+                                    <small>
+                                        {endpoint.status_code === null ? '—' : `HTTP ${endpoint.status_code}`}
+                                        {endpoint.latency_ms === null ? '' : ` · ${endpoint.latency_ms} ms`}
+                                    </small>
+                                </span></td>
                                 <td>{endpoint.checked_at === null ? '—' : dateTime(endpoint.checked_at, zh)}</td>
-                            </tr>)}</tbody>
+                            </tr>;
+                            })}</tbody>
                         </table> : unavailable(
                             programsError
                                 ? (zh ? '程序接口暂不可用' : 'Program APIs are unavailable')

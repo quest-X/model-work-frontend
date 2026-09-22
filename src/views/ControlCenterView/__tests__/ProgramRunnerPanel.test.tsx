@@ -313,26 +313,35 @@ describe('ProgramRunnerPanel', () => {
 
         fireEvent.click(within(dialog).getByRole('button', {name: '接口'}));
         const endpoints = await within(dialog).findByLabelText('程序接口');
-        expect(endpoints).toHaveTextContent('Vision OCR');
+        expect(within(endpoints).getAllByRole('columnheader').map(header => header.textContent))
+            .toEqual(['提交方式', '完整地址', '用途', '状态', '最近检查']);
+        expect(endpoints).toHaveTextContent('5 个接口');
         expect(endpoints).toHaveTextContent('GET');
-        expect(endpoints).toHaveTextContent('/health');
         expect(endpoints).toHaveTextContent('健康检查');
         expect(endpoints).toHaveTextContent('HTTP 200');
         expect(endpoints).toHaveTextContent('3.5 ms');
         expect(endpoints).toHaveTextContent('HTTP 503');
         expect(endpoints).toHaveTextContent('POST');
-        expect(endpoints).toHaveTextContent('/display');
         expect(endpoints).toHaveTextContent('未检查');
         expect(within(endpoints).queryByRole('img')).not.toBeInTheDocument();
-        expect(within(endpoints).getByRole('link', {name: '/health'})).toHaveAttribute(
-            'href',
-            expect.stringContaining(
-                '/runtime/programs/vision-ocr/interfaces?path=%2Fhealth',
-            ),
+        const healthUrl = ComputeClusterService.programInterfaceUrl(
+            node.node_id,
+            'vision-ocr',
+            '/health',
         );
-        expect(within(endpoints).getByRole('link', {name: '/health'}))
+        const displayUrl = ComputeClusterService.programInterfaceUrl(
+            node.node_id,
+            'vision-ocr',
+            '/display',
+        );
+        expect(endpoints).toHaveTextContent(displayUrl);
+        expect(within(endpoints).getByRole('link', {name: healthUrl})).toHaveAttribute(
+            'href',
+            healthUrl,
+        );
+        expect(within(endpoints).getByRole('link', {name: healthUrl}))
             .toHaveAttribute('target', '_blank');
-        expect(within(endpoints).queryByRole('link', {name: '/display'}))
+        expect(within(endpoints).queryByRole('link', {name: displayUrl}))
             .not.toBeInTheDocument();
         expect(endpoints).not.toHaveTextContent('节点服务');
         expect(endpoints).not.toHaveTextContent('任务执行器');
