@@ -1275,7 +1275,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     draggable={false}
                 />
                 <span className='ControlMachineIdentity'>
-                    <strong>{label}{dlkProgramIndicator(installedNode, dlkProgramTones, zh)}</strong>
+                    <strong>{dlkProgramIndicator(installedNode, dlkProgramTones, zh)}{label}</strong>
                     <small>node · {device.device_model || 'SSH'} · {device.address}</small>
                 </span>
                 <span className={`ControlMachineState ${stateTone}`}>
@@ -1405,7 +1405,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             >
                                 <MachinePlatformIcon node={node}/>
                                 <span className='ControlMachineIdentity'>
-                                    <strong>{node.name}{dlkProgramIndicator(node, dlkProgramTones, zh)}</strong>
+                                    <strong>{dlkProgramIndicator(node, dlkProgramTones, zh)}{node.name}</strong>
                                     <small>{node.role === 'main' ? 'main' : 'node'} · {zh
                                         ? '活跃于 '
                                         : 'Active '}{lastSeen(node.heartbeat_age_seconds, zh)}</small>
