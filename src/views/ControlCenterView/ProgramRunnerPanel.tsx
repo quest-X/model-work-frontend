@@ -720,7 +720,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         {endpointRows.length > 0 ? <table>
                             <thead><tr>
                                 <th>{zh ? '提交方式' : 'Method'}</th>
-                                <th>{zh ? '完整地址' : 'Full URL'}</th>
+                                <th>{zh ? '原始地址' : 'Original path'}</th>
                                 <th>{zh ? '用途' : 'Purpose'}</th>
                                 <th>{zh ? '状态' : 'Status'}</th>
                                 <th>{zh ? '最近检查' : 'Last checked'}</th>
@@ -739,8 +739,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         href={url}
                                         target='_blank'
                                         rel='noreferrer'
-                                    ><code>{url}</code></a>
-                                    : <code>{url}</code>}</td>
+                                    ><code title={endpoint.path}>{endpoint.path}</code></a>
+                                    : <code title={endpoint.path}>{endpoint.path}</code>}</td>
                                 <td><span className='ControlProgramEndpointName'>
                                     <span className={`ControlStatusDot ${interfaceTone(endpoint.state)}`} aria-hidden='true'/>
                                     <span><strong>{endpoint.name}</strong><small>{endpoint.description}</small></span>

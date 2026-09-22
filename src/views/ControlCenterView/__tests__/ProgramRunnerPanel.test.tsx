@@ -314,7 +314,7 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(dialog).getByRole('button', {name: '接口'}));
         const endpoints = await within(dialog).findByLabelText('程序接口');
         expect(within(endpoints).getAllByRole('columnheader').map(header => header.textContent))
-            .toEqual(['提交方式', '完整地址', '用途', '状态', '最近检查']);
+            .toEqual(['提交方式', '原始地址', '用途', '状态', '最近检查']);
         expect(endpoints).toHaveTextContent('5 个接口');
         expect(endpoints).toHaveTextContent('GET');
         expect(endpoints).toHaveTextContent('健康检查');
@@ -329,19 +329,14 @@ describe('ProgramRunnerPanel', () => {
             'vision-ocr',
             '/health',
         );
-        const displayUrl = ComputeClusterService.programInterfaceUrl(
-            node.node_id,
-            'vision-ocr',
-            '/display',
-        );
-        expect(endpoints).toHaveTextContent(displayUrl);
-        expect(within(endpoints).getByRole('link', {name: healthUrl})).toHaveAttribute(
+        expect(endpoints).toHaveTextContent('/display');
+        expect(within(endpoints).getByRole('link', {name: '/health'})).toHaveAttribute(
             'href',
             healthUrl,
         );
-        expect(within(endpoints).getByRole('link', {name: healthUrl}))
+        expect(within(endpoints).getByRole('link', {name: '/health'}))
             .toHaveAttribute('target', '_blank');
-        expect(within(endpoints).queryByRole('link', {name: displayUrl}))
+        expect(within(endpoints).queryByRole('link', {name: '/display'}))
             .not.toBeInTheDocument();
         expect(endpoints).not.toHaveTextContent('节点服务');
         expect(endpoints).not.toHaveTextContent('任务执行器');
