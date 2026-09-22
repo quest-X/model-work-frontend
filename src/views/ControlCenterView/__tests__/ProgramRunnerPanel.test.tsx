@@ -175,6 +175,15 @@ describe('ProgramRunnerPanel', () => {
                 }, {
                     method: 'GET',
                     path: '/rtsp',
+                    name: 'WebRTC 兼容入口',
+                    description: '跳转到 MediaMTX WebRTC',
+                    state: 'healthy',
+                    checked_at: 101,
+                    status_code: 200,
+                    latency_ms: 7.7,
+                }, {
+                    method: 'GET',
+                    path: '/stream.mjpeg',
                     name: '实时标注画面',
                     description: 'MJPEG 视频流',
                     state: 'healthy',
@@ -286,7 +295,7 @@ describe('ProgramRunnerPanel', () => {
             .toHaveAttribute(
                 'src',
                 expect.stringContaining(
-                    '/runtime/programs/vision-ocr/interfaces/stream?path=%2Frtsp',
+                    '/runtime/programs/vision-ocr/interfaces/stream?path=%2Fstream.mjpeg',
                 ),
             );
         expect(preview).toHaveTextContent('正在建立实时画面');

@@ -346,6 +346,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         }))
     );
     const livePreview = endpointRows.find(endpoint =>
+        endpoint.method === 'GET' && endpoint.path === '/stream.mjpeg'
+    ) || endpointRows.find(endpoint =>
         endpoint.method === 'GET' && endpoint.path === '/rtsp'
     );
     const previewUrl = livePreview
@@ -751,7 +753,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     </div>
                                     <div className='CameraPlayerMeta'>
                                         <span>{livePreview.name}</span>
-                                        <span>/rtsp</span>
+                                        <span>{livePreview.path}</span>
                                         <button type='button' onClick={reconnectPreview}>
                                             {zh ? '重新连接' : 'Reconnect'}
                                         </button>
@@ -765,7 +767,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         </div>}
                                         {previewState === 'error' && <div className='CameraPlayerNotice error'>
                                             <strong>{zh ? '实时画面连接失败' : 'Unable to open live stream'}</strong>
-                                            <span>{zh ? '请检查程序状态和 /rtsp 接口。' : 'Check the program and /rtsp API.'}</span>
+                                            <span>{zh
+                                                ? `请检查程序状态和 ${livePreview.path} 接口。`
+                                                : `Check the program and ${livePreview.path} API.`}</span>
                                             <button type='button' onClick={reconnectPreview}>
                                                 {zh ? '重试' : 'Retry'}
                                             </button>
