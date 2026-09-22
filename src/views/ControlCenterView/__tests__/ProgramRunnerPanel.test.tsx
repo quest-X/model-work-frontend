@@ -252,6 +252,14 @@ describe('ProgramRunnerPanel', () => {
                     content_type: 'application/x-ndjson',
                     size_bytes: 128,
                     modified_at: today - 3,
+                }, {
+                    artifact_id: 'e'.repeat(32),
+                    name: 'session.jsonl',
+                    relative_path: 'runs/20260918/017/internal/session.jsonl',
+                    kind: 'data',
+                    content_type: 'application/x-ndjson',
+                    size_bytes: 64,
+                    modified_at: today - 4,
                 }],
             }],
         });
@@ -351,6 +359,13 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
         expect(within(dialog).getByLabelText('筛选结果日期')).toHaveValue(todayValue);
         const artifacts = await within(dialog).findByLabelText('程序结果');
+        const resultFolder = within(artifacts).getByLabelText('结果文件夹 017');
+        expect(resultFolder.parentElement).toHaveAttribute('open');
+        expect(resultFolder.parentElement).toHaveTextContent('5 个文件');
+        fireEvent.click(resultFolder);
+        expect(resultFolder.parentElement).not.toHaveAttribute('open');
+        fireEvent.click(resultFolder);
+        expect(resultFolder.parentElement).toHaveAttribute('open');
         expect(artifacts).toHaveTextContent('017.mp4');
         expect(within(dialog).getByRole('status', {name: '在线 · 结果预览期间暂停状态刷新'}))
             .toBeInTheDocument();

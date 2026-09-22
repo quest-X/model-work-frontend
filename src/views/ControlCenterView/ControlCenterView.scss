@@ -2177,19 +2177,24 @@ button.ControlServiceCard {
     &[aria-current='page'] { border-color: rgba(0, 154, 255, 0.72); background: rgba(0, 154, 255, 0.1); }
   }
 
-  .ControlProgramArtifactGroup {
-    margin-bottom: 10px;
+  .ControlProgramArtifactFolder {
+    margin-bottom: 4px;
 
-    > header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 4px 10px;
+    > summary {
+      border: 1px solid transparent;
+      border-radius: 3px;
+      outline: 0;
+      padding: 8px 10px;
+      cursor: pointer;
     }
 
-    > header strong { color: rgba(255, 255, 255, 0.48); font-size: 9px; font-weight: 500; }
-    > header span { margin: 0; color: rgba(255, 255, 255, 0.28); font-size: 8px; }
-    > button { margin-bottom: 2px; }
+    > summary:hover,
+    > summary:focus-visible { border-color: rgba(0, 154, 255, 0.5); }
+    > summary strong { display: inline; margin-left: 4px; }
+    > summary span { display: inline; margin-left: 6px; }
+    > summary small { margin-left: 16px; }
+    > div { padding-left: 14px; }
+    > div > button { margin-bottom: 2px; }
   }
 
   strong,
@@ -2702,7 +2707,8 @@ button.ControlServiceCard {
   .ControlProgramLogs li small { grid-column: 2; }
   .ControlProgramArtifactWorkspace { display: block; overflow: auto; }
   .ControlProgramArtifactWorkspace > aside { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-right: 0; }
-  .ControlProgramArtifactWorkspace > aside button { flex: 0 0 230px; }
+  .ControlProgramArtifactWorkspace > aside > details { flex: 0 0 250px; }
+  .ControlProgramArtifactWorkspace > aside button { flex: none; }
   .ControlProgramArtifactPreview { min-height: 360px; padding-left: 0; }
   .ControlProgramArtifactFilters { max-width: 100%; justify-content: flex-start; }
   .ControlProgramArtifactFilters input[type='search'] { width: 150px; }

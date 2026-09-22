@@ -93,6 +93,11 @@ const bytes = (value: number): string => {
 };
 
 type ProgramArtifact = ComputeProgramSnapshot['programs'][number]['artifacts'][number];
+type ListedProgramArtifact = ProgramArtifact & {
+    selection_id: string;
+    program_id: string;
+    program_name: string;
+};
 
 const artifactCategory = (artifact: ProgramArtifact): Exclude<ResultCategory, 'all'> => {
     if (artifact.kind === 'video') return 'video';
@@ -110,6 +115,17 @@ const artifactCategoryLabel = (category: ResultCategory, zh: boolean): string =>
     telegram: zh ? '电文' : 'Telegrams',
     log: zh ? '日志' : 'Logs',
 }[category]);
+
+const artifactFolderPath = (relativePath: string): string => {
+    const parts = relativePath.split('/');
+    if (parts.length >= 4 && parts[0] === 'runs') return parts.slice(0, 3).join('/');
+    const separator = relativePath.lastIndexOf('/');
+    return separator < 0 ? '.' : relativePath.slice(0, separator);
+};
+
+const artifactFolderName = (path: string): string => path === '.'
+    ? path
+    : path.slice(path.lastIndexOf('/') + 1);
 
 const localDateKey = (timestamp: number): string => {
     const date = new Date(timestamp * 1000);
@@ -181,6 +197,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [artifactDate, setArtifactDate] = useState(todayDateKey);
     const [artifactCategoryFilter, setArtifactCategoryFilter] = useState<ResultCategory>('all');
     const [artifactQuery, setArtifactQuery] = useState('');
+    const [expandedArtifactFolders, setExpandedArtifactFolders] = useState<string[]>([]);
     const [loadedVideoId, setLoadedVideoId] = useState('');
     const [readyVideoId, setReadyVideoId] = useState('');
     const [videoPreviewProgress, setVideoPreviewProgress] = useState(0);
@@ -403,10 +420,34 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const selectedArtifact = filteredProgramArtifacts.find(artifact =>
         artifact.selection_id === selectedArtifactId
     ) || filteredProgramArtifacts[0] || null;
-    const artifactGroups = (['video', 'image', 'data', 'telegram', 'log'] as const).map(category => ({
-        category,
-        artifacts: filteredProgramArtifacts.filter(artifact => artifactCategory(artifact) === category),
-    }));
+    const artifactFolders = [...filteredProgramArtifacts.reduce((folders, artifact) => {
+        const path = artifactFolderPath(artifact.relative_path);
+        const key = `${artifact.program_id}:${path}`;
+        const folder = folders.get(key);
+        if (folder) {
+            folder.artifacts.push(artifact);
+            folder.size_bytes += artifact.size_bytes;
+            folder.modified_at = Math.max(folder.modified_at, artifact.modified_at);
+        } else {
+            folders.set(key, {
+                key,
+                path,
+                name: artifactFolderName(path),
+                size_bytes: artifact.size_bytes,
+                modified_at: artifact.modified_at,
+                artifacts: [artifact],
+            });
+        }
+        return folders;
+    }, new Map<string, {
+        key: string;
+        path: string;
+        name: string;
+        size_bytes: number;
+        modified_at: number;
+        artifacts: ListedProgramArtifact[];
+    }>()).values()].sort((left, right) => right.modified_at - left.modified_at);
+    const artifactFolderKeys = artifactFolders.map(folder => folder.key).join('\n');
     const selectedArtifactUrl = selectedArtifact
         ? ComputeClusterService.programArtifactUrl(
             node.node_id,
@@ -419,6 +460,16 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         selectedArtifact?.kind === 'data'
         && selectedArtifact.size_bytes > RESULT_PREVIEW_BYTES,
     );
+
+    useEffect(() => {
+        const available = new Set(artifactFolderKeys.split('\n').filter(Boolean));
+        setExpandedArtifactFolders(current => {
+            const retained = current.filter(key => available.has(key));
+            return retained.length > 0 || artifactFolders.length === 0
+                ? retained
+                : [artifactFolders[0].key];
+        });
+    }, [artifactFolderKeys]);
 
     useEffect(() => {
         setLoadedVideoId('');
@@ -817,7 +868,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         setArtifactCategoryFilter('all');
                                     }}
                                 >{zh ? '清除筛选' : 'Clear filters'}</button>}
-                                <span>{filteredProgramArtifacts.length}/{programArtifacts.length}</span>
+                                <span>{zh
+                                    ? `${artifactFolders.length} 个文件夹 · ${filteredProgramArtifacts.length} 个文件`
+                                    : `${artifactFolders.length} folders · ${filteredProgramArtifacts.length} files`}
+                                </span>
                             </div>
                         </header>
                         {programsError && programs && <div className='ControlRefreshWarning' role='status'>
@@ -831,27 +885,37 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             : programArtifacts.length > 0 && selectedArtifact
                                 ? <div className='ControlProgramArtifactWorkspace'>
                                     <aside aria-label={zh ? '结果列表' : 'Result list'}>
-                                        {artifactGroups.map(group => group.artifacts.length > 0 && <section
-                                            className='ControlProgramArtifactGroup'
-                                            key={group.category}
+                                        {artifactFolders.map(folder => <details
+                                            className='ControlProgramArtifactFolder'
+                                            key={folder.key}
+                                            open={expandedArtifactFolders.includes(folder.key)}
+                                            onToggle={event => {
+                                                const open = event.currentTarget.open;
+                                                setExpandedArtifactFolders(current => open
+                                                    ? [...new Set([...current, folder.key])]
+                                                    : current.filter(key => key !== folder.key));
+                                            }}
                                         >
-                                            <header>
-                                                <strong>{artifactCategoryLabel(group.category, zh)}</strong>
-                                                <span>{group.artifacts.length}</span>
-                                            </header>
-                                            {group.artifacts.map(artifact => <button
-                                                type='button'
-                                                key={`${artifact.program_id}-${artifact.artifact_id}`}
-                                                aria-current={artifact.selection_id === selectedArtifact.selection_id
-                                                    ? 'page'
-                                                    : undefined}
-                                                onClick={() => setSelectedArtifactId(artifact.selection_id)}
-                                            >
-                                                <strong>{artifact.name}</strong>
-                                                <span>{artifact.program_name} · {bytes(artifact.size_bytes)}</span>
-                                                <small>{dateTime(artifact.modified_at, zh)}</small>
-                                            </button>)}
-                                        </section>)}
+                                            <summary aria-label={`${zh ? '结果文件夹' : 'Result folder'} ${folder.name}`}>
+                                                <strong>{folder.name}</strong>
+                                                <span>{folder.artifacts.length} {zh ? '个文件' : 'files'} · {bytes(folder.size_bytes)}</span>
+                                                <small>{folder.path}</small>
+                                            </summary>
+                                            <div>
+                                                {folder.artifacts.map(artifact => <button
+                                                    type='button'
+                                                    key={`${artifact.program_id}-${artifact.artifact_id}`}
+                                                    aria-current={artifact.selection_id === selectedArtifact.selection_id
+                                                        ? 'page'
+                                                        : undefined}
+                                                    onClick={() => setSelectedArtifactId(artifact.selection_id)}
+                                                >
+                                                    <strong>{artifact.name}</strong>
+                                                    <span>{artifactCategoryLabel(artifactCategory(artifact), zh)} · {bytes(artifact.size_bytes)}</span>
+                                                    <small>{dateTime(artifact.modified_at, zh)}</small>
+                                                </button>)}
+                                            </div>
+                                        </details>)}
                                     </aside>
                                     <div className='ControlProgramArtifactPreview'>
                                         <header>
