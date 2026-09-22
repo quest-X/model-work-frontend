@@ -1003,6 +1003,15 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                         </span>}
                                                     </footer>
                                                 </div>}
+                                        <a
+                                            className='ControlProgramArtifactDownload'
+                                            href={selectedArtifactUrl}
+                                            download={selectedArtifact.name}
+                                            aria-label={zh ? '下载原文件' : 'Download original file'}
+                                            title={zh ? '下载原文件' : 'Download original file'}
+                                        >
+                                            <img src='/ico/download.png' alt=''/>
+                                        </a>
                                     </div>
                                 </div>
                                 : unavailable(
