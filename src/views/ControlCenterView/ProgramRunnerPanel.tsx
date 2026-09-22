@@ -1,5 +1,4 @@
 import React, {useEffect, useState} from 'react';
-import {Language} from '../../data/LanguageConfig';
 import {
     ComputeClusterNode,
     ComputeClusterService,
@@ -8,8 +7,7 @@ import {
     ComputeRuntimeService,
     ComputeRuntimeSnapshot,
 } from '../../services/ComputeClusterService';
-import CameraTimeline from '../EditorView/CameraTimeline/CameraTimeline';
-import '../EditorView/CameraPlayer/CameraPlayer.scss';
+import {ProgramLivePreview} from './ProgramLivePreview';
 
 type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
@@ -194,9 +192,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [refreshProgress, setRefreshProgress] = useState(0);
-    const [previewNonce, setPreviewNonce] = useState(Date.now());
-    const [previewState, setPreviewState] = useState<'loading' | 'playing' | 'error'>('loading');
-    const [previewNow, setPreviewNow] = useState(() => new Date());
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
     const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
     const runtimeVisible = runtimeCapable || snapshot !== null;
@@ -239,8 +234,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setResultPreviewError('');
         setResultPreviewLoading(false);
         setRefreshProgress(0);
-        setPreviewState('loading');
-        setPreviewNonce(Date.now());
     }, [node.node_id]);
 
     useEffect(() => {
@@ -365,25 +358,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     ) || endpointRows.find(endpoint =>
         endpoint.method === 'GET' && endpoint.path === '/rtsp'
     );
-    const previewUrl = livePreview
-        ? `${ComputeClusterService.programInterfaceStreamUrl(
-            node.node_id,
-            livePreview.program_id,
-            livePreview.path,
-        )}&v=${previewNonce}`
-        : '';
-    const reconnectPreview = () => {
-        setPreviewState('loading');
-        setPreviewNonce(previous => previous + 1);
-    };
-
-    useEffect(() => {
-        if (view !== 'preview') return undefined;
-        const updateNow = () => setPreviewNow(new Date());
-        updateNow();
-        const timer = window.setInterval(updateNow, 1000);
-        return () => window.clearInterval(timer);
-    }, [view]);
     const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
         view === 'telegrams'
             ? isTelegramLog(event.message)
@@ -704,61 +678,14 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             : (zh ? '节点恢复在线后才能读取实时画面。' : 'The node must return online before the live stream can be read.'),
                     )
                     : livePreview
-                        ? <section className='ControlProgramPreview' aria-label={zh ? '程序预览' : 'Program preview'}>
-                            <div className='ControlProgramLivePreview CameraPlayer'>
-                                <div className='CameraPlayerHeader'>
-                                    <div className='CameraPlayerIdentity'>
-                                        <span className={`CameraLiveDot ${previewState}`}/>
-                                        <strong>{livePreview.program_name}</strong>
-                                        <span className='CameraLiveBadge'>
-                                            {previewState === 'playing'
-                                                ? 'LIVE'
-                                                : previewState === 'error'
-                                                    ? (zh ? '连接失败' : 'FAILED')
-                                                    : (zh ? '连接中' : 'CONNECTING')}
-                                        </span>
-                                    </div>
-                                    <div className='CameraPlayerMeta'>
-                                        <span>{livePreview.name}</span>
-                                        <span>{livePreview.path}</span>
-                                        <button type='button' onClick={reconnectPreview}>
-                                            {zh ? '重新连接' : 'Reconnect'}
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className='CameraPlayerStage'>
-                                    <div className='CameraComparePane effect'>
-                                        {previewState === 'loading' && <div className='CameraPlayerNotice'>
-                                            <span className='CameraPlayerSpinner'/>
-                                            {zh ? '正在建立实时画面…' : 'Opening live stream…'}
-                                        </div>}
-                                        {previewState === 'error' && <div className='CameraPlayerNotice error'>
-                                            <strong>{zh ? '实时画面连接失败' : 'Unable to open live stream'}</strong>
-                                            <span>{zh
-                                                ? `请检查程序状态和 ${livePreview.path} 接口。`
-                                                : `Check the program and ${livePreview.path} API.`}</span>
-                                            <button type='button' onClick={reconnectPreview}>
-                                                {zh ? '重试' : 'Retry'}
-                                            </button>
-                                        </div>}
-                                        <img
-                                            key={previewNonce}
-                                            src={previewUrl}
-                                            alt={zh
-                                                ? `${livePreview.program_name} 现场实时画面`
-                                                : `${livePreview.program_name} live site preview`}
-                                            onLoad={() => setPreviewState('playing')}
-                                            onError={() => setPreviewState('error')}
-                                            draggable={false}
-                                        />
-                                    </div>
-                                </div>
-                                <CameraTimeline
-                                    language={zh ? Language.CHINESE : Language.ENGLISH}
-                                    dayTime={previewNow}
-                                />
-                            </div>
-                        </section>
+                        ? <ProgramLivePreview
+                            key={`${node.node_id}-${livePreview.program_id}`}
+                            nodeId={node.node_id}
+                            programId={livePreview.program_id}
+                            name={livePreview.program_name}
+                            path={livePreview.path}
+                            zh={zh}
+                        />
                         : unavailable(
                             programsError
                                 ? (zh ? '实时预览暂不可用' : 'Live preview is unavailable')

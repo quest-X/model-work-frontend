@@ -1,0 +1,38 @@
+.ControlProgramLivePreview {
+  .CameraPlayerMeta select {
+    max-width: 130px;
+    padding: 5px 8px;
+    color: #eee;
+    background: #252525;
+    border: 1px solid #555;
+    border-radius: 4px;
+  }
+
+  .CameraComparePane > video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .ProgramExternalStream {
+    width: 100%;
+    padding: 16px;
+    box-sizing: border-box;
+  }
+
+  .ProgramExternalAddress {
+    display: flex;
+    gap: 8px;
+    width: min(100%, 580px);
+  }
+
+  .ProgramExternalAddress input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px;
+    color: #eee;
+    background: #181818;
+    border: 1px solid #555;
+  }
+}
