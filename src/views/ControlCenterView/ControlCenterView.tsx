@@ -16,6 +16,7 @@ import {
     ComputeManagedDevice,
     ComputeResourceGraph,
     ComputeTask,
+    ComputeProgramSnapshot,
     ComputeRuntimeInventory,
     ComputeTerminalTarget,
     ComputeClusterService,
@@ -68,6 +69,32 @@ interface IProps {
 }
 
 type Tone = 'healthy' | 'warning' | 'offline';
+type ProgramIndicatorTone = Tone | 'unknown';
+
+const DLK_NODE_NAMES = new Set(['AIPACK-05', 'AIPACK-06', 'AIPACK-07']);
+
+const dlkProgramTone = (snapshot: ComputeProgramSnapshot): ProgramIndicatorTone => {
+    const program = snapshot.programs.find(item => /dlk/i.test(`${item.program_id} ${item.name}`));
+    if (!program) return 'offline';
+    if (
+        program.state === 'healthy'
+        && program.service.state === 'running'
+        && program.health.state === 'healthy'
+    ) return 'healthy';
+    if (
+        program.service.state === 'running'
+        && program.state !== 'unavailable'
+        && program.health.state !== 'unavailable'
+    ) return 'warning';
+    return 'offline';
+};
+
+const dlkProgramLabel = (tone: ProgramIndicatorTone, zh: boolean): string => ({
+    healthy: zh ? 'DLK 程序运行正常' : 'DLK program is healthy',
+    warning: zh ? 'DLK 程序运行异常' : 'DLK program is degraded',
+    offline: zh ? 'DLK 程序已停止或不可用' : 'DLK program is stopped or unavailable',
+    unknown: zh ? 'DLK 程序状态未知' : 'DLK program status is unknown',
+})[tone];
 
 const toneLabel = (tone: Tone, zh: boolean): string => tone === 'healthy'
     ? zh ? '正常' : 'Normal'
@@ -399,6 +426,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [error, setError] = useState('');
     const [graphError, setGraphError] = useState('');
     const [runtimeInventory, setRuntimeInventory] = useState<ComputeRuntimeInventory | null>(null);
+    const [dlkProgramTones, setDlkProgramTones] = useState<Record<string, ProgramIndicatorTone>>({});
     const [runtimeInventoryError, setRuntimeInventoryError] = useState('');
     const [dismissedRefreshWarningKey, setDismissedRefreshWarningKey] = useState('');
     const [inspectedServiceId, setInspectedServiceId] = useState('');
@@ -582,6 +610,37 @@ export const ControlCenterView: React.FC<IProps> = ({
             window.clearInterval(timer);
         };
     }, [refresh]);
+
+    useEffect(() => {
+        const targets = nodes.filter(node => DLK_NODE_NAMES.has(node.name.trim().toUpperCase()));
+        if (targets.length === 0) return undefined;
+        const controller = new AbortController();
+        let inFlight = false;
+        const load = async () => {
+            if (inFlight) return;
+            inFlight = true;
+            const entries = await Promise.all(targets.map(async node => {
+                if (!node.online) return [node.node_id, 'offline'] as const;
+                if (!node.capabilities.includes('runtime.programs.read.v1')) {
+                    return [node.node_id, 'unknown'] as const;
+                }
+                try {
+                    const snapshot = await ComputeClusterService.programs(node.node_id, controller.signal);
+                    return [node.node_id, dlkProgramTone(snapshot)] as const;
+                } catch {
+                    return [node.node_id, 'unknown'] as const;
+                }
+            }));
+            if (!controller.signal.aborted) setDlkProgramTones(Object.fromEntries(entries));
+            inFlight = false;
+        };
+        void load();
+        const timer = window.setInterval(() => void load(), 5000);
+        return () => {
+            controller.abort();
+            window.clearInterval(timer);
+        };
+    }, [nodes]);
 
     useEffect(() => {
         if (workspace !== 'groups') return undefined;
@@ -1304,7 +1363,20 @@ export const ControlCenterView: React.FC<IProps> = ({
                             >
                                 <MachinePlatformIcon node={node}/>
                                 <span className='ControlMachineIdentity'>
-                                    <strong>{node.name}</strong>
+                                    <strong>{node.name}{DLK_NODE_NAMES.has(node.name.trim().toUpperCase()) && <span
+                                        className={`ControlStatusDot ControlMachineProgramStatus ${
+                                            dlkProgramTones[node.node_id] || 'unknown'
+                                        }`}
+                                        role='img'
+                                        aria-label={dlkProgramLabel(
+                                            dlkProgramTones[node.node_id] || 'unknown',
+                                            zh,
+                                        )}
+                                        title={dlkProgramLabel(
+                                            dlkProgramTones[node.node_id] || 'unknown',
+                                            zh,
+                                        )}
+                                    />}</strong>
                                     <small>{node.role === 'main' ? 'main' : 'node'} · {zh
                                         ? '活跃于 '
                                         : 'Active '}{lastSeen(node.heartbeat_age_seconds, zh)}</small>

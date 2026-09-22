@@ -7,6 +7,7 @@ import {
     ComputeClusterService,
     ComputeGroupDetail,
     ComputeGroupResources,
+    ComputeProgramSnapshot,
     ComputeResourceGraph,
 } from '../../../services/ComputeClusterService';
 import {AgentChatService} from '../../../services/AgentChatService';
@@ -101,6 +102,30 @@ const runtimeNode = (name: string, online = true): ComputeClusterNode => {
     const value = node(name, online);
     return {...value, capabilities: [...value.capabilities, 'runtime.read.v1', 'runtime.inventory.v1']};
 };
+
+const dlkProgram = (
+    state: 'healthy' | 'degraded' | 'unavailable',
+    service: 'running' | 'stopped',
+): ComputeProgramSnapshot => ({
+    schema_version: 'runtime.programs.v1',
+    captured_at: 1,
+    invalid_manifests: 0,
+    programs: [{
+        program_id: 'dlk-overflow',
+        name: 'DLK Overflow',
+        version: '1.0.0',
+        root: '/opt/dlk-overflow',
+        environment: '/opt/dlk-overflow/.venv',
+        mode: 'production',
+        encryption: 'plain',
+        state,
+        service: {name: 'dlk-overflow.service', state: service, pid: 1, uptime_seconds: 60},
+        health: {state, checked_at: 1, status_code: state === 'healthy' ? 200 : 503, latency_ms: 1},
+        interfaces: [],
+        events: [],
+        artifacts: [],
+    }],
+});
 
 const graph = (clusterNode: ComputeClusterNode): ComputeResourceGraph => ({
     schema_version: 'resource-knowledge-graph.v3',
@@ -428,6 +453,36 @@ describe('ControlCenterView', () => {
         }
         fireEvent.click(within(machines).getByRole('button', {name: /baosight-02/}));
         expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+    });
+
+    it('shows Program Runner status lights for DLK nodes only', async () => {
+        const dlk05 = runtimeNode('AIPACK-05');
+        const dlk06 = runtimeNode('AIPACK-06');
+        const dlk07 = runtimeNode('AIPACK-07');
+        const other = runtimeNode('AIPACK-08');
+        for (const machine of [dlk05, dlk06, dlk07, other]) {
+            machine.capabilities.push('runtime.programs.read.v1');
+        }
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([dlk05, dlk06, dlk07, other]);
+        jest.spyOn(ComputeClusterService, 'programs').mockImplementation(nodeId => Promise.resolve(
+            nodeId === dlk05.node_id
+                ? dlkProgram('healthy', 'running')
+                : nodeId === dlk06.node_id
+                    ? dlkProgram('degraded', 'running')
+                    : dlkProgram('unavailable', 'stopped'),
+        ));
+
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        expect(await screen.findByRole('img', {name: 'DLK 程序运行正常'})).toHaveClass('healthy');
+        expect(screen.getByRole('img', {name: 'DLK 程序运行异常'})).toHaveClass('warning');
+        expect(screen.getByRole('img', {name: 'DLK 程序已停止或不可用'})).toHaveClass('offline');
+        expect(screen.queryAllByRole('img', {name: /DLK 程序/})).toHaveLength(3);
+        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(3);
+        expect(ComputeClusterService.programs).not.toHaveBeenCalledWith(
+            other.node_id,
+            expect.any(AbortSignal),
+        );
     });
 
     it('uses the worst state when one explicit control path fails', async () => {
