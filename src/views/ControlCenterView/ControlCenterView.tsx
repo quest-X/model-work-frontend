@@ -71,8 +71,9 @@ interface IProps {
 type Tone = 'healthy' | 'warning' | 'offline';
 type ProgramIndicatorTone = Tone | 'unknown';
 
-const programTone = (snapshot: ComputeProgramSnapshot): ProgramIndicatorTone => {
-    if (!snapshot.programs.length || snapshot.programs.some(program => program.state === 'unavailable')) {
+const programTone = (snapshot: ComputeProgramSnapshot): ProgramIndicatorTone | null => {
+    if (!snapshot.programs.length) return null;
+    if (snapshot.programs.some(program => program.state === 'unavailable')) {
         return 'offline';
     }
     if (snapshot.invalid_manifests || snapshot.programs.some(program => program.state === 'degraded')) {
@@ -94,7 +95,8 @@ const programStatus = (
     zh: boolean,
 ) => {
     if (!node) return null;
-    const tone = tones[node.node_id] || 'unknown';
+    const tone = tones[node.node_id];
+    if (!tone) return null;
     return {tone, label: programLabel(tone, zh)};
 };
 
@@ -647,9 +649,9 @@ export const ControlCenterView: React.FC<IProps> = ({
             if (inFlight) return;
             inFlight = true;
             const entries = await Promise.all(targets.map(async node => {
-                if (!node.online) return [node.node_id, 'offline'] as const;
+                if (!node.online) return [node.node_id, null] as const;
                 if (!node.capabilities.includes('runtime.programs.read.v1')) {
-                    return [node.node_id, 'unknown'] as const;
+                    return [node.node_id, null] as const;
                 }
                 try {
                     const snapshot = await ComputeClusterService.programs(node.node_id, controller.signal);
@@ -658,7 +660,11 @@ export const ControlCenterView: React.FC<IProps> = ({
                     return [node.node_id, 'unknown'] as const;
                 }
             }));
-            if (!controller.signal.aborted) setProgramTones(Object.fromEntries(entries));
+            if (!controller.signal.aborted) {
+                setProgramTones(Object.fromEntries(entries.filter(
+                    (entry): entry is readonly [string, ProgramIndicatorTone] => entry[1] !== null,
+                )));
+            }
             inFlight = false;
         };
         void load();
@@ -927,7 +933,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 : workspace === 'performance-mode'
                     ? performanceModeTone
                 : selectedNode
-                    ? programTones[selectedNode.node_id] || 'unknown'
+                    ? programTones[selectedNode.node_id] || null
                     : overviewNodes.length ? overviewTone : null;
     const refreshWarningKey = error ? `nodes:${error}` : graphError ? `graph:${graphError}` : '';
 

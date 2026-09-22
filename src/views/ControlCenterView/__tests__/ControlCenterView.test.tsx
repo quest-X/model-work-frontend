@@ -457,16 +457,17 @@ describe('ControlCenterView', () => {
         expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
     });
 
-    it('shows Program Runner status lights for every compute node', async () => {
+    it('shows Program Runner status lights only for nodes with mounted programs', async () => {
         const dlk05 = runtimeNode('AIPACK-05');
         const dlk06 = runtimeNode('AIPACK-06');
         const dlk07 = runtimeNode('AIPACK-07');
         const other = runtimeNode('AIPACK-08');
-        for (const machine of [dlk05, dlk06, dlk07, other]) {
+        const empty = runtimeNode('AIPACK-09');
+        for (const machine of [dlk05, dlk06, dlk07, other, empty]) {
             machine.capabilities.push('runtime.programs.read.v1');
         }
         dlk07.network.lan_address = '10.168.10.26';
-        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([dlk05, dlk06, dlk07, other]);
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([dlk05, dlk06, dlk07, other, empty]);
         jest.mocked(ComputeClusterService.lanAssets).mockResolvedValue({
             version: 1,
             group_id: 'group-1',
@@ -499,7 +500,9 @@ describe('ControlCenterView', () => {
                     ? programSnapshot('degraded', 'running')
                     : nodeId === dlk07.node_id
                         ? programSnapshot('unavailable', 'stopped')
-                        : programSnapshot('healthy', 'running', 'vision-ocr', 'Vision OCR'),
+                        : nodeId === other.node_id
+                            ? programSnapshot('healthy', 'running', 'vision-ocr', 'Vision OCR')
+                            : {...programSnapshot('healthy', 'running'), programs: []},
         ));
 
         render(<ControlCenterView language={Language.CHINESE}/>);
@@ -512,9 +515,14 @@ describe('ControlCenterView', () => {
         expect(warning.querySelector('.ControlMachineProgramStatus')).toHaveClass('warning');
         expect(offline.querySelector('.ControlMachineProgramStatus')).toHaveClass('offline');
         expect(generic.querySelector('.ControlMachineProgramStatus')).toHaveClass('healthy');
-        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(4);
+        const machines = screen.getByRole('complementary', {name: '机器列表'});
+        const noProgram = within(machines).getByText('AIPACK-09').closest('button') as HTMLElement;
+        expect(noProgram.querySelector('.ControlMachineProgramStatus')).not.toBeInTheDocument();
+        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(5);
         fireEvent.click(warning);
         expect(document.querySelector('.ControlToolbarGroup > .ControlStatusDot')).toHaveClass('warning');
+        fireEvent.click(noProgram);
+        expect(document.querySelector('.ControlToolbarGroup > .ControlStatusDot')).not.toBeInTheDocument();
     });
 
     it('uses the worst state when one explicit control path fails', async () => {
