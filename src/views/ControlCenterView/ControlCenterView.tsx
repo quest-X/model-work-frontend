@@ -71,50 +71,50 @@ interface IProps {
 type Tone = 'healthy' | 'warning' | 'offline';
 type ProgramIndicatorTone = Tone | 'unknown';
 
-const DLK_NODE_NAMES = new Set(['AIPACK-05', 'AIPACK-06', 'AIPACK-07']);
-
-const dlkProgramTone = (snapshot: ComputeProgramSnapshot): ProgramIndicatorTone => {
-    const program = snapshot.programs.find(item => /dlk/i.test(`${item.program_id} ${item.name}`));
-    if (!program) return 'offline';
-    return program.state === 'healthy'
-        ? 'healthy'
-        : program.state === 'unavailable' ? 'offline' : 'warning';
+const programTone = (snapshot: ComputeProgramSnapshot): ProgramIndicatorTone => {
+    if (!snapshot.programs.length || snapshot.programs.some(program => program.state === 'unavailable')) {
+        return 'offline';
+    }
+    if (snapshot.invalid_manifests || snapshot.programs.some(program => program.state === 'degraded')) {
+        return 'warning';
+    }
+    return snapshot.programs.some(program => program.state === 'unknown') ? 'unknown' : 'healthy';
 };
 
-const dlkProgramLabel = (tone: ProgramIndicatorTone, zh: boolean): string => ({
-    healthy: zh ? 'DLK 程序运行正常' : 'DLK program is healthy',
-    warning: zh ? 'DLK 程序运行异常' : 'DLK program is degraded',
-    offline: zh ? 'DLK 程序已停止或不可用' : 'DLK program is stopped or unavailable',
-    unknown: zh ? 'DLK 程序状态未知' : 'DLK program status is unknown',
+const programLabel = (tone: ProgramIndicatorTone, zh: boolean): string => ({
+    healthy: zh ? '程序运行正常' : 'Programs are healthy',
+    warning: zh ? '程序运行异常' : 'Programs are degraded',
+    offline: zh ? '程序已停止或不可用' : 'Programs are stopped or unavailable',
+    unknown: zh ? '程序状态未知' : 'Program status is unknown',
 })[tone];
 
-const dlkProgramStatus = (
+const programStatus = (
     node: ComputeClusterNode | undefined,
     tones: Record<string, ProgramIndicatorTone>,
     zh: boolean,
 ) => {
-    if (!node || !DLK_NODE_NAMES.has(node.name.trim().toUpperCase())) return null;
+    if (!node) return null;
     const tone = tones[node.node_id] || 'unknown';
-    return {tone, label: dlkProgramLabel(tone, zh)};
+    return {tone, label: programLabel(tone, zh)};
 };
 
-const dlkProgramAriaLabel = (
+const programAriaLabel = (
     node: ComputeClusterNode | undefined,
     tones: Record<string, ProgramIndicatorTone>,
     zh: boolean,
     label: string,
     fallback?: string,
 ) => {
-    const status = dlkProgramStatus(node, tones, zh);
+    const status = programStatus(node, tones, zh);
     return status ? `${label} · ${status.label}` : fallback;
 };
 
-const dlkProgramIndicator = (
+const programIndicator = (
     node: ComputeClusterNode | undefined,
     tones: Record<string, ProgramIndicatorTone>,
     zh: boolean,
 ) => {
-    const status = dlkProgramStatus(node, tones, zh);
+    const status = programStatus(node, tones, zh);
     if (!status) return null;
     return <span
         className={`ControlStatusDot ControlMachineProgramStatus ${status.tone}`}
@@ -453,7 +453,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [error, setError] = useState('');
     const [graphError, setGraphError] = useState('');
     const [runtimeInventory, setRuntimeInventory] = useState<ComputeRuntimeInventory | null>(null);
-    const [dlkProgramTones, setDlkProgramTones] = useState<Record<string, ProgramIndicatorTone>>({});
+    const [programTones, setProgramTones] = useState<Record<string, ProgramIndicatorTone>>({});
     const [runtimeInventoryError, setRuntimeInventoryError] = useState('');
     const [dismissedRefreshWarningKey, setDismissedRefreshWarningKey] = useState('');
     const [inspectedServiceId, setInspectedServiceId] = useState('');
@@ -639,7 +639,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [refresh]);
 
     useEffect(() => {
-        const targets = nodes.filter(node => DLK_NODE_NAMES.has(node.name.trim().toUpperCase()));
+        const targets = nodes;
         if (targets.length === 0) return undefined;
         const controller = new AbortController();
         let inFlight = false;
@@ -653,16 +653,16 @@ export const ControlCenterView: React.FC<IProps> = ({
                 }
                 try {
                     const snapshot = await ComputeClusterService.programs(node.node_id, controller.signal);
-                    return [node.node_id, dlkProgramTone(snapshot)] as const;
+                    return [node.node_id, programTone(snapshot)] as const;
                 } catch {
                     return [node.node_id, 'unknown'] as const;
                 }
             }));
-            if (!controller.signal.aborted) setDlkProgramTones(Object.fromEntries(entries));
+            if (!controller.signal.aborted) setProgramTones(Object.fromEntries(entries));
             inFlight = false;
         };
         void load();
-        const timer = window.setInterval(() => void load(), 5000);
+        const timer = window.setInterval(() => void load(), 15000);
         return () => {
             controller.abort();
             window.clearInterval(timer);
@@ -914,7 +914,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         node.online && node.capabilities.includes('runtime.performance.mode.read.v1')
     );
     const performanceModeTone: Tone = performanceModeAvailable ? 'healthy' : 'warning';
-    const toolbarTone: Tone | null = workspace === 'groups'
+    const toolbarTone: ProgramIndicatorTone | null = workspace === 'groups'
         ? visibleGroups.length ? currentGroupTone : null
         : workspace === 'network'
             ? (error ? 'offline' : 'healthy')
@@ -927,7 +927,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 : workspace === 'performance-mode'
                     ? performanceModeTone
                 : selectedNode
-                    ? machineTone(selectedNode)
+                    ? programTones[selectedNode.node_id] || 'unknown'
                     : overviewNodes.length ? overviewTone : null;
     const refreshWarningKey = error ? `nodes:${error}` : graphError ? `graph:${graphError}` : '';
 
@@ -1245,9 +1245,9 @@ export const ControlCenterView: React.FC<IProps> = ({
         if (installedNode) {
             selected = installedNode.node_id === selectedNodeId && !cameraViewerId;
             const nodeAriaLabel = zh ? `查看 ${label} 节点信息` : `View node details for ${label}`;
-            ariaLabel = dlkProgramAriaLabel(
+            ariaLabel = programAriaLabel(
                 installedNode,
-                dlkProgramTones,
+                programTones,
                 zh,
                 nodeAriaLabel,
                 nodeAriaLabel,
@@ -1275,7 +1275,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     draggable={false}
                 />
                 <span className='ControlMachineIdentity'>
-                    <strong>{label}{dlkProgramIndicator(installedNode, dlkProgramTones, zh)}</strong>
+                    <strong>{label}{programIndicator(installedNode, programTones, zh)}</strong>
                     <small>node · {device.device_model || 'SSH'} · {device.address}</small>
                 </span>
                 <span className={`ControlMachineState ${stateTone}`}>
@@ -1392,9 +1392,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 className={`ControlMachineItem ${
                                     !overviewBehindTool && node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''
                                 }`}
-                                aria-label={dlkProgramAriaLabel(
+                                aria-label={programAriaLabel(
                                     node,
-                                    dlkProgramTones,
+                                    programTones,
                                     zh,
                                     `${zh ? '查看' : 'View'} ${node.name} ${
                                         zh ? '节点信息' : 'node details'
@@ -1405,7 +1405,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             >
                                 <MachinePlatformIcon node={node}/>
                                 <span className='ControlMachineIdentity'>
-                                    <strong>{node.name}{dlkProgramIndicator(node, dlkProgramTones, zh)}</strong>
+                                    <strong>{node.name}{programIndicator(node, programTones, zh)}</strong>
                                     <small>{node.role === 'main' ? 'main' : 'node'} · {zh
                                         ? '活跃于 '
                                         : 'Active '}{lastSeen(node.heartbeat_age_seconds, zh)}</small>

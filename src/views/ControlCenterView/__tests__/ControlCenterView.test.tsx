@@ -103,16 +103,18 @@ const runtimeNode = (name: string, online = true): ComputeClusterNode => {
     return {...value, capabilities: [...value.capabilities, 'runtime.read.v1', 'runtime.inventory.v1']};
 };
 
-const dlkProgram = (
+const programSnapshot = (
     state: 'healthy' | 'degraded' | 'unavailable',
     service: 'running' | 'stopped',
+    programId = 'dlk-overflow',
+    name = 'DLK Overflow',
 ): ComputeProgramSnapshot => ({
     schema_version: 'runtime.programs.v1',
     captured_at: 1,
     invalid_manifests: 0,
     programs: [{
-        program_id: 'dlk-overflow',
-        name: 'DLK Overflow',
+        program_id: programId,
+        name,
         version: '1.0.0',
         root: '/opt/dlk-overflow',
         environment: '/opt/dlk-overflow/.venv',
@@ -455,7 +457,7 @@ describe('ControlCenterView', () => {
         expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
     });
 
-    it('shows Program Runner status lights for DLK nodes only', async () => {
+    it('shows Program Runner status lights for every compute node', async () => {
         const dlk05 = runtimeNode('AIPACK-05');
         const dlk06 = runtimeNode('AIPACK-06');
         const dlk07 = runtimeNode('AIPACK-07');
@@ -492,26 +494,27 @@ describe('ControlCenterView', () => {
         });
         jest.spyOn(ComputeClusterService, 'programs').mockImplementation(nodeId => Promise.resolve(
             nodeId === dlk05.node_id
-                ? dlkProgram('healthy', 'running')
+                ? programSnapshot('healthy', 'running')
                 : nodeId === dlk06.node_id
-                    ? dlkProgram('degraded', 'running')
-                    : dlkProgram('unavailable', 'stopped'),
+                    ? programSnapshot('degraded', 'running')
+                    : nodeId === dlk07.node_id
+                        ? programSnapshot('unavailable', 'stopped')
+                        : programSnapshot('healthy', 'running', 'vision-ocr', 'Vision OCR'),
         ));
 
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        const healthy = await screen.findByRole('button', {name: /AIPACK-05.*DLK 程序运行正常/});
-        const warning = screen.getByRole('button', {name: /AIPACK-06.*DLK 程序运行异常/});
-        const offline = screen.getByRole('button', {name: /AIPACK-07.*DLK 程序已停止或不可用/});
+        const healthy = await screen.findByRole('button', {name: /AIPACK-05.*程序运行正常/});
+        const warning = screen.getByRole('button', {name: /AIPACK-06.*程序运行异常/});
+        const offline = screen.getByRole('button', {name: /AIPACK-07.*程序已停止或不可用/});
+        const generic = screen.getByRole('button', {name: /AIPACK-08.*程序运行正常/});
         expect(healthy.querySelector('.ControlMachineProgramStatus')).toHaveClass('healthy');
         expect(warning.querySelector('.ControlMachineProgramStatus')).toHaveClass('warning');
         expect(offline.querySelector('.ControlMachineProgramStatus')).toHaveClass('offline');
-        expect(screen.queryAllByLabelText(/DLK 程序/)).toHaveLength(3);
-        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(3);
-        expect(ComputeClusterService.programs).not.toHaveBeenCalledWith(
-            other.node_id,
-            expect.any(AbortSignal),
-        );
+        expect(generic.querySelector('.ControlMachineProgramStatus')).toHaveClass('healthy');
+        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(4);
+        fireEvent.click(warning);
+        expect(document.querySelector('.ControlToolbarGroup > .ControlStatusDot')).toHaveClass('warning');
     });
 
     it('uses the worst state when one explicit control path fails', async () => {
