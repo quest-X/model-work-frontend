@@ -492,8 +492,11 @@ describe('ProgramRunnerPanel', () => {
 
         fireEvent.click(within(dialog).getByRole('button', {name: '统计'}));
         const statisticsView = await within(dialog).findByLabelText('大炉口溢渣统计');
-        expect(within(statisticsView).getByLabelText('统计日期')).toHaveValue(todayValue);
         expect(await within(statisticsView).findAllByText('溢渣次数')).toHaveLength(2);
+        expect(await within(statisticsView).findByRole('button', {
+            name: new RegExp(`统计日期 ${todayValue}，4 次溢渣`),
+        })).toHaveAttribute('aria-pressed', 'true');
+        expect(within(statisticsView).getByRole('button', {name: '下个月'})).toBeDisabled();
         expect(statisticsView).toHaveTextContent('小溢渣1');
         expect(statisticsView).toHaveTextContent('中溢渣2');
         expect(statisticsView).toHaveTextContent('大溢渣1');

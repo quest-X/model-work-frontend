@@ -1,4 +1,5 @@
 import React, {useEffect, useState} from 'react';
+import {ChevronLeft, ChevronRight} from 'lucide-react';
 import {
     ComputeClusterNode,
     ComputeClusterService,
@@ -143,6 +144,20 @@ const localDateKey = (timestamp: number): string => {
 };
 const todayDateKey = (): string => localDateKey(Date.now() / 1000);
 
+const monthDateKeys = (month: string): string[] => {
+    const [year, monthNumber] = month.split('-').map(Number);
+    const days = new Date(year, monthNumber, 0).getDate();
+    return Array.from({length: days}, (_, index) =>
+        `${month}-${`${index + 1}`.padStart(2, '0')}`
+    );
+};
+
+const shiftMonth = (month: string, offset: number): string => {
+    const [year, monthNumber] = month.split('-').map(Number);
+    const date = new Date(year, monthNumber - 1 + offset, 1);
+    return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}`;
+};
+
 const RESULT_PREVIEW_BYTES = 256 * 1024;
 
 const formatResultPreview = (contentType: string, value: string, truncated: boolean): string => {
@@ -202,6 +217,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [logServiceId, setLogServiceId] = useState('');
     const [prettyTelegramLogs, setPrettyTelegramLogs] = useState(true);
     const [statisticsDate, setStatisticsDate] = useState(todayDateKey);
+    const [statisticsMonth, setStatisticsMonth] = useState(() => todayDateKey().slice(0, 7));
+    const [statisticsMonthCounts, setStatisticsMonthCounts] = useState<Record<string, number | null>>({});
+    const [statisticsMonthLoading, setStatisticsMonthLoading] = useState(false);
     const [overflowStatistics, setOverflowStatistics] = useState<ComputeProgramOverflowStatistics | null>(null);
     const [statisticsError, setStatisticsError] = useState('');
     const [statisticsLoading, setStatisticsLoading] = useState(false);
@@ -562,12 +580,70 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         return () => controller.abort();
     }, [node.node_id, node.online, overflowProgram?.program_id, statisticsDate, view]);
 
+    useEffect(() => {
+        if (view !== 'statistics' || !node.online || !overflowProgram) return undefined;
+        const controller = new AbortController();
+        const dates = monthDateKeys(statisticsMonth)
+            .filter(date =>
+                date <= todayDateKey()
+                && date !== statisticsDate
+                && statisticsMonthCounts[date] === undefined
+            );
+        let nextDate = 0;
+        setStatisticsMonthLoading(true);
+        const load = async () => {
+            while (!controller.signal.aborted && nextDate < dates.length) {
+                const date = dates[nextDate];
+                nextDate += 1;
+                try {
+                    const value = await ComputeClusterService.programOverflowStatistics(
+                        node.node_id,
+                        overflowProgram.program_id,
+                        date,
+                        -new Date(`${date}T12:00:00`).getTimezoneOffset(),
+                        controller.signal,
+                    );
+                    if (!controller.signal.aborted) {
+                        setStatisticsMonthCounts(current => ({
+                            ...current,
+                            [date]: Object.values(value.episodes).reduce((sum, count) => sum + count, 0),
+                        }));
+                    }
+                } catch {
+                    if (!controller.signal.aborted) {
+                        setStatisticsMonthCounts(current => ({...current, [date]: null}));
+                    }
+                }
+            }
+        };
+        void Promise.all([load(), load()]).then(() => {
+            if (!controller.signal.aborted) setStatisticsMonthLoading(false);
+        });
+        return () => controller.abort();
+    }, [node.node_id, node.online, overflowProgram?.program_id, statisticsMonth, view]);
+
+    useEffect(() => {
+        if (!overflowStatistics) return;
+        setStatisticsMonthCounts(current => ({
+            ...current,
+            [overflowStatistics.date]: Object.values(overflowStatistics.episodes)
+                .reduce((sum, count) => sum + count, 0),
+        }));
+    }, [overflowStatistics]);
+
     const capturedAt = snapshot?.captured_at
         || programs?.captured_at
         || node.resources.captured_at;
     const selectedHeat = overflowStatistics?.heats.find(heat => heat.heat_id === selectedHeatId)
         || overflowStatistics?.heats[0]
         || null;
+    const statisticsDates = monthDateKeys(statisticsMonth);
+    const statisticsMonthStart = new Date(`${statisticsMonth}-01T12:00:00`);
+    const statisticsCalendarOffset = (statisticsMonthStart.getDay() + 6) % 7;
+    const statisticsMonthMaximum = Math.max(
+        0,
+        ...statisticsDates.map(date => statisticsMonthCounts[date] || 0),
+    );
 
     const unavailable = (title: string, detail = '') => <div className='ControlMonitorUnavailable'>
         <strong>{title}</strong>
@@ -1208,14 +1284,73 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     <h3>{zh ? '每日溢渣统计' : 'Daily overflow statistics'}</h3>
                                     <p>{zh ? '连续溢渣帧合并为一次，并按最高等级统计' : 'Consecutive overflow frames are merged and counted by peak level'}</p>
                                 </div>
-                                <input
-                                    type='date'
-                                    aria-label={zh ? '统计日期' : 'Statistics date'}
-                                    max={todayDateKey()}
-                                    value={statisticsDate}
-                                    onChange={event => event.target.value && setStatisticsDate(event.target.value)}
-                                />
                             </header>
+                            <section className='ControlProgramStatisticsCalendar' aria-label={zh ? '统计日期' : 'Statistics date'}>
+                                <header>
+                                    <button
+                                        type='button'
+                                        aria-label={zh ? '上个月' : 'Previous month'}
+                                        title={zh ? '上个月' : 'Previous month'}
+                                        onClick={() => setStatisticsMonth(current => shiftMonth(current, -1))}
+                                    >
+                                        <ChevronLeft aria-hidden='true'/>
+                                    </button>
+                                    <strong>{statisticsMonthStart.toLocaleDateString(zh ? 'zh-CN' : 'en-US', {
+                                        year: 'numeric',
+                                        month: 'long',
+                                    })}</strong>
+                                    <button
+                                        type='button'
+                                        aria-label={zh ? '下个月' : 'Next month'}
+                                        title={zh ? '下个月' : 'Next month'}
+                                        disabled={statisticsMonth >= todayDateKey().slice(0, 7)}
+                                        onClick={() => setStatisticsMonth(current => shiftMonth(current, 1))}
+                                    >
+                                        <ChevronRight aria-hidden='true'/>
+                                    </button>
+                                </header>
+                                <div className='weekdays' aria-hidden='true'>
+                                    {(zh ? ['一', '二', '三', '四', '五', '六', '日'] : ['M', 'T', 'W', 'T', 'F', 'S', 'S'])
+                                        .map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}
+                                </div>
+                                <div className='days'>
+                                    {Array.from({length: statisticsCalendarOffset}, (_, index) =>
+                                        <span key={`empty-${index}`}/>
+                                    )}
+                                    {statisticsDates.map(date => {
+                                        const count = statisticsMonthCounts[date];
+                                        const level = count && statisticsMonthMaximum
+                                            ? Math.max(1, Math.ceil(count / statisticsMonthMaximum * 4))
+                                            : 0;
+                                        const label = count === null || count === undefined
+                                            ? `${zh ? '统计日期' : 'Statistics date'} ${date}`
+                                            : `${zh ? '统计日期' : 'Statistics date'} ${date}，${count} ${zh ? '次溢渣' : 'episodes'}`;
+                                        return <button
+                                            type='button'
+                                            key={date}
+                                            className={`level-${level}`}
+                                            aria-label={label}
+                                            aria-pressed={date === statisticsDate}
+                                            title={label}
+                                            disabled={date > todayDateKey()}
+                                            onClick={() => setStatisticsDate(date)}
+                                        >
+                                            {Number(date.slice(-2))}
+                                        </button>;
+                                    })}
+                                </div>
+                                <footer>
+                                    <span>{statisticsMonthLoading
+                                        ? (zh ? '正在读取当月统计…' : 'Loading month…')
+                                        : (zh ? '少' : 'Less')}</span>
+                                    <i className='level-0'/>
+                                    <i className='level-1'/>
+                                    <i className='level-2'/>
+                                    <i className='level-3'/>
+                                    <i className='level-4'/>
+                                    <span>{zh ? '多' : 'More'}</span>
+                                </footer>
+                            </section>
                             {statisticsError
                                 ? unavailable(zh ? '每日统计暂不可用' : 'Daily statistics are unavailable', statisticsError)
                                 : statisticsLoading && !overflowStatistics

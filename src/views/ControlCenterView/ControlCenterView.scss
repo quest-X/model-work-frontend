@@ -2098,20 +2098,81 @@ button.ControlServiceCard {
   min-width: 0;
   overflow: auto;
   padding: 18px 20px;
+}
 
-  input[type='date'] {
+.ControlProgramStatisticsCalendar {
+  width: min(340px, 100%);
+  margin-top: 16px;
+
+  > header {
+    display: grid;
+    grid-template-columns: 28px 1fr 28px;
+    align-items: center;
+  }
+  > header strong {
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 11px;
+    font-weight: 500;
+    text-align: center;
+  }
+  button {
     box-sizing: border-box;
-    height: 30px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 0;
+    border-radius: 3px;
+    color: rgba(255, 255, 255, 0.56);
+    cursor: pointer;
+  }
+  > header button {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    background: transparent;
+  }
+  > header svg { width: 14px; height: 14px; }
+  button:hover:not(:disabled),
+  button:focus-visible { outline: 1px solid rgba(105, 198, 255, 0.72); }
+  button:disabled { cursor: default; opacity: 0.25; }
+  .weekdays,
+  .days {
+    display: grid;
+    grid-template-columns: repeat(7, 28px);
+    gap: 5px;
+  }
+  .weekdays {
+    margin: 10px 0 6px;
+    color: rgba(255, 255, 255, 0.28);
+    font-size: 8px;
+    text-align: center;
+  }
+  .days button {
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.055);
+    font-size: 9px;
+  }
+  .days button[aria-pressed='true'] {
+    outline: 1px solid #69c6ff;
+    color: white;
+  }
+  .level-1 { background: rgba(121, 216, 158, 0.28) !important; }
+  .level-2 { background: rgba(94, 201, 137, 0.52) !important; }
+  .level-3 { background: rgba(52, 177, 107, 0.76) !important; color: white !important; }
+  .level-4 { background: #16824e !important; color: white !important; }
+  > footer {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 10px;
+    color: rgba(255, 255, 255, 0.32);
+    font-size: 8px;
+  }
+  > footer span:first-child { margin-left: auto; }
+  > footer i {
+    width: 10px;
+    height: 10px;
     border-radius: 2px;
-    outline: 0;
-    background: rgba(0, 0, 0, 0.16);
-    padding: 0 8px;
-    color: rgba(255, 255, 255, 0.82);
-    color-scheme: dark;
-    font-size: 10px;
-
-    &:focus-visible { border-color: rgba(255, 255, 255, 0.42); }
+    background: rgba(255, 255, 255, 0.055);
   }
 }
 
