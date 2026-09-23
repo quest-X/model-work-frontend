@@ -41,11 +41,19 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
     const [error, setError] = useState('');
     const [externalUrl, setExternalUrl] = useState('');
     const [now, setNow] = useState(() => new Date());
+    const [visible, setVisible] = useState(() => !document.hidden);
     const videoRef = useRef<HTMLVideoElement>(null);
+    const imageRef = useRef<HTMLImageElement>(null);
     const accessController = useRef<AbortController | null>(null);
     const base = ComputeClusterService.programMediaUrl(nodeId, programId);
     const external = protocol === 'rtsp' || protocol === 'srt';
     const reconnect = () => setNonce(value => value + 1);
+
+    useEffect(() => {
+        const updateVisibility = () => setVisible(!document.hidden);
+        document.addEventListener('visibilitychange', updateVisibility);
+        return () => document.removeEventListener('visibilitychange', updateVisibility);
+    }, []);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -68,36 +76,44 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
         setError('');
         setExternalUrl('');
         accessController.current?.abort();
-        if (external) return () => accessController.current?.abort();
+        if (external || !visible) return () => accessController.current?.abort();
         let disposed = false;
-        let lastFrameAt = Date.now();
+        let failed = false;
+        const startedAt = Date.now();
+        let lastFrameAt: number | undefined;
         let frames = 0;
         let hls: Hls | undefined;
         let reader: Reader | undefined;
+        let timer = 0;
         const video = videoRef.current;
+        const image = imageRef.current;
         const fail = (message: string) => {
-            if (disposed) return;
+            if (disposed || failed) return;
+            failed = true;
+            window.clearInterval(timer);
             setError(message);
             setState('error');
             hls?.destroy();
             reader?.close();
         };
-        const timer = window.setInterval(() => {
+        timer = window.setInterval(() => {
             if (protocol === 'mjpeg') return;
-            const decoded = video?.getVideoPlaybackQuality?.().totalVideoFrames || 0;
+            const decoded = video?.getVideoPlaybackQuality?.().totalVideoFrames ?? video?.currentTime ?? 0;
             if (decoded > frames) {
                 frames = decoded;
                 lastFrameAt = Date.now();
                 setState('playing');
-            } else if (Date.now() - lastFrameAt > 20000) {
+            } else if (lastFrameAt !== undefined && Date.now() - lastFrameAt > 20000) {
                 fail(zh ? '20 秒内未收到新视频帧' : 'No new video frame for 20 seconds');
+            } else if (lastFrameAt === undefined && Date.now() - startedAt > 30000) {
+                fail(zh ? '实时画面首帧加载超时' : 'Timed out loading the first video frame');
             }
         }, 1000);
         if (video && protocol === 'webrtc') {
             reader = new window.MediaMTXWebRTCReader({
                 url: `${base}/webrtc/whep`,
                 onTrack: event => {
-                    if (!disposed) video.srcObject = event.streams[0];
+                    if (!disposed && !failed) video.srcObject = event.streams[0];
                 },
                 onError: fail,
             });
@@ -121,6 +137,8 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
             window.clearInterval(timer);
             hls?.destroy();
             reader?.close();
+            // Removing an img from the DOM alone can leave its MJPEG request running.
+            image?.removeAttribute('src');
             if (video) {
                 (video.srcObject as MediaStream | null)?.getTracks().forEach(track => track.stop());
                 video.srcObject = null;
@@ -128,7 +146,7 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
                 video.load();
             }
         };
-    }, [base, external, nonce, protocol, zh]);
+    }, [base, external, nonce, protocol, visible, zh]);
 
     const loadExternalUrl = async () => {
         setError('');
@@ -196,7 +214,7 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
                             <span>{error || (zh ? `请检查程序状态和 ${path} 接口。` : `Check the program and ${path} API.`)}</span>
                             <button type='button' onClick={reconnect}>{zh ? '重试' : 'Retry'}</button>
                         </div>}
-                        {protocol === 'mjpeg' ? <img
+                        {visible && (protocol === 'mjpeg' ? <img ref={imageRef}
                             key={nonce}
                             src={`${ComputeClusterService.programInterfaceStreamUrl(nodeId, programId, path)}&v=${nonce}`}
                             alt={zh ? `${name} 现场实时画面` : `${name} live site preview`}
@@ -210,7 +228,7 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
                             onError={() => {
                                 setError(videoRef.current?.error?.message || 'Video decode error');
                                 setState('error');
-                            }}/>}
+                            }}/>)}
                     </>}
                 </div>
             </div>
