@@ -215,6 +215,30 @@ const bytesPerSecond = (value: number | null, zh: boolean): string => value === 
     ? (zh ? '未上报' : 'Not reported')
     : `${bytes(value, zh)}/s`;
 
+const gpuMetricDetail = (
+    node: ComputeClusterNode | undefined,
+    memoryUsedMb: number,
+    memoryTotalMb: number,
+    temperature: number,
+    zh: boolean,
+): string => {
+    if (!node?.resources.gpus.length) {
+        if (node && machineIconKind(node) === 'jetson') {
+            return zh ? 'Jetson GPU 指标未上报' : 'Jetson GPU metrics are not reported';
+        }
+        return zh ? '未检测到 GPU' : 'No GPU detected';
+    }
+    const memory = memoryTotalMb > 0
+        ? `${bytes(memoryUsedMb * 1024 ** 2, zh)} / ${bytes(memoryTotalMb * 1024 ** 2, zh)}`
+        : (zh ? '共享系统内存' : 'shared system memory');
+    const hottest = Number.isFinite(temperature)
+        ? `${temperature}°C`
+        : (zh ? '未上报' : 'not reported');
+    return zh
+        ? `${node.resources.gpus.length} GPU · 显存 ${memory} · 最高温度 ${hottest}`
+        : `${node.resources.gpus.length} GPU · Memory ${memory} · Hottest ${hottest}`;
+};
+
 const percentUsed = (total: number | null, available: number | null): string => {
     if (!total || available === null) return '—';
     return `${Math.round(Math.max(0, Math.min(1, 1 - available / total)) * 100)}%`;
@@ -2109,11 +2133,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         id: 'gpu',
         label: zh ? '图形处理器' : 'GPU',
         value: gpuUsage === null ? '—' : `${gpuUsage}%`,
-        detail: selectedNode?.resources.gpus.length
-            ? (zh
-                ? `${selectedNode.resources.gpus.length} GPU · 显存 ${bytes(gpuMemoryUsedMb * 1024 ** 2, true)} / ${bytes(gpuMemoryTotalMb * 1024 ** 2, true)} · 最高温度 ${Number.isFinite(gpuTemperature) ? `${gpuTemperature}°C` : '未上报'}`
-                : `${selectedNode.resources.gpus.length} GPU · Memory ${bytes(gpuMemoryUsedMb * 1024 ** 2, false)} / ${bytes(gpuMemoryTotalMb * 1024 ** 2, false)} · Hottest ${Number.isFinite(gpuTemperature) ? `${gpuTemperature}°C` : 'not reported'}`)
-            : (zh ? '未检测到 GPU' : 'No GPU detected'),
+        detail: gpuMetricDetail(selectedNode, gpuMemoryUsedMb, gpuMemoryTotalMb, gpuTemperature, zh),
         values: selectedResourceHistory.map(sample => sample.gpu),
         color: '#ad83ff',
         emptyLabel: zh ? '等待 GPU 数据' : 'Waiting for GPU data',

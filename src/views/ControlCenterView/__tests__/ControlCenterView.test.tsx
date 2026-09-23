@@ -1278,16 +1278,40 @@ describe('ControlCenterView', () => {
     });
 
     it('uses the reported system icon and reserves the device image for Jetson', async () => {
+        const jetsonTelemetry = node('Integrated GPU', true, false, 'NVIDIA Jetson AGX Orin', 'linux');
+        jetsonTelemetry.resources.gpus = [{
+            index: 0,
+            uuid: 'JETSON-INTEGRATED-GPU-0',
+            name: 'NVIDIA Jetson AGX Orin Integrated GPU',
+            memory_total_mb: 0,
+            memory_used_mb: 0,
+            utilization_percent: 37,
+            temperature_celsius: 44,
+        }];
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
             node('Jetson', true, false, 'NVIDIA Jetson AGX Orin', 'linux'),
+            jetsonTelemetry,
             node('Windows', true, false, null, 'windows'),
             node('Linux', true, false, null, 'linux'),
             node('Mac', true, false, null, 'darwin'),
         ]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await selectMachine('Jetson');
-        expect(screen.getByRole('img', {name: 'Jetson'})).toHaveAttribute('src', '/ico/jetson-agx-orin.png');
+        const machineList = screen.getByRole('complementary', {name: '机器列表'});
+        const jetsonButton = (await within(machineList).findByText('Jetson')).closest('button') as HTMLElement;
+        fireEvent.click(jetsonButton);
+        await screen.findByRole('heading', {name: 'Jetson'});
+        expect(within(jetsonButton).getByRole('img', {name: 'Jetson'}))
+            .toHaveAttribute('src', '/ico/jetson-agx-orin.png');
+        fireEvent.click(screen.getByRole('button', {name: '打开资源监视器'}));
+        const missingMonitor = screen.getByRole('dialog', {name: 'Jetson 资源监视器'});
+        expect(missingMonitor).toHaveTextContent('Jetson GPU 指标未上报');
+        fireEvent.mouseDown(missingMonitor.closest('.ControlResourceMonitorBackdrop') as HTMLElement);
+        fireEvent.click((await within(machineList).findByText('Integrated GPU')).closest('button') as HTMLElement);
+        await screen.findByRole('heading', {name: 'Integrated GPU'});
+        fireEvent.click(screen.getByRole('button', {name: '打开资源监视器'}));
+        expect(screen.getByRole('dialog', {name: 'Integrated GPU 资源监视器'}))
+            .toHaveTextContent('显存 共享系统内存');
         expect(screen.getByRole('img', {name: 'Windows'}).querySelector('image')).toHaveAttribute('href', '/ico/system-windows.svg');
         expect(screen.getByRole('img', {name: 'Linux'}).querySelector('image')).toHaveAttribute('href', '/ico/system-linux.svg');
         expect(screen.getByRole('img', {name: 'macOS'}).querySelector('image')).toHaveAttribute('href', '/ico/system-macos.svg');
