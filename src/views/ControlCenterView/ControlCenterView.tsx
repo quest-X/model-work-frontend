@@ -464,6 +464,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [monitorMaximized, setMonitorMaximized] = useState(false);
     const [programRunnerOpen, setProgramRunnerOpen] = useState(false);
     const [programRunnerMaximized, setProgramRunnerMaximized] = useState(false);
+    const [pageVisible, setPageVisible] = useState(() => !document.hidden);
     const [monitorView, setMonitorView] = useState<MonitorView>('performance');
     const [deviceManagementTab, setDeviceManagementTab] = useState<'camera' | 'edge' | null>(null);
     const [cameraViewerId, setCameraViewerId] = useState('');
@@ -630,9 +631,17 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, []);
 
     useEffect(() => {
+        const updateVisibility = () => setPageVisible(!document.hidden);
+        document.addEventListener('visibilitychange', updateVisibility);
+        return () => document.removeEventListener('visibilitychange', updateVisibility);
+    }, []);
+
+    useEffect(() => {
         mounted.current = true;
         void refresh(true);
-        const timer = window.setInterval(() => void refresh(), 15000);
+        const timer = window.setInterval(() => {
+            if (!document.hidden) void refresh();
+        }, 15000);
         return () => {
             mounted.current = false;
             runtimeInventoryAbort.current?.abort();
@@ -641,6 +650,8 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [refresh]);
 
     useEffect(() => {
+        // The runner polls its own node; fleet snapshots must not compete with its live stream.
+        if (!pageVisible || programRunnerOpen) return undefined;
         const targets = nodes;
         if (targets.length === 0) return undefined;
         const controller = new AbortController();
@@ -673,7 +684,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [nodes]);
+    }, [nodes, pageVisible, programRunnerOpen]);
 
     useEffect(() => {
         if (workspace !== 'groups') return undefined;
