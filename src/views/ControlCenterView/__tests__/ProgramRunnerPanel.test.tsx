@@ -4,6 +4,7 @@ import {
     ComputeClusterNode,
     ComputeClusterService,
 } from '../../../services/ComputeClusterService';
+import {MachineHistoryService} from '../../../services/MachineHistoryService';
 import {ProgramRunnerPanel} from '../ProgramRunnerPanel';
 
 const node: ComputeClusterNode = {
@@ -11,7 +12,12 @@ const node: ComputeClusterNode = {
     installation_id: 'aipack-13-installation',
     name: 'AIPACK-13',
     agent_version: '1.1.2',
-    capabilities: ['runtime.read.v1', 'runtime.inventory.v1', 'runtime.programs.read.v1'],
+    capabilities: [
+        'runtime.read.v1',
+        'runtime.inventory.v1',
+        'runtime.programs.read.v1',
+        'machine.history.read.v1',
+    ],
     control_transport: 'lan',
     network: {
         provider: 'tailscale',
@@ -321,6 +327,36 @@ describe('ProgramRunnerPanel', () => {
                 }],
             }],
         });
+        jest.spyOn(MachineHistoryService, 'status').mockResolvedValue({
+            schema_version: 'machine-history.status.v1',
+            encrypted: true,
+            objects: 2,
+            versions: 4,
+            plaintext_bytes: 2048,
+        });
+        jest.spyOn(MachineHistoryService, 'objects').mockResolvedValue({
+            schema_version: 'machine-history.list.v1',
+            objects: [{
+                namespace: 'program-overflow',
+                object_key: `vision-ocr:${todayValue}:480`,
+                version: 2,
+                created_at: today,
+                captured_at: today,
+                digest: 'a'.repeat(64),
+                size_bytes: 1024,
+            }],
+        });
+        jest.spyOn(MachineHistoryService, 'object').mockResolvedValue({
+            schema_version: 'machine-history.object.v1',
+            namespace: 'program-overflow',
+            object_key: `vision-ocr:${todayValue}:480`,
+            version: 2,
+            created_at: today,
+            captured_at: today,
+            digest: 'a'.repeat(64),
+            size_bytes: 1024,
+            payload: {date: todayValue, overflow_frames: 12},
+        });
         const toggleMaximized = jest.fn();
 
         const {unmount} = render(<ProgramRunnerPanel
@@ -520,6 +556,16 @@ describe('ProgramRunnerPanel', () => {
             'vision-ocr',
             todayValue,
             -new Date().getTimezoneOffset(),
+            expect.any(AbortSignal),
+        );
+
+        fireEvent.click(within(dialog).getByRole('button', {name: '历史'}));
+        const history = await within(dialog).findByLabelText('机器历史');
+        expect(await within(history).findByText('已加密')).toBeInTheDocument();
+        expect(history).toHaveTextContent('vision-ocr');
+        expect(history).toHaveTextContent('"overflow_frames": 12');
+        expect(MachineHistoryService.status).toHaveBeenCalledWith(
+            node.node_id,
             expect.any(AbortSignal),
         );
 

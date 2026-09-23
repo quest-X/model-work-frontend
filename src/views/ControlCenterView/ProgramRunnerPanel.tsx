@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {CalendarDays, ChevronLeft, ChevronRight} from 'lucide-react';
+import {CalendarDays, ChevronLeft, ChevronRight, RefreshCw} from 'lucide-react';
 import {
     ComputeClusterNode,
     ComputeClusterService,
@@ -9,9 +9,15 @@ import {
     ComputeRuntimeService,
     ComputeRuntimeSnapshot,
 } from '../../services/ComputeClusterService';
+import {
+    MachineHistoryObject,
+    MachineHistoryObjectSummary,
+    MachineHistoryService,
+    MachineHistoryStatus,
+} from '../../services/MachineHistoryService';
 import {ProgramLivePreview} from './ProgramLivePreview';
 
-type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs' | 'statistics';
+type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs' | 'statistics' | 'history';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
 type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'telegram' | 'log';
 
@@ -225,6 +231,12 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [statisticsError, setStatisticsError] = useState('');
     const [statisticsLoading, setStatisticsLoading] = useState(false);
     const [selectedHeatId, setSelectedHeatId] = useState('');
+    const [historyStatus, setHistoryStatus] = useState<MachineHistoryStatus | null>(null);
+    const [historyObjects, setHistoryObjects] = useState<MachineHistoryObjectSummary[]>([]);
+    const [historyDocument, setHistoryDocument] = useState<MachineHistoryObject | null>(null);
+    const [historyError, setHistoryError] = useState('');
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [historyRefresh, setHistoryRefresh] = useState(0);
     const [selectedArtifactId, setSelectedArtifactId] = useState('');
     const [artifactDate, setArtifactDate] = useState(todayDateKey);
     const [artifactCategoryFilter, setArtifactCategoryFilter] = useState<ResultCategory>('all');
@@ -243,6 +255,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [refreshProgress, setRefreshProgress] = useState(0);
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
     const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
+    const historyCapable = node.online && node.capabilities.includes('machine.history.read.v1');
     const runtimeVisible = runtimeCapable || snapshot !== null;
     const programsVisible = programsCapable || programs !== null;
     const logsVisible = runtimeVisible || programsVisible || events.length > 0;
@@ -273,6 +286,12 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setOverflowStatistics(null);
         setStatisticsError('');
         setStatisticsLoading(false);
+        setHistoryStatus(null);
+        setHistoryObjects([]);
+        setHistoryDocument(null);
+        setHistoryError('');
+        setHistoryLoading(false);
+        setHistoryRefresh(0);
         setSelectedArtifactId('');
         setArtifactDate(todayDateKey());
         setArtifactCategoryFilter('all');
@@ -388,6 +407,52 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             window.clearInterval(timer);
         };
     }, [eventsRequested, node.node_id, pollingPaused, programsCapable, runtimeCapable]);
+
+    useEffect(() => {
+        if (view !== 'history' || !historyCapable) return undefined;
+        const controller = new AbortController();
+        setHistoryLoading(true);
+        setHistoryError('');
+        void Promise.all([
+            MachineHistoryService.status(node.node_id, controller.signal),
+            MachineHistoryService.objects(node.node_id, controller.signal),
+        ]).then(async ([status, listing]) => {
+            if (controller.signal.aborted) return;
+            setHistoryStatus(status);
+            setHistoryObjects(listing.objects);
+            const first = listing.objects[0];
+            setHistoryDocument(first
+                ? await MachineHistoryService.object(
+                    node.node_id,
+                    first.namespace,
+                    first.object_key,
+                    controller.signal,
+                )
+                : null);
+            if (!controller.signal.aborted) setHistoryLoading(false);
+        }).catch(error => {
+            if (controller.signal.aborted) return;
+            setHistoryError(error instanceof Error ? error.message : String(error));
+            setHistoryLoading(false);
+        });
+        return () => controller.abort();
+    }, [historyCapable, historyRefresh, node.node_id, view]);
+
+    const selectHistoryObject = (object: MachineHistoryObjectSummary) => {
+        setHistoryLoading(true);
+        setHistoryError('');
+        void MachineHistoryService.object(
+            node.node_id,
+            object.namespace,
+            object.object_key,
+        ).then(value => {
+            setHistoryDocument(value);
+            setHistoryLoading(false);
+        }).catch(error => {
+            setHistoryError(error instanceof Error ? error.message : String(error));
+            setHistoryLoading(false);
+        });
+    };
 
     const selectedService = snapshot?.services.find(service =>
         service.service_id === selectedServiceId
@@ -704,6 +769,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     ['telegrams', zh ? '电文' : 'Telegrams'],
                     ['logs', zh ? '日志' : 'Logs'],
                     ['statistics', zh ? '统计' : 'Statistics'],
+                    ['history', zh ? '历史' : 'History'],
                 ] as [ProgramRunnerView, string][]).map(([item, label]) => <button
                     type='button'
                     key={item}
@@ -1538,6 +1604,95 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         </>
                                         : unavailable(zh ? '暂无每日统计' : 'No daily statistics')}
                         </section>)}
+
+                {view === 'history' && (!historyCapable
+                    ? unavailable(
+                        zh ? '当前节点尚不支持机器历史' : 'Machine history is not supported',
+                        node.online
+                            ? (zh ? '升级节点程序后可读取加密快照。' : 'Upgrade the node software to read encrypted snapshots.')
+                            : (zh ? '节点恢复在线后才能读取机器历史。' : 'The node must return online before machine history can be read.'),
+                    )
+                    : <section className='ControlMachineHistory' aria-label={zh ? '机器历史' : 'Machine history'}>
+                        <header className='ControlMonitorSearchHeader'>
+                            <div>
+                                <h3>{zh ? '机器历史' : 'Machine history'}</h3>
+                                <p>{zh ? '节点本地加密保存的缓存、快照和结构化报告' : 'Node-local encrypted caches, snapshots, and structured reports'}</p>
+                            </div>
+                            <button
+                                type='button'
+                                className='ControlMachineHistoryRefresh'
+                                aria-label={zh ? '刷新机器历史' : 'Refresh machine history'}
+                                title={zh ? '刷新' : 'Refresh'}
+                                disabled={historyLoading}
+                                onClick={() => setHistoryRefresh(value => value + 1)}
+                            ><RefreshCw aria-hidden='true'/></button>
+                        </header>
+                        {historyError
+                            ? unavailable(zh ? '机器历史暂不可用' : 'Machine history is unavailable', historyError)
+                            : historyLoading && !historyStatus
+                                ? unavailable(zh ? '正在读取机器历史…' : 'Loading machine history…')
+                                : historyStatus
+                                    ? <>
+                                        <div className='ControlMachineHistorySummary'>
+                                            <article>
+                                                <span>{zh ? '存储状态' : 'Storage'}</span>
+                                                <strong>{historyStatus.encrypted
+                                                    ? (zh ? '已加密' : 'Encrypted')
+                                                    : (zh ? '未加密' : 'Plain')}</strong>
+                                            </article>
+                                            <article>
+                                                <span>{zh ? '对象' : 'Objects'}</span>
+                                                <strong>{historyStatus.objects}</strong>
+                                            </article>
+                                            <article>
+                                                <span>{zh ? '版本' : 'Versions'}</span>
+                                                <strong>{historyStatus.versions}</strong>
+                                            </article>
+                                            <article>
+                                                <span>{zh ? '结构化数据' : 'Structured data'}</span>
+                                                <strong>{bytes(historyStatus.plaintext_bytes)}</strong>
+                                            </article>
+                                        </div>
+                                        <div className='ControlMachineHistoryWorkspace'>
+                                            <nav aria-label={zh ? '历史对象' : 'History objects'}>
+                                                {historyObjects.map(object => <button
+                                                    type='button'
+                                                    key={`${object.namespace}:${object.object_key}`}
+                                                    aria-current={
+                                                        historyDocument?.namespace === object.namespace
+                                                        && historyDocument.object_key === object.object_key
+                                                            ? 'page'
+                                                            : undefined
+                                                    }
+                                                    onClick={() => selectHistoryObject(object)}
+                                                >
+                                                    <strong>{object.object_key}</strong>
+                                                    <span>{object.namespace} · v{object.version}</span>
+                                                    <small>{dateTime(object.captured_at || object.created_at, zh)}</small>
+                                                </button>)}
+                                            </nav>
+                                            <article>
+                                                {historyDocument
+                                                    ? <>
+                                                        <header>
+                                                            <div>
+                                                                <h4>{historyDocument.object_key}</h4>
+                                                                <p>{historyDocument.namespace} · v{historyDocument.version}
+                                                                    {' · '}{bytes(historyDocument.size_bytes)}</p>
+                                                            </div>
+                                                            <span>{dateTime(
+                                                                historyDocument.captured_at || historyDocument.created_at,
+                                                                zh,
+                                                            )}</span>
+                                                        </header>
+                                                        <pre>{JSON.stringify(historyDocument.payload, null, 2)}</pre>
+                                                    </>
+                                                    : <p>{zh ? '尚无历史对象。' : 'No history objects yet.'}</p>}
+                                            </article>
+                                        </div>
+                                    </>
+                                    : unavailable(zh ? '暂无机器历史' : 'No machine history')}
+                    </section>)}
             </div>
         </div>
     </section>;
