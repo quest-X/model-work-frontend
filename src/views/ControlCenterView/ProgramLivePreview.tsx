@@ -46,6 +46,7 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
     const imageRef = useRef<HTMLImageElement>(null);
     const accessController = useRef<AbortController | null>(null);
     const base = ComputeClusterService.programMediaUrl(nodeId, programId);
+    const imageUrl = `${ComputeClusterService.programInterfaceStreamUrl(nodeId, programId, path)}&v=${nonce}`;
     const external = protocol === 'rtsp' || protocol === 'srt';
     const reconnect = () => setNonce(value => value + 1);
 
@@ -87,6 +88,7 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
         let timer = 0;
         const video = videoRef.current;
         const image = imageRef.current;
+        if (image) image.src = imageUrl;
         const fail = (message: string) => {
             if (disposed || failed) return;
             failed = true;
@@ -146,7 +148,7 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
                 video.load();
             }
         };
-    }, [base, external, nonce, protocol, visible, zh]);
+    }, [base, external, imageUrl, nonce, protocol, visible, zh]);
 
     const loadExternalUrl = async () => {
         setError('');
@@ -216,7 +218,6 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
                         </div>}
                         {visible && (protocol === 'mjpeg' ? <img ref={imageRef}
                             key={nonce}
-                            src={`${ComputeClusterService.programInterfaceStreamUrl(nodeId, programId, path)}&v=${nonce}`}
                             alt={zh ? `${name} 现场实时画面` : `${name} live site preview`}
                             style={{visibility: state === 'error' ? 'hidden' : 'visible'}}
                             onLoad={() => setState('playing')}

@@ -130,6 +130,20 @@ it('does not open a media connection when initially hidden', () => {
     expect(Hls).not.toHaveBeenCalled();
 });
 
+it('restores the MJPEG source on effect replay and language changes', () => {
+    global.fetch = jest.fn().mockResolvedValue({ok: false});
+    const preview = (zh: boolean) => <React.StrictMode><ProgramLivePreview
+        nodeId='node04' programId='dlk-overflow' name='DLK' path='/stream.mjpeg' zh={zh}
+    /></React.StrictMode>;
+    const {rerender, unmount} = render(preview(true));
+    expect(screen.getByRole('img').getAttribute('src')).toContain('path=%2Fstream.mjpeg');
+    rerender(preview(false));
+    const image = screen.getByRole('img');
+    expect(image.getAttribute('src')).toContain('path=%2Fstream.mjpeg');
+    unmount();
+    expect(image.hasAttribute('src')).toBe(false);
+});
+
 it('allows a slow LL-HLS first frame, then detects an established stream stall', async () => {
     jest.useFakeTimers();
     global.fetch = jest.fn().mockResolvedValue({
