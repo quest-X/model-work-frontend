@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {ChevronLeft, ChevronRight} from 'lucide-react';
+import {CalendarDays, ChevronLeft, ChevronRight} from 'lucide-react';
 import {
     ComputeClusterNode,
     ComputeClusterService,
@@ -217,6 +217,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [logServiceId, setLogServiceId] = useState('');
     const [prettyTelegramLogs, setPrettyTelegramLogs] = useState(true);
     const [statisticsDate, setStatisticsDate] = useState(todayDateKey);
+    const [statisticsCalendarOpen, setStatisticsCalendarOpen] = useState(false);
     const [statisticsMonth, setStatisticsMonth] = useState(() => todayDateKey().slice(0, 7));
     const [statisticsMonthCounts, setStatisticsMonthCounts] = useState<Record<string, number | null>>({});
     const [statisticsMonthLoading, setStatisticsMonthLoading] = useState(false);
@@ -581,7 +582,12 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     }, [node.node_id, node.online, overflowProgram?.program_id, statisticsDate, view]);
 
     useEffect(() => {
-        if (view !== 'statistics' || !node.online || !overflowProgram) return undefined;
+        if (
+            view !== 'statistics'
+            || !statisticsCalendarOpen
+            || !node.online
+            || !overflowProgram
+        ) return undefined;
         const controller = new AbortController();
         const dates = monthDateKeys(statisticsMonth)
             .filter(date =>
@@ -620,7 +626,14 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             if (!controller.signal.aborted) setStatisticsMonthLoading(false);
         });
         return () => controller.abort();
-    }, [node.node_id, node.online, overflowProgram?.program_id, statisticsMonth, view]);
+    }, [
+        node.node_id,
+        node.online,
+        overflowProgram?.program_id,
+        statisticsCalendarOpen,
+        statisticsMonth,
+        view,
+    ]);
 
     useEffect(() => {
         if (!overflowStatistics) return;
@@ -1284,8 +1297,24 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     <h3>{zh ? '每日溢渣统计' : 'Daily overflow statistics'}</h3>
                                     <p>{zh ? '连续溢渣帧合并为一次，并按最高等级统计' : 'Consecutive overflow frames are merged and counted by peak level'}</p>
                                 </div>
+                                <button
+                                    type='button'
+                                    className='ControlProgramStatisticsDateButton'
+                                    aria-expanded={statisticsCalendarOpen}
+                                    aria-label={`${zh ? '选择统计日期' : 'Choose statistics date'} ${statisticsDate}`}
+                                    onClick={() => {
+                                        setStatisticsMonth(statisticsDate.slice(0, 7));
+                                        setStatisticsCalendarOpen(open => !open);
+                                    }}
+                                >
+                                    <span>{statisticsDate}</span>
+                                    <CalendarDays aria-hidden='true'/>
+                                </button>
                             </header>
-                            <section className='ControlProgramStatisticsCalendar' aria-label={zh ? '统计日期' : 'Statistics date'}>
+                            {statisticsCalendarOpen && <section
+                                className='ControlProgramStatisticsCalendar'
+                                aria-label={zh ? '统计日历' : 'Statistics calendar'}
+                            >
                                 <header>
                                     <button
                                         type='button'
@@ -1333,7 +1362,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                             aria-pressed={date === statisticsDate}
                                             title={label}
                                             disabled={date > todayDateKey()}
-                                            onClick={() => setStatisticsDate(date)}
+                                            onClick={() => {
+                                                setStatisticsDate(date);
+                                                setStatisticsCalendarOpen(false);
+                                            }}
                                         >
                                             {Number(date.slice(-2))}
                                         </button>;
@@ -1350,7 +1382,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     <i className='level-4'/>
                                     <span>{zh ? '多' : 'More'}</span>
                                 </footer>
-                            </section>
+                            </section>}
                             {statisticsError
                                 ? unavailable(zh ? '每日统计暂不可用' : 'Daily statistics are unavailable', statisticsError)
                                 : statisticsLoading && !overflowStatistics

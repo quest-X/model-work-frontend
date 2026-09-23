@@ -493,10 +493,18 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(dialog).getByRole('button', {name: '统计'}));
         const statisticsView = await within(dialog).findByLabelText('大炉口溢渣统计');
         expect(await within(statisticsView).findAllByText('溢渣次数')).toHaveLength(2);
-        expect(await within(statisticsView).findByRole('button', {
+        expect(within(statisticsView).queryByLabelText('统计日历')).not.toBeInTheDocument();
+        fireEvent.click(within(statisticsView).getByRole('button', {
+            name: `选择统计日期 ${todayValue}`,
+        }));
+        const calendar = await within(statisticsView).findByLabelText('统计日历');
+        const selectedDate = await within(calendar).findByRole('button', {
             name: new RegExp(`统计日期 ${todayValue}，4 次溢渣`),
-        })).toHaveAttribute('aria-pressed', 'true');
-        expect(within(statisticsView).getByRole('button', {name: '下个月'})).toBeDisabled();
+        });
+        expect(selectedDate).toHaveAttribute('aria-pressed', 'true');
+        expect(within(calendar).getByRole('button', {name: '下个月'})).toBeDisabled();
+        fireEvent.click(selectedDate);
+        expect(within(statisticsView).queryByLabelText('统计日历')).not.toBeInTheDocument();
         expect(statisticsView).toHaveTextContent('小溢渣1');
         expect(statisticsView).toHaveTextContent('中溢渣2');
         expect(statisticsView).toHaveTextContent('大溢渣1');
