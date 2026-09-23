@@ -713,6 +713,7 @@
 }
 
 .ComputeGraphHoverCard {
+  --entity-accent: 180, 139, 232;
   position: absolute;
   z-index: 7;
   display: flex;
@@ -720,16 +721,20 @@
   gap: 7px;
   width: 284px;
   box-sizing: border-box;
-  border: 1px solid rgba(180, 139, 232, 0.48);
+  border: 1px solid rgba(var(--entity-accent), 0.48);
   border-radius: 10px;
   background: rgba(17, 18, 23, 0.96);
   padding: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 24px rgba(133, 77, 199, 0.12);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 24px rgba(var(--entity-accent), 0.12);
   pointer-events: none;
   backdrop-filter: blur(12px);
+  &.role-node,
+  &.edge-device { --entity-accent: 102, 221, 160; }
+  &.sensor { --entity-accent: 91, 195, 255; }
+  &.actuator { --entity-accent: 244, 194, 83; }
   &.pinned {
-    border-color: rgba(91, 195, 255, 0.72);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 26px rgba(91, 195, 255, 0.18);
+    border-color: rgba(var(--entity-accent), 0.72);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 26px rgba(var(--entity-accent), 0.18);
     pointer-events: auto;
   }
   &.align-left { left: 14px; }

@@ -659,6 +659,7 @@ describe('ComputeClusterPopup', () => {
         await user.hover(onlineNode);
         const operationsCard = screen.getByRole('status', {name: 'edge-01 运维信息'});
         expect(operationsCard).toHaveClass('anchored');
+        expect(operationsCard).toHaveClass('role-main');
         expect(within(operationsCard).getByText('SSH 通路')).toBeInTheDocument();
         expect(within(operationsCard).getByText('公网出口')).toBeInTheDocument();
         expect(within(operationsCard).getByText('Tailscale 私有组网')).toBeInTheDocument();
@@ -696,8 +697,12 @@ describe('ComputeClusterPopup', () => {
         expect(within(offlineCard).getByText('异常 · 最后心跳 20 小时前')).toHaveClass('offline');
 
         await user.unhover(offlineNode);
+        await user.hover(edgeDevice);
+        expect(screen.getByRole('status', {name: 'AIPACK-01 运维信息'})).toHaveClass('edge-device');
+        await user.unhover(edgeDevice);
         await user.hover(camera);
         const sensorCard = screen.getByRole('status', {name: 'IP CAMERA 运维信息'});
+        expect(sensorCard).toHaveClass('sensor');
         expect(within(sensorCard).getByText('摄像头传感器 S-001 · 正常')).toBeInTheDocument();
         expect(within(sensorCard).getByText('DS-2CD2686FWDA2-IZS')).toBeInTheDocument();
         expect(within(sensorCard).getByText('2 个通道')).toBeInTheDocument();

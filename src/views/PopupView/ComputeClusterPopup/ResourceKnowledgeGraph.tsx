@@ -408,6 +408,12 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     }));
     const inspectedEntityId = pinnedEntityId || hoveredEntityId;
     const inspectedEntity = inspectedEntityId ? index.get(inspectedEntityId) : undefined;
+    const inspectedRole = inspectedEntity?.kind === 'compute_node'
+        ? nodeRoles.get(inspectedEntity.entity_id) || 'node'
+        : undefined;
+    const inspectedClassification = inspectedEntity?.kind === 'managed_device'
+        ? deviceClass(inspectedEntity)
+        : undefined;
     const inspectedPoint = inspectedEntityId ? points.get(inspectedEntityId) : undefined;
     const hoveredRelation = visibleRelations.find(relation => relation.relation_id === hoveredRelationId);
     const hoveredRelationSource = hoveredRelation ? index.get(hoveredRelation.source_id) : undefined;
@@ -675,7 +681,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                 </aside>}
 
                 {inspectedEntity && <aside
-                    className={`ComputeGraphHoverCard anchored ${pinnedEntityId === inspectedEntity.entity_id ? 'pinned' : ''}`}
+                    className={`ComputeGraphHoverCard anchored ${inspectedRole ? `role-${inspectedRole}` : ''} ${inspectedClassification || ''} ${inspectedEntity.device_kind === 'edge_compute' ? 'edge-device' : ''} ${pinnedEntityId === inspectedEntity.entity_id ? 'pinned' : ''}`}
                     style={{
                         '--hover-anchor-x': `${inspectedPoint?.x || 50}%`,
                         '--hover-anchor-y': `${inspectedPoint?.y || 50}%`,
