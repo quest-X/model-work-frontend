@@ -103,10 +103,10 @@ export const ProgramStatisticsExport: React.FC<Props> = ({nodeId, nodeName, prog
         }
     };
     return <>
-        <button type='button' className='ControlMachineHistoryRefresh'
+        <button type='button' className='ControlProgramStatisticsExportButton'
             aria-label={zh ? '导出统计' : 'Export statistics'} title={zh ? '导出统计' : 'Export statistics'}
             onClick={() => { onOpen(); setMessage(''); setOpen(true); }}>
-            <Download aria-hidden='true'/>
+            {zh ? '导出' : 'Export'}
         </button>
         <Dialog open={open} onClose={close} aria-labelledby='statistics-export-title'
             PaperProps={{className: 'ControlStatisticsExportDialog', sx: {backgroundColor: '#242424', color: '#eee'}}}>

@@ -39,6 +39,16 @@ const open = () => {
 
 afterEach(() => { jest.restoreAllMocks(); jest.clearAllMocks(); jest.useRealTimers(); });
 
+it.each([true, false])('opens the date range from a text-only export button (zh=%s)', zh => {
+    render(<ProgramStatisticsExport {...props} zh={zh}/>);
+    const button = screen.getByRole('button', {name: zh ? '导出统计' : 'Export statistics'});
+    expect(button).toHaveTextContent(zh ? '导出' : 'Export');
+    expect(button.querySelector('svg')).toBeNull();
+    fireEvent.click(button);
+    expect(screen.getByLabelText(zh ? '开始日期' : 'Start date')).toHaveValue(props.date);
+    expect(screen.getByLabelText(zh ? '结束日期' : 'End date')).toHaveValue(props.date);
+});
+
 it('validates inclusive calendar dates, leap days, future dates and bounded ranges', () => {
     expect(statisticsExportDates('2024-02-28', '2024-03-01', props.today, true))
         .toEqual(['2024-02-28', '2024-02-29', '2024-03-01']);
