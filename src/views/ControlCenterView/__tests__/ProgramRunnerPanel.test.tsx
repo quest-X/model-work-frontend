@@ -573,7 +573,8 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(statisticsView).getByRole('button', {
             name: `选择统计日期 ${todayValue}`,
         }));
-        const calendar = await within(statisticsView).findByLabelText('统计日历');
+        const calendar = await screen.findByLabelText('统计日历');
+        expect(statisticsView).not.toContainElement(calendar);
         const selectedDate = await within(calendar).findByRole('button', {
             name: new RegExp(`统计日期 ${todayValue}，4 次溢渣`),
         });
@@ -629,9 +630,9 @@ describe('ProgramRunnerPanel', () => {
         expect(within(dialog).getByLabelText('大炉口溢渣统计')).toHaveTextContent('12 / 100');
         expect(within(dialog).queryByText('正在读取缓存统计…')).not.toBeInTheDocument();
         fireEvent.click(within(dialog).getByRole('button', {name: `选择统计日期 ${todayValue}`}));
-        const previousMonth = within(dialog).getByRole('button', {name: '上个月'});
+        const previousMonth = within(screen.getByLabelText('统计日历')).getByRole('button', {name: '上个月'});
         fireEvent.click(previousMonth);
-        const anotherDate = within(dialog).getAllByRole('button', {name: /^统计日期 /})[0];
+        const anotherDate = within(screen.getByLabelText('统计日历')).getAllByRole('button', {name: /^统计日期 /})[0];
         fireEvent.click(anotherDate);
         expect(within(dialog).getByText('正在读取缓存统计…')).toBeInTheDocument();
         expect(within(dialog).getByLabelText('大炉口溢渣统计')).not.toHaveTextContent('12 / 100');
@@ -703,13 +704,17 @@ describe('ProgramRunnerPanel', () => {
         expect(screen.queryByLabelText('统计日历')).not.toBeInTheDocument();
 
         const calendarButton = screen.getByRole('button', {name: '选择统计日期 2026-09-25'});
-        fireEvent.click(calendarButton);
+        await userEvent.click(calendarButton);
         let calendar = screen.getByLabelText('统计日历');
+        expect(panel.container).not.toContainElement(calendar);
         expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-24，待读取'})).toHaveClass('pending');
         expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-24，待读取'})).toHaveTextContent(/^24$/);
         expect(within(calendar).queryByText('... 待读取')).not.toBeInTheDocument();
         expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-26，未来日期'})).toBeDisabled();
-        fireEvent.click(calendarButton);
+        fireEvent.keyDown(window, {key: 'Escape'});
+        expect(screen.queryByLabelText('统计日历')).not.toBeInTheDocument();
+        expect(screen.getByRole('dialog', {name: 'AIPACK-13 程序运行器'})).toBeInTheDocument();
+        expect(calendarButton).toHaveFocus();
         expect(statistics.mock.calls[1][4].aborted).toBe(false);
         expect(statistics.mock.calls[2][4].aborted).toBe(false);
         await act(async () => resolveRecent());

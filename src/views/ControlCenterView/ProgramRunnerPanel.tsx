@@ -1,4 +1,5 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
+import Popover from '@mui/material/Popover';
 import Tooltip from '@mui/material/Tooltip';
 import {CalendarDays, ChevronLeft, ChevronRight, RefreshCw} from 'lucide-react';
 import {
@@ -19,6 +20,7 @@ import {
 import {ProgramLivePreview} from './ProgramLivePreview';
 import {ProgramStatisticsExport} from './ProgramStatisticsExport';
 import {statisticsHasRecords} from './statisticsExport';
+import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 
 type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs' | 'statistics' | 'history';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
@@ -227,6 +229,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [prettyTelegramLogs, setPrettyTelegramLogs] = useState(true);
     const [statisticsDate, setStatisticsDate] = useState(todayDateKey);
     const [statisticsCalendarOpen, setStatisticsCalendarOpen] = useState(false);
+    const statisticsDateButton = useRef<HTMLButtonElement>(null);
     const [statisticsMonth, setStatisticsMonth] = useState(() => todayDateKey().slice(0, 7));
     const [statisticsMonthCounts, setStatisticsMonthCounts] = useState<Record<string, {count: number; hasRecords: boolean} | null>>({});
     const [statisticsMonthLoading, setStatisticsMonthLoading] = useState(false);
@@ -257,6 +260,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [refreshProgress, setRefreshProgress] = useState(0);
+    useEscapeToClose(() => setStatisticsCalendarOpen(false), statisticsCalendarOpen, 22);
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
     const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
     const historyCapable = node.online && node.capabilities.includes('machine.history.read.v1');
@@ -1383,6 +1387,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 <div className='ControlProgramStatisticsActions'>
                                     <button
                                         type='button'
+                                        ref={statisticsDateButton}
                                         className='ControlProgramStatisticsDateButton'
                                         aria-expanded={statisticsCalendarOpen}
                                         aria-label={`${zh ? '选择统计日期' : 'Choose statistics date'} ${statisticsDate}`}
@@ -1402,9 +1407,18 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     />
                                 </div>
                             </header>
-                            {statisticsCalendarOpen && <section
-                                className='ControlProgramStatisticsCalendar'
-                                aria-label={zh ? '统计日历' : 'Statistics calendar'}
+                            {statisticsCalendarOpen && <Popover
+                                open
+                                anchorEl={statisticsDateButton.current}
+                                anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
+                                transformOrigin={{vertical: 'top', horizontal: 'right'}}
+                                marginThreshold={12}
+                                onClose={() => setStatisticsCalendarOpen(false)}
+                                PaperProps={{
+                                    component: 'section',
+                                    className: 'ControlProgramStatisticsCalendar',
+                                    'aria-label': zh ? '统计日历' : 'Statistics calendar',
+                                }}
                             >
                                 <header>
                                     <button
@@ -1496,7 +1510,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     <i className='level-4'/>
                                     <span>{zh ? '多' : 'More'}</span>
                                 </footer>
-                            </section>}
+                            </Popover>}
                             {statisticsError
                                 ? unavailable(zh ? '每日统计暂不可用' : 'Daily statistics are unavailable', statisticsError)
                                 : statisticsLoading && !overflowStatistics

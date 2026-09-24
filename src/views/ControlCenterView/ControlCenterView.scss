@@ -2242,12 +2242,10 @@ button.ControlServiceCard {
   button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid #69c6ff; outline-offset: 2px; }
 }
 
-.ControlProgramStatisticsCalendar {
-  position: absolute;
-  z-index: 5;
-  top: 56px;
-  right: 20px;
+.ControlProgramStatisticsCalendar.MuiPopover-paper {
   width: 250px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
   box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 4px;
