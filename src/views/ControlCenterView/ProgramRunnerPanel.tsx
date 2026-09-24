@@ -1,4 +1,5 @@
 import React, {useEffect, useState} from 'react';
+import Tooltip from '@mui/material/Tooltip';
 import {CalendarDays, ChevronLeft, ChevronRight, RefreshCw} from 'lucide-react';
 import {
     ComputeClusterNode,
@@ -1533,13 +1534,20 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                             <div className='ControlProgramHourlyStatistics'>
                                                 <strong>{zh ? '时段分布' : 'Hourly distribution'}</strong>
                                                 <div>
-                                                    {overflowStatistics.hourly.map((count, hour) => <span
+                                                    {overflowStatistics.hourly.map((count, hour) => <Tooltip
                                                         key={hour}
-                                                        title={`${`${hour}`.padStart(2, '0')}:00 · ${count}`}
+                                                        title={`${`${hour}`.padStart(2, '0')}:00 - ${`${hour + 1}`.padStart(2, '0')}:00 · ${
+                                                            zh ? `溢渣 ${count} 次` : `${count} overflow events`
+                                                        }`}
+                                                        placement='top'
+                                                        enterDelay={0}
+                                                        arrow
                                                     >
-                                                        <i style={{height: `${Math.max(2, count / Math.max(...overflowStatistics.hourly, 1) * 100)}%`}}/>
-                                                        <small>{hour % 3 === 0 ? `${`${hour}`.padStart(2, '0')}` : ''}</small>
-                                                    </span>)}
+                                                        <span role='img' tabIndex={0}>
+                                                            <i style={{height: `${Math.max(2, count / Math.max(...overflowStatistics.hourly, 1) * 100)}%`}}/>
+                                                            <small>{hour % 3 === 0 ? `${`${hour}`.padStart(2, '0')}` : ''}</small>
+                                                        </span>
+                                                    </Tooltip>)}
                                                 </div>
                                             </div>
                                             <section className='ControlProgramHeatReports'>

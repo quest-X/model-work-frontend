@@ -1,5 +1,6 @@
 import React from 'react';
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {
     ComputeClusterNode,
     ComputeClusterService,
@@ -361,7 +362,7 @@ describe('ProgramRunnerPanel', () => {
         });
         const toggleMaximized = jest.fn();
 
-        const {unmount} = render(<ProgramRunnerPanel
+        const {unmount, rerender} = render(<ProgramRunnerPanel
             node={node}
             zh
             maximized={false}
@@ -538,6 +539,36 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(dialog).getByRole('button', {name: '统计'}));
         const statisticsView = await within(dialog).findByLabelText('大炉口溢渣统计');
         expect(await within(statisticsView).findAllByText('溢渣次数')).toHaveLength(2);
+        const user = userEvent.setup();
+        const peakHour = within(statisticsView).getByRole('img', {name: '09:00 - 10:00 · 溢渣 2 次'});
+        const emptyHour = within(statisticsView).getByRole('img', {name: '00:00 - 01:00 · 溢渣 0 次'});
+        expect(within(statisticsView).getAllByRole('img')).toHaveLength(24);
+        expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+        await user.hover(peakHour);
+        expect(await screen.findByRole('tooltip')).toHaveTextContent('09:00 - 10:00 · 溢渣 2 次');
+        await user.unhover(peakHour);
+        await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+        await user.hover(emptyHour);
+        expect(await screen.findByRole('tooltip')).toHaveTextContent('00:00 - 01:00 · 溢渣 0 次');
+        await user.unhover(emptyHour);
+        await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+
+        act(() => within(statisticsView).getByRole('img', {name: '22:00 - 23:00 · 溢渣 0 次'}).focus());
+        await user.tab();
+        const lastHour = within(statisticsView).getByRole('img', {name: '23:00 - 24:00 · 溢渣 0 次'});
+        expect(lastHour).toHaveFocus();
+        expect(await screen.findByRole('tooltip', {name: '23:00 - 24:00 · 溢渣 0 次'})).toBeVisible();
+        await user.keyboard('{Escape}');
+        await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+        act(() => lastHour.blur());
+
+        rerender(<ProgramRunnerPanel node={node} zh={false} maximized={false} onToggleMaximized={toggleMaximized}/>);
+        await user.hover(screen.getByRole('img', {name: '09:00 - 10:00 · 2 overflow events'}));
+        expect(await screen.findByRole('tooltip')).toHaveTextContent('09:00 - 10:00 · 2 overflow events');
+        await user.unhover(screen.getByRole('img', {name: '09:00 - 10:00 · 2 overflow events'}));
+        await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+        rerender(<ProgramRunnerPanel node={node} zh maximized={false} onToggleMaximized={toggleMaximized}/>);
+
         expect(within(statisticsView).queryByLabelText('统计日历')).not.toBeInTheDocument();
         fireEvent.click(within(statisticsView).getByRole('button', {
             name: `选择统计日期 ${todayValue}`,

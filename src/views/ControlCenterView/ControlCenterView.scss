@@ -2383,7 +2383,19 @@ button.ControlServiceCard {
     gap: 3px;
     margin-top: 12px;
   }
-  span { display: grid; height: 100%; grid-template-rows: minmax(0, 1fr) 14px; align-items: end; }
+  span {
+    display: grid;
+    height: 100%;
+    grid-template-rows: minmax(0, 1fr) 14px;
+    align-items: end;
+    cursor: crosshair;
+
+    &:hover,
+    &:focus-visible { background: rgba(105, 198, 255, 0.1); }
+    &:focus-visible { outline: 1px solid #69c6ff; outline-offset: 1px; }
+    &:hover i,
+    &:focus-visible i { background: #a6ddff; }
+  }
   i { display: block; min-height: 2px; background: #69c6ff; }
   small { color: rgba(255, 255, 255, 0.28); font-size: 7px; font-style: normal; text-align: center; }
 }
