@@ -2,7 +2,6 @@ import React, {useEffect, useRef, useState} from 'react';
 import {Dialog, DialogContent, DialogTitle} from '@mui/material';
 import {Download, X} from 'lucide-react';
 import JSZip from 'jszip';
-import {saveAs} from 'file-saver';
 import {ComputeClusterService} from '../../services/ComputeClusterService';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import {StatisticsExportDay, statisticsExportDates, statisticsExportFiles, statisticsHasRecords} from './statisticsExport';
@@ -48,16 +47,20 @@ export const ProgramStatisticsExport: React.FC<Props> = ({nodeId, nodeName, prog
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState('');
     const [message, setMessage] = useState('');
+    const [file, setFile] = useState<{url: string; name: string} | null>(null);
     const controller = useRef<AbortController | null>(null);
     const close = () => {
         controller.current?.abort();
+        setFile(null);
         setOpen(false);
     };
     useEscapeToClose(close, open, 40);
     useEffect(() => () => controller.current?.abort(), []);
+    useEffect(() => () => { if (file) URL.revokeObjectURL(file.url); }, [file]);
 
-    const download = async () => {
+    const prepareExport = async () => {
         if (controller.current) return;
+        setFile(null);
         setMessage('');
         let dates: string[];
         try {
@@ -83,12 +86,12 @@ export const ProgramStatisticsExport: React.FC<Props> = ({nodeId, nodeName, prog
             const blob = await zip.generateAsync({type: 'blob', compression: 'DEFLATE'});
             if (job.signal.aborted) return;
             const safeName = nodeName.replace(/[<>:"/\\|?*\p{Cc}]/gu, '_');
-            saveAs(blob, `${safeName}_overflow_${start}_${end}.zip`);
+            setFile({url: URL.createObjectURL(blob), name: `${safeName}_overflow_${start}_${end}.zip`});
             const failed = days.filter(day => !day.statistics).length;
             const empty = days.filter(day => day.statistics && !statisticsHasRecords(day.statistics)).length;
             setMessage(zh
-                ? `已导出 ${days.length} 天；无记录 ${empty} 天，读取失败 ${failed} 天。`
-                : `Exported ${days.length} days; ${empty} without records, ${failed} failed.`);
+                ? `已生成 ${days.length} 天；无记录 ${empty} 天，读取失败 ${failed} 天。`
+                : `Prepared ${days.length} days; ${empty} without records, ${failed} failed.`);
         } catch (error) {
             if (!job.signal.aborted) setMessage(error instanceof Error ? error.message : String(error));
         } finally {
@@ -109,18 +112,20 @@ export const ProgramStatisticsExport: React.FC<Props> = ({nodeId, nodeName, prog
             PaperProps={{className: 'ControlStatisticsExportDialog', sx: {backgroundColor: '#242424', color: '#eee'}}}>
             <DialogTitle id='statistics-export-title'>{zh ? '导出统计' : 'Export statistics'} · {nodeName}</DialogTitle>
             <DialogContent>
-                <form onSubmit={event => { event.preventDefault(); void download(); }}>
+                <form onSubmit={event => { event.preventDefault(); void prepareExport(); }}>
                     <div className='date-range'>
                         <label>{zh ? '开始日期' : 'Start date'}<input type='date' required value={start} max={today}
-                            disabled={busy} onChange={event => setStart(event.target.value)}/></label>
+                            disabled={busy} onChange={event => { setStart(event.target.value); setFile(null); setMessage(''); }}/></label>
                         <label>{zh ? '结束日期' : 'End date'}<input type='date' required value={end} min={start} max={today}
-                            disabled={busy} onChange={event => setEnd(event.target.value)}/></label>
+                            disabled={busy} onChange={event => { setEnd(event.target.value); setFile(null); setMessage(''); }}/></label>
                     </div>
                     <p>CSV · ZIP</p>
                     <div role='status' aria-live='polite'>{busy ? progress : message}</div>
                     <footer>
                         <button type='button' onClick={close}><X aria-hidden='true'/>{zh ? '取消' : 'Cancel'}</button>
-                        <button type='submit' disabled={busy}><Download aria-hidden='true'/>{zh ? '导出' : 'Export'}</button>
+                        {file
+                            ? <a href={file.url} download={file.name}><Download aria-hidden='true'/>{zh ? '下载文件' : 'Download file'}</a>
+                            : <button type='submit' disabled={busy}><Download aria-hidden='true'/>{zh ? '导出' : 'Export'}</button>}
                     </footer>
                 </form>
             </DialogContent>

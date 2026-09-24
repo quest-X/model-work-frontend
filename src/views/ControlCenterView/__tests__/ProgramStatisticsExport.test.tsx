@@ -1,12 +1,16 @@
 import React from 'react';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import JSZip from 'jszip';
-import {saveAs} from 'file-saver';
 import {ComputeClusterService, ComputeProgramOverflowStatistics} from '../../../services/ComputeClusterService';
 import {ProgramStatisticsExport} from '../ProgramStatisticsExport';
 import {statisticsExportDates, statisticsExportFiles} from '../statisticsExport';
 
-jest.mock('file-saver', () => ({saveAs: jest.fn()}));
+const createObjectURL = jest.fn<string, [Blob]>(() => 'blob:statistics-export');
+const revokeObjectURL = jest.fn();
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
+beforeAll(() => { URL.createObjectURL = createObjectURL; URL.revokeObjectURL = revokeObjectURL; });
+afterAll(() => { URL.createObjectURL = originalCreateObjectURL; URL.revokeObjectURL = originalRevokeObjectURL; });
 
 const statistics: ComputeProgramOverflowStatistics = {
     schema_version: 'runtime.program-overflow-statistics.v1',
@@ -85,14 +89,17 @@ it('defaults to the selected day and exports a range sequentially with failure a
     expect(screen.getByLabelText('开始日期')).toBeDisabled();
     await act(async () => completeFirst({...statistics, date: '2026-09-22',
         timezone_offset_minutes: -new Date('2026-09-22T12:00:00').getTimezoneOffset()}));
-    await waitFor(() => expect(saveAs).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
     expect(request.mock.calls.map(call => call[2])).toEqual(['2026-09-22', '2026-09-23', '2026-09-24']);
-    expect(screen.getByRole('status')).toHaveTextContent('已导出 3 天；无记录 1 天，读取失败 1 天');
-    expect(jest.mocked(saveAs).mock.calls[0][1]).toBe('AIPACK-07_overflow_2026-09-22_2026-09-24.zip');
-    const zip = await JSZip.loadAsync(jest.mocked(saveAs).mock.calls[0][0]);
+    expect(screen.getByRole('status')).toHaveTextContent('已生成 3 天；无记录 1 天，读取失败 1 天');
+    expect(screen.getByRole('link', {name: '下载文件'})).toHaveAttribute('download', 'AIPACK-07_overflow_2026-09-22_2026-09-24.zip');
+    const zip = await JSZip.loadAsync(createObjectURL.mock.calls[0][0]);
     expect(Object.keys(zip.files)).toHaveLength(5);
     expect(await zip.file('每日汇总.csv').async('string')).toContain('"读取失败","HTTP 503"');
     expect(await zip.file('炉次明细.csv').async('string')).toContain('"001"');
+    fireEvent.change(screen.getByLabelText('开始日期'), {target: {value: props.date}});
+    expect(screen.queryByRole('link', {name: '下载文件'})).not.toBeInTheDocument();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:statistics-export');
 });
 
 it('exports the selected day without additional date requests', async () => {
@@ -100,11 +107,13 @@ it('exports the selected day without additional date requests', async () => {
         .mockImplementation((_, __, date, offset) => Promise.resolve({...statistics, date, timezone_offset_minutes: offset}));
     open();
     fireEvent.click(screen.getByRole('button', {name: '导出', exact: true}));
-    await waitFor(() => expect(saveAs).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
     expect(request).toHaveBeenCalledTimes(1);
     expect(request.mock.calls[0][2]).toBe(props.date);
-    expect(jest.mocked(saveAs).mock.calls[0][1]).toBe('AIPACK-07_overflow_2026-09-24_2026-09-24.zip');
-    expect(screen.getByRole('status')).toHaveTextContent('已导出 1 天；无记录 0 天，读取失败 0 天');
+    expect(screen.getByRole('link', {name: '下载文件'})).toHaveAttribute('download', 'AIPACK-07_overflow_2026-09-24_2026-09-24.zip');
+    expect(screen.getByRole('status')).toHaveTextContent('已生成 1 天；无记录 0 天，读取失败 0 天');
+    fireEvent.click(screen.getByRole('button', {name: '取消'}));
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:statistics-export');
 });
 
 it('marks a timed-out day and continues to the next day', async () => {
@@ -117,10 +126,10 @@ it('marks a timed-out day and continues to the next day', async () => {
     jest.useFakeTimers();
     fireEvent.click(screen.getByRole('button', {name: '导出', exact: true}));
     await act(async () => { jest.advanceTimersByTime(30000); });
-    await waitFor(() => expect(saveAs).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
     jest.useRealTimers();
     expect(request.mock.calls.map(call => call[2])).toEqual(['2026-09-23', '2026-09-24']);
-    const zip = await JSZip.loadAsync(jest.mocked(saveAs).mock.calls[0][0]);
+    const zip = await JSZip.loadAsync(createObjectURL.mock.calls[0][0]);
     expect(await zip.file('每日汇总.csv').async('string')).toContain('"读取失败","读取超时"');
 });
 
@@ -138,16 +147,16 @@ it.each(['cancel', 'unmount'])('aborts requests and suppresses download on %s', 
         else fireEvent.click(screen.getByRole('button', {name: '取消'}));
     });
     expect(signal.aborted).toBe(true);
-    expect(saveAs).not.toHaveBeenCalled();
+    expect(createObjectURL).not.toHaveBeenCalled();
 });
 
 it('marks mismatched responses as failed instead of exporting a different day', async () => {
     jest.spyOn(ComputeClusterService, 'programOverflowStatistics').mockResolvedValue({...statistics, date: '2026-09-01'});
     open();
     fireEvent.click(screen.getByRole('button', {name: '导出', exact: true}));
-    await waitFor(() => expect(saveAs).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
     expect(screen.getByRole('status')).toHaveTextContent('读取失败 1 天');
-    const zip = await JSZip.loadAsync(jest.mocked(saveAs).mock.calls[0][0]);
+    const zip = await JSZip.loadAsync(createObjectURL.mock.calls[0][0]);
     const overview = await zip.file('导出概览.csv').async('string');
     expect(overview).toContain('"0","0","1","","","","","","",""');
 });
