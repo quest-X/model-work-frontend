@@ -46,6 +46,7 @@ import {StorageAnalysisPanel} from './StorageAnalysisPanel';
 import {DuplicateAnalysisPanel} from './DuplicateAnalysisPanel';
 import {StartupItemsPanel} from './StartupItemsPanel';
 import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
+import {ProgramRunnerPanel} from './ProgramRunnerPanel';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
@@ -380,6 +381,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [computeTasks, setComputeTasks] = useState<ComputeTask[]>([]);
     const [selectedNodeId, setSelectedNodeId] = useState('');
     const [loading, setLoading] = useState(true);
+    const [loadingProgress, setLoadingProgress] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
     const [graphError, setGraphError] = useState('');
@@ -387,8 +389,11 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [runtimeInventoryError, setRuntimeInventoryError] = useState('');
     const [dismissedRefreshWarningKey, setDismissedRefreshWarningKey] = useState('');
     const [inspectedServiceId, setInspectedServiceId] = useState('');
-    useEscapeToClose(() => setInspectedServiceId(''), Boolean(inspectedServiceId), 20);
+    const [toolOpenedFromOverview, setToolOpenedFromOverview] = useState(false);
+    const [pendingOverviewTool, setPendingOverviewTool] = useState<'monitor' | 'runner' | null>(null);
     const [monitorMaximized, setMonitorMaximized] = useState(false);
+    const [programRunnerOpen, setProgramRunnerOpen] = useState(false);
+    const [programRunnerMaximized, setProgramRunnerMaximized] = useState(false);
     const [monitorView, setMonitorView] = useState<MonitorView>('performance');
     const [deviceManagementTab, setDeviceManagementTab] = useState<'camera' | 'edge' | null>(null);
     const [cameraViewerId, setCameraViewerId] = useState('');
@@ -423,12 +428,30 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [overviewView, setOverviewView] = useState<OverviewView>('map');
     const mounted = useRef(true);
     const refreshInFlight = useRef(false);
+    const groupRefreshInFlight = useRef(false);
     const overviewSelected = useRef(false);
     const selectedNodeIdRef = useRef('');
     const runtimeInventoryRequest = useRef(0);
     const runtimeInventoryPendingNode = useRef('');
     const runtimeInventoryAbort = useRef<AbortController | null>(null);
     const conversationRequest = useRef(0);
+    useEscapeToClose(() => {
+        setInspectedServiceId('');
+        if (toolOpenedFromOverview) {
+            overviewSelected.current = true;
+            setSelectedNodeId('');
+            setToolOpenedFromOverview(false);
+        }
+    }, Boolean(inspectedServiceId), 20);
+    useEscapeToClose(() => {
+        setProgramRunnerOpen(false);
+        setProgramRunnerMaximized(false);
+        if (toolOpenedFromOverview) {
+            overviewSelected.current = true;
+            setSelectedNodeId('');
+            setToolOpenedFromOverview(false);
+        }
+    }, programRunnerOpen, 21);
 
     const loadRuntimeInventory = useCallback(async (nodeId: string) => {
         if (runtimeInventoryPendingNode.current === nodeId) return;
@@ -458,34 +481,52 @@ export const ControlCenterView: React.FC<IProps> = ({
     const refresh = useCallback(async (initial = false) => {
         if (refreshInFlight.current) return;
         refreshInFlight.current = true;
-        if (mounted.current) initial ? setLoading(true) : setRefreshing(true);
+        let completed = 0;
+        const track = <T,>(promise: Promise<T>) => promise.finally(() => {
+            completed += 1;
+            if (initial && mounted.current) setLoadingProgress(completed * 25);
+        });
+        if (!groupRefreshInFlight.current) {
+            groupRefreshInFlight.current = true;
+            void ComputeClusterService.groups()
+                .then(value => {
+                    if (mounted.current) setGroupMemberships(value.groups);
+                })
+                .catch(() => undefined)
+                .finally(() => {
+                    groupRefreshInFlight.current = false;
+                });
+        }
+        if (mounted.current) {
+            if (initial) {
+                setLoading(true);
+                setLoadingProgress(0);
+            } else {
+                setRefreshing(true);
+            }
+        }
         try {
-            const [nextNodes, graphResult, assetResult, memberships, targets] = await Promise.all([
-                ComputeClusterService.nodes(),
-                ComputeClusterService.resourceGraph().then(
+            const [nextNodes, graphResult, assetResult, targets] = await Promise.all([
+                track(ComputeClusterService.nodes()),
+                track(ComputeClusterService.resourceGraph().then(
                     value => ({value, error: ''}),
                     reason => ({
                         value: null,
                         error: reason instanceof Error ? reason.message : String(reason),
                     }),
-                ),
-                ComputeClusterService.lanAssets().then(
+                )),
+                track(ComputeClusterService.lanAssets().then(
                     value => value.assets,
                     () => [] as ComputeLanAsset[],
-                ),
-                ComputeClusterService.groups().then(
-                    value => value.groups,
-                    () => [] as ComputeGroupMembership[],
-                ),
-                ComputeClusterService.terminalTargets().then(
+                )),
+                track(ComputeClusterService.terminalTargets().then(
                     value => value.targets,
                     () => [] as ComputeTerminalTarget[],
-                ),
+                )),
             ]);
             if (!mounted.current) return;
             setNodes(nextNodes);
             setLanAssets(assetResult);
-            setGroupMemberships(memberships);
             setTerminalTargets(targets);
             if (graphResult.value) setResourceGraph(graphResult.value);
             setGraphError(graphResult.error);
@@ -689,6 +730,10 @@ export const ControlCenterView: React.FC<IProps> = ({
         return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
     }, [nodeGrouping, nodeOrdering, nodeRegions, nodes, nodeVisibility, zh]);
     const selectedNode = nodes.find(node => node.node_id === selectedNodeId) || null;
+    const overviewBehindTool = Boolean(
+        toolOpenedFromOverview && (inspectedServiceId || programRunnerOpen),
+    );
+    const backgroundNode = overviewBehindTool ? null : selectedNode;
     const runtimeInventoryCapable = Boolean(
         selectedNode?.online && selectedNode.capabilities.includes('runtime.inventory.v1'),
     );
@@ -790,6 +835,8 @@ export const ControlCenterView: React.FC<IProps> = ({
         if (nodeChanged) {
             setInspectedServiceId('');
             setMonitorView('performance');
+            setProgramRunnerOpen(false);
+            setProgramRunnerMaximized(false);
         }
         if (nodeChanged || !runtimeInventoryCapable) {
             runtimeInventoryAbort.current?.abort();
@@ -803,6 +850,13 @@ export const ControlCenterView: React.FC<IProps> = ({
             void loadRuntimeInventory(selectedNodeId);
         }
     }, [loadRuntimeInventory, selectedNode, selectedNodeId]);
+
+    useEffect(() => {
+        if (!pendingOverviewTool || !selectedNode) return;
+        if (pendingOverviewTool === 'monitor') setInspectedServiceId('node-runtime');
+        else setProgramRunnerOpen(true);
+        setPendingOverviewTool(null);
+    }, [pendingOverviewTool, selectedNode]);
 
     useEffect(() => {
         if (!selectedNode) return;
@@ -1045,8 +1099,8 @@ export const ControlCenterView: React.FC<IProps> = ({
         <div className='ControlMachineList'>
             <button
                 type='button'
-                className={`ControlMachineItem overview ${!selectedNodeId ? 'selected' : ''}`}
-                aria-pressed={!selectedNodeId}
+                className={`ControlMachineItem overview ${overviewBehindTool || !selectedNodeId ? 'selected' : ''}`}
+                aria-pressed={overviewBehindTool || !selectedNodeId}
                 onClick={() => {
                     overviewSelected.current = true;
                     setSelectedNodeId('');
@@ -1079,8 +1133,8 @@ export const ControlCenterView: React.FC<IProps> = ({
                     return <button
                         type='button'
                         key={node.node_id}
-                        className={`ControlMachineItem ${node.node_id === selectedNodeId ? 'selected' : ''}`}
-                        aria-pressed={node.node_id === selectedNodeId}
+                        className={`ControlMachineItem ${!overviewBehindTool && node.node_id === selectedNodeId ? 'selected' : ''}`}
+                        aria-pressed={!overviewBehindTool && node.node_id === selectedNodeId}
                         onClick={() => {
                             overviewSelected.current = false;
                             setActiveGroupResources(null);
@@ -1261,6 +1315,30 @@ export const ControlCenterView: React.FC<IProps> = ({
         </button>;
     };
 
+    const renderProgramRunnerCard = () => {
+        const capable = Boolean(
+            selectedNode?.online && selectedNode.capabilities.includes('runtime.read.v1'),
+        );
+        const tone: Tone = selectedNode?.online ? (capable ? 'healthy' : 'warning') : 'offline';
+        const status = selectedNode?.online
+            ? capable ? (zh ? '正常' : 'Normal') : (zh ? '待升级' : 'Upgrade required')
+            : (zh ? '故障' : 'Fault');
+        return <button
+            type='button'
+            className='ControlServiceCard ControlRuntimeService'
+            aria-label={zh ? '打开程序运行器' : 'Open program runner'}
+            onClick={() => setProgramRunnerOpen(true)}
+        >
+            <span className={`ControlStatusDot ${tone}`} aria-hidden='true'/>
+            <span className='ControlRuntimeIdentity'>
+                <span>{status}</span>
+                <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
+                <small>{zh ? '程序 · 环境 · 接口 · 状态 · 结果 · 日志' : 'Programs · environments · APIs · status · results · logs'}</small>
+            </span>
+            <span className='ControlServiceOpen' aria-hidden='true'>›</span>
+        </button>;
+    };
+
     // eslint-disable-next-line complexity
     const renderNode = (node: ComputeClusterNode) => {
         // Dependency health belongs to the latest node snapshot. Once that
@@ -1302,7 +1380,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             <header className='ControlNodeHeader'>
                 <div>
                     <h1>{node.name}</h1>
-                    <p>{zh ? '最后检查' : 'Last check'} {runtimeTime(node.resources.captured_at, zh)} · {zh ? '最近心跳' : 'Last heartbeat'} {lastSeen(node.heartbeat_age_seconds, zh)}</p>
+                    <p>{zh ? '最后检查' : 'Last check'} {runtimeTime(node.resources.captured_at, zh)} · {zh ? '最近通信' : 'Last contact'} {lastSeen(node.heartbeat_age_seconds, zh)}</p>
                     <div className='ControlNodeTags' aria-label={zh ? '节点标签' : 'Node tags'}>
                         {locationTag && <span className='ControlNodeTag location'>
                             {zh ? `地域 (${locationTag})` : `Region (${locationTag})`}
@@ -1419,7 +1497,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                         <h2>{zh ? '资源监控' : 'Resource monitoring'}</h2>
                     </div>
                 </div>
-                <div className='ControlServiceGrid'>{renderResourceMonitorCard()}</div>
+                <div className='ControlServiceGrid'>
+                    {renderResourceMonitorCard()}
+                    {renderProgramRunnerCard()}
+                </div>
             </section>
 
             <section className='ControlSection'>
@@ -1762,23 +1843,23 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 ? (zh ? '文件管理' : 'File manager')
                             : workspace === 'utilities'
                                 ? (zh ? '实用工具' : 'Utilities')
-                            : selectedNode?.name || activeGroupResources?.group.group_name || (overviewView === 'map'
+                            : backgroundNode?.name || activeGroupResources?.group.group_name || (overviewView === 'map'
                                 ? (zh ? '边缘集群地图' : 'Edge cluster map')
                                 : (zh ? '边缘集群图谱' : 'Edge cluster graph'))}</strong>
                     {workspace === 'groups'
                         ? <small>{zh ? '本机群成员关系' : 'Local group memberships'}</small>
                         : workspace === 'network'
                         ? <small>{zh ? '计算群资产台账' : 'Compute-cluster inventory'}</small>
-                        : selectedNode && workspace !== 'files' && <small>{workspace === 'terminal'
-                            ? selectedNode.name
-                            : selectedNode.node_id}</small>}
+                        : backgroundNode && workspace !== 'files' && <small>{workspace === 'terminal'
+                            ? backgroundNode.name
+                            : backgroundNode.node_id}</small>}
                 </div>
                 <div className='ControlToolbarGroup right'>
                     {queriedAt && <small>{zh ? '查询于' : 'Checked'} {queriedAt.toLocaleTimeString(zh ? 'zh-CN' : 'en-US')}</small>}
                     <span>{workspace === 'groups'
                         ? `${visibleGroups.length} ${zh ? '个群' : visibleGroups.length === 1 ? 'group' : 'groups'}`
                         : `${normalCount} / ${overviewNodes.length} ${zh ? '正常' : 'normal'}`}</span>
-                    {workspace === 'node' && !selectedNode
+                    {workspace === 'node' && !backgroundNode
                         ? <div className='ControlOverviewViewSwitch' role='group' aria-label={zh ? '总览视角' : 'Overview view'}>
                             <button
                                 type='button'
@@ -2030,15 +2111,15 @@ export const ControlCenterView: React.FC<IProps> = ({
                     />
                 </div>}
                 {workspace === 'node' && loading && nodes.length === 0 && <div className='ControlCenterMessage'>
-                    <strong>{zh ? '正在读取计算群' : 'Loading compute cluster'}</strong>
+                    <strong>{zh ? `正在读取计算群 ${loadingProgress}%` : `Loading compute cluster ${loadingProgress}%`}</strong>
                     <span>{zh ? '正在获取已加入计算群的机器…' : 'Fetching enrolled machines…'}</span>
                 </div>}
-                {workspace === 'node' && !loading && !selectedNode && overviewNodes.length === 0 && <div className='ControlCenterMessage error'>
+                {workspace === 'node' && !loading && !backgroundNode && overviewNodes.length === 0 && <div className='ControlCenterMessage error'>
                     <strong>{error ? (zh ? '无法读取计算群' : 'Compute cluster unavailable') : (zh ? '暂无机器' : 'No machines')}</strong>
                     <span>{error || (zh ? '请先将机器加入计算群' : 'Enroll a machine in the compute cluster first')}</span>
                     <button type='button' onClick={() => void refresh()}>{zh ? '重试' : 'Retry'}</button>
                 </div>}
-                {workspace === 'node' && !loading && !selectedNode && overviewNodes.length > 0 && <div className='ControlNodeContent'>
+                {workspace === 'node' && !loading && !backgroundNode && overviewNodes.length > 0 && <div className='ControlNodeContent'>
                     {(error || graphError) && dismissedRefreshWarningKey !== refreshWarningKey && <div className='ControlRefreshWarning' role='status'>
                         <span>{error
                                 ? (zh ? '本次刷新失败，正在显示上一次数据：' : 'Refresh failed; showing the last snapshot: ')
@@ -2065,6 +2146,21 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 zh={zh}
                                 fitWindow
                                 onSelectWorkAgent={() => undefined}
+                                onOpenNodeTool={(node, tool) => {
+                                    setSelectedNodeId(node.node_id);
+                                    if (tool === 'terminal') {
+                                        overviewSelected.current = false;
+                                        setToolOpenedFromOverview(false);
+                                        setTerminalAutoConnect(true);
+                                        setTerminalTransport(undefined);
+                                        setWorkspace('terminal');
+                                        return;
+                                    }
+                                    overviewSelected.current = false;
+                                    setToolOpenedFromOverview(true);
+                                    setPendingOverviewTool(tool);
+                                    setWorkspace('node');
+                                }}
                             />
                             : <div className='ControlCenterMessage error'>
                                 <strong>{zh ? '边缘集群图谱暂不可用' : 'Edge cluster graph unavailable'}</strong>
@@ -2072,7 +2168,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 <button type='button' onClick={() => void refresh()}>{zh ? '重试' : 'Retry'}</button>
                             </div>}
                 </div>}
-                {workspace === 'node' && selectedNode && <>
+                {workspace === 'node' && backgroundNode && <>
                     <div className='ControlNodeContent'>
                         {error && dismissedRefreshWarningKey !== refreshWarningKey && <div className='ControlRefreshWarning' role='status'>
                             <span>{zh ? '本次刷新失败，正在显示上一次数据：' : 'Refresh failed; showing the last snapshot: '}{error}</span>
@@ -2083,7 +2179,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 onClick={() => setDismissedRefreshWarningKey(refreshWarningKey)}
                             >×</button>
                         </div>}
-                        {renderNode(selectedNode)}
+                        {renderNode(backgroundNode)}
                     </div>
                 </>}
             </div>
@@ -2091,7 +2187,14 @@ export const ControlCenterView: React.FC<IProps> = ({
         {selectedNode && inspectedServiceId && <div
             className={`ControlResourceMonitorBackdrop${monitorMaximized ? ' maximized' : ''}`}
             onMouseDown={event => {
-                if (event.target === event.currentTarget) setInspectedServiceId('');
+                if (event.target === event.currentTarget) {
+                    setInspectedServiceId('');
+                    if (toolOpenedFromOverview) {
+                        overviewSelected.current = true;
+                        setSelectedNodeId('');
+                        setToolOpenedFromOverview(false);
+                    }
+                }
             }}
         >
             <section
@@ -2377,6 +2480,31 @@ export const ControlCenterView: React.FC<IProps> = ({
                     </div>
                 </div>
             </section>
+        </div>}
+        {selectedNode && programRunnerOpen && <div
+            className={`ControlResourceMonitorBackdrop${programRunnerMaximized ? ' maximized' : ''}`}
+            onMouseDown={event => {
+                if (event.target === event.currentTarget) {
+                    setProgramRunnerOpen(false);
+                    setProgramRunnerMaximized(false);
+                    if (toolOpenedFromOverview) {
+                        overviewSelected.current = true;
+                        setSelectedNodeId('');
+                        setToolOpenedFromOverview(false);
+                    }
+                }
+            }}
+        >
+            <ProgramRunnerPanel
+                node={selectedNode}
+                edgeDevices={lanAssets.filter(asset =>
+                    asset.node_id === selectedNode.node_id
+                    && asset.device_kind === 'edge_compute'
+                )}
+                zh={zh}
+                maximized={programRunnerMaximized}
+                onToggleMaximized={() => setProgramRunnerMaximized(current => !current)}
+            />
         </div>}
     </div>;
 };

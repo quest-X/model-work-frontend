@@ -5,6 +5,7 @@ import {Language} from '../../../../data/LanguageConfig';
 import {ComputeClusterService, ComputeUpgradeBatch} from '../../../../services/ComputeClusterService';
 import {ComputeClusterPopup} from '../ComputeClusterPopup';
 import {ResourceKnowledgeGraph} from '../ResourceKnowledgeGraph';
+import {AGENT_CHAT_SEND_EVENT} from '../../../Common/AgentSideChat/AgentSideChat';
 
 jest.mock('../../../../logic/actions/PopupActions', () => ({
     PopupActions: {close: jest.fn()},
@@ -545,10 +546,12 @@ describe('ComputeClusterPopup', () => {
         expect(graphLegend).toHaveTextContent('主节点');
         expect(graphLegend).toHaveTextContent('边缘计算设备');
         expect(graphLegend).toHaveTextContent('摄像头');
+        expect(graphLegend).toHaveTextContent('计算群成员');
         expect(graphLegend).toHaveTextContent('数据包');
         expect(graphLegend).not.toHaveTextContent('实时任务流');
         expect(screen.queryByText('黄色 · 执行器（预留）')).not.toBeInTheDocument();
         expect(screen.getAllByTestId('resource-graph-region')).toHaveLength(2);
+        expect(screen.getAllByTestId('resource-graph-group-link')).toHaveLength(1);
         expect(screen.getByText('上海')).toBeInTheDocument();
         expect(screen.getByText('山东')).toBeInTheDocument();
         expect(screen.queryByText('绿色 · 在线')).not.toBeInTheDocument();
@@ -579,6 +582,14 @@ describe('ComputeClusterPopup', () => {
         expect(camera).toHaveClass('sensor');
         expect(within(camera).getByText('S-001')).toBeInTheDocument();
         const onlineNode = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
+        const groupLink = screen.getByTestId('resource-graph-group-link-hit');
+        expect(groupLink).toHaveAttribute('aria-label', '同群成员 edge-offline ↔ edge-01');
+        await user.hover(groupLink);
+        expect(screen.getByText('计算群成员关系').closest('[role="status"]'))
+            .toHaveTextContent('计算群成员关系edge-offline↔edge-01');
+        expect(onlineNode).toHaveClass('relation-focused');
+        expect(offlineNode).toHaveClass('relation-focused');
+        await user.unhover(groupLink);
 
         const taskFlow = screen.getByLabelText('任务流 edge-01 → edge-offline');
         expect(screen.getAllByTestId('resource-graph-task-flow')).toHaveLength(2);
@@ -619,6 +630,7 @@ describe('ComputeClusterPopup', () => {
         await user.hover(onlineNode);
         const operationsCard = screen.getByRole('status', {name: 'edge-01 运维信息'});
         expect(operationsCard).toHaveClass('anchored');
+        expect(operationsCard).toHaveClass('tone-online');
         expect(within(operationsCard).getByText('SSH 通路')).toBeInTheDocument();
         expect(within(operationsCard).getByText('公网出口')).toBeInTheDocument();
         expect(within(operationsCard).getByText('Tailscale 私有组网')).toBeInTheDocument();
@@ -653,7 +665,9 @@ describe('ComputeClusterPopup', () => {
 
         await user.hover(offlineNode);
         const offlineCard = screen.getByRole('status', {name: 'edge-offline 运维信息'});
+        expect(offlineCard).toHaveClass('tone-offline');
         expect(within(offlineCard).getByText('异常 · 最后心跳 20 小时前')).toHaveClass('offline');
+        expect(within(offlineCard).getAllByText('异常')).toHaveLength(2);
 
         await user.unhover(offlineNode);
         await user.hover(camera);
@@ -663,6 +677,48 @@ describe('ComputeClusterPopup', () => {
         expect(within(sensorCard).getByText('2 个通道')).toBeInTheDocument();
         expect(within(sensorCard).getByText('上级设备 · AIPACK-01')).toBeInTheDocument();
         await waitFor(() => expect(service.resourceGraph).toHaveBeenCalledTimes(1));
+    });
+
+    it('opens the three classic node tools from a pinned graph card', async () => {
+        const user = userEvent.setup();
+        const graph = await service.resourceGraph();
+        const nodes = await service.nodes();
+        const onOpenNodeTool = jest.fn();
+        const rendered = render(<ResourceKnowledgeGraph
+            graph={graph}
+            nodes={nodes}
+            zh={true}
+            onSelectWorkAgent={jest.fn()}
+            onOpenNodeTool={onOpenNodeTool}
+        />);
+
+        const node = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
+        await user.dblClick(node);
+        const card = screen.getByRole('status', {name: 'edge-01 运维信息'});
+        expect(card).toHaveClass('pinned');
+
+        await user.click(within(card).getByRole('button', {name: /SSH \/ Tailscale/}));
+        await user.click(within(card).getByRole('button', {name: /资源监视器/}));
+        await user.click(within(card).getByRole('button', {name: /程序运行器/}));
+
+        expect(onOpenNodeTool.mock.calls.map(([, tool]) => tool))
+            .toEqual(['terminal', 'monitor', 'runner']);
+
+        const sent = jest.fn();
+        window.addEventListener(AGENT_CHAT_SEND_EVENT, sent);
+        await user.click(within(card).getByRole('button', {name: /通过 OpenSight Agent 执行 等待诊断/}));
+        expect((sent.mock.calls[0][0] as CustomEvent<string>).detail)
+            .toBe('@edge-01 执行 等待诊断（system.wait） 服务，并将执行结果按表格输出');
+        window.removeEventListener(AGENT_CHAT_SEND_EVENT, sent);
+
+        rendered.rerender(<ResourceKnowledgeGraph
+            graph={graph}
+            nodes={nodes.map(node => ({...node, communication_state: 'fault'}))}
+            zh={true}
+            onSelectWorkAgent={jest.fn()}
+            onOpenNodeTool={onOpenNodeTool}
+        />);
+        expect(screen.getByRole('status', {name: 'edge-01 运维信息'})).toHaveClass('tone-warning');
     });
 
     it('puts a direct camera owner at the top without changing the clockwise node order', async () => {

@@ -163,10 +163,11 @@ export const computeLinkStates = (node?: ComputeClusterNode): {lan: ComputeCommu
 
 export const computeNodeState = (node?: ComputeClusterNode): ComputeCommunicationState => {
     if (!node) return 'fault';
-    return aggregateCommunicationStates([
-        node.online && !node.network.error ? node.communication_state ?? 'normal' : 'fault',
-        ...Object.values(computeLinkStates(node)),
-    ]);
+    if (node.communication_state === 'abnormal') return 'abnormal';
+    return node.online && !node.network.error
+        && (node.communication_state == null || node.communication_state === 'normal')
+        ? 'normal'
+        : 'fault';
 };
 
 export const communicationStateLabel = (state: ComputeCommunicationState, zh: boolean): string =>
@@ -242,6 +243,59 @@ export type ComputeRuntimeInventory = {
         display_name: string;
         state: 'running' | 'stopped' | 'paused' | 'pending' | 'unknown';
         start_type: 'automatic';
+    }[];
+};
+
+export type ComputeProgramSnapshot = {
+    schema_version: 'runtime.programs.v1';
+    captured_at: number;
+    invalid_manifests: number;
+    programs: {
+        program_id: string;
+        name: string;
+        version: string;
+        root: string;
+        environment: string;
+        mode: 'production' | 'debug';
+        encryption: 'encrypted' | 'plain' | 'unknown';
+        state: ComputeRuntimeState;
+        service: {
+            name: string;
+            state: 'running' | 'stopped' | 'unknown';
+            pid: number | null;
+            uptime_seconds: number | null;
+        };
+        health: {
+            state: ComputeRuntimeState;
+            checked_at: number;
+            status_code: number | null;
+            latency_ms: number | null;
+        };
+        interfaces: {
+            method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+            path: string;
+            name: string;
+            description: string;
+            state: 'healthy' | 'unavailable' | 'not_checked';
+            checked_at: number | null;
+            status_code: number | null;
+            latency_ms: number | null;
+        }[];
+        events: {
+            created_at: number;
+            level: 'info' | 'warning' | 'error';
+            event_type: string;
+            message: string;
+        }[];
+        artifacts: {
+            artifact_id: string;
+            name: string;
+            relative_path: string;
+            kind: 'image' | 'video' | 'data';
+            content_type: string;
+            size_bytes: number;
+            modified_at: number;
+        }[];
     }[];
 };
 
@@ -1280,6 +1334,39 @@ export class ComputeClusterService {
 
     public static runtimeInventory(nodeId: string, signal?: AbortSignal): Promise<ComputeRuntimeInventory> {
         return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/inventory`, signal);
+    }
+
+    public static programs(nodeId: string, signal?: AbortSignal): Promise<ComputeProgramSnapshot> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/programs`, signal);
+    }
+
+    public static edgePrograms(
+        assetId: string,
+        signal?: AbortSignal,
+    ): Promise<ComputeProgramSnapshot> {
+        return request(`/lan-assets/${encodeURIComponent(assetId)}/runtime/programs`, signal);
+    }
+
+    public static programArtifactUrl(
+        nodeId: string,
+        programId: string,
+        artifactId: string,
+        modifiedAt: number,
+    ): string {
+        return `${baseUrl()}/nodes/${encodeURIComponent(nodeId)}/runtime/programs/${
+            encodeURIComponent(programId)
+        }/artifacts/${encodeURIComponent(artifactId)}?v=${modifiedAt}`;
+    }
+
+    public static edgeProgramArtifactUrl(
+        assetId: string,
+        programId: string,
+        artifactId: string,
+        modifiedAt: number,
+    ): string {
+        return `${baseUrl()}/lan-assets/${encodeURIComponent(assetId)}/runtime/programs/${
+            encodeURIComponent(programId)
+        }/artifacts/${encodeURIComponent(artifactId)}?v=${modifiedAt}`;
     }
 
     public static startupItems(nodeId: string, signal?: AbortSignal): Promise<ComputeStartupList> {

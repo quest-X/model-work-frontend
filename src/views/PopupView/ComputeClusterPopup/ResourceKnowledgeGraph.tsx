@@ -8,6 +8,7 @@ import {
     computeNodeLabel,
     aggregateCommunicationStates,
 } from '../../../services/ComputeClusterService';
+import {sendAgentMessage} from '../../Common/AgentSideChat/AgentSideChat';
 
 interface ResourceKnowledgeGraphProps {
     graph: ComputeResourceGraph;
@@ -19,6 +20,10 @@ interface ResourceKnowledgeGraphProps {
     onSelectWorkAgent: (
         agent: ComputeResourceGraphEntity,
         candidateNodeIds: string[],
+    ) => void;
+    onOpenNodeTool?: (
+        node: ComputeClusterNode,
+        tool: 'terminal' | 'monitor' | 'runner',
     ) => void;
 }
 
@@ -252,6 +257,9 @@ const agentLabel = (
 const availabilityLabel = (available: boolean, zh: boolean): string =>
     available ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
 
+const routeAvailabilityLabel = (available: boolean, zh: boolean): string =>
+    available ? (zh ? '正常' : 'Normal') : (zh ? '异常' : 'Abnormal');
+
 const sensorKindLabel = (entity: ComputeResourceGraphEntity, zh: boolean): string => {
     if (entity.device_kind === 'edge_compute') return zh ? '边缘计算设备' : 'Edge device';
     const classification = deviceClass(entity);
@@ -274,9 +282,11 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     tasks = [],
     zh,
     fitWindow = false,
+    onOpenNodeTool,
 }) => {
     const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
     const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
+    const [hoveredGroupLinkId, setHoveredGroupLinkId] = useState<string | null>(null);
     const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
     const [pinnedEntityId, setPinnedEntityId] = useState<string | null>(null);
     const index = useMemo(
@@ -310,6 +320,18 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     const points = topology.points;
     const codes = useMemo(() => displayCodes(graph.entities), [graph.entities]);
     const graphNodes = visibleEntities.filter(entity => entity.kind === 'compute_node');
+    const groupMembers = [...graphNodes]
+        .filter(entity => points.has(entity.entity_id))
+        .sort((left, right) => {
+            const leftPoint = points.get(left.entity_id) as GraphPoint;
+            const rightPoint = points.get(right.entity_id) as GraphPoint;
+            return leftPoint.x - rightPoint.x || leftPoint.y - rightPoint.y;
+        });
+    const groupLinks = groupMembers.slice(1).map((target, linkIndex) => ({
+        id: `${groupMembers[linkIndex].entity_id}:${target.entity_id}`,
+        source: groupMembers[linkIndex],
+        target,
+    }));
     const activeTaskFlows = tasks.flatMap(task => {
         const source = task.source_entity_id ? index.get(task.source_entity_id) : undefined;
         const target = task.target_entity_id ? index.get(task.target_entity_id) : undefined;
@@ -330,12 +352,18 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     }));
     const inspectedEntityId = pinnedEntityId || hoveredEntityId;
     const inspectedEntity = inspectedEntityId ? index.get(inspectedEntityId) : undefined;
+    const inspectedTone = inspectedEntity?.kind === 'compute_node'
+        ? nodeTones.get(inspectedEntity.entity_id)
+        : undefined;
     const inspectedPoint = inspectedEntityId ? points.get(inspectedEntityId) : undefined;
     const hoveredRelation = visibleRelations.find(relation => relation.relation_id === hoveredRelationId);
     const hoveredRelationSource = hoveredRelation ? index.get(hoveredRelation.source_id) : undefined;
     const hoveredRelationTarget = hoveredRelation ? index.get(hoveredRelation.target_id) : undefined;
     const hoveredRelationSourcePoint = hoveredRelation ? points.get(hoveredRelation.source_id) : undefined;
     const hoveredRelationTargetPoint = hoveredRelation ? points.get(hoveredRelation.target_id) : undefined;
+    const hoveredGroupLink = groupLinks.find(link => link.id === hoveredGroupLinkId);
+    const hoveredGroupSourcePoint = hoveredGroupLink ? points.get(hoveredGroupLink.source.entity_id) : undefined;
+    const hoveredGroupTargetPoint = hoveredGroupLink ? points.get(hoveredGroupLink.target.entity_id) : undefined;
     const hoveredTaskFlow = activeTaskFlows.find(({task}) => task.task_id === hoveredTaskId);
     const hoveredTaskSourcePoint = hoveredTaskFlow ? points.get(hoveredTaskFlow.source.entity_id) : undefined;
     const hoveredTaskTargetPoint = hoveredTaskFlow ? points.get(hoveredTaskFlow.target.entity_id) : undefined;
@@ -387,13 +415,14 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
             <span><i className='entity-shape circle'/>{zh ? '主节点' : 'Main node'}</span>
             <span><i className='entity-shape rounded-rectangle edge-device'/>{zh ? '边缘计算设备' : 'Edge device'}</span>
             <span><i className='entity-shape rounded-rectangle sensor'/>{zh ? '摄像头' : 'Camera'}</span>
+            <span><i className='entity-shape group-link'/>{zh ? '计算群成员' : 'Cluster membership'}</span>
             <span><i className='entity-shape task-flow'/>{zh ? '数据包' : 'Packet'}</span>
         </div>
 
         <div className={`ComputeGraphViewport${fitWindow ? ' fit-window' : ''}`}>
             <div className='ComputeGraphFit'>
             <div
-                className={`ComputeGraphScene operations-only${hoveredRelation || hoveredTaskFlow ? ' has-relation-focus' : ''}`}
+                className={`ComputeGraphScene operations-only${hoveredRelation || hoveredGroupLink || hoveredTaskFlow ? ' has-relation-focus' : ''}${hoveredGroupLink ? ' group-focus' : ''}`}
                 data-layout='radial'
                 style={{
                     minWidth: fitWindow ? 0 : topology.minWidth,
@@ -427,6 +456,37 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     data-testid='resource-node-link-graph'
                     aria-label={zh ? '设备连接线' : 'Device connections'}
                 >
+                    {groupLinks.map(link => {
+                        const sourcePoint = points.get(link.source.entity_id) as GraphPoint;
+                        const targetPoint = points.get(link.target.entity_id) as GraphPoint;
+                        const focused = hoveredGroupLinkId === link.id;
+                        const muted = Boolean(hoveredRelationId || hoveredTaskId || hoveredGroupLinkId) && !focused;
+                        return <React.Fragment key={link.id}>
+                            <line
+                                x1={sourcePoint.x * 10}
+                                y1={sourcePoint.y * 4.4}
+                                x2={targetPoint.x * 10}
+                                y2={targetPoint.y * 4.4}
+                                className={`ComputeGraphGroupLink ${focused ? 'focused' : ''} ${muted ? 'muted' : ''}`}
+                                data-testid='resource-graph-group-link'
+                                aria-hidden='true'
+                            />
+                            <line
+                                x1={sourcePoint.x * 10}
+                                y1={sourcePoint.y * 4.4}
+                                x2={targetPoint.x * 10}
+                                y2={targetPoint.y * 4.4}
+                                className='ComputeGraphEdgeHit'
+                                data-testid='resource-graph-group-link-hit'
+                                tabIndex={0}
+                                aria-label={`${zh ? '同群成员' : 'Cluster members'} ${link.source.label} ↔ ${link.target.label}`}
+                                onMouseEnter={() => setHoveredGroupLinkId(link.id)}
+                                onMouseLeave={() => setHoveredGroupLinkId(current => current === link.id ? null : current)}
+                                onFocus={() => setHoveredGroupLinkId(link.id)}
+                                onBlur={() => setHoveredGroupLinkId(current => current === link.id ? null : current)}
+                            />
+                        </React.Fragment>;
+                    })}
                     {visibleRelations.map(relation => {
                         const source = points.get(relation.source_id);
                         const target = points.get(relation.target_id);
@@ -438,7 +498,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         const x2 = target.x * 10;
                         const y2 = target.y * 4.4;
                         const focused = hoveredRelationId === relation.relation_id;
-                        const muted = Boolean(hoveredRelationId || hoveredTaskId) && !focused;
+                        const muted = Boolean(hoveredRelationId || hoveredGroupLinkId || hoveredTaskId) && !focused;
                         return <React.Fragment key={relation.relation_id}>
                             <line
                                 x1={x1}
@@ -483,7 +543,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         if (!sourcePoint || !targetPoint) return null;
                         const path = `M ${sourcePoint.x * 10} ${sourcePoint.y * 4.4} L ${targetPoint.x * 10} ${targetPoint.y * 4.4}`;
                         const focused = hoveredTaskId === task.task_id;
-                        const muted = Boolean(hoveredRelationId) || Boolean(hoveredTaskId && !focused);
+                        const muted = Boolean(hoveredRelationId || hoveredGroupLinkId) || Boolean(hoveredTaskId && !focused);
                         return <g
                             key={task.task_id}
                             className={`ComputeGraphTaskFlow ${focused ? 'focused' : ''} ${muted ? 'muted' : ''}`}
@@ -524,6 +584,8 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     const isPinned = pinnedEntityId === entity.entity_id;
                     const isRelationEndpoint = hoveredRelation?.source_id === entity.entity_id
                         || hoveredRelation?.target_id === entity.entity_id
+                        || hoveredGroupLink?.source.entity_id === entity.entity_id
+                        || hoveredGroupLink?.target.entity_id === entity.entity_id
                         || hoveredTaskFlow?.source.entity_id === entity.entity_id
                         || hoveredTaskFlow?.target.entity_id === entity.entity_id;
                     return <button
@@ -531,7 +593,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         key={entity.entity_id}
                         className={`ComputeGraphNode ${entity.kind} ${classification} ${entity.device_kind === 'edge_compute' ? 'edge-device' : ''} state-${entity.state} ${isNode
                             ? `node-${nodeTones.get(entity.entity_id)}`
-                            : 'sensor-node'} ${isHovered || isPinned ? 'focused' : ''} ${isPinned ? 'pinned' : ''} ${isRelationEndpoint ? 'relation-focused' : ''} ${(hoveredRelation || hoveredTaskFlow) && !isRelationEndpoint ? 'muted' : ''}`}
+                            : 'sensor-node'} ${isHovered || isPinned ? 'focused' : ''} ${isPinned ? 'pinned' : ''} ${isRelationEndpoint ? 'relation-focused' : ''} ${(hoveredRelation || hoveredGroupLink || hoveredTaskFlow) && !isRelationEndpoint ? 'muted' : ''}`}
                         style={{left: `${point.x}%`, top: `${point.y}%`}}
                         onMouseEnter={() => setHoveredEntityId(entity.entity_id)}
                         onMouseLeave={() => setHoveredEntityId(current => current === entity.entity_id ? null : current)}
@@ -577,6 +639,19 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     <strong>{hoveredRelationSource.label}<b>↔</b>{hoveredRelationTarget.label}</strong>
                 </aside>}
 
+                {hoveredGroupLink && hoveredGroupSourcePoint && hoveredGroupTargetPoint && <aside
+                    className='ComputeGraphEdgeLabel group-link'
+                    style={{
+                        left: `${(hoveredGroupSourcePoint.x + hoveredGroupTargetPoint.x) / 2}%`,
+                        top: `${(hoveredGroupSourcePoint.y + hoveredGroupTargetPoint.y) / 2}%`,
+                    }}
+                    role='status'
+                    aria-label={`${hoveredGroupLink.source.label} ${zh ? '与' : 'and'} ${hoveredGroupLink.target.label} ${zh ? '同群成员关系' : 'cluster membership'}`}
+                >
+                    <span>{zh ? '计算群成员关系' : 'Cluster membership'}</span>
+                    <strong>{hoveredGroupLink.source.label}<b>↔</b>{hoveredGroupLink.target.label}</strong>
+                </aside>}
+
                 {hoveredTaskFlow && hoveredTaskSourcePoint && hoveredTaskTargetPoint && <aside
                     className='ComputeGraphEdgeLabel task-flow'
                     style={{
@@ -591,7 +666,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                 </aside>}
 
                 {inspectedEntity && <aside
-                    className={`ComputeGraphHoverCard anchored ${pinnedEntityId === inspectedEntity.entity_id ? 'pinned' : ''}`}
+                    className={`ComputeGraphHoverCard anchored ${inspectedTone ? `tone-${inspectedTone}` : ''} ${pinnedEntityId === inspectedEntity.entity_id ? 'pinned' : ''}`}
                     style={{
                         '--hover-anchor-x': `${inspectedPoint?.x || 50}%`,
                         '--hover-anchor-y': `${inspectedPoint?.y || 50}%`,
@@ -610,6 +685,10 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         const sshAvailable = dependencyFor(inspectedEntity, 'control_ssh');
                         const publicAvailable = dependencyFor(inspectedEntity, 'public_http');
                         const tailscaleAvailable = dependencyFor(inspectedEntity, 'tailscale');
+                        const terminalAvailable = sshAvailable || tailscaleAvailable;
+                        const runnerAvailable = Boolean(
+                            node?.online && node.capabilities.includes('runtime.read.v1'),
+                        );
                         return <>
                             <span>{zh
                                 ? `主节点 ${codes.get(inspectedEntity.entity_id)} · 运维信息${pinnedEntityId === inspectedEntity.entity_id ? ' · 已固定（双击节点或点击空白取消）' : ''}`
@@ -618,23 +697,74 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                             <small className={tone}>{computeNodeLabel(node, zh)} · {node?.online
                                 ? (zh ? '心跳' : 'heartbeat')
                                 : (zh ? '最后心跳' : 'last heartbeat')}{' '}{heartbeatLabel(node?.heartbeat_age_seconds, zh)}</small>
-                            <div className='ComputeGraphHoverRoutes'>
+                            {node && onOpenNodeTool ? <div className='ComputeGraphNodeActions'>
+                                <button
+                                    type='button'
+                                    disabled={!terminalAvailable}
+                                    onClick={event => {
+                                        event.stopPropagation();
+                                        onOpenNodeTool(node, 'terminal');
+                                    }}
+                                >
+                                    <span>{routeAvailabilityLabel(terminalAvailable, zh)}</span>
+                                    <strong>SSH / Tailscale</strong>
+                                    <small>{zh ? '打开终端窗口' : 'Open terminal'}</small>
+                                </button>
+                                <button
+                                    type='button'
+                                    onClick={event => {
+                                        event.stopPropagation();
+                                        onOpenNodeTool(node, 'monitor');
+                                    }}
+                                >
+                                    <span>{computeNodeLabel(node, zh)}</span>
+                                    <strong>{zh ? '资源监视器' : 'Resource monitor'}</strong>
+                                    <small>{zh ? '处理器 · 内存 · 显卡 · 磁盘 · 网络' : 'CPU · MEM · GPU · DISK · NETWORK'}</small>
+                                </button>
+                                <button
+                                    type='button'
+                                    onClick={event => {
+                                        event.stopPropagation();
+                                        onOpenNodeTool(node, 'runner');
+                                    }}
+                                >
+                                    <span>{runnerAvailable
+                                        ? (zh ? '正常' : 'Normal')
+                                        : node.online ? (zh ? '待升级' : 'Upgrade required') : computeNodeLabel(node, zh)}</span>
+                                    <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
+                                    <small>{zh ? '程序 · 环境 · 接口 · 状态 · 结果 · 日志' : 'Programs · environments · APIs · status · results · logs'}</small>
+                                </button>
+                            </div> : <div className='ComputeGraphHoverRoutes'>
                                 <div className={sshAvailable ? 'available' : 'unavailable'}>
-                                    <span>{zh ? 'SSH 通路' : 'SSH route'}</span><strong>{availabilityLabel(sshAvailable, zh)}</strong>
+                                    <span>{zh ? 'SSH 通路' : 'SSH route'}</span><strong>{routeAvailabilityLabel(sshAvailable, zh)}</strong>
                                     <small>{node?.network.self_name || node?.network.addresses.join(' · ') || (zh ? '地址待节点上报' : 'Address pending')}</small>
                                 </div>
                                 <div className={publicAvailable ? 'available' : 'unavailable'}>
-                                    <span>{zh ? '公网出口' : 'Public egress'}</span><strong>{availabilityLabel(publicAvailable, zh)}</strong>
+                                    <span>{zh ? '公网出口' : 'Public egress'}</span><strong>{routeAvailabilityLabel(publicAvailable, zh)}</strong>
                                     <small>{zh ? '公开网络访问' : 'Public network access'}</small>
                                 </div>
                                 <div className={tailscaleAvailable ? 'available' : 'unavailable'}>
-                                    <span>{zh ? 'Tailscale 私有组网' : 'Tailscale private overlay'}</span><strong>{availabilityLabel(tailscaleAvailable, zh)}</strong>
+                                    <span>{zh ? 'Tailscale 私有组网' : 'Tailscale private overlay'}</span><strong>{routeAvailabilityLabel(tailscaleAvailable, zh)}</strong>
                                     <small>{node?.network.tailnet || (zh ? '私有链路' : 'Private route')}</small>
                                 </div>
-                            </div>
+                            </div>}
                             <div className='ComputeGraphHoverAgents'>
                                 <span>{zh ? '可调用任务执行器' : 'Callable task workers'}</span>
-                                {agents.length ? <div>{agents.map(agent => <em key={agent.entity_id}>{codes.get(agent.entity_id)} · {agentLabel(agent, zh)}</em>)}</div>
+                                {agents.length ? <div>{agents.map(agent => {
+                                    const service = agentLabel(agent, zh);
+                                    const command = zh
+                                        ? `@${node.name} 执行 ${service}${agent.task_type ? `（${agent.task_type}）` : ''} 服务，并将执行结果按表格输出`
+                                        : `@${node.name} run the ${service}${agent.task_type ? ` (${agent.task_type})` : ''} service and show the result as a table`;
+                                    return <button
+                                        type='button'
+                                        key={agent.entity_id}
+                                        aria-label={zh ? `通过 OpenSight Agent 执行 ${service}` : `Run ${service} with OpenSight Agent`}
+                                        onClick={event => {
+                                            event.stopPropagation();
+                                            sendAgentMessage(command);
+                                        }}
+                                    >{codes.get(agent.entity_id)} · {service}</button>;
+                                })}</div>
                                     : <small>{zh ? '暂无可调用任务执行器' : 'No callable task worker'}</small>}
                             </div>
                         </>;
