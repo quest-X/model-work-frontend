@@ -356,6 +356,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const [scheduler, setScheduler] = useState<ComputeSchedulerResponse | null>(null);
     const [resourceGraph, setResourceGraph] = useState<ComputeResourceGraph | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadingProgress, setLoadingProgress] = useState(0);
     const [maximized, setMaximized] = useState(false);
     const [activeWorkspace, setActiveWorkspace] = useState<ComputeWorkspace>(initialWorkspace);
     const [nodeFilter, setNodeFilter] = useState<NodeFilter>('all');
@@ -406,11 +407,18 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const refresh = useCallback(async (signal?: AbortSignal) => {
         if (refreshingRef.current) return;
         refreshingRef.current = true;
+        if (mounted.current) setLoadingProgress(0);
         try {
+            let completedBaseRequests = 0;
+            const trackBase = <T,>(request: Promise<T>): Promise<T> => request.finally(() => {
+                completedBaseRequests += 1;
+                if (mounted.current) setLoadingProgress(completedBaseRequests * 25);
+            });
             const [nextStatus, nextNodes] = await Promise.all([
-                ComputeClusterService.status(signal),
-                ComputeClusterService.nodes(signal),
+                trackBase(ComputeClusterService.status(signal)),
+                trackBase(ComputeClusterService.nodes(signal)),
             ]);
+            if (mounted.current) setLoadingProgress(50);
             if (mounted.current) {
                 setStatus(nextStatus);
                 setNodes(nextNodes);
@@ -459,6 +467,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                         setLanSchedules(scheduleResponse?.schedules || []);
                         setScanCidr(current => current || Object.values(nextTargets)[0]?.[0]?.cidr || '');
                         setTaskError('');
+                        setLoadingProgress(100);
                     }
                     const now = Date.now();
                     const renewable = response.tasks.filter(task =>
@@ -481,6 +490,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                 setResourceGraph(null);
                 setLanAssets(null);
                 setLanSchedules([]);
+                setLoadingProgress(100);
             }
         } catch (reason) {
             if ((reason as {name?: string})?.name !== 'AbortError') {
@@ -790,7 +800,9 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
             </nav>}
 
             <div className='ComputeClusterContent'>
-                {loading && <div className='ComputeClusterLoading'><span/>{zh ? '正在读取节点…' : 'Loading nodes…'}</div>}
+                {loading && <div className='ComputeClusterLoading'><span/>{zh
+                    ? `正在读取节点… ${loadingProgress}%`
+                    : `Loading nodes… ${loadingProgress}%`}</div>}
                 {!loading && nodes.length === 0 && <div className='ComputeClusterEmpty'>
                     <div className='ComputeClusterEmptyIcon'><i/><i/><i/></div>
                     <h3>{zh ? '尚未注册计算节点' : 'No compute nodes registered'}</h3>

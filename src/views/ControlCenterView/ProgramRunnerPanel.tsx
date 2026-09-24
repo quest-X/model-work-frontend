@@ -7,8 +7,9 @@ import {
     ComputeRuntimeService,
     ComputeRuntimeSnapshot,
 } from '../../services/ComputeClusterService';
+import {ProgramLivePreview} from './ProgramLivePreview';
 
-type ProgramRunnerView = 'programs' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs';
+type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
 type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'telegram' | 'log';
 
@@ -197,8 +198,12 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const programsVisible = programsCapable || programs !== null;
     const logsVisible = runtimeVisible || programsVisible || events.length > 0;
     const showingCache = !node.online && (snapshot !== null || programs !== null || events.length > 0);
+    const pollingPaused = view === 'artifacts' && programs !== null;
+    const eventsRequested = view === 'telegrams' || view === 'logs';
     const connectionLabel = node.online
-        ? (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
+        ? pollingPaused
+            ? (zh ? '在线 · 结果预览期间暂停状态刷新' : 'Online · status refresh paused during result preview')
+            : (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
         : showingCache
             ? (zh ? '离线 · 显示最后缓存' : 'Offline · showing last cached data')
             : (zh ? '离线' : 'Offline');
@@ -232,7 +237,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     }, [node.node_id]);
 
     useEffect(() => {
-        if (!runtimeCapable && !programsCapable) return undefined;
+        if (pollingPaused || !runtimeCapable && !programsCapable) return undefined;
         const controller = new AbortController();
         let inFlight = false;
         // eslint-disable-next-line complexity
@@ -241,7 +246,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             inFlight = true;
             setRefreshing(true);
             setRefreshProgress(0);
-            const requestCount = Number(runtimeCapable) * 2 + Number(programsCapable);
+            const requestCount = Number(runtimeCapable)
+                + Number(programsCapable)
+                + Number(runtimeCapable && eventsRequested);
             let completedRequests = 0;
             const track = <T,>(request: Promise<T>): Promise<T> => request.finally(() => {
                 completedRequests += 1;
@@ -249,58 +256,74 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     setRefreshProgress(Math.round(completedRequests / requestCount * 100));
                 }
             });
-            const [runtimeResult, programsResult, eventsResult] = await Promise.allSettled([
-                runtimeCapable
-                    ? track(ComputeClusterService.runtime(node.node_id, controller.signal))
-                    : Promise.resolve(null),
-                programsCapable
-                    ? track(ComputeClusterService.programs(node.node_id, controller.signal))
-                    : Promise.resolve(null),
-                runtimeCapable
-                    ? track(ComputeClusterService.runtimeEvents(node.node_id, 0, 100, controller.signal))
-                    : Promise.resolve(null),
-            ]);
+            const updateCache = (patch: Partial<ProgramRunnerCache>) => {
+                const current = programRunnerCache.get(node.node_id);
+                programRunnerCache.set(node.node_id, {
+                    snapshot: current?.snapshot || null,
+                    programs: current?.programs || null,
+                    events: current?.events || [],
+                    ...patch,
+                });
+            };
+            const requests: Promise<void>[] = [];
+            if (runtimeCapable) {
+                requests.push(track(ComputeClusterService.runtime(node.node_id, controller.signal)).then(
+                    value => {
+                        if (controller.signal.aborted) return;
+                        updateCache({snapshot: value});
+                        setSnapshot(value);
+                        setRuntimeError('');
+                    },
+                    reason => {
+                        if (controller.signal.aborted) return;
+                        setRuntimeError(reason instanceof Error ? reason.message : String(reason));
+                    },
+                ));
+            }
+            if (programsCapable) {
+                requests.push(track(ComputeClusterService.programs(node.node_id, controller.signal)).then(
+                    value => {
+                        if (controller.signal.aborted) return;
+                        updateCache({programs: value});
+                        setPrograms(value);
+                        setProgramsError('');
+                    },
+                    reason => {
+                        if (controller.signal.aborted) return;
+                        setProgramsError(reason instanceof Error ? reason.message : String(reason));
+                    },
+                ));
+            }
+            if (runtimeCapable && eventsRequested) {
+                requests.push(track(ComputeClusterService.runtimeEvents(
+                    node.node_id,
+                    0,
+                    100,
+                    controller.signal,
+                )).then(
+                    value => {
+                        if (controller.signal.aborted) return;
+                        updateCache({events: value.events});
+                        setEvents(value.events);
+                        setEventsError('');
+                    },
+                    reason => {
+                        if (controller.signal.aborted) return;
+                        setEventsError(reason instanceof Error ? reason.message : String(reason));
+                    },
+                ));
+            }
+            await Promise.all(requests);
             if (!controller.signal.aborted) {
-                const cachedResult = programRunnerCache.get(node.node_id);
-                const nextCache: ProgramRunnerCache = {
-                    snapshot: cachedResult?.snapshot || null,
-                    programs: cachedResult?.programs || null,
-                    events: cachedResult?.events || [],
-                };
-                if (runtimeResult.status === 'fulfilled') {
-                    if (runtimeResult.value) {
-                        nextCache.snapshot = runtimeResult.value;
-                        setSnapshot(runtimeResult.value);
-                    }
+                if (!runtimeCapable) {
                     setRuntimeError('');
-                } else {
-                    setRuntimeError(runtimeResult.reason instanceof Error
-                        ? runtimeResult.reason.message
-                        : String(runtimeResult.reason));
                 }
-                if (programsResult.status === 'fulfilled') {
-                    if (programsResult.value) {
-                        nextCache.programs = programsResult.value;
-                        setPrograms(programsResult.value);
-                    }
+                if (!programsCapable) {
                     setProgramsError('');
-                } else {
-                    setProgramsError(programsResult.reason instanceof Error
-                        ? programsResult.reason.message
-                        : String(programsResult.reason));
                 }
-                if (eventsResult.status === 'fulfilled') {
-                    if (eventsResult.value) {
-                        nextCache.events = eventsResult.value.events;
-                        setEvents(eventsResult.value.events);
-                    }
+                if (!eventsRequested) {
                     setEventsError('');
-                } else {
-                    setEventsError(eventsResult.reason instanceof Error
-                        ? eventsResult.reason.message
-                        : String(eventsResult.reason));
                 }
-                programRunnerCache.set(node.node_id, nextCache);
                 setRefreshing(false);
             }
             inFlight = false;
@@ -311,7 +334,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [node.node_id, programsCapable, runtimeCapable]);
+    }, [eventsRequested, node.node_id, pollingPaused, programsCapable, runtimeCapable]);
 
     const selectedService = snapshot?.services.find(service =>
         service.service_id === selectedServiceId
@@ -329,6 +352,11 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             program_id: program.program_id,
             program_name: program.name,
         }))
+    );
+    const livePreview = endpointRows.find(endpoint =>
+        endpoint.method === 'GET' && endpoint.path === '/stream.mjpeg'
+    ) || endpointRows.find(endpoint =>
+        endpoint.method === 'GET' && endpoint.path === '/rtsp'
     );
     const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
         view === 'telegrams'
@@ -480,6 +508,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             <nav className='ControlMonitorNav' aria-label={zh ? '程序运行器导航' : 'Program runner navigation'}>
                 {([
                     ['programs', zh ? '程序' : 'Programs'],
+                    ['preview', zh ? '预览' : 'Preview'],
                     ['endpoints', zh ? '接口' : 'APIs'],
                     ['artifacts', zh ? '结果' : 'Results'],
                     ['telegrams', zh ? '电文' : 'Telegrams'],
@@ -602,7 +631,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                         </dl>
                                                     </article>)}</div>
                                                     : <p>{zh ? '节点尚未注册部署程序。' : 'No deployed programs are registered on this node.'}</p>
-                                                : <p>{zh ? '正在读取受控程序目录…' : 'Loading the managed program directory…'}</p>}
+                                                : <p>{zh
+                                                    ? `正在读取受控程序目录… ${refreshProgress}%`
+                                                    : `Loading the managed program directory… ${refreshProgress}%`}</p>}
                                     {Boolean(programs?.invalid_manifests) && <p className='warning'>
                                         {zh
                                             ? `${programs?.invalid_manifests} 个程序清单未通过安全校验`
@@ -631,8 +662,39 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         : unavailable(
                             runtimeError
                                 ? (zh ? '程序状态暂不可用' : 'Program status is unavailable')
-                                : (zh ? '正在读取程序状态…' : 'Loading program status…'),
+                                : refreshing && !snapshot
+                                    ? (zh
+                                        ? `正在读取程序状态… ${refreshProgress}%`
+                                        : `Loading program status… ${refreshProgress}%`)
+                                    : (zh ? '暂无程序状态' : 'No program status'),
                             runtimeError,
+                        ))}
+
+                {view === 'preview' && (!programsVisible
+                    ? unavailable(
+                        zh ? '当前节点尚不支持实时预览' : 'Live preview is not supported',
+                        node.online
+                            ? (zh ? '升级节点程序后可查看实时画面。' : 'Upgrade the node software to view the live stream.')
+                            : (zh ? '节点恢复在线后才能读取实时画面。' : 'The node must return online before the live stream can be read.'),
+                    )
+                    : livePreview
+                        ? <ProgramLivePreview
+                            key={`${node.node_id}-${livePreview.program_id}`}
+                            nodeId={node.node_id}
+                            programId={livePreview.program_id}
+                            name={livePreview.program_name}
+                            path={livePreview.path}
+                            zh={zh}
+                        />
+                        : unavailable(
+                            programsError
+                                ? (zh ? '实时预览暂不可用' : 'Live preview is unavailable')
+                                : refreshing && !programs
+                                    ? (zh
+                                        ? `正在读取实时预览… ${refreshProgress}%`
+                                        : `Loading live preview… ${refreshProgress}%`)
+                                    : (zh ? '该程序未声明 /rtsp 预览接口' : 'The program has not declared a /rtsp preview API'),
+                            programsError,
                         ))}
 
                 {view === 'endpoints' && (!programsVisible
@@ -646,53 +708,60 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         <header className='ControlMonitorSearchHeader'>
                             <div>
                                 <h3>{zh ? '接口' : 'APIs'}</h3>
-                                <p>{zh ? '每 5 秒检查程序声明的安全只读接口' : 'Declared safe read-only APIs refresh every 5 seconds'}</p>
+                                <p>{zh ? '声明接口状态每 5 秒刷新' : 'Declared API status refreshes every 5 seconds'}</p>
                             </div>
-                            <span className='ControlProgramEndpointCount'>{endpointRows.length}</span>
+                            <span className='ControlProgramEndpointCount'>
+                                {endpointRows.length} {zh ? '个接口' : endpointRows.length === 1 ? 'API' : 'APIs'}
+                            </span>
                         </header>
                         {programsError && <p className='ControlProgramError' role='status'>
                             {programsError}
                         </p>}
                         {endpointRows.length > 0 ? <table>
                             <thead><tr>
-                                <th>{zh ? '程序' : 'Program'}</th>
-                                <th>{zh ? '方法' : 'Method'}</th>
-                                <th>{zh ? '路径' : 'Path'}</th>
-                                <th>{zh ? '功能' : 'Function'}</th>
+                                <th>{zh ? '提交方式' : 'Method'}</th>
+                                <th>{zh ? '完整地址' : 'Full URL'}</th>
+                                <th>{zh ? '用途' : 'Purpose'}</th>
                                 <th>{zh ? '状态' : 'Status'}</th>
-                                <th>{zh ? '响应' : 'Response'}</th>
-                                <th>{zh ? '延迟' : 'Latency'}</th>
                                 <th>{zh ? '最近检查' : 'Last checked'}</th>
                             </tr></thead>
-                            <tbody>{endpointRows.map(endpoint => <tr key={endpoint.key}>
-                                <td>{endpoint.program_name}</td>
+                            <tbody>{endpointRows.map(endpoint => {
+                                const url = ComputeClusterService.programInterfaceUrl(
+                                    node.node_id,
+                                    endpoint.program_id,
+                                    endpoint.path,
+                                );
+                                return <tr key={endpoint.key}>
                                 <td><code>{endpoint.method}</code></td>
-                                <td>{endpoint.method === 'GET'
+                                <td className='ControlProgramEndpointAddress'>{endpoint.method === 'GET'
                                     ? <a
                                         className='ControlProgramEndpointLink'
-                                        href={ComputeClusterService.programInterfaceUrl(
-                                            node.node_id,
-                                            endpoint.program_id,
-                                            endpoint.path,
-                                        )}
+                                        href={url}
                                         target='_blank'
                                         rel='noreferrer'
-                                    ><code>{endpoint.path}</code></a>
-                                    : <code>{endpoint.path}</code>}</td>
+                                    ><code>{url}</code></a>
+                                    : <code>{url}</code>}</td>
                                 <td><span className='ControlProgramEndpointName'>
                                     <span className={`ControlStatusDot ${interfaceTone(endpoint.state)}`} aria-hidden='true'/>
                                     <span><strong>{endpoint.name}</strong><small>{endpoint.description}</small></span>
                                 </span></td>
-                                <td>{interfaceStateLabel(endpoint.state, zh)}</td>
-                                <td>{endpoint.status_code === null ? '—' : `HTTP ${endpoint.status_code}`}</td>
-                                <td>{endpoint.latency_ms === null ? '—' : `${endpoint.latency_ms} ms`}</td>
+                                <td><span className='ControlProgramEndpointStatus'>
+                                    <strong>{interfaceStateLabel(endpoint.state, zh)}</strong>
+                                    <small>
+                                        {endpoint.status_code === null ? '—' : `HTTP ${endpoint.status_code}`}
+                                        {endpoint.latency_ms === null ? '' : ` · ${endpoint.latency_ms} ms`}
+                                    </small>
+                                </span></td>
                                 <td>{endpoint.checked_at === null ? '—' : dateTime(endpoint.checked_at, zh)}</td>
-                            </tr>)}</tbody>
+                            </tr>;
+                            })}</tbody>
                         </table> : unavailable(
                             programsError
                                 ? (zh ? '程序接口暂不可用' : 'Program APIs are unavailable')
-                                : refreshing
-                                    ? (zh ? '正在读取程序接口…' : 'Loading program APIs…')
+                                : refreshing && !programs
+                                    ? (zh
+                                        ? `正在读取程序接口… ${refreshProgress}%`
+                                        : `Loading program APIs… ${refreshProgress}%`)
                                     : (zh ? '该程序未声明接口' : 'The program has not declared any APIs'),
                         )}
                     </section>)}
@@ -888,11 +957,22 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                         </span>}
                                                     </footer>
                                                 </div>}
+                                        <a
+                                            className='ControlProgramArtifactDownload'
+                                            href={selectedArtifactUrl}
+                                            download={selectedArtifact.name}
+                                            aria-label={zh ? '下载原文件' : 'Download original file'}
+                                            title={zh ? '下载原文件' : 'Download original file'}
+                                        >
+                                            <span>{zh ? '下载' : 'Download'}</span>
+                                        </a>
                                     </div>
                                 </div>
                                 : unavailable(
-                                    refreshing
-                                        ? (zh ? '正在读取程序结果…' : 'Loading program results…')
+                                    refreshing && !programs
+                                        ? (zh
+                                            ? `正在读取程序结果… ${refreshProgress}%`
+                                            : `Loading program results… ${refreshProgress}%`)
                                         : programArtifacts.length > 0
                                             ? (zh ? '没有符合筛选条件的结果' : 'No results match the filters')
                                             : (zh ? '暂无录像、图片或数据文件' : 'No recordings, images, or data files'),
@@ -985,7 +1065,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 ? (view === 'telegrams'
                                     ? (zh ? '电文暂不可用' : 'Telegrams are unavailable')
                                     : (zh ? '日志暂不可用' : 'Logs are unavailable'))
-                                : refreshing
+                                : refreshing && !snapshot && !programs && events.length === 0
                                     ? (view === 'telegrams'
                                         ? (zh ? `正在读取电文… ${refreshProgress}%` : `Loading telegrams… ${refreshProgress}%`)
                                         : (zh ? `正在读取日志… ${refreshProgress}%` : `Loading logs… ${refreshProgress}%`))

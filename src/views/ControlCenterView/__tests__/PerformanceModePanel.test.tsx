@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {
     ComputeLanAsset,
     ComputeClusterNode,
@@ -210,6 +210,29 @@ describe('PerformanceModePanel', () => {
         expect(screen.getByText('上次扫描')).toBeInTheDocument();
         expect(screen.getByText('0 / 2 正常')).toBeInTheDocument();
         expect(ComputeClusterService.performanceMode).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows machine-count progress while scanning', async () => {
+        const first = node('AIPACK-13');
+        const second = node('AIPACK-14');
+        let resolveFirst!: (value: ComputePerformanceMode) => void;
+        let resolveSecond!: (value: ComputePerformanceMode) => void;
+        jest.spyOn(ComputeClusterService, 'performanceMode').mockImplementation(nodeId =>
+            new Promise(resolve => {
+                if (nodeId === first.node_id) resolveFirst = resolve;
+                else resolveSecond = resolve;
+            })
+        );
+
+        render(<PerformanceModePanel nodes={[first, second]} zh visible/>);
+        fireEvent.click(screen.getByRole('button', {name: '开始扫描'}));
+        expect(screen.getByRole('button', {name: '扫描中 0/2 (0%)'})).toBeInTheDocument();
+
+        await act(async () => resolveFirst(result(false)));
+        expect(await screen.findByRole('button', {name: '扫描中 1/2 (50%)'})).toBeInTheDocument();
+
+        await act(async () => resolveSecond(result(true)));
+        expect(await screen.findByRole('button', {name: '重新扫描'})).toBeInTheDocument();
     });
 
     it('prepares one exact approval, optimizes, and checks again', async () => {

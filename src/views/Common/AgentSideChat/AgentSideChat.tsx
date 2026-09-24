@@ -1318,7 +1318,7 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
                         else next.add(date);
                         return next;
                     })}
-                ><span>{date}</span><svg viewBox='0 0 12 12' aria-hidden='true'><path d='m3 3 3 6 3-6'/></svg></button></h3>
+                ><span>{date}</span><span className='AgentSideChatHistoryChevron' aria-hidden='true'>&#8250;</span></button></h3>
                 {!collapsed && conversations.map(conversation => <button
                     type='button'
                     key={conversation.id}

@@ -254,6 +254,11 @@ span.ControlMachineIcon {
   }
 }
 
+.ControlMachineProgramStatus {
+  margin: 0 0 0 7px;
+  vertical-align: 1px;
+}
+
 .ControlMachineState {
   flex: 0 0 auto;
   margin-top: 0;
@@ -300,6 +305,10 @@ span.ControlMachineIcon {
   gap: 8px;
   color: rgba(255, 255, 255, 0.7);
   font-size: 10px;
+
+  > .ControlStatusDot {
+    margin: 0;
+  }
 
   strong {
     overflow: hidden;
@@ -1815,15 +1824,29 @@ button.ControlServiceCard {
 .ControlProgramRunner {
   .ControlProgramConnection { display: inline-flex; align-items: center; gap: 5px; }
   .ControlProgramConnection .ControlStatusDot { margin: 0; }
-  .ControlProgramEndpointCount { color: rgba(255, 255, 255, 0.42); font-size: 10px; }
+  .ControlProgramEndpointCount { color: rgba(255, 255, 255, 0.42); font-size: 10px; white-space: nowrap; }
+  .ControlProgramEndpointAddress { max-width: 420px; word-break: break-all; }
   .ControlProgramEndpointName { display: flex; align-items: center; gap: 8px; }
   .ControlProgramEndpointName .ControlStatusDot { margin: 0; }
   .ControlProgramEndpointName > span:last-child { display: grid; gap: 2px; }
   .ControlProgramEndpointName small { color: rgba(255, 255, 255, 0.42); }
+  .ControlProgramEndpointStatus { display: grid; gap: 2px; white-space: nowrap; }
+  .ControlProgramEndpointStatus small { color: rgba(255, 255, 255, 0.42); }
   .ControlProgramEndpointLink { color: #73caff; text-decoration: none; }
   .ControlProgramEndpointLink:hover { text-decoration: underline; }
   .ControlProgramEndpointLink:focus-visible { outline: 1px solid #73caff; outline-offset: 2px; }
   .ControlProgramInterfaces { overflow: auto; }
+  .ControlProgramPreview {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+    padding: 20px;
+  }
+  .ControlProgramLivePreview {
+    min-height: 360px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
   .ControlProgramInterfaces table { min-width: 980px; }
   .ControlProgramInterfaces code {
     color: rgba(255, 255, 255, 0.72);
@@ -2172,6 +2195,7 @@ button.ControlServiceCard {
 }
 
 .ControlProgramArtifactPreview {
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -2179,7 +2203,7 @@ button.ControlServiceCard {
   justify-content: center;
   flex-direction: column;
   gap: 14px;
-  padding: 12px 0 0 16px;
+  padding: 12px 0 42px 16px;
 
   > header {
     display: flex;
@@ -2270,6 +2294,40 @@ button.ControlServiceCard {
       font-size: 9px;
       cursor: pointer;
     }
+  }
+
+  .ControlProgramArtifactDownload {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    display: inline-flex;
+    box-sizing: border-box;
+    width: 46px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.16);
+    padding: 0;
+    color: rgba(255, 255, 255, 0.74);
+    font-size: 9px;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+
+    &:hover {
+      border-color: rgba(0, 154, 255, 0.72);
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(255, 255, 255, 0.9);
+    }
+    &:focus-visible {
+      border-color: rgba(0, 154, 255, 0.72);
+      outline: 1px solid rgba(0, 154, 255, 0.5);
+      outline-offset: 1px;
+    }
+
+    span { margin: 0; color: inherit; font-size: inherit; line-height: 1; }
   }
 
 }

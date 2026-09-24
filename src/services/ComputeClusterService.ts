@@ -1429,6 +1429,22 @@ export class ComputeClusterService {
         }/interfaces?path=${encodeURIComponent(path)}`;
     }
 
+    public static programInterfaceStreamUrl(
+        nodeId: string,
+        programId: string,
+        path: string,
+    ): string {
+        return `${baseUrl()}/nodes/${encodeURIComponent(nodeId)}/runtime/programs/${
+            encodeURIComponent(programId)
+        }/interfaces/stream?path=${encodeURIComponent(path)}`;
+    }
+
+    public static programMediaUrl(nodeId: string, programId: string): string {
+        return `${baseUrl()}/nodes/${encodeURIComponent(nodeId)}/runtime/programs/${
+            encodeURIComponent(programId)
+        }/media`;
+    }
+
     public static programArtifactUrl(
         nodeId: string,
         programId: string,

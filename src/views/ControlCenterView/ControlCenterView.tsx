@@ -16,6 +16,7 @@ import {
     ComputeManagedDevice,
     ComputeResourceGraph,
     ComputeTask,
+    ComputeProgramSnapshot,
     ComputeRuntimeInventory,
     ComputeTerminalTarget,
     ComputeClusterService,
@@ -68,6 +69,61 @@ interface IProps {
 }
 
 type Tone = 'healthy' | 'warning' | 'offline';
+type ProgramIndicatorTone = Tone | 'unknown';
+
+const programTone = (snapshot: ComputeProgramSnapshot): ProgramIndicatorTone | null => {
+    if (!snapshot.programs.length) return null;
+    if (snapshot.programs.some(program => program.state === 'unavailable')) {
+        return 'offline';
+    }
+    if (snapshot.invalid_manifests || snapshot.programs.some(program => program.state === 'degraded')) {
+        return 'warning';
+    }
+    return snapshot.programs.some(program => program.state === 'unknown') ? 'unknown' : 'healthy';
+};
+
+const programLabel = (tone: ProgramIndicatorTone, zh: boolean): string => ({
+    healthy: zh ? '程序运行正常' : 'Programs are healthy',
+    warning: zh ? '程序运行异常' : 'Programs are degraded',
+    offline: zh ? '程序已停止或不可用' : 'Programs are stopped or unavailable',
+    unknown: zh ? '程序状态未知' : 'Program status is unknown',
+})[tone];
+
+const programStatus = (
+    node: ComputeClusterNode | undefined,
+    tones: Record<string, ProgramIndicatorTone>,
+    zh: boolean,
+) => {
+    if (!node) return null;
+    const tone = tones[node.node_id];
+    if (!tone) return null;
+    return {tone, label: programLabel(tone, zh)};
+};
+
+const programAriaLabel = (
+    node: ComputeClusterNode | undefined,
+    tones: Record<string, ProgramIndicatorTone>,
+    zh: boolean,
+    label: string,
+    fallback?: string,
+) => {
+    const status = programStatus(node, tones, zh);
+    return status ? `${label} · ${status.label}` : fallback;
+};
+
+const programIndicator = (
+    node: ComputeClusterNode | undefined,
+    tones: Record<string, ProgramIndicatorTone>,
+    zh: boolean,
+) => {
+    const status = programStatus(node, tones, zh);
+    if (!status) return null;
+    return <span
+        className={`ControlStatusDot ControlMachineProgramStatus ${status.tone}`}
+        aria-hidden='true'
+        title={status.label}
+    />;
+};
 
 const toneLabel = (tone: Tone, zh: boolean): string => tone === 'healthy'
     ? zh ? '正常' : 'Normal'
@@ -394,10 +450,12 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [computeTasks, setComputeTasks] = useState<ComputeTask[]>([]);
     const [selectedNodeId, setSelectedNodeId] = useState('');
     const [loading, setLoading] = useState(true);
+    const [loadProgress, setLoadProgress] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
     const [graphError, setGraphError] = useState('');
     const [runtimeInventory, setRuntimeInventory] = useState<ComputeRuntimeInventory | null>(null);
+    const [programTones, setProgramTones] = useState<Record<string, ProgramIndicatorTone>>({});
     const [runtimeInventoryError, setRuntimeInventoryError] = useState('');
     const [dismissedRefreshWarningKey, setDismissedRefreshWarningKey] = useState('');
     const [inspectedServiceId, setInspectedServiceId] = useState('');
@@ -493,29 +551,41 @@ export const ControlCenterView: React.FC<IProps> = ({
     const refresh = useCallback(async (initial = false) => {
         if (refreshInFlight.current) return;
         refreshInFlight.current = true;
-        if (mounted.current) initial ? setLoading(true) : setRefreshing(true);
+        if (mounted.current) {
+            if (initial) {
+                setLoading(true);
+                setLoadProgress(0);
+            } else {
+                setRefreshing(true);
+            }
+        }
         try {
+            let completed = 0;
+            const track = <T,>(request: Promise<T>): Promise<T> => request.finally(() => {
+                completed += 1;
+                if (initial && mounted.current) setLoadProgress(completed * 20);
+            });
             const [nextNodes, graphResult, assetResult, memberships, targets] = await Promise.all([
-                ComputeClusterService.nodes(),
-                ComputeClusterService.resourceGraph().then(
+                track(ComputeClusterService.nodes()),
+                track(ComputeClusterService.resourceGraph().then(
                     value => ({value, error: ''}),
                     reason => ({
                         value: null,
                         error: reason instanceof Error ? reason.message : String(reason),
                     }),
-                ),
-                ComputeClusterService.lanAssets().then(
+                )),
+                track(ComputeClusterService.lanAssets().then(
                     value => value.assets,
                     () => null,
-                ),
-                ComputeClusterService.groups().then(
+                )),
+                track(ComputeClusterService.groups().then(
                     value => value.groups,
                     () => [] as ComputeGroupMembership[],
-                ),
-                ComputeClusterService.terminalTargets().then(
+                )),
+                track(ComputeClusterService.terminalTargets().then(
                     value => value.targets,
                     () => [] as ComputeTerminalTarget[],
-                ),
+                )),
             ]);
             if (!mounted.current) return;
             setNodes(nextNodes);
@@ -569,6 +639,41 @@ export const ControlCenterView: React.FC<IProps> = ({
             window.clearInterval(timer);
         };
     }, [refresh]);
+
+    useEffect(() => {
+        const targets = nodes;
+        if (targets.length === 0) return undefined;
+        const controller = new AbortController();
+        let inFlight = false;
+        const load = async () => {
+            if (inFlight) return;
+            inFlight = true;
+            const entries = await Promise.all(targets.map(async node => {
+                if (!node.online) return [node.node_id, null] as const;
+                if (!node.capabilities.includes('runtime.programs.read.v1')) {
+                    return [node.node_id, null] as const;
+                }
+                try {
+                    const snapshot = await ComputeClusterService.programs(node.node_id, controller.signal);
+                    return [node.node_id, programTone(snapshot)] as const;
+                } catch {
+                    return [node.node_id, null] as const;
+                }
+            }));
+            if (!controller.signal.aborted) {
+                setProgramTones(Object.fromEntries(entries.filter(
+                    (entry): entry is readonly [string, ProgramIndicatorTone] => entry[1] !== null,
+                )));
+            }
+            inFlight = false;
+        };
+        void load();
+        const timer = window.setInterval(() => void load(), 15000);
+        return () => {
+            controller.abort();
+            window.clearInterval(timer);
+        };
+    }, [nodes]);
 
     useEffect(() => {
         if (workspace !== 'groups') return undefined;
@@ -815,7 +920,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         node.online && node.capabilities.includes('runtime.performance.mode.read.v1')
     );
     const performanceModeTone: Tone = performanceModeAvailable ? 'healthy' : 'warning';
-    const toolbarTone: Tone | null = workspace === 'groups'
+    const toolbarTone: ProgramIndicatorTone | null = workspace === 'groups'
         ? visibleGroups.length ? currentGroupTone : null
         : workspace === 'network'
             ? (error ? 'offline' : 'healthy')
@@ -828,7 +933,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 : workspace === 'performance-mode'
                     ? performanceModeTone
                 : selectedNode
-                    ? machineTone(selectedNode)
+                    ? programTones[selectedNode.node_id] || null
                     : overviewNodes.length ? overviewTone : null;
     const refreshWarningKey = error ? `nodes:${error}` : graphError ? `graph:${graphError}` : '';
 
@@ -1145,7 +1250,14 @@ export const ControlCenterView: React.FC<IProps> = ({
         let stateLabel = toneLabel(stateTone, zh);
         if (installedNode) {
             selected = installedNode.node_id === selectedNodeId && !cameraViewerId;
-            ariaLabel = zh ? `查看 ${label} 节点信息` : `View node details for ${label}`;
+            const nodeAriaLabel = zh ? `查看 ${label} 节点信息` : `View node details for ${label}`;
+            ariaLabel = programAriaLabel(
+                installedNode,
+                programTones,
+                zh,
+                nodeAriaLabel,
+                nodeAriaLabel,
+            );
             stateTone = machineTone(installedNode);
             stateLabel = computeNodeLabel(installedNode, zh);
         }
@@ -1169,7 +1281,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     draggable={false}
                 />
                 <span className='ControlMachineIdentity'>
-                    <strong>{label}</strong>
+                    <strong>{label}{programIndicator(installedNode, programTones, zh)}</strong>
                     <small>node · {device.device_model || 'SSH'} · {device.address}</small>
                 </span>
                 <span className={`ControlMachineState ${stateTone}`}>
@@ -1286,12 +1398,20 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 className={`ControlMachineItem ${
                                     !overviewBehindTool && node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''
                                 }`}
+                                aria-label={programAriaLabel(
+                                    node,
+                                    programTones,
+                                    zh,
+                                    `${zh ? '查看' : 'View'} ${node.name} ${
+                                        zh ? '节点信息' : 'node details'
+                                    }`,
+                                )}
                                 aria-pressed={!overviewBehindTool && node.node_id === selectedNodeId && !cameraViewerId}
                                 onClick={() => selectSidebarNode(node.node_id)}
                             >
                                 <MachinePlatformIcon node={node}/>
                                 <span className='ControlMachineIdentity'>
-                                    <strong>{node.name}</strong>
+                                    <strong>{node.name}{programIndicator(node, programTones, zh)}</strong>
                                     <small>{node.role === 'main' ? 'main' : 'node'} · {zh
                                         ? '活跃于 '
                                         : 'Active '}{lastSeen(node.heartbeat_age_seconds, zh)}</small>
@@ -2332,7 +2452,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </div>}
                 {workspace === 'node' && loading && nodes.length === 0 && <div className='ControlCenterMessage'>
                     <strong>{zh ? '正在读取计算群' : 'Loading compute cluster'}</strong>
-                    <span>{zh ? '正在获取已加入计算群的机器…' : 'Fetching enrolled machines…'}</span>
+                    <span>{zh
+                        ? `正在获取已加入计算群的机器… ${loadProgress}%`
+                        : `Fetching enrolled machines… ${loadProgress}%`}</span>
                 </div>}
                 {workspace === 'node' && !loading && !backgroundNode && overviewNodes.length === 0 && <div className='ControlCenterMessage error'>
                     <strong>{error ? (zh ? '无法读取计算群' : 'Compute cluster unavailable') : (zh ? '暂无机器' : 'No machines')}</strong>

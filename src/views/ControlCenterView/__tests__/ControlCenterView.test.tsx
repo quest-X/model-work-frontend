@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {Language} from '../../../data/LanguageConfig';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {
@@ -7,6 +7,7 @@ import {
     ComputeClusterService,
     ComputeGroupDetail,
     ComputeGroupResources,
+    ComputeProgramSnapshot,
     ComputeResourceGraph,
 } from '../../../services/ComputeClusterService';
 import {AgentChatService} from '../../../services/AgentChatService';
@@ -102,6 +103,32 @@ const runtimeNode = (name: string, online = true): ComputeClusterNode => {
     return {...value, capabilities: [...value.capabilities, 'runtime.read.v1', 'runtime.inventory.v1']};
 };
 
+const programSnapshot = (
+    state: 'healthy' | 'degraded' | 'unavailable',
+    service: 'running' | 'stopped',
+    programId = 'dlk-overflow',
+    name = 'DLK Overflow',
+): ComputeProgramSnapshot => ({
+    schema_version: 'runtime.programs.v1',
+    captured_at: 1,
+    invalid_manifests: 0,
+    programs: [{
+        program_id: programId,
+        name,
+        version: '1.0.0',
+        root: '/opt/dlk-overflow',
+        environment: '/opt/dlk-overflow/.venv',
+        mode: 'production',
+        encryption: 'plain',
+        state,
+        service: {name: 'dlk-overflow.service', state: service, pid: 1, uptime_seconds: 60},
+        health: {state, checked_at: 1, status_code: state === 'healthy' ? 200 : 503, latency_ms: 1},
+        interfaces: [],
+        events: [],
+        artifacts: [],
+    }],
+});
+
 const graph = (clusterNode: ComputeClusterNode): ComputeResourceGraph => ({
     schema_version: 'resource-knowledge-graph.v3',
     group_id: 'group-1',
@@ -196,6 +223,23 @@ describe('ControlCenterView', () => {
         jest.restoreAllMocks();
         Object.defineProperty(global, 'fetch', {configurable: true, writable: true, value: originalFetch});
         window.localStorage.clear();
+    });
+
+    it('shows request completion progress while loading the compute cluster', async () => {
+        const machine = node('进度节点', true);
+        let resolveNodes!: (value: ComputeClusterNode[]) => void;
+        jest.spyOn(ComputeClusterService, 'nodes').mockImplementation(() =>
+            new Promise(resolve => { resolveNodes = resolve; })
+        );
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(machine));
+
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        expect(await screen.findByText('正在获取已加入计算群的机器… 80%')).toBeInTheDocument();
+
+        await act(async () => resolveNodes([machine]));
+        await waitFor(() => expect(
+            screen.queryByText(/正在获取已加入计算群的机器/),
+        ).not.toBeInTheDocument());
     });
 
     it('cycles status regions from the highest node count', () => {
@@ -410,6 +454,81 @@ describe('ControlCenterView', () => {
         }
         fireEvent.click(within(machines).getByRole('button', {name: /baosight-02/}));
         expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+    });
+
+    it('shows Program Runner status lights only for nodes with mounted programs', async () => {
+        const dlk05 = runtimeNode('AIPACK-05');
+        const dlk06 = runtimeNode('AIPACK-06');
+        const dlk07 = runtimeNode('AIPACK-07');
+        const other = runtimeNode('AIPACK-08');
+        const empty = runtimeNode('AIPACK-09');
+        const failed = runtimeNode('AIPACK-10');
+        for (const machine of [dlk05, dlk06, dlk07, other, empty, failed]) {
+            machine.capabilities.push('runtime.programs.read.v1');
+        }
+        dlk07.network.lan_address = '10.168.10.26';
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            dlk05, dlk06, dlk07, other, empty, failed,
+        ]);
+        jest.mocked(ComputeClusterService.lanAssets).mockResolvedValue({
+            version: 1,
+            group_id: 'group-1',
+            summary: {total: 1, online: 1, offline: 0, new: 0, changed: 0, networks: 1},
+            latest_scans: [],
+            assets: [{
+                asset_id: 'edge-07',
+                node_id: dlk05.node_id,
+                node_name: dlk05.name,
+                cidr: '10.168.10.0/24',
+                address: '10.168.10.26',
+                hostname: 'aipack-07',
+                mac: '00:04:4b:00:00:07',
+                device_kind: 'edge_compute',
+                display_name: 'AIPACK-07',
+                device_model: 'Orin',
+                ssh_username: 'nvidia',
+                ports: [{port: 22, service: 'ssh'}],
+                online: true,
+                first_seen_at: 1,
+                last_seen_at: 1,
+                last_changed_at: 1,
+                change_type: 'unchanged',
+            }],
+        });
+        jest.spyOn(ComputeClusterService, 'programs').mockImplementation(nodeId => (
+            nodeId === failed.node_id
+                ? Promise.reject(new Error('unavailable'))
+                : Promise.resolve(nodeId === dlk05.node_id
+                ? programSnapshot('healthy', 'running')
+                : nodeId === dlk06.node_id
+                    ? programSnapshot('degraded', 'running')
+                    : nodeId === dlk07.node_id
+                        ? programSnapshot('unavailable', 'stopped')
+                        : nodeId === other.node_id
+                            ? programSnapshot('healthy', 'running', 'vision-ocr', 'Vision OCR')
+                            : {...programSnapshot('healthy', 'running'), programs: []})
+        ));
+
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        const healthy = await screen.findByRole('button', {name: /AIPACK-05.*程序运行正常/});
+        const warning = screen.getByRole('button', {name: /AIPACK-06.*程序运行异常/});
+        const offline = screen.getByRole('button', {name: /AIPACK-07.*程序已停止或不可用/});
+        const generic = screen.getByRole('button', {name: /AIPACK-08.*程序运行正常/});
+        expect(healthy.querySelector('.ControlMachineProgramStatus')).toHaveClass('healthy');
+        expect(warning.querySelector('.ControlMachineProgramStatus')).toHaveClass('warning');
+        expect(offline.querySelector('.ControlMachineProgramStatus')).toHaveClass('offline');
+        expect(generic.querySelector('.ControlMachineProgramStatus')).toHaveClass('healthy');
+        const machines = screen.getByRole('complementary', {name: '机器列表'});
+        const noProgram = within(machines).getByText('AIPACK-09').closest('button') as HTMLElement;
+        expect(noProgram.querySelector('.ControlMachineProgramStatus')).not.toBeInTheDocument();
+        const failedProgram = within(machines).getByText('AIPACK-10').closest('button') as HTMLElement;
+        expect(failedProgram.querySelector('.ControlMachineProgramStatus')).not.toBeInTheDocument();
+        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(6);
+        fireEvent.click(warning);
+        expect(document.querySelector('.ControlToolbarGroup > .ControlStatusDot')).toHaveClass('warning');
+        fireEvent.click(noProgram);
+        expect(document.querySelector('.ControlToolbarGroup > .ControlStatusDot')).not.toBeInTheDocument();
     });
 
     it('uses the worst state when one explicit control path fails', async () => {
@@ -1358,7 +1477,7 @@ describe('ControlCenterView', () => {
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         const list = screen.getByRole('complementary', {name: '机器列表'});
-        const installed = await within(list).findByRole('button', {name: '查看 AIPACK-05 节点信息'});
+        const installed = await within(list).findByRole('button', {name: /查看 AIPACK-05 节点信息/});
         expect(installed).toHaveClass('edge-device', 'tree-depth-0');
         expect(installed.querySelector('img')).toHaveAttribute('src', '/ico/jetson-agx-orin.png');
         expect(within(list).getAllByText('AIPACK-05')).toHaveLength(1);
@@ -1368,17 +1487,17 @@ describe('ControlCenterView', () => {
 
         fireEvent(window, new CustomEvent('opensight:edge-device-updated'));
         await waitFor(() => expect(lanAssets).toHaveBeenCalledTimes(2));
-        expect(within(list).getByRole('button', {name: '查看 AIPACK-05 节点信息'}))
+        expect(within(list).getByRole('button', {name: /查看 AIPACK-05 节点信息/}))
             .toBeInTheDocument();
 
         fireEvent.click(installed);
         expect(await screen.findByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
         fireEvent.click(within(list).getByRole('button', {name: '收起炉后作业区'}));
-        expect(within(list).queryByRole('button', {name: '查看 AIPACK-05 节点信息'}))
+        expect(within(list).queryByRole('button', {name: /查看 AIPACK-05 节点信息/}))
             .not.toBeInTheDocument();
         expect(screen.getByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
         fireEvent.click(within(list).getByRole('button', {name: '展开炉后作业区'}));
-        expect(within(list).getByRole('button', {name: '查看 AIPACK-05 节点信息'}))
+        expect(within(list).getByRole('button', {name: /查看 AIPACK-05 节点信息/}))
             .toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByLabelText('1 个相关设备')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '打开车间相机实时画面'}));
