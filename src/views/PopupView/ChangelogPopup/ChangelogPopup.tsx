@@ -14,6 +14,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.4',
+        date: '2026-09-24',
+        changes: [
+            { zh: '【状态】节点与图谱按最坏链路状态聚合，避免局部故障被正常状态掩盖', en: '[Status] Nodes and graphs now aggregate the worst link state so partial failures are not hidden by healthy links' },
+            { zh: '【网络】同时展示 LAN 与 Tailscale 的 IPv4、IPv6 地址', en: '[Network] Display LAN and Tailscale IPv4 and IPv6 addresses together' },
+            { zh: '【SSH】支持展开、复制 SSH 命令，并明确连接方式与确认反馈', en: '[SSH] Added reveal and copy actions for SSH commands with explicit connection modes and confirmation feedback' },
+            { zh: '【界面】统一中文资源标签，并压缩地址区域布局', en: '[UI] Unified Chinese resource labels and compacted the address layout' },
+        ],
+    },
+    {
         version: '2.9.3',
         date: '2026-09-24',
         changes: [
