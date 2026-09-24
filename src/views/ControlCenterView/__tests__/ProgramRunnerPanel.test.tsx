@@ -627,13 +627,13 @@ describe('ProgramRunnerPanel', () => {
         statistics.mockImplementation(() => new Promise(() => undefined));
         fireEvent.click(within(dialog).getByRole('button', {name: '统计'}));
         expect(within(dialog).getByLabelText('大炉口溢渣统计')).toHaveTextContent('12 / 100');
-        expect(within(dialog).queryByText('正在统计当日溢渣…')).not.toBeInTheDocument();
+        expect(within(dialog).queryByText('正在读取缓存统计…')).not.toBeInTheDocument();
         fireEvent.click(within(dialog).getByRole('button', {name: `选择统计日期 ${todayValue}`}));
         const previousMonth = within(dialog).getByRole('button', {name: '上个月'});
         fireEvent.click(previousMonth);
         const anotherDate = within(dialog).getAllByRole('button', {name: /^统计日期 /})[0];
         fireEvent.click(anotherDate);
-        expect(within(dialog).getByText('正在统计当日溢渣…')).toBeInTheDocument();
+        expect(within(dialog).getByText('正在读取缓存统计…')).toBeInTheDocument();
         expect(within(dialog).getByLabelText('大炉口溢渣统计')).not.toHaveTextContent('12 / 100');
         fireEvent.click(within(dialog).getByRole('button', {name: '程序', exact: true}));
         expect(ComputeClusterService.programs).toHaveBeenCalledTimes(programCalls + 1);
