@@ -534,6 +534,9 @@ export const ControlCenterView: React.FC<IProps> = ({
     const runtimeInventoryPendingNode = useRef('');
     const runtimeInventoryAbort = useRef<AbortController | null>(null);
     const conversationRequest = useRef(0);
+    const programPollingNodes = useRef(nodes);
+    programPollingNodes.current = nodes;
+    const hasProgramPollingNodes = nodes.length > 0;
     useEscapeToClose(() => {
         setInspectedServiceId('');
         if (toolOpenedFromOverview) {
@@ -679,35 +682,44 @@ export const ControlCenterView: React.FC<IProps> = ({
 
     useEffect(() => {
         // The runner polls its own node; fleet snapshots must not compete with its live stream.
-        if (!pageVisible || programRunnerOpen) return undefined;
-        const targets = nodes;
-        if (targets.length === 0) return undefined;
+        if (!pageVisible || programRunnerOpen || !hasProgramPollingNodes) return undefined;
         const controller = new AbortController();
         let inFlight = false;
         const load = async () => {
             if (inFlight) return;
             inFlight = true;
-            const entries = await Promise.all(targets.map(async node => {
-                if (!node.online) return [node.node_id, undefined] as const;
-                if (!node.capabilities.includes('runtime.programs.read.v1')) {
-                    return [node.node_id, undefined] as const;
+            const targets = [...programPollingNodes.current];
+            const poll = async () => {
+                while (targets.length && !controller.signal.aborted) {
+                    const selected = targets.findIndex(node => node.node_id === selectedNodeIdRef.current);
+                    const [node] = targets.splice(Math.max(0, selected), 1);
+                    let tone: ProgramIndicatorTone | null | undefined;
+                    if (node.online && node.capabilities.includes('runtime.programs.read.v1')) {
+                        try {
+                            tone = programTone(await ComputeClusterService.programs(node.node_id, controller.signal));
+                        } catch {
+                            // A failed query cannot prove that a mounted program was removed.
+                        }
+                    }
+                    if (controller.signal.aborted) return;
+                    setProgramTones(current => {
+                        const next = {...current};
+                        if (tone) next[node.node_id] = tone;
+                        else delete next[node.node_id];
+                        return next;
+                    });
+                    if (tone !== undefined) {
+                        setMountedProgramNodes(current => {
+                            const next = new Set(current);
+                            if (tone === null) next.delete(node.node_id);
+                            else next.add(node.node_id);
+                            return next;
+                        });
+                    }
                 }
-                try {
-                    const snapshot = await ComputeClusterService.programs(node.node_id, controller.signal);
-                    return [node.node_id, programTone(snapshot)] as const;
-                } catch {
-                    return [node.node_id, undefined] as const;
-                }
-            }));
-            if (!controller.signal.aborted) {
-                setProgramTones(Object.fromEntries(entries.filter(
-                    (entry): entry is readonly [string, ProgramIndicatorTone] => entry[1] != null,
-                )));
-                // A failed query cannot prove that a previously mounted program was removed.
-                setMountedProgramNodes(current => new Set(entries
-                    .filter(([id, tone]) => tone === undefined ? current.has(id) : tone !== null)
-                    .map(([id]) => id)));
-            }
+            };
+            // Keep browser connections available for the selected machine's interactive reads.
+            await Promise.all([poll(), poll(), poll()]);
             inFlight = false;
         };
         void load();
@@ -716,7 +728,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [nodes, pageVisible, programRunnerOpen]);
+    }, [hasProgramPollingNodes, pageVisible, programRunnerOpen]);
 
     useEffect(() => {
         if (workspace !== 'groups') return undefined;
