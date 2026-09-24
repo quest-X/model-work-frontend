@@ -5,7 +5,7 @@
 ## 现场待办（2026-09-24，等待 Tailscale）
 
 以下对应总 TODO 的 LAN 编号；等用户回家并确认接入后再恢复，不自动部署。
-本轮山东专用预览/炉次界面整合到 `commercial`，不整支合入通用 `main`；
+本轮山东专用预览/炉次界面整合到 `main`，不整支合入通用 `master`；
 功能源码基线 `939b0dd8`，预览/轮询/运行器 64 项、3 suites 与专项 ESLint 通过。
 
 - [ ] **LAN-1/2｜现场清单与按需部署**：核对实际页面资源、部署提交和并行部署；仅在确实缺少修复且授权明确时，复用 `scripts/deploy-shangang-frontend.sh` 固定提交构建与回滚。`DRY_RUN` 仍会 SSH，不能作为离网检查。
@@ -33,6 +33,6 @@
 
 ## 当前同步基线
 
-- 分支：`commercial`
-- GitHub 同步：本地 `commercial` 与 `origin/commercial` 对齐；精确提交以 `git rev-parse HEAD` 为准。
+- 分支：`main`
+- GitHub 同步：本地 `main` 与 `origin/main` 对齐；精确提交以 `git rev-parse HEAD` 为准。
 - 本机的 `dist-*` 目录是未跟踪构建产物，不属于 GitHub 源码交接。

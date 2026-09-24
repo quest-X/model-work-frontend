@@ -10,7 +10,7 @@ const temporary = mkdtempSync(join(tmpdir(), 'opensight-vite-cache-'));
 (async () => {
     try {
         const caches = [];
-        for (const name of ['main', 'commercial']) {
+        for (const name of ['master', 'main']) {
             const root = join(temporary, name);
             mkdirSync(root);
             for (const entry of ['node_modules', 'package.json']) {
