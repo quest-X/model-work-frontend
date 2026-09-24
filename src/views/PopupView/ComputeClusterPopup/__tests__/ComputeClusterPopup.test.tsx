@@ -690,6 +690,7 @@ describe('ComputeClusterPopup', () => {
             zh={true}
             onSelectWorkAgent={jest.fn()}
             onOpenNodeTool={onOpenNodeTool}
+            programStatus={() => ({tone: 'warning', label: '程序运行异常'})}
         />);
 
         const nodeButton = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
@@ -703,6 +704,7 @@ describe('ComputeClusterPopup', () => {
 
         expect(onOpenNodeTool.mock.calls.map(([, tool]) => tool))
             .toEqual(['terminal', 'monitor', 'runner']);
+        expect(within(card).getByRole('button', {name: /程序运行器/})).toHaveTextContent('程序运行异常');
 
         const sent = jest.fn();
         window.addEventListener(AGENT_CHAT_SEND_EVENT, sent);
@@ -719,6 +721,8 @@ describe('ComputeClusterPopup', () => {
             onOpenNodeTool={onOpenNodeTool}
         />);
         expect(screen.getByRole('status', {name: 'edge-01 运维信息'})).toHaveClass('tone-warning');
+        expect(within(card).queryByRole('button', {name: /程序运行器/})).not.toBeInTheDocument();
+        expect(within(card).getByRole('button', {name: /资源监视器/})).toBeInTheDocument();
     });
 
     it('puts a direct camera owner at the top without changing the clockwise node order', async () => {

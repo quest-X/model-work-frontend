@@ -14,6 +14,7 @@ import {
     ComputeGroupResources,
     ComputeLanAsset,
     ComputeManagedDevice,
+    ComputeProgramSnapshot,
     ComputeResourceGraph,
     ComputeTask,
     ComputeRuntimeInventory,
@@ -71,6 +72,23 @@ interface IProps {
 }
 
 type Tone = 'healthy' | 'warning' | 'offline';
+type ProgramTone = Tone | 'unknown';
+
+const programTone = (snapshot: ComputeProgramSnapshot): ProgramTone | null => {
+    if (!snapshot.programs.length) return null;
+    if (snapshot.programs.some(program => program.state === 'unavailable')) return 'offline';
+    if (snapshot.invalid_manifests || snapshot.programs.some(program => program.state === 'degraded')) {
+        return 'warning';
+    }
+    return snapshot.programs.some(program => program.state === 'unknown') ? 'unknown' : 'healthy';
+};
+
+const programLabel = (tone: ProgramTone, zh: boolean): string => ({
+    healthy: zh ? '程序运行正常' : 'Programs are healthy',
+    warning: zh ? '程序运行异常' : 'Programs are degraded',
+    offline: zh ? '程序已停止或不可用' : 'Programs are stopped or unavailable',
+    unknown: zh ? '程序状态未知' : 'Program status is unknown',
+})[tone];
 
 const toneLabel = (tone: Tone, zh: boolean): string => tone === 'healthy'
     ? zh ? '正常' : 'Normal'
@@ -366,6 +384,10 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [terminalTargets, setTerminalTargets] = useState<ComputeTerminalTarget[]>([]);
     const [copiedSshAddress, setCopiedSshAddress] = useState('');
     const [nodes, setNodes] = useState<ComputeClusterNode[]>([]);
+    const [mountedPrograms, setMountedPrograms] = useState<Record<string, ProgramTone>>({});
+    const programPollingNodes = useRef(nodes);
+    programPollingNodes.current = nodes;
+    const hasProgramPollingNodes = nodes.length > 0;
     const [groupMemberships, setGroupMemberships] = useState<ComputeGroupMembership[]>([]);
     const [selectedGroupId, setSelectedGroupId] = useState('');
     const [selectedGroupDetail, setSelectedGroupDetail] = useState<ComputeGroupDetail | null>(null);
@@ -579,6 +601,48 @@ export const ControlCenterView: React.FC<IProps> = ({
             window.clearInterval(timer);
         };
     }, [refresh]);
+
+    useEffect(() => {
+        if (!hasProgramPollingNodes || programRunnerOpen) return undefined;
+        const controller = new AbortController();
+        let inFlight = false;
+        const load = async () => {
+            if (inFlight || document.hidden) return;
+            inFlight = true;
+            const targets = [...programPollingNodes.current];
+            const poll = async () => {
+                while (targets.length && !controller.signal.aborted) {
+                    const selected = targets.findIndex(node => node.node_id === selectedNodeIdRef.current);
+                    const [node] = targets.splice(Math.max(0, selected), 1);
+                    let tone: ProgramTone | null | undefined;
+                    if (node.online && node.capabilities.includes('runtime.programs.read.v1')) {
+                        try {
+                            tone = programTone(await ComputeClusterService.programs(node.node_id, controller.signal));
+                        } catch {
+                            // A failed query does not prove that a mounted program was removed.
+                        }
+                    }
+                    if (controller.signal.aborted) return;
+                    setMountedPrograms(current => {
+                        if (tone === undefined && !current[node.node_id]) return current;
+                        const next = {...current};
+                        if (tone === null) delete next[node.node_id];
+                        else next[node.node_id] = tone || 'unknown';
+                        return next;
+                    });
+                }
+            };
+            // Leave browser connections available for the selected machine's interactive reads.
+            await Promise.all([poll(), poll(), poll()]);
+            inFlight = false;
+        };
+        void load();
+        const timer = window.setInterval(() => void load(), 15000);
+        return () => {
+            controller.abort();
+            window.clearInterval(timer);
+        };
+    }, [hasProgramPollingNodes, programRunnerOpen]);
 
     useEffect(() => {
         if (workspace !== 'groups') return undefined;
@@ -1319,23 +1383,24 @@ export const ControlCenterView: React.FC<IProps> = ({
         </button>;
     };
 
+    const mountedProgramStatus = (node: ComputeClusterNode | null) => {
+        if (!node || !mountedPrograms[node.node_id]) return null;
+        const tone = node.online ? mountedPrograms[node.node_id] : 'offline';
+        return {tone, label: programLabel(tone, zh)};
+    };
+
     const renderProgramRunnerCard = () => {
-        const capable = Boolean(
-            selectedNode?.online && selectedNode.capabilities.includes('runtime.read.v1'),
-        );
-        const tone: Tone = selectedNode?.online ? (capable ? 'healthy' : 'warning') : 'offline';
-        const status = selectedNode?.online
-            ? capable ? (zh ? '正常' : 'Normal') : (zh ? '待升级' : 'Upgrade required')
-            : (zh ? '故障' : 'Fault');
+        const status = mountedProgramStatus(selectedNode);
+        if (!status) return null;
         return <button
             type='button'
             className='ControlServiceCard ControlRuntimeService'
             aria-label={zh ? '打开程序运行器' : 'Open program runner'}
             onClick={() => setProgramRunnerOpen(true)}
         >
-            <span className={`ControlStatusDot ${tone}`} aria-hidden='true'/>
+            <span className={`ControlStatusDot ${status.tone}`} aria-hidden='true'/>
             <span className='ControlRuntimeIdentity'>
-                <span>{status}</span>
+                <span>{status.label}</span>
                 <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
                 <small>{zh ? '程序 · 环境 · 接口 · 状态 · 结果 · 日志' : 'Programs · environments · APIs · status · results · logs'}</small>
             </span>
@@ -2153,7 +2218,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 zh={zh}
                                 fitWindow
                                 onSelectWorkAgent={() => undefined}
+                                programStatus={mountedProgramStatus}
                                 onOpenNodeTool={(node, tool) => {
+                                    if (tool === 'runner' && !mountedProgramStatus(node)) return;
                                     setSelectedNodeId(node.node_id);
                                     if (tool === 'terminal') {
                                         overviewSelected.current = false;
