@@ -260,11 +260,13 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const programsVisible = programsCapable || programs !== null;
     const logsVisible = runtimeVisible || programsVisible || events.length > 0;
     const showingCache = !node.online && (snapshot !== null || programs !== null || events.length > 0);
-    const pollingPaused = view === 'artifacts' && programs !== null;
+    // Snapshot scans share the node control channel with these lightweight reads.
+    const pollingPaused = view === 'history'
+        || (view === 'artifacts' || view === 'statistics') && programs !== null;
     const eventsRequested = view === 'telegrams' || view === 'logs';
     const connectionLabel = node.online
         ? pollingPaused
-            ? (zh ? '在线 · 结果预览期间暂停状态刷新' : 'Online · status refresh paused during result preview')
+            ? (zh ? '在线 · 状态刷新已暂停' : 'Online · status refresh paused')
             : (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
         : showingCache
             ? (zh ? '离线 · 显示最后缓存' : 'Offline · showing last cached data')
@@ -414,21 +416,24 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setHistoryLoading(true);
         setHistoryError('');
         void Promise.all([
-            MachineHistoryService.status(node.node_id, controller.signal),
-            MachineHistoryService.objects(node.node_id, controller.signal),
-        ]).then(async ([status, listing]) => {
-            if (controller.signal.aborted) return;
-            setHistoryStatus(status);
-            setHistoryObjects(listing.objects);
-            const first = listing.objects[0];
-            setHistoryDocument(first
-                ? await MachineHistoryService.object(
-                    node.node_id,
-                    first.namespace,
-                    first.object_key,
-                    controller.signal,
-                )
-                : null);
+            MachineHistoryService.status(node.node_id, controller.signal).then(status => {
+                if (!controller.signal.aborted) setHistoryStatus(status);
+            }),
+            MachineHistoryService.objects(node.node_id, controller.signal).then(async listing => {
+                if (controller.signal.aborted) return;
+                setHistoryObjects(listing.objects);
+                const first = listing.objects[0];
+                const document = first
+                    ? await MachineHistoryService.object(
+                        node.node_id,
+                        first.namespace,
+                        first.object_key,
+                        controller.signal,
+                    )
+                    : null;
+                if (!controller.signal.aborted) setHistoryDocument(document);
+            }),
+        ]).then(() => {
             if (!controller.signal.aborted) setHistoryLoading(false);
         }).catch(error => {
             if (controller.signal.aborted) return;
@@ -625,7 +630,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         const controller = new AbortController();
         setStatisticsLoading(true);
         setStatisticsError('');
-        setOverflowStatistics(null);
+        setOverflowStatistics(current => current?.date === statisticsDate
+            && current.program_id === overflowProgram.program_id
+            && current.timezone_offset_minutes === -new Date(`${statisticsDate}T12:00:00`).getTimezoneOffset()
+            ? current : null);
         void ComputeClusterService.programOverflowStatistics(
             node.node_id,
             overflowProgram.program_id,

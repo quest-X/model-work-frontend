@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import {
     ComputeClusterNode,
     ComputeClusterService,
@@ -68,6 +68,7 @@ describe('ProgramRunnerPanel', () => {
     });
 
     afterEach(() => {
+        jest.useRealTimers();
         global.fetch = originalFetch;
         jest.restoreAllMocks();
     });
@@ -440,7 +441,7 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(resultFolder);
         expect(resultFolder.parentElement).toHaveAttribute('open');
         expect(artifacts).toHaveTextContent('017.mp4');
-        expect(within(dialog).getByRole('status', {name: '在线 · 结果预览期间暂停状态刷新'}))
+        expect(within(dialog).getByRole('status', {name: '在线 · 状态刷新已暂停'}))
             .toBeInTheDocument();
         expect(jest.mocked(ComputeClusterService.runtime).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.programs).mock.calls[0][1]?.aborted).toBe(true);
@@ -558,6 +559,12 @@ describe('ProgramRunnerPanel', () => {
             -new Date().getTimezoneOffset(),
             expect.any(AbortSignal),
         );
+        jest.useFakeTimers();
+        const programCalls = jest.mocked(ComputeClusterService.programs).mock.calls.length;
+        const runtimeCalls = jest.mocked(ComputeClusterService.runtime).mock.calls.length;
+        await act(async () => { jest.advanceTimersByTime(15000); });
+        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(programCalls);
+        expect(ComputeClusterService.runtime).toHaveBeenCalledTimes(runtimeCalls);
 
         fireEvent.click(within(dialog).getByRole('button', {name: '历史'}));
         const history = await within(dialog).findByLabelText('机器历史');
@@ -568,6 +575,24 @@ describe('ProgramRunnerPanel', () => {
             node.node_id,
             expect.any(AbortSignal),
         );
+        await act(async () => { jest.advanceTimersByTime(15000); });
+        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(programCalls);
+        expect(ComputeClusterService.runtime).toHaveBeenCalledTimes(runtimeCalls);
+
+        statistics.mockImplementation(() => new Promise(() => undefined));
+        fireEvent.click(within(dialog).getByRole('button', {name: '统计'}));
+        expect(within(dialog).getByLabelText('大炉口溢渣统计')).toHaveTextContent('12 / 100');
+        expect(within(dialog).queryByText('正在统计当日溢渣…')).not.toBeInTheDocument();
+        fireEvent.click(within(dialog).getByRole('button', {name: `选择统计日期 ${todayValue}`}));
+        const previousMonth = within(dialog).getByRole('button', {name: '上个月'});
+        fireEvent.click(previousMonth);
+        const anotherDate = within(dialog).getAllByRole('button', {name: /^统计日期 /})[0];
+        fireEvent.click(anotherDate);
+        expect(within(dialog).getByText('正在统计当日溢渣…')).toBeInTheDocument();
+        expect(within(dialog).getByLabelText('大炉口溢渣统计')).not.toHaveTextContent('12 / 100');
+        fireEvent.click(within(dialog).getByRole('button', {name: '程序', exact: true}));
+        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(programCalls + 1);
+        expect(ComputeClusterService.runtime).toHaveBeenCalledTimes(runtimeCalls + 1);
 
         fireEvent.click(within(dialog).getByRole('button', {name: '放大程序运行器窗口'}));
         expect(toggleMaximized).toHaveBeenCalledTimes(1);
@@ -576,6 +601,24 @@ describe('ProgramRunnerPanel', () => {
         expect(jest.mocked(ComputeClusterService.runtime).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.programs).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.runtimeEvents).mock.calls[0][3]?.aborted).toBe(true);
+    });
+
+    it('renders history status without waiting for the object list', async () => {
+        jest.spyOn(MachineHistoryService, 'status').mockResolvedValue({
+            schema_version: 'machine-history.status.v1',
+            encrypted: true, objects: 2, versions: 4, plaintext_bytes: 2048,
+        });
+        jest.spyOn(MachineHistoryService, 'objects').mockImplementation(() => new Promise(() => undefined));
+        render(<ProgramRunnerPanel
+            node={{...node, node_id: 'history-pending-list', capabilities: ['machine.history.read.v1']}}
+            zh
+            maximized={false}
+            onToggleMaximized={jest.fn()}
+        />);
+        fireEvent.click(screen.getByRole('button', {name: '历史'}));
+        expect(await screen.findByText('已加密')).toBeInTheDocument();
+        expect(screen.queryByText('正在读取机器历史…')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '刷新机器历史'})).toBeDisabled();
     });
 
     it('shows the last node snapshot immediately when reopened', async () => {

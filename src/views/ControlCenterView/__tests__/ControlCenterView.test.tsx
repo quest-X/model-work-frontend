@@ -597,6 +597,7 @@ describe('ControlCenterView', () => {
         await act(async () => { jest.advanceTimersByTime(30000); });
         expect(otherCalls()).toHaveLength(1);
         expect(programs).toHaveBeenCalledWith(selected.node_id, expect.any(AbortSignal));
+        expect(ComputeClusterService.runtimeInventory).not.toHaveBeenCalled();
 
         fireEvent.keyDown(document, {key: 'Escape'});
         await waitFor(() => expect(otherCalls()).toHaveLength(2));
@@ -891,10 +892,12 @@ describe('ControlCenterView', () => {
         expect(screen.queryByLabelText('最近异常')).not.toBeInTheDocument();
         expect(ComputeClusterService.runtime).not.toHaveBeenCalled();
         expect(ComputeClusterService.runtimeEvents).not.toHaveBeenCalled();
+        expect(runtimeInventory).not.toHaveBeenCalled();
         expect(screen.queryByText('Node Agent')).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', {name: '打开资源监视器'}));
         const monitor = await screen.findByRole('dialog', {name: '节点甲 资源监视器'});
+        await waitFor(() => expect(runtimeInventory).toHaveBeenCalledWith('节点甲-id', expect.anything()));
         const maximizeMonitor = within(monitor).getByRole('button', {name: '放大资源监视器窗口'});
         expect(maximizeMonitor).toHaveAttribute('aria-pressed', 'false');
         fireEvent.click(maximizeMonitor);

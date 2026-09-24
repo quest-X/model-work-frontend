@@ -997,10 +997,18 @@ export const ControlCenterView: React.FC<IProps> = ({
             setRuntimeInventory(null);
             setRuntimeInventoryError('');
         }
-        if (runtimeInventoryCapable) {
-            void loadRuntimeInventory(selectedNodeId);
-        }
-    }, [loadRuntimeInventory, selectedNode, selectedNodeId]);
+    }, [runtimeInventoryCapable, selectedNodeId]);
+
+    useEffect(() => {
+        if (!inspectedServiceId || !pageVisible || !runtimeInventoryCapable) return undefined;
+        void loadRuntimeInventory(selectedNodeId);
+        return () => {
+            runtimeInventoryAbort.current?.abort();
+            runtimeInventoryAbort.current = null;
+            runtimeInventoryPendingNode.current = '';
+            runtimeInventoryRequest.current += 1;
+        };
+    }, [inspectedServiceId, loadRuntimeInventory, pageVisible, runtimeInventoryCapable, selectedNodeId]);
 
     useEffect(() => {
         if (!pendingOverviewTool || !selectedNode) return;
@@ -1024,7 +1032,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [inspectedServiceId]);
 
     useEffect(() => {
-        if (!inspectedServiceId || !selectedNodeId) return undefined;
+        if (!inspectedServiceId || !selectedNodeId || !pageVisible) return undefined;
         const timer = window.setInterval(() => {
             if (runtimeInventoryCapable) void loadRuntimeInventory(selectedNodeId);
             void refresh();
@@ -1040,6 +1048,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [
         inspectedServiceId,
         loadRuntimeInventory,
+        pageVisible,
         refresh,
         runtimeInventoryCapable,
         selectedNodeId,
