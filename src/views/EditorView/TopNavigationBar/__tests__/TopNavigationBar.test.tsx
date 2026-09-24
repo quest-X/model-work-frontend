@@ -10,6 +10,7 @@ import {
 } from '../../../../store/queue/types';
 import {TopNavigationBar} from '../TopNavigationBar';
 import {PopupWindowType} from '../../../../data/enums/PopupWindowType';
+import {version as appVersion} from '../../../../../package.json';
 
 jest.mock('../../StateBar/StateBar', () => ({
     __esModule: true,
@@ -333,7 +334,7 @@ describe('TopNavigationBar account preview', () => {
         expect(screen.getByRole('dialog', {name: '关于我们'})).toHaveTextContent(
             '山东钢铁-宝信自动化视觉组',
         );
-        expect(screen.getByText('v2.9.1')).toBeInTheDocument();
+        expect(screen.getByText(`v${appVersion}`)).toBeInTheDocument();
         fireEvent.keyDown(window, {key: 'Escape'});
         expect(screen.queryByRole('dialog', {name: '关于我们'})).not.toBeInTheDocument();
     });

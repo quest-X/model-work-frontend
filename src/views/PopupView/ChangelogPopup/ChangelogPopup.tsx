@@ -14,6 +14,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.2',
+        date: '2026-09-24',
+        changes: [
+            { zh: '【平台】同步节点运维、任务中心、编辑器恢复与 SSH 状态改进', en: '[Platform] Synchronized node operations, task center, editor recovery, and SSH status improvements' },
+            { zh: '【商业版】限制编辑工具与项目名称，并按作业区和设备归类资源', en: '[Commercial] Restricted editing tools and project naming while grouping resources by work area and device' },
+            { zh: '【帮助】新增关于页面与现场操作手册入口', en: '[Help] Added the About page and field operations manual entry points' },
+            { zh: '【引擎】保留引擎管理入口，同时维持其他 Commercial 操作限制', en: '[Engines] Kept engine management available while preserving the remaining Commercial restrictions' },
+        ],
+    },
+    {
         version: '2.9.1',
         date: '2026-09-07',
         changes: [
