@@ -1656,6 +1656,65 @@ describe('ControlCenterView', () => {
         );
     });
 
+    it('keeps discovered LAN cameras visible when camera registration is missing', async () => {
+        const main = {...node('baosight-01', true), role: 'main' as const};
+        const aipack = {
+            ...node('AIPACK-05', true, false, 'Jetson AGX Orin Developer Kit', 'Linux'),
+            role: 'node' as const,
+        };
+        aipack.network.lan_address = '10.168.10.24';
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([main, aipack]);
+        jest.mocked(ComputeClusterService.lanAssets).mockResolvedValue({
+            version: 1,
+            group_id: 'group-1',
+            summary: {total: 2, online: 2, offline: 0, new: 0, changed: 0, networks: 1},
+            latest_scans: [],
+            assets: [{
+                asset_id: 'edge-05',
+                node_id: 'retired-scanner',
+                node_name: 'shangang-aipac-02',
+                cidr: '10.168.10.0/24',
+                address: '10.168.10.24',
+                hostname: 'aipack-05',
+                mac: '00:04:4b:00:00:05',
+                device_kind: 'edge_compute',
+                display_name: 'AIPACK-05',
+                device_model: 'Orin',
+                ports: [{port: 22, service: 'ssh'}],
+                online: true,
+                first_seen_at: 1,
+                last_seen_at: 1,
+                last_changed_at: 1,
+                change_type: 'unchanged',
+            }, {
+                asset_id: 'camera-1',
+                node_id: 'retired-scanner',
+                node_name: 'shangang-aipac-02',
+                cidr: '10.168.10.0/24',
+                address: '10.168.10.140',
+                hostname: 'camera-1',
+                mac: '00:04:4b:00:00:30',
+                device_kind: 'camera',
+                display_name: '（炉后）大炉口#02',
+                parent_asset_id: 'edge-05',
+                ports: [],
+                online: true,
+                first_seen_at: 1,
+                last_seen_at: 1,
+                last_changed_at: 1,
+                change_type: 'unchanged',
+            }],
+        });
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        const list = screen.getByRole('complementary', {name: '机器列表'});
+        const camera = await within(list).findByRole('button', {name: '打开 （炉后）大炉口#02 实时画面'});
+        expect(camera).toBeDisabled();
+        expect(camera).toHaveClass('camera-device', 'tree-depth-1');
+        expect(camera).toHaveTextContent('已发现，未注册 · 0 通道');
+        expect(camera).toHaveAttribute('title', '此相机不支持实时画面（需要 camera.stream.v1）');
+    });
+
     it('opens a registered camera with devices on the left and live view on the right', async () => {
         const machine = node('在线节点', true, true);
         machine.device_inventory.devices[0].capabilities = ['camera.stream.v1'];
