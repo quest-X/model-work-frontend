@@ -566,6 +566,11 @@ describe('ProgramRunnerPanel', () => {
             -new Date().getTimezoneOffset(),
             expect.any(AbortSignal),
         );
+        fireEvent.click(within(statisticsView).getByRole('button', {name: '导出统计'}));
+        expect(screen.getByLabelText('开始日期')).toHaveValue(todayValue);
+        expect(screen.getByLabelText('结束日期')).toHaveValue(todayValue);
+        fireEvent.click(screen.getByRole('button', {name: '取消'}));
+        await within(dialog).findByRole('button', {name: '历史'});
         jest.useFakeTimers();
         const programCalls = jest.mocked(ComputeClusterService.programs).mock.calls.length;
         const runtimeCalls = jest.mocked(ComputeClusterService.runtime).mock.calls.length;

@@ -16,6 +16,7 @@ import {
     MachineHistoryStatus,
 } from '../../services/MachineHistoryService';
 import {ProgramLivePreview} from './ProgramLivePreview';
+import {ProgramStatisticsExport} from './ProgramStatisticsExport';
 
 type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs' | 'statistics' | 'history';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
@@ -1372,19 +1373,27 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     <h3>{zh ? '每日溢渣统计' : 'Daily overflow statistics'}</h3>
                                     <p>{zh ? '连续溢渣帧合并为一次，并按最高等级统计' : 'Consecutive overflow frames are merged and counted by peak level'}</p>
                                 </div>
-                                <button
-                                    type='button'
-                                    className='ControlProgramStatisticsDateButton'
-                                    aria-expanded={statisticsCalendarOpen}
-                                    aria-label={`${zh ? '选择统计日期' : 'Choose statistics date'} ${statisticsDate}`}
-                                    onClick={() => {
-                                        setStatisticsMonth(statisticsDate.slice(0, 7));
-                                        setStatisticsCalendarOpen(open => !open);
-                                    }}
-                                >
-                                    <span>{statisticsDate}</span>
-                                    <CalendarDays aria-hidden='true'/>
-                                </button>
+                                <div className='ControlProgramStatisticsActions'>
+                                    <button
+                                        type='button'
+                                        className='ControlProgramStatisticsDateButton'
+                                        aria-expanded={statisticsCalendarOpen}
+                                        aria-label={`${zh ? '选择统计日期' : 'Choose statistics date'} ${statisticsDate}`}
+                                        onClick={() => {
+                                            setStatisticsMonth(statisticsDate.slice(0, 7));
+                                            setStatisticsCalendarOpen(open => !open);
+                                        }}
+                                    >
+                                        <span>{statisticsDate}</span>
+                                        <CalendarDays aria-hidden='true'/>
+                                    </button>
+                                    <ProgramStatisticsExport
+                                        key={`${node.node_id}:${overflowProgram.program_id}:${statisticsDate}`}
+                                        nodeId={node.node_id} nodeName={node.name} programId={overflowProgram.program_id}
+                                        date={statisticsDate} today={todayDateKey()} zh={zh}
+                                        onOpen={() => setStatisticsCalendarOpen(false)}
+                                    />
+                                </div>
                             </header>
                             {statisticsCalendarOpen && <section
                                 className='ControlProgramStatisticsCalendar'
