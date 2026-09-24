@@ -584,7 +584,7 @@ const restoreMaskGroup = (
     if (provenance.some(item => !sameGroupProvenance(provenance[0], item))) {
         throw new Error('Inconsistent image workspace mask provenance');
     }
-    const polygons = ordered.map((component, index): LabelPolygon => ({
+    const polygons = ordered.map((component, index) => ({
         id: `visual-search:${provenance[index].backendJobId}:${provenance[index].resultId}:mask:${index}`,
         labelId: component.labelId,
         vertices: component.vertices,
@@ -593,7 +593,7 @@ const restoreMaskGroup = (
         status: LabelStatus.ACCEPTED,
         suggestedLabel: null,
         extra: {visualSearch: {
-            schemaVersion: 1,
+            schemaVersion: 1 as const,
             clientJobId: provenance[index].clientJobId,
             backendJobId: provenance[index].backendJobId,
             resultId: provenance[index].resultId,

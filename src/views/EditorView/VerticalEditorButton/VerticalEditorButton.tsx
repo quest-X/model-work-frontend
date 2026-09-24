@@ -5,7 +5,7 @@ import './VerticalEditorButton.scss';
 interface IProps {
     key?:string;
     label:string;
-    onClick?:() => any;
+    onClick?:() => void;
     style?:React.CSSProperties;
     isActive?:boolean;
     isDisabled?:boolean;
@@ -30,7 +30,7 @@ export const VerticalEditorButton = (props:IProps) => {
     return(
         <div
             className={getClassName()}
-            onClick={!!onClick ? onClick : undefined}
+            onClick={onClick ? onClick : undefined}
             key={key}
             style={style}
         >

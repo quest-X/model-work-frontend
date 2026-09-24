@@ -17,10 +17,6 @@ export class LabelsSelector {
         return store.getState().labels.activeLabelNameId;
     }
 
-    public static getActiveLabelType(): LabelType {
-        return store.getState().labels.activeLabelType;
-    }
-
     public static getImagesData(): ImageData[] {
         return store.getState().labels.imagesData;
     }

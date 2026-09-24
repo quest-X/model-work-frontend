@@ -9,6 +9,7 @@ export const getExportFormatData = (language: Language): ExportFormatDataMap => 
     const texts = LanguageConfig[language];
     
     return {
+        [LabelType.ALL]: [],
         [LabelType.RECT]: [
             {
                 type: AnnotationFormatType.YOLO,

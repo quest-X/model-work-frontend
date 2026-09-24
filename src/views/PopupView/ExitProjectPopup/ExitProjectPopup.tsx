@@ -10,19 +10,17 @@ import {
 } from "../../../store/labels/actionCreators";
 import { AppState } from "../../../store";
 import { connect } from "react-redux";
-import { ImageData, LabelName } from "../../../store/labels/types";
 import { PopupActions } from "../../../logic/actions/PopupActions";
-import { ProjectData } from "../../../store/general/types";
 import { updateProjectData as storeUpdateProjectData } from "../../../store/general/actionCreators";
 import {Language, LanguageConfig} from "../../../data/LanguageConfig";
 
 interface IProps {
-    updateActiveImageIndex: (activeImageIndex: number) => any;
-    updateActiveLabelNameId: (activeLabelId: string) => any;
-    updateLabelNames: (labelNames: LabelName[]) => any;
-    updateImageData: (imageData: ImageData[]) => any;
-    updateFirstLabelCreatedFlag: (firstLabelCreatedFlag: boolean) => any;
-    updateProjectData: (projectData: ProjectData) => any;
+    updateActiveImageIndex: typeof storeUpdateActiveImageIndex;
+    updateActiveLabelNameId: typeof storeUpdateActiveLabelNameId;
+    updateLabelNames: typeof storeUpdateLabelNames;
+    updateImageData: typeof storeUpdateImageData;
+    updateFirstLabelCreatedFlag: typeof storeUpdateFirstLabelCreatedFlag;
+    updateProjectData: typeof storeUpdateProjectData;
     language: Language;
 }
 

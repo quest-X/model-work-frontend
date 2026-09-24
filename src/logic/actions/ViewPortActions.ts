@@ -18,7 +18,7 @@ import {VideoSelector} from '../../store/selectors/VideoSelector';
 
 export class ViewPortActions {
     public static updateViewPortSize() {
-        if (!!EditorModel.editor) {
+        if (EditorModel.editor) {
             const primaryPane = EditorModel.editor.querySelector('.CanvasViewPane.primary') as HTMLElement | null;
             const viewPortElement = primaryPane || EditorModel.editor;
             EditorModel.viewPortSize = {
@@ -79,7 +79,7 @@ export class ViewPortActions {
             EditorModel.canvas.width = newCanvasSize.width;
             EditorModel.canvas.height = newCanvasSize.height;
         }
-    };
+    }
 
     public static resizeViewPortContent() {
         const viewPortContentSize = ViewPortActions.calculateViewPortContentSize();
@@ -104,7 +104,7 @@ export class ViewPortActions {
     }
 
     public static getRelativeScrollPosition(): IPoint {
-        if (!!EditorModel.viewPortScrollbars) {
+        if (EditorModel.viewPortScrollbars) {
             const values = EditorModel.viewPortScrollbars.getValues();
             return {
                 x: values.left,
@@ -116,7 +116,7 @@ export class ViewPortActions {
     }
 
     public static getAbsoluteScrollPosition(): IPoint {
-        if (!!EditorModel.viewPortScrollbars) {
+        if (EditorModel.viewPortScrollbars) {
             const values = EditorModel.viewPortScrollbars.getValues();
             return {
                 x: values.scrollLeft,

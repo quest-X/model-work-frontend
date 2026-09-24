@@ -66,10 +66,12 @@ export class FileUtil {
     public static readFile(fileData: File): Promise<string> {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onloadend = (event: any) => {
-                resolve(event?.target?.result);
+            reader.onload = () => {
+                if (typeof reader.result === 'string') resolve(reader.result);
+                else reject(new Error('FileReader did not return text'));
             };
             reader.onerror = reject;
+            reader.onabort = () => reject(new DOMException('File reading was aborted', 'AbortError'));
             reader.readAsText(fileData);
         });
     }

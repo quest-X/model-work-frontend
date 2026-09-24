@@ -36,15 +36,16 @@ import {QueueActions} from '../../../logic/actions/QueueActions';
 import {DatasetEditSelection} from '../../../services/DatasetActionSelection';
 import {updateProjectData} from '../../../store/general/actionCreators';
 import {ProjectData} from '../../../store/general/types';
+import {LabelMeAnnotation} from '../../../logic/import/labelme/LabelMeImporter';
 
 interface IProps {
     activeLabelType: LabelType;
-    updateImageDataAction: (imageData: ImageData[]) => any;
-    updateLabelNamesAction: (labels: LabelName[]) => any;
-    updateActiveLabelTypeAction: (activeLabelType: LabelType) => any;
-    addQueueItemsAction: (items: QueueItem[]) => any;
-    updateQueueItemAction: (itemId: string, updates: Partial<QueueItem>) => any;
-    updateProjectDataAction: (projectData: ProjectData) => any;
+    updateImageDataAction: typeof updateImageData;
+    updateLabelNamesAction: typeof updateLabelNames;
+    updateActiveLabelTypeAction: typeof updateActiveLabelType;
+    addQueueItemsAction: typeof addQueueItems;
+    updateQueueItemAction: typeof updateQueueItem;
+    updateProjectDataAction: typeof updateProjectData;
     queueItems: QueueItem[];
     projectData: ProjectData;
     language: Language;
@@ -224,10 +225,10 @@ const ImportLabelPopup: React.FC<IProps> = ({
     const importLabelMeAsync = (imageFiles: File[], annotationFiles: File[]): Promise<ImportResult> => {
         const jsonFiles = annotationFiles.filter(f => f.name.toLowerCase().endsWith('.json'));
         return Promise.all(jsonFiles.map(f =>
-            FileUtil.readFile(f).then(text => JSON.parse(text))
+            FileUtil.readFile(f).then((text): LabelMeAnnotation => JSON.parse(text))
         )).then(annotations => {
             const allLabels = new Set<string>();
-            annotations.forEach((ann: any) => (ann.shapes || []).forEach((s: any) => allLabels.add(s.label)));
+            annotations.forEach(ann => (ann.shapes || []).forEach(shape => allLabels.add(shape.label)));
 
             let colorIdx = 0;
             const labelNameMap: Record<string, LabelName> = {};
@@ -276,13 +277,14 @@ const ImportLabelPopup: React.FC<IProps> = ({
         });
     };
 
-    const importGenericAsync = (files: File[], format: AnnotationFormatType): Promise<ImportResult> => {
+    const importGenericAsync = (files: File[], format: AnnotationFormatType, sourceImages?: ImageData[]): Promise<ImportResult> => {
         if (!ImporterSpecData[format]) return Promise.reject(new Error('Unsupported file format'));
         return new Promise((resolve, reject) => {
             const importer = new (ImporterSpecData[format])([labelType]);
             importer.import(files,
                 (imageData: ImageData[], labelNames: LabelName[]) => resolve({ imageData, labelNames }),
-                (error?: Error) => reject(error || new Error('Import failed'))
+                (error?: Error) => reject(error || new Error('Import failed')),
+                sourceImages
             );
         });
     };
@@ -321,13 +323,13 @@ const ImportLabelPopup: React.FC<IProps> = ({
                         zip.forEach((path, entry) => {
                             if (entry.dir) return;
                             const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
-                            const fileName = path.split('/').pop();
+                            const fileName = path.substring(path.lastIndexOf('/') + 1);
                             if (annotationExts.includes(ext)) {
                                 annPromises.push(entry.async('arraybuffer').then(buf =>
-                                    new File([buf], fileName!, { type: mimeMap[ext] || 'text/plain' })));
+                                    new File([buf], fileName, { type: mimeMap[ext] || 'text/plain' })));
                             } else if (isFull && imageExts.includes(ext)) {
                                 imgPromises.push(entry.async('arraybuffer').then(buf =>
-                                    new File([buf], fileName!, { type: imageMimeMap[ext] || 'image/jpeg' })));
+                                    new File([buf], fileName, { type: imageMimeMap[ext] || 'image/jpeg' })));
                             }
                         });
                         return Promise.all([Promise.all(annPromises), Promise.all(imgPromises)]);
@@ -340,10 +342,7 @@ const ImportLabelPopup: React.FC<IProps> = ({
                             const newImageData = imgFiles.map(f => ImageDataUtil.createImageDataFromFileData(f));
                             const format = zipFormat || detectFormatFromFiles(annFiles);
                             if (!format) return Promise.reject(new Error('Cannot detect annotation format'));
-                            return importGenericAsync(annFiles, format).then(r => ({
-                                imageData: [...newImageData, ...r.imageData],
-                                labelNames: r.labelNames,
-                            }));
+                            return importGenericAsync(annFiles, format, newImageData);
                         } else {
                             const format = zipFormat || detectFormatFromFiles(annFiles);
                             if (!format) return Promise.reject(new Error('Cannot detect annotation format'));
@@ -357,12 +356,13 @@ const ImportLabelPopup: React.FC<IProps> = ({
                         const labelNameMap = new Map<string, LabelName>();
                         const idRemap = new Map<string, string>();
                         results.forEach(r => r.labelNames.forEach(ln => {
-                            if (!labelNameMap.has(ln.name)) labelNameMap.set(ln.name, ln);
-                            idRemap.set(ln.id, labelNameMap.get(ln.name)!.id);
+                            const canonical = labelNameMap.get(ln.name) || ln;
+                            labelNameMap.set(ln.name, canonical);
+                            idRemap.set(ln.id, canonical.id);
                         }));
 
                         const allImageData: ImageData[] = [];
-                        const remap = (id: string | null) => (id && idRemap.has(id)) ? idRemap.get(id)! : id;
+                        const remap = (id: string | null) => id ? idRemap.get(id) ?? id : id;
 
                         results.forEach((r, zipIdx) => {
                             const prefix = zips.length > 1

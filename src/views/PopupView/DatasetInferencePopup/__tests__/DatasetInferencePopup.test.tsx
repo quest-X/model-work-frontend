@@ -3,9 +3,10 @@ import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {Language} from '../../../../data/LanguageConfig';
 import {DatasetInferenceSelection} from '../../../../services/DatasetActionSelection';
 import {DatasetInferencePopup} from '../DatasetInferencePopup';
+import type {GenericYesNoPopup} from '../../GenericYesNoPopup/GenericYesNoPopup';
 
 jest.mock('../../GenericYesNoPopup/GenericYesNoPopup', () => ({
-    GenericYesNoPopup: ({title, renderContent, rejectLabel, onReject}: any) => <div>
+    GenericYesNoPopup: ({title, renderContent, rejectLabel, onReject}: React.ComponentProps<typeof GenericYesNoPopup>) => <div>
         <h1>{title}</h1>
         {renderContent()}
         <button onClick={onReject}>{rejectLabel}</button>
@@ -34,7 +35,7 @@ describe('DatasetInferencePopup', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         (DatasetInferenceSelection.get as jest.Mock).mockReturnValue('dataset-1');
-        global.fetch = jest.fn((input: RequestInfo, options?: RequestInit) => {
+        global.fetch = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
             const url = String(input);
             if (url.endsWith('/datasets')) {
                 return Promise.resolve(response({datasets: [{id: 'dataset-1', name: 'default-project', image_count: 465}]}));
@@ -70,7 +71,7 @@ describe('DatasetInferencePopup', () => {
     it('requests cooperative cancellation and shows the acknowledgement state', async () => {
         const existingFetch = global.fetch;
         let state = 'running';
-        global.fetch = jest.fn((input: RequestInfo, options?: RequestInit) => {
+        global.fetch = jest.fn((input: RequestInfo | URL, options?: RequestInit) => {
             if (String(input).endsWith('/cancel')) {
                 state = 'cancelling';
                 return Promise.resolve(response({status: 'accepted'}));

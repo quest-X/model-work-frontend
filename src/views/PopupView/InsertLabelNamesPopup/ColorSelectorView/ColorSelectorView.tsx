@@ -3,7 +3,7 @@ import './ColorSelectorView.scss'
 
 interface IProps {
     color: string;
-    onClick: () => any;
+    onClick: () => void;
 }
 
 export const ColorSelectorView: React.FC<IProps> = ({color, onClick}) => {

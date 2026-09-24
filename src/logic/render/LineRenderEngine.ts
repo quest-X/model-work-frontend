@@ -1,6 +1,7 @@
 import {BaseRenderEngine} from './BaseRenderEngine';
 import {RenderEngineSettings} from '../../settings/RenderEngineSettings';
 import {LabelType} from '../../data/enums/LabelType';
+import {LabelStatus} from '../../data/enums/LabelStatus';
 import {EditorData} from '../../data/EditorData';
 import {RenderEngineUtil} from '../../utils/RenderEngineUtil';
 import {ImageData, LabelLine} from '../../store/labels/types';
@@ -80,7 +81,7 @@ export class LineRenderEngine extends BaseRenderEngine {
         const isOverImage: boolean = RenderEngineUtil.isMouseOverImage(data);
         if (isOverImage) {
             const labelLine: LabelLine = this.getLineUnderMouse(data);
-            if (!!labelLine) {
+            if (labelLine) {
                 if (LabelsSelector.getHighlightedLabelId() !== labelLine.id) {
                     store.dispatch(updateHighlightedLabelId(labelLine.id))
                 }
@@ -112,7 +113,7 @@ export class LineRenderEngine extends BaseRenderEngine {
                 const isActive: boolean = labelLine.id === activeLabelId || labelLine.id === highlightedLabelId;
                 const lineOnCanvas = RenderEngineUtil.transferLineFromImageToViewPortContent(labelLine.line, data)
                 if (!(labelLine.id === activeLabelId && this.isResizeInProgress())) {
-                    this.drawLine(labelLine.labelId, lineOnCanvas, isActive, labelLine.isCreatedByAI)
+                    this.drawLine(labelLine.labelId, lineOnCanvas, isActive)
                 }
             }
         });
@@ -188,10 +189,10 @@ export class LineRenderEngine extends BaseRenderEngine {
                 this.drawLengthLabel(finalLineToDraw, RenderEngineSettings.LINE_SNAP_COLOR);
             } else {
                 // 正常状态：使用常规绘制
-                this.drawLine(activeLabelLine.labelId, finalLineToDraw, true, activeLabelLine.isCreatedByAI)
+                this.drawLine(activeLabelLine.labelId, finalLineToDraw, true)
                 
                 // 调整大小时也显示实时长度
-                const lineColor = BaseRenderEngine.resolveLabelLineColor(activeLabelLine.labelId, true, activeLabelLine.isCreatedByAI);
+                const lineColor = BaseRenderEngine.resolveLabelLineColor(activeLabelLine.labelId);
                 this.drawLengthLabel(finalLineToDraw, lineColor);
             }
         }
@@ -216,8 +217,8 @@ export class LineRenderEngine extends BaseRenderEngine {
         }
     }
 
-    private drawLine(labelId: string, line: ILine, isActive: boolean, isCreatedByAI: boolean = false) {
-        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelId, isActive, isCreatedByAI)
+    private drawLine(labelId: string, line: ILine, isActive: boolean) {
+        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelId)
         const anchorColor = BaseRenderEngine.resolveLabelAnchorColor(isActive)
         const standardizedLine: ILine = {
             start: RenderEngineUtil.setPointBetweenPixels(line.start),
@@ -316,6 +317,9 @@ export class LineRenderEngine extends BaseRenderEngine {
             id: uuidv4(),
             labelId: activeLabelId,
             line: lineOnImage,
+            isCreatedByAI: false,
+            status: LabelStatus.ACCEPTED,
+            suggestedLabel: null,
             isVisible: true
         };
         imageData.labelLines.push(labelLine);

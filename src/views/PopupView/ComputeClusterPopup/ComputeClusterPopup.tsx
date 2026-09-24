@@ -4,11 +4,13 @@ import {Language} from '../../../data/LanguageConfig';
 import {
     ComputeClusterNode,
     computeNodeUpgradeAvailable,
+    computeNodeUpgradeReady,
     computeNodeState,
     computeNodeLabel,
     computeNodeNormal,
     ComputeClusterService,
     ComputeClusterStatus,
+    ComputeUpgradeManifest,
     ComputeLanDiscoveryResult,
     ComputeLanAssetsResponse,
     ComputeLanSchedule,
@@ -77,6 +79,21 @@ const taskState = (state: ComputeTask['state'], zh: boolean): string => {
     return labels[state][zh ? 0 : 1];
 };
 
+const TASK_NAMES: Record<ComputeTask['task_type'], [string, string]> = {
+    'system.wait': ['等待测试', 'Wait test'],
+    'information.web_fetch': ['公开信息抓取', 'Public information fetch'],
+    'network.lan_discovery': ['局域网设备发现', 'LAN device discovery'],
+    'network.peer_probe': ['节点连通测试', 'Peer connectivity test'],
+    'model.infer': ['模型推理', 'Model inference'],
+    'duplicate.scan': ['重复文件扫描', 'Duplicate file scan'],
+    'storage.scan': ['存储分析', 'Storage analysis'],
+    'camera.discover': ['摄像头发现', 'Camera discovery'],
+    'camera.connect': ['摄像头连接', 'Camera connection'],
+};
+
+const taskName = (task: ComputeTask, zh: boolean): string =>
+    TASK_NAMES[task.task_type][zh ? 0 : 1];
+
 const taskProgress = (task: ComputeTask): number => {
     if (task.state === 'succeeded') return 100;
     const reported = task.progress?.percent;
@@ -139,17 +156,14 @@ const TaskCard: React.FC<TaskCardProps> = ({task, zh, busy, onControl}) => {
     const finished = ['succeeded', 'failed', 'cancelled'].includes(task.state);
     const informationTask = task.task_type === 'information.web_fetch';
     const discoveryTask = task.task_type === 'network.lan_discovery';
+    const cameraTask = task.task_type === 'camera.connect' || task.task_type === 'camera.discover';
     const evidence = webFetchResult(task);
     const discovery = lanDiscoveryResult(task);
     return <article className={`ComputeTaskCard ${task.state}`}>
         <div className='ComputeTaskIdentity'>
             <span className={`ComputeTaskState ${task.state}`}>{taskState(task.state, zh)}</span>
             <div>
-                <strong>{informationTask
-                    ? (zh ? '公开信息抓取' : 'Public information fetch')
-                    : discoveryTask
-                        ? (zh ? '局域网设备发现' : 'LAN device discovery')
-                        : (zh ? '等待测试' : 'Wait test')} · {task.node_name}</strong>
+                <strong>{taskName(task, zh)} · {task.node_name}</strong>
                 <small>{task.mode === 'online' ? (zh ? '在线任务' : 'Online') : (zh ? '后台任务' : 'Background')} · {task.task_id.slice(0, 8)}</small>
                 {task.placement && <small className='ComputeTaskPlacement'>
                     {task.placement.mode === 'automatic'
@@ -171,9 +185,9 @@ const TaskCard: React.FC<TaskCardProps> = ({task, zh, busy, onControl}) => {
                     : `${Number(task.progress?.completed ?? task.checkpoint?.elapsed_seconds ?? 0).toFixed(1)} / ${Number(task.parameters.seconds ?? task.progress?.total ?? 0).toFixed(1)} s`}</small>
         </div>
         <div className='ComputeTaskActions'>
-            {active && !informationTask && !discoveryTask && <button type='button' disabled={busy} onClick={() => onControl(task, 'pause')}>{zh ? '暂停' : 'Pause'}</button>}
-            {task.state === 'paused' && !informationTask && !discoveryTask && <button type='button' disabled={busy} onClick={() => onControl(task, 'resume')}>{zh ? '恢复' : 'Resume'}</button>}
-            {!finished && <button type='button' className='danger' disabled={busy} onClick={() => onControl(task, 'cancel')}>{zh ? '取消' : 'Cancel'}</button>}
+            {active && !informationTask && !discoveryTask && !cameraTask && <button type='button' disabled={busy} onClick={() => onControl(task, 'pause')}>{zh ? '暂停' : 'Pause'}</button>}
+            {task.state === 'paused' && !informationTask && !discoveryTask && !cameraTask && <button type='button' disabled={busy} onClick={() => onControl(task, 'resume')}>{zh ? '恢复' : 'Resume'}</button>}
+            {!finished && !cameraTask && <button type='button' className='danger' disabled={busy} onClick={() => onControl(task, 'cancel')}>{zh ? '取消' : 'Cancel'}</button>}
         </div>
         {informationTask && <div className='ComputeTaskEvidence'>
             <span className={`ComputeEvidenceState ${evidence?.status || 'pending'}`}>
@@ -208,6 +222,7 @@ const TaskCard: React.FC<TaskCardProps> = ({task, zh, busy, onControl}) => {
 
 interface NodeCardProps {
     node: ComputeClusterNode;
+    releases: ComputeUpgradeManifest[];
     zh: boolean;
     region?: string;
     onUpgrade?: () => void;
@@ -215,7 +230,7 @@ interface NodeCardProps {
 
 // Resource, network, GPU, and device variants are one presentational node boundary.
 // eslint-disable-next-line complexity
-const NodeCard: React.FC<NodeCardProps> = ({node, zh, region, onUpgrade}) => <details className={`ComputeNodeCard ${computeNodeState(node)}`}>
+const NodeCard: React.FC<NodeCardProps> = ({node, releases, zh, region, onUpgrade}) => <details className={`ComputeNodeCard ${computeNodeState(node)}`}>
     <summary className='ComputeNodeHeading'>
         <div className='ComputeNodeIdentity'>
             <span className='ComputeNodeStatus'><i/>{computeNodeLabel(node, zh)}</span>
@@ -237,13 +252,15 @@ const NodeCard: React.FC<NodeCardProps> = ({node, zh, region, onUpgrade}) => <de
             <span className='ComputeNodeVersion'>SERVICE <strong>v{node.agent_version}</strong></span>
             {onUpgrade && <button
                 type='button'
-                disabled={!computeNodeUpgradeAvailable(node)}
+                disabled={!computeNodeUpgradeAvailable(node, releases)}
                 aria-label={`${zh ? '管理' : 'Manage'} ${node.name} ${zh ? '节点升级' : 'node upgrade'}`}
                 onClick={onUpgrade}
-            >{computeNodeUpgradeAvailable(node)
+            >{computeNodeUpgradeAvailable(node, releases)
                 ? (zh ? '升级节点' : 'Upgrade node')
                 : node.communication_state === 'abnormal'
                     ? (zh ? '异常，暂不可升级' : 'Abnormal; upgrade unavailable')
+                    : computeNodeUpgradeReady(node)
+                        ? (zh ? '暂无可用升级' : 'No upgrade available')
                     : (zh ? '无法联通，暂不可升级' : 'Unreachable; upgrade unavailable')}</button>}
         </div>
     </summary>
@@ -310,6 +327,9 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
 }) => {
     const zh = language === Language.CHINESE;
     const [nodes, setNodes] = useState<ComputeClusterNode[]>([]);
+    const [upgradeReleases, setUpgradeReleases] = useState<ComputeUpgradeManifest[]>([]);
+    const [upgradeReleasesLoading, setUpgradeReleasesLoading] = useState(true);
+    const [upgradeReleasesError, setUpgradeReleasesError] = useState('');
     const [status, setStatus] = useState<ComputeClusterStatus | null>(null);
     const [tasks, setTasks] = useState<ComputeTask[]>([]);
     const [scheduler, setScheduler] = useState<ComputeSchedulerResponse | null>(null);
@@ -349,6 +369,24 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const heartbeats = useRef<Record<string, number>>({});
     const taskFormRef = useRef<HTMLDivElement | null>(null);
     const upgradePanelRef = useRef<HTMLDivElement | null>(null);
+
+    const refreshUpgradeReleases = useCallback(async (signal?: AbortSignal) => {
+        setUpgradeReleasesLoading(true);
+        try {
+            const catalog = await ComputeClusterService.upgradeReleases(signal);
+            if (mounted.current) {
+                setUpgradeReleases(catalog.releases);
+                setUpgradeReleasesError('');
+            }
+        } catch (reason) {
+            if ((reason as {name?: string})?.name !== 'AbortError' && mounted.current) {
+                setUpgradeReleases([]);
+                setUpgradeReleasesError(reason instanceof Error ? reason.message : String(reason));
+            }
+        } finally {
+            if (mounted.current) setUpgradeReleasesLoading(false);
+        }
+    }, []);
 
     const openUpgrade = () => {
         setUpgradeOpen(true);
@@ -452,13 +490,14 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
         mounted.current = true;
         const controller = new AbortController();
         void refresh(controller.signal);
+        void refreshUpgradeReleases(controller.signal);
         const timer = window.setInterval(() => void refresh(controller.signal), 2000);
         return () => {
             mounted.current = false;
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [refresh]);
+    }, [refresh, refreshUpgradeReleases]);
 
     // Task variants share one strictly typed dispatch boundary.
     // eslint-disable-next-line complexity
@@ -616,8 +655,8 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
         });
     }, [nodes, regionByNode]);
     const filteredNodes = useMemo(() => sortedNodes.filter(node => nodeFilter === 'all'
-        || (nodeFilter === 'upgradeable' && computeNodeUpgradeAvailable(node))
-        || computeNodeState(node) === nodeFilter), [nodeFilter, sortedNodes]);
+        || (nodeFilter === 'upgradeable' && computeNodeUpgradeAvailable(node, upgradeReleases))
+        || computeNodeState(node) === nodeFilter), [nodeFilter, sortedNodes, upgradeReleases]);
 
     const taskControlEnabled = status?.task_control?.enabled === true;
     const orchestrationEnabled = taskControlEnabled
@@ -990,7 +1029,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                                 ['all', zh ? '全部' : 'All', nodes.length],
                                 ['normal', zh ? '正常' : 'Normal', nodes.filter(node => computeNodeState(node) === 'normal').length],
                                 ['fault', zh ? '故障' : 'Fault', nodes.filter(node => computeNodeState(node) === 'fault').length],
-                                ['upgradeable', zh ? '可升级' : 'Upgradeable', nodes.filter(computeNodeUpgradeAvailable).length],
+                                ['upgradeable', zh ? '可升级' : 'Upgradeable', nodes.filter(node => computeNodeUpgradeAvailable(node, upgradeReleases)).length],
                             ] as Array<[NodeFilter, string, number]>).map(([filter, label, count]) => <button
                                 type='button'
                                 key={filter}
@@ -1007,7 +1046,14 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                     </div>
                 </div>}
                 {!loading && activeWorkspace === 'nodes' && upgradeOpen && <div className='ComputeNodeUpgradeArea' ref={upgradePanelRef}>
-                    <ComputeUpgradePanel nodes={nodes} zh={zh}/>
+                    <ComputeUpgradePanel
+                        nodes={nodes}
+                        releases={upgradeReleases}
+                        releasesLoading={upgradeReleasesLoading}
+                        releasesError={upgradeReleasesError}
+                        refreshReleases={refreshUpgradeReleases}
+                        zh={zh}
+                    />
                 </div>}
                 {!loading && activeWorkspace === 'nodes' && filteredNodes.length === 0 && <div className='ComputeNodeFilterEmpty'>
                     {zh ? '没有符合当前筛选条件的节点。' : 'No nodes match the current filter.'}
@@ -1015,6 +1061,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                 {!loading && activeWorkspace === 'nodes' && filteredNodes.map(node => <NodeCard
                     key={node.node_id}
                     node={node}
+                    releases={upgradeReleases}
                     zh={zh}
                     region={regionByNode.get(node.node_id)?.region_name || regionByNode.get(node.node_id)?.region_id}
                     onUpgrade={node.capabilities.includes('control.node.upgrade.v1') ? openUpgrade : undefined}

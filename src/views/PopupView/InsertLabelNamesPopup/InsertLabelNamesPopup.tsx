@@ -17,7 +17,6 @@ import { Settings } from '../../../settings/Settings';
 import { reject, sample, filter, uniq } from 'lodash';
 import { ProjectType } from '../../../data/enums/ProjectType';
 import { submitNewNotification } from '../../../store/notifications/actionCreators';
-import { INotification } from '../../../store/notifications/types';
 import { NotificationUtil } from '../../../utils/NotificationUtil';
 import { NotificationsDataMap } from '../../../data/info/NotificationsData';
 import { Notification } from '../../../data/enums/Notification';
@@ -25,10 +24,10 @@ import { StyledTextField } from '../../Common/StyledTextField/StyledTextField';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
 
 interface IProps {
-    updateActivePopupTypeAction: (activePopupType: PopupWindowType) => any;
-    updateLabelNamesAction: (labels: LabelName[]) => any;
-    updatePerClassColorationStatusAction: (updatePerClassColoration: boolean) => any;
-    submitNewNotificationAction: (notification: INotification) => any;
+    updateActivePopupTypeAction: typeof updateActivePopupType;
+    updateLabelNamesAction: typeof updateLabelNames;
+    updatePerClassColorationStatusAction: typeof updatePerClassColorationStatus;
+    submitNewNotificationAction: typeof submitNewNotification;
     isUpdate: boolean;
     projectType: ProjectType;
     enablePerClassColoration: boolean;
@@ -59,7 +58,7 @@ const InsertLabelNamesPopup: React.FC<IProps> = (
         return uniqueLabelNames.length === labelNames.length;
     };
 
-    const callbackWithLabelNamesValidation = (callback: () => any): () => any => {
+    const callbackWithLabelNamesValidation = (callback: () => void): () => void => {
         return () => {
             if (!validateEmptyLabelNames()) {
                 submitNewNotificationAction(NotificationUtil

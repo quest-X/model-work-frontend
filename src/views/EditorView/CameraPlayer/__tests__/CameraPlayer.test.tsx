@@ -165,4 +165,35 @@ describe('CameraPlayer', () => {
         render(<CameraPlayer item={item} language={Language.CHINESE}/>);
         expect(screen.getByRole('button', {name: /播放/})).toBeDisabled();
     });
+    it('resets paused comparison playback and hides local controls when switching to a remote camera', () => {
+        act(() => CanvasMultiViewStore.setLayout('1x2'));
+        const {rerender} = render(<CameraPlayer item={item} language={Language.ENGLISH}/>);
+        const original = screen.getByRole('img', {name: 'Camera 01 original live stream'});
+        const adjusted = screen.getByRole('img', {name: 'Camera 01 adjusted live stream'});
+        const previousUrl = adjusted.getAttribute('src');
+        for (const image of [original, adjusted]) {
+            Object.defineProperty(image, 'naturalWidth', {configurable: true, value: 640});
+            Object.defineProperty(image, 'naturalHeight', {configurable: true, value: 360});
+            fireEvent.load(image);
+        }
+        fireEvent.keyDown(window, {code: 'Space'});
+        expect(drawImage).toHaveBeenCalledWith(original, 0, 0, 640, 360);
+        expect(drawImage).toHaveBeenCalledWith(adjusted, 0, 0, 640, 360);
+        expect(screen.queryByRole('img')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: 'Smart controls'}));
+
+        rerender(<CameraPlayer
+            item={{...item, name: 'Remote camera', cameraResourceId: 'resource-2', cameraNodeId: 'node-2'}}
+            language={Language.ENGLISH}
+        />);
+
+        expect(screen.getByRole('img', {name: 'Remote camera live stream'})).not.toHaveAttribute('src', previousUrl);
+        expect(screen.queryByRole('img', {name: /original live stream/})).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Smart controls'})).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Camera parameters'})).not.toBeInTheDocument();
+        expect(screen.queryByText('Preview not dispatched')).not.toBeInTheDocument();
+        expect(screen.getByText('CONNECTING')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: /Play/})).toBeDisabled();
+    });
+
 });

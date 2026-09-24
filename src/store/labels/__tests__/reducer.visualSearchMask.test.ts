@@ -3,7 +3,7 @@ import {LabelType} from '../../../data/enums/LabelType';
 import {DataBatchSyncService} from '../../../services/DataBatchSyncService';
 import {deriveEditorVisualSearchQuery} from '../../../views/PopupView/VisualSearchPopup/VisualSearchGeometry';
 import {VISUAL_SEARCH_MASK_RASTERIZER_REVISION} from '../../visualSearch/types';
-import {updateImageDataById} from '../actionCreators';
+import {acceptVisualSearchMask, updateImageDataById} from '../actionCreators';
 import {labelsReducer} from '../reducer';
 import {ImageData, LabelPolygon, LabelsState} from '../types';
 import {visualSearchVerticesSignature} from '../../../utils/VisualSearchMaskProvenance';
@@ -152,4 +152,33 @@ describe('labelsReducer visual-search mask edit boundary', () => {
         nextState.imagesData[0].labelPolygons.forEach(polygon =>
             expect(polygon.extra?.visualSearch).toBeDefined());
     });
+});
+
+
+it.each<[string, unknown, boolean]>([
+    ['null', null, false],
+    ['undefined', undefined, false],
+    ['array', [], false],
+    ['missing hash', {componentIndex: 0}, false],
+    ['matching hash on otherwise malformed object', {geometrySha256: 'a'.repeat(64)}, true],
+    ['different hash', {geometrySha256: 'b'.repeat(64)}, false],
+    ['matching hash on array', Object.assign([], {geometrySha256: 'a'.repeat(64)}), true],
+])('preserves acceptance duplicate-hash behavior for %s provenance', (_name, provenance, duplicate) => {
+    const current = image();
+    current.labelPolygons = [{...component(0), id: 'existing', extra: {visualSearch: provenance}}];
+    const before = state(current);
+    const acceptedPolygon = {...component(0), id: 'new-acceptance'};
+    const after = labelsReducer(before, acceptVisualSearchMask({
+        clientJobId: 'client-mask', backendJobId: 'task-mask', resultId: 'result-mask',
+        queueItemId: 'queue-mask', datasetId: 'dataset-mask', datasetRevision: 2,
+        assetId: 'asset-mask', contentSha256: 'c'.repeat(64), geometrySha256: 'a'.repeat(64),
+        rasterizerRevision: VISUAL_SEARCH_MASK_RASTERIZER_REVISION,
+        imageId: current.id, expectedFile: current.fileData,
+        mask: {encoding: 'binary_rle_varint_zlib_base64_v1', order: 'row-major',
+            size: [6, 14], countsBase64: 'AA=='},
+        sourcePolygons: [vertices[0].map(({x, y}) => [x, y] as const)],
+        labelPolygons: [acceptedPolygon],
+    }));
+    if (duplicate) expect(after).toBe(before);
+    else expect(after.imagesData[0].labelPolygons).toEqual([...current.labelPolygons, acceptedPolygon]);
 });

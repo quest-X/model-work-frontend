@@ -19,8 +19,8 @@ export class YOLOImporter extends AnnotationImporter {
 
     public import(
         filesData: File[],
-        onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => any,
-        onFailure: (error?:Error) => any
+        onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => void,
+        onFailure: (error?:Error) => void
     ): void {
         try {
             const sourceImagesData = LabelsSelector.getImagesData()

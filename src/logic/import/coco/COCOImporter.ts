@@ -25,8 +25,9 @@ export class COCOImporter extends AnnotationImporter {
 
     public import(
         filesData: File[],
-        onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => any,
-        onFailure: (error?:Error) => any
+        onSuccess: (imagesData: ImageData[], labelNames: LabelName[]) => void,
+        onFailure: (error?:Error) => void,
+        sourceImages?: ImageData[]
     ): void {
         if (filesData.length > 1) {
             onFailure(new COCOAnnotationFileCountError());
@@ -35,10 +36,10 @@ export class COCOImporter extends AnnotationImporter {
 
         const reader = new FileReader();
         reader.readAsText(filesData[0]);
-        reader.onloadend = (evt: any) => {
+        reader.onload = () => {
             try {
-                const inputImagesData: ImageData[] = LabelsSelector.getImagesData();
-                const annotations = COCOImporter.deserialize(evt.target.result)
+                const inputImagesData = sourceImages ?? LabelsSelector.getImagesData();
+                const annotations = COCOImporter.deserialize(String(reader.result))
                 const {imagesData, labelNames} = this.applyLabels(inputImagesData, annotations);
                 onSuccess(imagesData,labelNames);
             } catch (error) {
@@ -122,7 +123,7 @@ export class COCOImporter extends AnnotationImporter {
     }
 
     public static validateCocoFormat(annotationsObject: COCOObject): void {
-        const missingKeys = COCOImporter.requiredKeys.filter((key: string) => !annotationsObject.hasOwnProperty(key))
+        const missingKeys = COCOImporter.requiredKeys.filter((key: string) => !Object.prototype.hasOwnProperty.call(annotationsObject, key))
         if (missingKeys.length !== 0) {
             throw new COCOFormatValidationError(`Uploaded file does not contain all required keys: ${missingKeys}`)
         }

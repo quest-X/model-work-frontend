@@ -5,7 +5,7 @@ import classNames from 'classnames';
 interface IProps {
     key?:string;
     label:string;
-    onClick?:() => any;
+    onClick?:() => void;
     style?:React.CSSProperties;
     isActive?:boolean;
     isDisabled?:boolean;
@@ -26,7 +26,7 @@ export const TextButton = (props:IProps) => {
         );
     };
 
-    const onClickHandler = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+    const onClickHandler = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
         event.stopPropagation();
         if (onClick) {
             onClick();

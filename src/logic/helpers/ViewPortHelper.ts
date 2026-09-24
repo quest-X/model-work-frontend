@@ -14,13 +14,13 @@ export class ViewPortHelper {
     private mouseStartPosition: IPoint;
 
     public update(data: EditorData): void {
-        if (!!data.event) {
+        if (data.event) {
             switch (MouseEventUtil.getEventType(data.event)) {
                 case EventType.MOUSE_MOVE:
                     this.mouseMoveHandler(data);
                     break;
                 case EventType.MOUSE_UP:
-                    this.mouseUpHandler(data);
+                    this.mouseUpHandler();
                     break;
                 case EventType.MOUSE_DOWN:
                     this.mouseDownHandler(data);
@@ -40,7 +40,7 @@ export class ViewPortHelper {
         EditorModel.canvas.style.cursor = "none";
     }
 
-    private mouseUpHandler(data: EditorData) {
+    private mouseUpHandler() {
         this.startScrollPosition = null;
         this.mouseStartPosition = null;
         store.dispatch(updateCustomCursorStyle(CustomCursorStyle.GRAB));

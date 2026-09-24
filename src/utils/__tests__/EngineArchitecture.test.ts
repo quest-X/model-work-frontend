@@ -31,8 +31,11 @@ describe('engine service URL normalization', () => {
             getState: () => ({
                 aimodels: {
                     activeModelId: 'core-engine',
+                    selectedModelTask: null,
                     models: [{
                         id: 'core-engine',
+                        name: 'Core engine',
+                        createdAt: new Date('2026-01-01T00:00:00Z'),
                         modelType: 'core',
                         url: 'https://localhost:58600/core_service',
                         isActive: true,
@@ -54,8 +57,11 @@ describe('engine service URL normalization', () => {
             getState: () => ({
                 aimodels: {
                     activeModelId: 'remote-core',
+                    selectedModelTask: null,
                     models: [{
                         id: 'remote-core',
+                        name: 'Remote core',
+                        createdAt: new Date('2026-01-01T00:00:00Z'),
                         modelType: 'core',
                         url: 'https://engine.example.test:58600',
                         isActive: true,

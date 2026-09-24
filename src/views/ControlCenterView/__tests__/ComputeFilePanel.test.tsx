@@ -50,6 +50,18 @@ describe('ComputeFilePanel', () => {
 
     afterEach(() => jest.restoreAllMocks());
 
+    it('explains an unconfigured Linux desktop and keeps path navigation available', async () => {
+        const create = jest.spyOn(ComputeClusterService, 'createFilesystemAuthorization')
+            .mockRejectedValue(new Error('desktop_not_configured: node desktop directory is not configured'));
+        const linux = {...node, resources: {...node.resources, platform: 'Linux'}};
+        render(<ComputeFilePanel nodes={[linux]} zh/>);
+        expect(await screen.findByRole('alert')).toHaveTextContent('这台机器尚未设置桌面目录，请输入绝对路径浏览。');
+        fireEvent.change(screen.getByRole('textbox', {name: '绝对目录路径'}), {target: {value: '/home/luo'}});
+        fireEvent.click(screen.getByRole('button', {name: '转到'}));
+        await waitFor(() => expect(create).toHaveBeenLastCalledWith(node.node_id,
+            expect.objectContaining({target: {kind: 'path', path: '/home/luo'}})));
+    });
+
     it('opens the default node at its desktop and returns through cached history', async () => {
         const longName = `${'very-long-'.repeat(30)}report.txt`;
         let target: ComputeFilesystemTarget = {

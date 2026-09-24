@@ -28,7 +28,7 @@ export const aiModelsReducer = (
                 )
             };
             break;
-        case 'DELETE_AI_MODEL':
+        case 'DELETE_AI_MODEL': {
             const remainingModels = state.models.filter(model => model.id !== action.payload);
             newState = {
                 ...state,
@@ -36,6 +36,7 @@ export const aiModelsReducer = (
                 activeModelId: state.activeModelId === action.payload ? null : state.activeModelId
             };
             break;
+        }
         case 'SET_ACTIVE_AI_MODEL':
             newState = {
                 ...state,

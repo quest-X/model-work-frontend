@@ -38,6 +38,7 @@ export type ComputeNodeResources = {
 };
 
 export type ComputeManagedDevice = {
+    ip_address?: string | null;
     device_id: string;
     kind: 'camera';
     provider: 'camera-connect';
@@ -114,10 +115,29 @@ export const computeSshAvailability = (node: ComputeClusterNode): {lan: boolean;
     };
 };
 
-export const computeNodeUpgradeAvailable = (node: ComputeClusterNode): boolean =>
+export const computeNodeUpgradeReady = (node: ComputeClusterNode): boolean =>
     node.enabled && node.communication_state !== 'abnormal'
     && node.capabilities.includes('control.node.upgrade.v1')
     && Object.values(computeSshAvailability(node)).some(Boolean);
+
+export const compareNodeVersions = (left: string, right: string): number => {
+    const a = left.split('.').map(Number), b = right.split('.').map(Number);
+    if (a.length !== 3 || b.length !== 3 || [...a, ...b].some(Number.isNaN)) return NaN;
+    return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+};
+
+const nodeArchitecture = (value: string): string =>
+    ({amd64: 'x86_64', arm64: 'aarch64'}[value.toLowerCase()] || value.toLowerCase());
+
+export const computeNodeUpgradeAvailable = (
+    node: ComputeClusterNode,
+    releases: ComputeUpgradeManifest[],
+): boolean => computeNodeUpgradeReady(node) && releases.some(release =>
+    release.platform === node.resources.platform.toLowerCase()
+    && release.architecture === nodeArchitecture(node.resources.architecture)
+    && compareNodeVersions(node.agent_version, release.minimum_node_version) >= 0
+    && compareNodeVersions(node.agent_version, release.release_version) < 0
+);
 
 export type ComputeCommunicationState = 'normal' | 'fault' | 'abnormal';
 
@@ -137,7 +157,10 @@ export const computeLinkStates = (node?: ComputeClusterNode): {lan: ComputeCommu
 };
 
 export const computeNodeState = (node?: ComputeClusterNode): 'normal' | 'fault' =>
-    aggregateCommunicationStates(Object.values(computeLinkStates(node)));
+    node?.online && !node.network.error
+        && (node.communication_state == null || node.communication_state === 'normal')
+        ? 'normal'
+        : 'fault';
 
 export const communicationStateLabel = (state: ComputeCommunicationState, zh: boolean): string =>
     state === 'normal' ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
@@ -398,12 +421,12 @@ export type ComputeGroupMember = {
 };
 
 export type ComputeGroupDetail = {
-    schema_version: 'field-group-snapshot.v1';
-    reporting_installation_id: string;
+    schema_version: 'central-group-snapshot.v1' | 'field-group-snapshot.v1';
+    reporting_installation_id: string | null;
     group: {
         group_id: string;
         group_name: string;
-        scope: 'local';
+        scope: 'central' | 'local';
     };
     members: ComputeGroupMember[];
     captured_at: number;
@@ -418,30 +441,6 @@ export type ComputeGroupResources = {
     resource_graph: ComputeResourceGraph;
 };
 
-export type ComputeFieldGroupAdmissionInput = {
-    installation_id: string;
-    name: string;
-    ssh_user: string;
-    control_host: string;
-    lan_host?: string | null;
-    authority_subject: {
-        role: 'main';
-        installation_id: string;
-        owner_id: string;
-        group_id: string;
-        generation: number;
-        public_key: string;
-    };
-};
-
-export type ComputeFieldGroupAdmission = {
-    schema_version: 'field-group-admission.v1';
-    status: 'registered' | 'updated' | 'unchanged';
-    reporting_installation_id: string;
-    name: string;
-    invitation: Record<string, unknown>;
-};
-
 export type ComputeFieldGroupRemoval = {
     schema_version: 'field-group-removal.v1';
     status: 'revoked' | 'locally_fenced';
@@ -449,6 +448,39 @@ export type ComputeFieldGroupRemoval = {
     remote_revoked: boolean;
     pending_remote_revocation: boolean;
     group_id: string;
+};
+
+export type ComputeJoinCode = {
+    schema_version: 'join-code.v1';
+    configured: boolean;
+    code?: string;
+    issued_at?: number;
+    expires_at?: number;
+    days?: 7 | 30 | 180;
+    generation?: string;
+};
+
+export type ComputeJoinRequest = {
+    schema_version: 'join-request.v1';
+    request_id: string;
+    status: 'pending' | 'approved' | 'rejected' | 'expired';
+    payload: {
+        installation_id: string;
+        name: string;
+        role: 'node';
+        ssh_user: string;
+        control_host: string;
+        lan_host?: string | null;
+    };
+    created_at: number;
+    updated_at: number;
+    expires_at: number;
+};
+
+export type ComputeJoinRequests = {
+    schema_version: 'join-request-list.v1';
+    requests: ComputeJoinRequest[];
+    pending_count: number;
 };
 
 export type ComputeFilesystemOperation = 'filesystem.stat' | 'filesystem.list';
@@ -769,8 +801,10 @@ export type ComputeTaskType = 'system.wait'
     | 'information.web_fetch'
     | 'network.lan_discovery'
     | 'network.peer_probe'
+    | 'model.infer'
     | 'duplicate.scan'
     | 'storage.scan'
+    | 'camera.discover'
     | 'camera.connect';
 
 export type ComputeLanScanTarget = {
@@ -943,6 +977,12 @@ export type ComputeWebFetchResult = {
     attempt_count: number;
 };
 
+export type ComputeModelResult = {
+    model_id: string;
+    model_sha256: string;
+    outputs: Record<string, unknown>;
+};
+
 export type ComputeResourceRequest = {
     cpu_cores: number;
     memory_bytes: number;
@@ -980,6 +1020,7 @@ export type ComputeTask = {
         | ComputeDuplicateResult
         | ComputeStorageResult
         | CameraConnectResult
+        | ComputeModelResult
         | null;
     error?: string | null;
     attempt: number;
@@ -1191,21 +1232,34 @@ export class ComputeClusterService {
         return request(`/groups/${encodeURIComponent(groupId)}/resource-graph`, signal);
     }
 
-    public static admitFieldGroup(
-        input: ComputeFieldGroupAdmissionInput,
-        signal?: AbortSignal,
-    ): Promise<ComputeFieldGroupAdmission> {
-        return request('/groups', signal, {
-            method: 'POST',
-            body: JSON.stringify({...input, role: 'main'}),
-        });
-    }
-
     public static removeFieldGroup(
         groupId: string,
         signal?: AbortSignal,
     ): Promise<ComputeFieldGroupRemoval> {
         return request(`/groups/${encodeURIComponent(groupId)}`, signal, {method: 'DELETE'});
+    }
+
+    public static joinCode(signal?: AbortSignal): Promise<ComputeJoinCode> {
+        return request('/join-code', signal);
+    }
+
+    public static rotateJoinCode(days: 7 | 30 | 180): Promise<ComputeJoinCode> {
+        return request('/join-code/rotate', undefined, {
+            method: 'POST', body: JSON.stringify({days}),
+        });
+    }
+
+    public static joinRequests(signal?: AbortSignal): Promise<ComputeJoinRequests> {
+        return request('/join-requests', signal);
+    }
+
+    public static decideJoinRequest(
+        requestId: string,
+        action: 'approve' | 'reject',
+    ): Promise<ComputeJoinRequest> {
+        return request(`/join-requests/${encodeURIComponent(requestId)}/${action}`, undefined, {
+            method: 'POST', body: '{}',
+        });
     }
 
     public static runtime(nodeId: string, signal?: AbortSignal): Promise<ComputeRuntimeSnapshot> {

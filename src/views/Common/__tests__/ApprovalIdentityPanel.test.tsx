@@ -31,7 +31,7 @@ describe('approval identity panel', () => {
         await waitFor(() => expect(screen.getByText('授权身份：Operator')).toBeInTheDocument());
         expect(currentApprovalUser()).toEqual(user);
         fireEvent.click(screen.getByText('导出公开登记材料'));
-        const blob = (saveAs as jest.Mock).mock.calls[0][0] as Blob;
+        const blob = jest.mocked(saveAs).mock.calls[0][0] as Blob;
         const exported = await new Promise<string>(resolve => {
             const reader = new FileReader();
             reader.onload = () => resolve(String(reader.result));

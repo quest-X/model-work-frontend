@@ -1,13 +1,15 @@
+import React from 'react';
+import {act, render} from '@testing-library/react';
 import {ImageRepository} from '../../../../../logic/imageRepository/ImageRepository';
 import {ImageData} from '../../../../../store/labels/types';
 import {FileUtil} from '../../../../../utils/FileUtil';
+import {ImageDataUtil} from '../../../../../utils/ImageDataUtil';
 import {ImagePreview} from '../ImagePreview';
 
 const imageData = (id: string): ImageData => ({
+    ...ImageDataUtil.createImageDataFromFileData(new File([id], `${id}.jpg`, {type: 'image/jpeg'})),
     id,
-    loadStatus: false,
-    fileData: new File([id], `${id}.jpg`, {type: 'image/jpeg'}),
-} as ImageData);
+});
 
 describe('ImagePreview rapid switching', () => {
     beforeEach(() => {
@@ -38,26 +40,23 @@ describe('ImagePreview rapid switching', () => {
             deleteImageById: jest.fn(),
             deleteSelectedImages: jest.fn(),
         };
-        const preview = new ImagePreview(props);
-        (preview as any).mounted = true;
-        preview.setState = jest.fn();
-
-        await (preview as any).loadImage(oldData, false);
-        (preview as any).props = {...props, imageData: newData};
-        await (preview as any).loadImage(newData, false);
+        const {rerender} = render(<ImagePreview {...props}/>);
+        rerender(<ImagePreview {...props} imageData={newData}/>);
 
         const lateImage = new Image();
         lateImage.src = 'blob:old-frame';
-        resolvers.get('old-frame.jpg')(lateImage);
-        await Promise.resolve();
+        await act(async () => {
+            resolvers.get('old-frame.jpg')(lateImage);
+        });
 
         expect(ImageRepository.getById('old-frame')).toBeUndefined();
         expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:old-frame');
 
         const currentImage = new Image();
         currentImage.src = 'blob:new-frame';
-        resolvers.get('new-frame.jpg')(currentImage);
-        await Promise.resolve();
+        await act(async () => {
+            resolvers.get('new-frame.jpg')(currentImage);
+        });
 
         expect(ImageRepository.getById('new-frame')).toBe(currentImage);
         expect(props.updateImageDataById).toHaveBeenCalledWith(

@@ -21,7 +21,6 @@ import {ContextManager} from '../../../logic/hotkey/ContextManager';
 import {ContextType} from '../../../data/enums/ContextType';
 import Scrollbars from 'react-custom-scrollbars-2';
 import {ViewPortActions} from '../../../logic/actions/ViewPortActions';
-import {PlatformModel} from '../../../staticModels/PlatformModel';
 import LabelControlPanel from '../LabelControlPanel/LabelControlPanel';
 import {IPoint} from '../../../interfaces/IPoint';
 import {RenderEngineUtil} from '../../../utils/RenderEngineUtil';
@@ -40,7 +39,7 @@ interface IProps {
     size: ISize;
     imageData: ImageData;
     activeLabelType: LabelType;
-    updateImageDataById: (id: string, newImageData: ImageData) => any;
+    updateImageDataById: typeof updateImageDataById;
     activePopupType: PopupWindowType;
     activeLabelId: string;
     customCursorStyle: CustomCursorStyle;
@@ -50,8 +49,8 @@ interface IProps {
     activeLabelViewType?: LabelType;
     imageAIStates?: AIState['imageAIStates'];
     enablePerClassColoration?: boolean;
-    updateActiveLabelId?: (labelId: string) => any;
-    updatePreventCustomCursorStatus?: (preventCustomCursor: boolean) => any;
+    updateActiveLabelId?: typeof updateActiveLabelId;
+    updatePreventCustomCursorStatus?: typeof updatePreventCustomCursorStatus;
 }
 
 interface IState {
@@ -65,7 +64,7 @@ export class Editor extends React.Component<IProps, IState> {
     private requestGeneration: number = 0;
     private mounted: boolean = false;
 
-    constructor(props) {
+    constructor(props: IProps) {
         super(props);
         this.state = {
             viewPortSize: {
@@ -118,7 +117,7 @@ export class Editor extends React.Component<IProps, IState> {
         this.unmountEventListeners();
     }
 
-    public componentDidUpdate(prevProps: Readonly<IProps>, prevState: Readonly<{}>, snapshot?: any): void {
+    public componentDidUpdate(prevProps: Readonly<IProps>): void {
         const {imageData, activeLabelType} = this.props;
         const imageChanged = prevProps.imageData.id !== imageData.id;
 
@@ -136,7 +135,8 @@ export class Editor extends React.Component<IProps, IState> {
         if (prevProps.activeLabelType !== activeLabelType) {
             // 绘制工具改变时，始终切换渲染引擎到对应的工具类型
             EditorActions.swapSupportRenderingEngine(activeLabelType);
-            AIActions.detect(imageData.id, ImageRepository.getById(imageData.id));
+            ImageRepository.getById(imageData.id); // Retain the active-image LRU touch.
+            AIActions.detect(imageData.id);
         }
 
         // loadImage renders only after it has a valid full-resolution image.
@@ -187,7 +187,7 @@ export class Editor extends React.Component<IProps, IState> {
     // LOAD IMAGE
     // =================================================================================================================
 
-    private loadImage = async (imageData: ImageData): Promise<any> => {
+    private loadImage = async (imageData: ImageData): Promise<void> => {
         const generation = ++this.requestGeneration;
         if (imageData.loadStatus) {
             // 视频模式：复用缓存的 videoFrameImage（尺寸与视频一致），同步设置，零延迟
@@ -204,7 +204,7 @@ export class Editor extends React.Component<IProps, IState> {
             const cachedImage = ImageRepository.getById(imageData.id);
             if (cachedImage) {
                 EditorActions.setActiveImage(cachedImage);
-                AIActions.detect(imageData.id, cachedImage);
+                AIActions.detect(imageData.id);
                 this.updateModelAndRender();
             } else {
                 this.loadMissingImage(imageData, generation);
@@ -242,12 +242,12 @@ export class Editor extends React.Component<IProps, IState> {
         this.props.updateImageDataById(imageData.id, updatedImageData);
         ImageRepository.storeImage(imageData.id, image);
         EditorActions.setActiveImage(image);
-        AIActions.detect(imageData.id, image);
+        AIActions.detect(imageData.id);
         EditorActions.setLoadingStatus(false);
         this.updateModelAndRender();
     };
 
-    private handleLoadImageError = (imageData: ImageData, generation: number, error?: any) => {
+    private handleLoadImageError = (imageData: ImageData, generation: number, error?: unknown) => {
         if (!this.isCurrentRequest(imageData.id, generation)) return;
         EditorActions.setLoadingStatus(false);
         console.error(`[Editor] 图像加载失败: ${imageData.fileData?.name} (size=${imageData.fileData?.size})`, error);

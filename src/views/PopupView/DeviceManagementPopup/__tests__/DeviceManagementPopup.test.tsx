@@ -69,7 +69,7 @@ describe('DeviceManagementPopup remote camera management', () => {
         />);
 
         expect(screen.getByText('查看设备状态、通道与能力，并通过所属节点更名或删除。')).toBeInTheDocument();
-        expect(container.querySelector('.DeviceManagementNodeState .fault')).toHaveTextContent('故障');
+        expect(container.querySelector('.DeviceManagementNodeState .normal')).toHaveTextContent('正常');
         expect(screen.queryByRole('button', {name: '刷新'})).not.toBeInTheDocument();
         expect(screen.queryByRole('button', {name: '添加摄像头'})).not.toBeInTheDocument();
         expect(screen.queryByText('显示 1 / 1')).not.toBeInTheDocument();

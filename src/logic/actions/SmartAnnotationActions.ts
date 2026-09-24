@@ -5,12 +5,12 @@ import {LabelsSelector} from '../../store/selectors/LabelsSelector';
 import {SegmentationAPIDetector} from '../../ai/SegmentationAPIDetector';
 import {submitNewNotification, deleteNotificationById, updateNotificationById} from '../../store/notifications/actionCreators';
 import {NotificationUtil} from '../../utils/NotificationUtil';
+import {INotification} from '../../store/notifications/types';
 import {NotificationsDataMap} from '../../data/info/NotificationsData';
 import {Notification} from '../../data/enums/Notification';
 import {ImageData, LabelRect} from '../../store/labels/types';
 import {EditorModel} from '../../staticModels/EditorModel';
 import {FrameExtractorService} from '../../services/FrameExtractorService';
-import {LanguageConfig} from '../../data/LanguageConfig';
 import {updateImageDataById} from '../../store/labels/actionCreators';
 import {v4 as uuidv4} from 'uuid';
 import {LabelStatus} from '../../data/enums/LabelStatus';
@@ -142,41 +142,21 @@ export class SmartAnnotationActions {
         const prompts = this.getPromptRects(imageData);
         if (prompts.length === 0) return;
 
-        // Build prompt payload
-        const points: [number, number][] = [];
-        const pointLabels: number[] = [];
-        let bbox: [number, number, number, number] | undefined;
-
-        for (const p of prompts) {
-            if (p.promptLabel) {
-                // Point prompt — center of the tiny rect
-                const cx = p.rect.x + p.rect.width / 2;
-                const cy = p.rect.y + p.rect.height / 2;
-                points.push([cx, cy]);
-                pointLabels.push(p.promptLabel === 'negative' ? 0 : 1);
-            } else {
-                // Bbox prompt — use the last bbox if multiple
-                bbox = [p.rect.x, p.rect.y, p.rect.x + p.rect.width, p.rect.y + p.rect.height];
-            }
-        }
-
-        // 开始推理 → 开启闪烁动画
-        (window as any).__openSightPromptInferring = true;
+        const {points, bbox, request} = this.buildPromptPayload(prompts);
 
         // Progress notification
         const lang = store.getState().general.language;
-        const promptDesc = lang === 'zh'
-            ? `${points.length} 个点${bbox ? ' + 框' : ''}`
-            : `${points.length} point(s)${bbox ? ' + bbox' : ''}`;
-        const progressNotification = this.createProgressNotification(promptDesc);
-        store.dispatch(submitNewNotification(progressNotification));
+        const progressNotification = this.createProgressNotification(points.length, !!bbox);
 
+        // 开始推理 → 开启闪烁动画；从这里开始的所有退出路径都由 finally 清理。
+        const promptWindow = window as Window & {__openSightPromptInferring?: boolean};
+        promptWindow.__openSightPromptInferring = true;
         try {
+            store.dispatch(submitNewNotification(progressNotification));
             // Step 1: prepare image
             this.updateProgress(progressNotification, 1, lang === 'zh' ? '准备图像帧' : 'Preparing image');
             const blob = await this.resolveImageBlob(imageData);
             if (!blob || blob.size === 0) {
-                store.dispatch(deleteNotificationById(progressNotification.id));
                 this.notifyError('Could not obtain image bytes for the active frame');
                 return;
             }
@@ -188,11 +168,7 @@ export class SmartAnnotationActions {
             const results = await SegmentationAPIDetector.predictFromBlob(
                 blob,
                 imageData.fileData?.name || 'image.jpg',
-                {
-                    points: points.length > 0 ? points : undefined,
-                    pointLabels: pointLabels.length > 0 ? pointLabels : undefined,
-                    bbox,
-                }
+                request
             );
 
             // Step 3: apply results — re-read imageData to get the latest state
@@ -211,20 +187,47 @@ export class SmartAnnotationActions {
             // Re-read again after clearing prompts
             const finalImageData = LabelsSelector.getActiveImageData();
             AISegmentationActions.applySingleResult(finalImageData || imageData, results, 'smart');
-
-            (window as any).__openSightPromptInferring = false;
-            store.dispatch(deleteNotificationById(progressNotification.id));
         } catch (err) {
             console.error('[SmartAnnotation] inference failed:', err);
-            (window as any).__openSightPromptInferring = false;
-            store.dispatch(deleteNotificationById(progressNotification.id));
             this.notifyError((err as Error).message || 'Smart annotation failed');
+        } finally {
+            promptWindow.__openSightPromptInferring = false;
+            store.dispatch(deleteNotificationById(progressNotification.id));
         }
     }
 
-    private static createProgressNotification(promptDesc: string) {
+    private static buildPromptPayload(prompts: LabelRect[]) {
+        // Build prompt payload
+        const points: [number, number][] = [];
+        const pointLabels: number[] = [];
+        let bbox: [number, number, number, number] | undefined;
+
+        for (const p of prompts) {
+            if (p.promptLabel) {
+                // Point prompt — center of the tiny rect
+                const cx = p.rect.x + p.rect.width / 2;
+                const cy = p.rect.y + p.rect.height / 2;
+                points.push([cx, cy]);
+                pointLabels.push(p.promptLabel === 'negative' ? 0 : 1);
+            } else {
+                // Bbox prompt — use the last bbox if multiple
+                bbox = [p.rect.x, p.rect.y, p.rect.x + p.rect.width, p.rect.y + p.rect.height];
+            }
+        }
+
+        return {points, bbox, request: {
+            points: points.length > 0 ? points : undefined,
+            pointLabels: pointLabels.length > 0 ? pointLabels : undefined,
+            bbox,
+        }};
+    }
+
+    private static createProgressNotification(pointCount: number, hasBbox: boolean) {
         const base = NotificationUtil.createInferenceProgressNotification();
         const lang = store.getState().general.language;
+        const promptDesc = lang === 'zh'
+            ? `${pointCount} 个点${hasBbox ? ' + 框' : ''}`
+            : `${pointCount} point(s)${hasBbox ? ' + bbox' : ''}`;
         return {
             ...base,
             header: lang === 'zh' ? '智能标注（SAM prompt）' : 'Smart Annotation (SAM prompt)',
@@ -235,7 +238,7 @@ export class SmartAnnotationActions {
         };
     }
 
-    private static updateProgress(notification: any, step: number, stepDesc: string): void {
+    private static updateProgress(notification: INotification, step: number, stepDesc: string): void {
         store.dispatch(updateNotificationById(notification.id, {
             ...notification,
             currentStep: step,

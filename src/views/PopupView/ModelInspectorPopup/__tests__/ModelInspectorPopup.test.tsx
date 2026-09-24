@@ -171,7 +171,7 @@ describe('ModelInspectorPopup', () => {
 
     it('deletes a late capture result after the popup closes', async () => {
         let finish: (value: InspectionSession) => void;
-        (ModelInspectorAPI.createSession as jest.Mock).mockReturnValue(new Promise(resolve => {finish = resolve;}));
+        (ModelInspectorAPI.createSession as jest.Mock).mockReturnValue(new Promise<InspectionSession>(resolve => {finish = resolve;}));
         const view = render(<ModelInspectorPopup language={Language.CHINESE} activeImage={activeImage} activeModelTask='detect'/>);
         await waitFor(() => expect(ModelInspectorAPI.createSession).toHaveBeenCalled());
         const signal = (ModelInspectorAPI.createSession as jest.Mock).mock.calls[0][4];
@@ -184,7 +184,7 @@ describe('ModelInspectorPopup', () => {
     it('does not publish attribution for a previous layer or target class', async () => {
         let finish: () => void;
         (ModelInspectorAPI.createSession as jest.Mock).mockResolvedValue({...session, predictions: []});
-        (ModelInspectorAPI.createAttribution as jest.Mock).mockReturnValue(new Promise(resolve => {finish = resolve;}));
+        (ModelInspectorAPI.createAttribution as jest.Mock).mockReturnValue(new Promise<void>(resolve => {finish = resolve;}));
         render(<ModelInspectorPopup language={Language.CHINESE} activeImage={activeImage} activeModelTask='detect'/>);
         await screen.findByTestId('inspector-view-a');
         fireEvent.click(screen.getByRole('button', {name: '生成类别响应图'}));
@@ -324,7 +324,7 @@ describe('ModelInspectorPopup', () => {
         await waitFor(() => expect(capture).toHaveTextContent('生成 34 层透视 · 2 批'));
         expect(screen.getByText('34 层待捕获 · 自动分 2 批')).toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-        await act(async () => fireEvent.click(capture));
+        await act(async () => { fireEvent.click(capture); });
         expect(ModelInspectorAPI.createSession).toHaveBeenCalledWith(
             activeImage.fileData,
             'detection',
@@ -334,12 +334,12 @@ describe('ModelInspectorPopup', () => {
         );
 
         const escapeEvent = new Event(MODEL_INSPECTOR_ESCAPE_EVENT, {cancelable: true});
-        act(() => window.dispatchEvent(escapeEvent));
+        act(() => { window.dispatchEvent(escapeEvent); });
         expect(escapeEvent.defaultPrevented).toBe(true);
         await waitFor(() => expect(capture).toHaveTextContent('生成 0 层透视'));
 
         const emptyEscapeEvent = new Event(MODEL_INSPECTOR_ESCAPE_EVENT, {cancelable: true});
-        act(() => window.dispatchEvent(emptyEscapeEvent));
+        act(() => { window.dispatchEvent(emptyEscapeEvent); });
         expect(emptyEscapeEvent.defaultPrevented).toBe(false);
     });
 

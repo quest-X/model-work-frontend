@@ -6,7 +6,6 @@ import {GeneralSelector} from '../../store/selectors/GeneralSelector';
 import {RenderEngineSettings} from '../../settings/RenderEngineSettings';
 import {LabelName} from '../../store/labels/types';
 import {LabelsSelector} from '../../store/selectors/LabelsSelector';
-import {AISelector} from '../../store/selectors/AISelector';
 
 export abstract class BaseRenderEngine {
     protected readonly canvas: HTMLCanvasElement;
@@ -17,7 +16,7 @@ export abstract class BaseRenderEngine {
     }
 
     public update(data: EditorData): void {
-        if (!!data.event) {
+        if (data.event) {
             switch (MouseEventUtil.getEventType(data.event)) {
                 case EventType.MOUSE_MOVE:
                     this.mouseMoveHandler(data);
@@ -42,7 +41,7 @@ export abstract class BaseRenderEngine {
 
     abstract isInProgress(): boolean;
 
-    protected static resolveLabelLineColor(labelId: string, isActive: boolean, isCreatedByAI?: boolean): string {
+    protected static resolveLabelLineColor(labelId: string): string {
         const perClassColor: boolean = GeneralSelector.getEnablePerClassColorationStatus();
 
         // 按类别着色开启时，所有标注框都用标签颜色

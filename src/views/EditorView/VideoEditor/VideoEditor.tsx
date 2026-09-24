@@ -1,3 +1,4 @@
+import {createVideoFramePlaceholders, getPlaybackFrame} from './VideoFrameState';
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { connect } from 'react-redux';
 import './VideoEditor.scss';
@@ -10,12 +11,11 @@ import { VideoData } from '../../../store/video/types';
 import { ImageData } from '../../../store/labels/types';
 import { ISize } from '../../../interfaces/ISize';
 import {
-    updateVideoCurrentFrame,
-    updateVideoPlayingStatus,
-    updateVideoMetadata
+    updateVideoCurrentFrame as updateVideoCurrentFrameAction,
+    updateVideoPlayingStatus as updateVideoPlayingStatusAction,
+    updateVideoMetadata as updateVideoMetadataAction
 } from '../../../store/video/actionCreators';
-import { updateImageDataById, updateImageData, updateActiveImageIndex, addImageData, toggleImageSelection } from '../../../store/labels/actionCreators';
-import { ImageDataUtil } from '../../../utils/ImageDataUtil';
+import { updateImageDataById as updateImageDataByIdAction, updateImageData as updateImageDataAction, updateActiveImageIndex as updateActiveImageIndexAction, addImageData as addImageDataAction, toggleImageSelection as toggleImageSelectionAction } from '../../../store/labels/actionCreators';
 import { ImageRepository } from '../../../logic/imageRepository/ImageRepository';
 import { EditorActions } from '../../../logic/actions/EditorActions';
 import { ViewPortActions } from '../../../logic/actions/ViewPortActions';
@@ -59,13 +59,12 @@ const VideoEditor: React.FC<IProps> = ({
     updateImageDataById,
     updateImageData,
     updateActiveImageIndex,
-    addImageData,
-    toggleImageSelection
+    addImageData
 }) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [videoUrl, setVideoUrl] = useState<string>('');
-    const [loadedThumbnailCount, setLoadedThumbnailCount] = useState(0);
-    const [totalFrameCount, setTotalFrameCount] = useState(0);
+    const [, setLoadedThumbnailCount] = useState(0);
+    const [, setTotalFrameCount] = useState(0);
     const [isMuted, setIsMuted] = useState<boolean>(true);
     const [canvasLayout, setCanvasLayout] = useState<CanvasViewLayout>(CanvasMultiViewStore.get().layout);
     const generationIdRef = React.useRef(0);
@@ -397,14 +396,7 @@ const VideoEditor: React.FC<IProps> = ({
                         }));
                         updateImageData(frameImageDataArray);
                     } else {
-                        for (let i = 0; i < frames; i++) {
-                            const frameImageData = ImageDataUtil.createImageDataFromFileData(activeVideo.fileData);
-                            frameImageData.loadStatus = false;
-                            if (i === 0) {
-                                frameImageData.isSelected = true;
-                            }
-                            frameImageDataArray.push(frameImageData);
-                        }
+                        frameImageDataArray = createVideoFramePlaceholders(activeVideo.fileData, frames);
                         addImageData(frameImageDataArray);
                     }
 
@@ -442,19 +434,18 @@ const VideoEditor: React.FC<IProps> = ({
             if (frameNumber === activeVideo.currentFrame) return;
             const timestamp = frameNumber / activeVideo.fps;
             // 同步设置 playbackImageData，确保标签与帧一致（fallback 到 latestImagesData 以抗 AI 批量推理时的 ref 滞后）
-            let frameImageData = imagesDataRef.current[frameNumber];
-            if (frameImageData && frameImageData.labelRects.length === 0 && EditorModel.latestImagesData) {
-                const latestData = EditorModel.latestImagesData[frameNumber];
-                if (latestData && latestData.labelRects.length > 0) {
-                    frameImageData = latestData;
-                }
-            }
-            EditorModel.playbackImageData = frameImageData || null;
+            EditorModel.playbackImageData = getPlaybackFrame(imagesDataRef.current, EditorModel.latestImagesData, frameNumber);
             updateVideoCurrentFrame(activeVideo.id, frameNumber, timestamp);
             updateActiveImageIndex(frameNumber);
         },
         [activeVideo, updateVideoCurrentFrame, updateActiveImageIndex]
     );
+
+    // 处理视频时间更新
+    const lastFrameRef = React.useRef<number>(-1);
+    const frameSkipCountRef = React.useRef<number>(0);
+
+
 
     // 处理播放/暂停
     const handlePlayPause = useCallback(async () => {
@@ -481,10 +472,6 @@ const VideoEditor: React.FC<IProps> = ({
     const handleToggleMute = useCallback(() => {
         setIsMuted(prev => !prev);
     }, []);
-
-    // 处理视频时间更新
-    const lastFrameRef = React.useRef<number>(-1);
-    const frameSkipCountRef = React.useRef<number>(0);
     const lastUpdateTimeRef = React.useRef<number>(0); // 记录上次更新时间，用于节流
     const lastSidebarUpdateRef = React.useRef<number>(0); // 侧边栏高亮节流
     const handleVideoTimeUpdate = useCallback(
@@ -536,14 +523,7 @@ const VideoEditor: React.FC<IProps> = ({
                 updateVideoCurrentFrame(currentActiveVideo.id, frame, time);
 
                 // 2. 设置播放时的标注数据（绕过 Redux selector，直接读 ref）
-                let frameImageData = imagesDataRef.current[frame];
-                if (frameImageData && frameImageData.labelRects.length === 0 && EditorModel.latestImagesData) {
-                    const latestData = EditorModel.latestImagesData[frame];
-                    if (latestData && latestData.labelRects.length > 0) {
-                        frameImageData = latestData;
-                    }
-                }
-                EditorModel.playbackImageData = frameImageData || null;
+                EditorModel.playbackImageData = getPlaybackFrame(imagesDataRef.current, EditorModel.latestImagesData, frame);
 
                 // 3. 侧边栏高亮更新：节流到 ~5fps
                 const sidebarTimeSince = now - lastSidebarUpdateRef.current;
@@ -715,14 +695,14 @@ const mapStateToProps = (state: AppState) => ({
 });
 
 const mapDispatchToProps = {
-    updateVideoCurrentFrame,
-    updateVideoPlayingStatus,
-    updateVideoMetadata,
-    updateImageDataById,
-    updateImageData,
-    updateActiveImageIndex,
-    addImageData,
-    toggleImageSelection
+    updateVideoCurrentFrame: updateVideoCurrentFrameAction,
+    updateVideoPlayingStatus: updateVideoPlayingStatusAction,
+    updateVideoMetadata: updateVideoMetadataAction,
+    updateImageDataById: updateImageDataByIdAction,
+    updateImageData: updateImageDataAction,
+    updateActiveImageIndex: updateActiveImageIndexAction,
+    addImageData: addImageDataAction,
+    toggleImageSelection: toggleImageSelectionAction
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(VideoEditor);

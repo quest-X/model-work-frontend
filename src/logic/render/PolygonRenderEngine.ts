@@ -52,7 +52,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
     // =================================================================================================================
 
     public update(data: EditorData): void {
-        if (!!data.event) {
+        if (data.event) {
             switch (MouseEventUtil.getEventType(data.event)) {
                 case EventType.MOUSE_MOVE:
                     this.mouseMoveHandler(data);
@@ -82,7 +82,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
                 }
             } else {
                 const polygonUnderMouse: LabelPolygon = this.getPolygonUnderMouse(data);
-                if (!!polygonUnderMouse) {
+                if (polygonUnderMouse) {
                     const anchorIndex: number = polygonUnderMouse.vertices.reduce(
                         (indexUnderMouse: number, anchor: IPoint, index: number) => {
                         if (indexUnderMouse === null) {
@@ -177,11 +177,11 @@ export class PolygonRenderEngine extends BaseRenderEngine {
                 } else {
                     const anchorUnderMouse: IPoint = this.getAnchorUnderMouse(data);
                     const isMouseOverNewAnchor: boolean = this.isMouseOverAnchor(data.mousePositionOnViewPortContent, this.suggestedAnchorPositionOnCanvas);
-                    if (!!isMouseOverNewAnchor) {
+                    if (isMouseOverNewAnchor) {
                         store.dispatch(updateCustomCursorStyle(CustomCursorStyle.ADD));
                     } else if (this.isResizeInProgress()) {
                         store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
-                    } else if (!!anchorUnderMouse) {
+                    } else if (anchorUnderMouse) {
                         store.dispatch(updateCustomCursorStyle(CustomCursorStyle.MOVE));
                     } else {
                         RenderEngineUtil.wrapDefaultCursorStyleInCancel(data);
@@ -198,7 +198,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
         const standardizedPoints: IPoint[] = this.activePath.map((point: IPoint) => RenderEngineUtil.setPointBetweenPixels(point));
         const path = standardizedPoints.concat(data.mousePositionOnViewPortContent);
         const lines: ILine[] = PolygonUtil.getEdges(path, false);
-        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(null, true)
+        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(null)
         const anchorColor: string = BaseRenderEngine.resolveLabelAnchorColor(true)
         DrawUtil.drawPolygonWithFill(this.canvas, path, DrawUtil.hexToRGB(lineColor, 0.2));
         lines.forEach((line: ILine) => {
@@ -260,8 +260,8 @@ export class PolygonRenderEngine extends BaseRenderEngine {
         if (labelPolygon.labelId) {
             const labelName = LabelsSelector.getLabelNameById(labelPolygon.labelId);
             if (labelName) labelText = labelName.name;
-        } else if ((labelPolygon as any).suggestedLabel) {
-            labelText = (labelPolygon as any).suggestedLabel;
+        } else if (labelPolygon.suggestedLabel) {
+            labelText = labelPolygon.suggestedLabel;
         }
         if (!labelText || pathOnCanvas.length === 0) return;
 
@@ -309,7 +309,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
     }
 
     private drawPolygon(labelId: string | null, polygon: IPoint[], isActive: boolean) {
-        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelId, true)
+        const lineColor: string = BaseRenderEngine.resolveLabelLineColor(labelId)
         const anchorColor: string = BaseRenderEngine.resolveLabelAnchorColor(true)
         const standardizedPoints: IPoint[] = polygon.map((point: IPoint) => RenderEngineUtil.setPointBetweenPixels(point));
         // 始终填充多边形（半透明 20%），active 时颜色加深到 30% 以做视觉区分
@@ -381,7 +381,7 @@ export class PolygonRenderEngine extends BaseRenderEngine {
         store.dispatch(updateImageDataById(imageData.id, imageData));
         store.dispatch(updateFirstLabelCreatedFlag(true));
         store.dispatch(updateActiveLabelId(labelPolygon.id));
-    };
+    }
 
     // =================================================================================================================
     // TRANSFER

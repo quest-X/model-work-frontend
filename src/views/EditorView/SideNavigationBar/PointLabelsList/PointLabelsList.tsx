@@ -20,12 +20,12 @@ import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
 interface IProps {
     size: ISize;
     imageData: ImageData;
-    updateImageDataByIdAction: (id: string, newImageData: ImageData) => any;
+    updateImageDataByIdAction: typeof updateImageDataById;
     activeLabelId: string;
     highlightedLabelId: string;
-    updateActiveLabelNameIdAction: (activeLabelId: string) => any;
+    updateActiveLabelNameIdAction: typeof updateActiveLabelNameId;
     labelNames: LabelName[];
-    updateActiveLabelIdAction: (activeLabelId: string) => any;
+    updateActiveLabelIdAction: typeof updateActiveLabelId;
     language: Language;
 }
 

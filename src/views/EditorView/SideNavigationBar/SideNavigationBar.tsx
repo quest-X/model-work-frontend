@@ -7,8 +7,8 @@ interface IProps {
     direction: Direction
     isOpen: boolean;
     isWithContext?: boolean;
-    renderCompanion?: () => any;
-    renderContent?: () => any;
+    renderCompanion?: () => React.ReactNode;
+    renderContent?: () => React.ReactNode;
 }
 
 export const SideNavigationBar: React.FC<IProps> = (props) => {

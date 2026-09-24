@@ -4,9 +4,10 @@ import {Language} from '../../../../data/LanguageConfig';
 import {DatasetExportSelection} from '../../../../services/DatasetActionSelection';
 import {PopupActions} from '../../../../logic/actions/PopupActions';
 import {DatasetExportPopup} from '../DatasetExportPopup';
+import type {GenericYesNoPopup} from '../../GenericYesNoPopup/GenericYesNoPopup';
 
 jest.mock('../../GenericYesNoPopup/GenericYesNoPopup', () => ({
-    GenericYesNoPopup: ({title, renderContent, acceptLabel, onAccept, rejectLabel, onReject}: any) => <div>
+    GenericYesNoPopup: ({title, renderContent, acceptLabel, onAccept, rejectLabel, onReject}: React.ComponentProps<typeof GenericYesNoPopup>) => <div>
         <h1>{title}</h1>
         {renderContent()}
         <button onClick={onAccept}>{acceptLabel}</button>

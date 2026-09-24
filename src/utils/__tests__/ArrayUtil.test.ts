@@ -4,7 +4,7 @@ import {ArrayUtil, ArrayUtilAmbiguousMatchError, EmptyArrayError, NegativeIndexE
 describe('ArrayUtil partition method', () => {
     it('should return empty PartitionResult if array is empty', () => {
         // when
-        const result = ArrayUtil.partition([], (item: any) => true)
+        const result = ArrayUtil.partition([], () => true)
 
         // then
         expect(result.pass.length).toEqual(0);
@@ -53,7 +53,7 @@ describe('ArrayUtil partition method', () => {
 describe('ArrayUtil match method', () => {
     it('should return empty array', () => {
         // when
-        const result = ArrayUtil.match([], [], (k, v) => true)
+        const result = ArrayUtil.match([], [], () => true)
 
         // then
         expect(result.length).toEqual(0);

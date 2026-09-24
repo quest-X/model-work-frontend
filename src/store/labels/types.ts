@@ -38,7 +38,7 @@ export type LabelPolygon = Annotation & {
     suggestedLabel: string;
     confidence?: number; // AI 分割置信度 (0-1)
     trackingGroupId?: string; // 同一次目标跟踪产出的所有帧 polygon 共享此 ID
-    extra?: Record<string, any>; // 自定义后处理脚本注入的字段（含 overlays 等）
+    extra?: Record<string, unknown>; // 自定义后处理脚本注入的字段（含 overlays 等）
 }
 
 export type LabelLine = Annotation & {
@@ -215,6 +215,11 @@ interface SelectImageRange {
     }
 }
 
+interface DeleteSelectedImages {
+    type: typeof Action.DELETE_SELECTED_IMAGES;
+    payload: Record<string, never>;
+}
+
 interface DeleteImageById {
     type: typeof Action.DELETE_IMAGE_BY_ID;
     payload: {
@@ -247,5 +252,6 @@ export type LabelsActionTypes = UpdateActiveImageIndex
     | ToggleImageSelection
     | SelectImageRange
     | DeleteImageById
+    | DeleteSelectedImages
     | AcceptVisualSearchBBox
     | AcceptVisualSearchMask

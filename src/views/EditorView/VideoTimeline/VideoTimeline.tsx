@@ -119,20 +119,7 @@ const VideoTimeline: React.FC<IProps> = ({
         const minLabelSpacing = 40;
         const minTimeInterval = minLabelSpacing / pixelsPerSecond;
 
-        let labelInterval: number;
-        if (minTimeInterval <= 5) {
-            labelInterval = 5;
-        } else if (minTimeInterval <= 10) {
-            labelInterval = 10;
-        } else if (minTimeInterval <= 30) {
-            labelInterval = 30;
-        } else if (minTimeInterval <= 60) {
-            labelInterval = 60;
-        } else if (minTimeInterval <= 300) {
-            labelInterval = 300;
-        } else {
-            labelInterval = 600;
-        }
+        const labelInterval = [5, 10, 30, 60, 300].find(interval => minTimeInterval <= interval) ?? 600;
 
         const tickInterval = Math.max(1, labelInterval / 5);
 
@@ -241,6 +228,21 @@ const VideoTimeline: React.FC<IProps> = ({
 
     }, [duration, currentTime, frames, currentFrame, fps, hoverTime, keyframes, annotatedFrames, selectionRange]);
 
+    // 处理时间跳转
+    const handleSeek = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const time = (x / rect.width) * duration;
+        const clampedTime = Math.max(0, Math.min(duration, time));
+        const frame = Math.min(Math.round(clampedTime * fps), frames - 1);
+        if (frame === currentFrame) return;
+        onFrameChange(frame);
+    };
+
+
     // ===== 鼠标事件 =====
 
     const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -306,20 +308,6 @@ const VideoTimeline: React.FC<IProps> = ({
         setHoverTime(null);
     };
 
-    // 处理时间跳转
-    const handleSeek = (e: React.MouseEvent<HTMLCanvasElement>) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const time = (x / rect.width) * duration;
-        const clampedTime = Math.max(0, Math.min(duration, time));
-        const frame = Math.min(Math.round(clampedTime * fps), frames - 1);
-        if (frame === currentFrame) return;
-        onFrameChange(frame);
-    };
-
     // 键盘快捷键
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -367,7 +355,7 @@ const VideoTimeline: React.FC<IProps> = ({
     const syncSourceRef = useRef<'timeline' | 'images' | null>(null);
     useEffect(() => {
         setGlobalRange(selectionRange);
-        if (syncSourceRef.current === 'images') { syncSourceRef.current = null; return; }
+        if (syncSourceRef.current === 'images') { syncSourceRef.current = null; return undefined; }
         if (selectionRange) {
             store.dispatch(selectImageRange(selectionRange.startFrame, selectionRange.endFrame));
         } else {

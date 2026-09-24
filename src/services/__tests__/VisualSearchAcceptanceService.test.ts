@@ -294,8 +294,9 @@ describe('VisualSearchAcceptanceService', () => {
 
         const accepting = service.accept('snapshot-bbox', 'result-1');
         await Promise.resolve();
-        testStore.getState().visualSearch.jobsById['snapshot-bbox']
-            .result!.items[0].contentSha256 = 'b'.repeat(64);
+        const result = testStore.getState().visualSearch.jobsById['snapshot-bbox'].result;
+        if (!result) throw new Error('bbox result fixture is missing');
+        result.items[0].contentSha256 = 'b'.repeat(64);
         resolveDigest?.(DIGEST);
 
         await expect(accepting).rejects.toThrow(
@@ -341,7 +342,9 @@ describe('VisualSearchAcceptanceService', () => {
 
     it('rejects an empty logical asset id before hashing', async () => {
         const {testStore} = readyStore();
-        testStore.getState().visualSearch.jobsById['snapshot-bbox'].result!.items[0].assetId = '  ';
+        const result = testStore.getState().visualSearch.jobsById['snapshot-bbox'].result;
+        if (!result) throw new Error('bbox result fixture is missing');
+        result.items[0].assetId = '  ';
         const digest = jest.fn(async () => DIGEST);
         const service = new VisualSearchAcceptanceService({
             getState: testStore.getState,
@@ -358,8 +361,9 @@ describe('VisualSearchAcceptanceService', () => {
 
     it('rejects a malformed content SHA-256 before hashing', async () => {
         const {testStore} = readyStore();
-        testStore.getState().visualSearch.jobsById['snapshot-bbox']
-            .result!.items[0].contentSha256 = 'not-a-sha256';
+        const result = testStore.getState().visualSearch.jobsById['snapshot-bbox'].result;
+        if (!result) throw new Error('bbox result fixture is missing');
+        result.items[0].contentSha256 = 'not-a-sha256';
         const digest = jest.fn(async () => DIGEST);
         const service = new VisualSearchAcceptanceService({
             getState: testStore.getState,
@@ -455,10 +459,10 @@ describe('VisualSearchAcceptanceService', () => {
     it('rejects a preview-only mask before hashing or mutation', async () => {
         const {testStore} = readyMaskStore();
         UndoStack.clear();
-        testStore.getState().visualSearch.jobsById['snapshot-mask']
-            .result!.items[0].acceptanceEligible = false;
-        testStore.getState().visualSearch.jobsById['snapshot-mask']
-            .result!.items[0].acceptanceReason = 'source_polygon_unavailable';
+        const result = testStore.getState().visualSearch.jobsById['snapshot-mask'].result;
+        if (!result) throw new Error('mask result fixture is missing');
+        result.items[0].acceptanceEligible = false;
+        result.items[0].acceptanceReason = 'source_polygon_unavailable';
         const digest = jest.fn(async () => DIGEST);
         const verifyMaskGeometry = jest.fn().mockResolvedValue(MASK_POLYGONS);
         const service = new VisualSearchAcceptanceService({
@@ -495,8 +499,9 @@ describe('VisualSearchAcceptanceService', () => {
         const accepting = service.accept('snapshot-mask', 'mask-result-1');
         await new Promise(resolve => setTimeout(resolve, 0));
         expect(resolveDigest).toBeDefined();
-        testStore.getState().visualSearch.jobsById['snapshot-mask']
-            .result!.items[0].geometrySha256 = 'd'.repeat(64);
+        const result = testStore.getState().visualSearch.jobsById['snapshot-mask'].result;
+        if (!result) throw new Error('mask result fixture is missing');
+        result.items[0].geometrySha256 = 'd'.repeat(64);
         resolveDigest?.(DIGEST);
 
         await expect(accepting).rejects.toThrow(

@@ -55,7 +55,7 @@ describe('camera discovery progress', () => {
             if (String(input).endsWith('/discovery/progress')) {
                 return Promise.resolve({
                     ok: true,
-                    json: async () => ({state: 'running', completed_hosts: 106, total_hosts: 253}),
+                    json: async () => ({state: 'running', completed: 106, total: 253, percent: 42}),
                 } as Response);
             }
             return new Promise<Response>(resolve => {

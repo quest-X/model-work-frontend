@@ -1,4 +1,4 @@
-import {Middleware} from 'redux';
+import {Action as ReduxAction, Middleware} from 'redux';
 import {Action} from '../../store/Actions';
 import {UndoStack, RestoreFlag, UndoSnapshot} from './UndoStack';
 import {AppState} from '../../store';
@@ -177,7 +177,7 @@ const assertMaskLabels = (
         try {
             const component = parseVisualSearchMaskComponent(label);
             if (!component) acceptanceCASFailure('mask_provenance');
-            components.push(component as ValidatedVisualSearchMaskComponent);
+            components.push(component);
         } catch {
             acceptanceCASFailure('mask_provenance');
         }
@@ -249,8 +249,8 @@ const assertVisualSearchAcceptanceCAS = (
     }
 };
 
-const clone: <T>(value: T) => T = typeof (globalThis as any).structuredClone === 'function'
-    ? (v) => (globalThis as any).structuredClone(v)
+const clone: <T>(value: T) => T = typeof globalThis.structuredClone === 'function'
+    ? (v) => globalThis.structuredClone(v)
     : (v) => JSON.parse(JSON.stringify(v));
 
 function cloneImageData(list: ImageData[]): ImageData[] {
@@ -287,7 +287,7 @@ function takeSnapshot(state: AppState): UndoSnapshot {
 }
 
 export const undoMiddleware: Middleware<Record<string, never>, AppState> =
-store => next => (action: any) => {
+store => next => (action: ReduxAction) => {
     if (action?.type === Action.ACCEPT_VISUAL_SEARCH_BBOX ||
         action?.type === Action.ACCEPT_VISUAL_SEARCH_MASK) {
         const before = store.getState();

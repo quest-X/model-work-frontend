@@ -21,7 +21,7 @@ interface IProps {
     activeImageIndex: number;
     imagesData: ImageData[];
     activeLabelType: LabelType;
-    imageAIStates: Map<string, any>;
+    imageAIStates: AppState['ai']['imageAIStates'];
     language: Language;
 }
 
@@ -36,7 +36,7 @@ interface IState {
 class ImagesList extends React.Component<IProps, IState> {
     private imagesListRef: HTMLDivElement;
 
-    constructor(props) {
+    constructor(props: IProps) {
         super(props);
 
         this.state = {
@@ -109,6 +109,12 @@ class ImagesList extends React.Component<IProps, IState> {
     private isImageChecked = (index:number): boolean => {
         const imageData = this.props.imagesData[index]
         switch (this.props.activeLabelType) {
+            case LabelType.ALL:
+                return imageData.labelLines.length > 0
+                    || imageData.labelNameIds.length > 0
+                    || imageData.labelPolygons.length > 0
+                    || imageData.labelPoints.some(label => label.status === LabelStatus.ACCEPTED)
+                    || imageData.labelRects.some(label => label.status === LabelStatus.ACCEPTED);
             case LabelType.LINE:
                 return imageData.labelLines.length > 0
             case LabelType.IMAGE_RECOGNITION:
@@ -235,7 +241,7 @@ class ImagesList extends React.Component<IProps, IState> {
         const imageData = this.props.imagesData[index];
 
         const aiState = this.props.imageAIStates?.get(imageData.id);
-        const isInferred = aiState?.inferenceHistory?.some((r: any) => r.success) || false;
+        const isInferred = aiState?.inferenceHistory?.some((r) => r.success) || false;
 
         return <ImagePreview
             key={index}

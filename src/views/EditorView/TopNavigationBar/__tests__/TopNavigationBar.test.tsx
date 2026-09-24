@@ -38,6 +38,7 @@ jest.mock('../../../../services/AccountService', () => {
         ACCOUNT_SESSION_CHANGED: 'opensight:account-session-changed',
         currentAccountSession: jest.fn(() => ({user, csrf_token: 'csrf', expires_at: 2_000_000_000})),
         uploadAccountAvatar: jest.fn(async () => ({...user, avatar_url: '/core_service/account/avatar?v=2'})),
+        accountUsers: jest.fn(async () => ({users: []})),
         accountSessions: jest.fn(async () => ({sessions: []})),
         accountAudit: jest.fn(async () => ({events: []})),
         updateAccountProfile: jest.fn(async () => user),
@@ -234,8 +235,8 @@ describe('TopNavigationBar account preview', () => {
         const platformSwitch = screen.getByRole('menuitem', {name: '切换到管理平台'});
         expect(platformSwitch).not.toHaveAttribute('href');
         expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
+            '管本地管理员管理员账户',
             '切换到管理平台',
-            '个人中心',
             '退出登录',
         ]);
 
@@ -253,12 +254,14 @@ describe('TopNavigationBar account preview', () => {
         expect(screen.getByRole('menuitem', {name: '切换到生产平台'})).toBeInTheDocument();
     });
 
-    it('uploads an account avatar through the authenticated account API', async () => {
+    it('opens account center from the summary and uploads an avatar there', async () => {
         const {container} = renderNavigation([], Language.CHINESE);
         fireEvent.click(screen.getByRole('button', {name: '打开账户菜单'}));
 
-        expect(screen.getByRole('button', {name: '上传头像'})).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText('上传头像', {selector: 'input'}), {
+        fireEvent.click(screen.getByRole('menuitem', {name: /本地管理员/}));
+        expect(screen.getByRole('dialog', {name: '个人中心'})).toBeInTheDocument();
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('更换头像', {selector: 'input'}), {
             target: {files: [new File(['avatar'], 'avatar.png', {type: 'image/png'})]},
         });
 

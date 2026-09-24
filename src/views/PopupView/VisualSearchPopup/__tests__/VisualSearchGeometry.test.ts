@@ -1,5 +1,5 @@
 import {LabelStatus} from '../../../../data/enums/LabelStatus';
-import {ImageData, LabelPolygon} from '../../../../store/labels/types';
+import {ImageData} from '../../../../store/labels/types';
 import {
     VISUAL_SEARCH_MASK_LIMITS,
     VISUAL_SEARCH_MASK_RASTERIZER_REVISION,
@@ -48,7 +48,7 @@ const acceptedComponent = (
     componentIndex: number,
     vertices: Array<{x: number; y: number}>,
     componentCount: number = 2,
-): LabelPolygon => ({
+) => ({
     id: `visual-search:task-mask:result-mask:mask:${componentIndex}`,
     labelId: 'label-mask',
     isVisible: true,

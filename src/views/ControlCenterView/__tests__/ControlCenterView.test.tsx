@@ -160,6 +160,15 @@ describe('ControlCenterView', () => {
         });
         jest.spyOn(ComputeClusterService, 'group').mockRejectedValue(new Error('field group not found'));
         jest.spyOn(ComputeClusterService, 'groupResources').mockRejectedValue(new Error('field resources not found'));
+        jest.spyOn(ComputeClusterService, 'joinCode').mockResolvedValue({
+            schema_version: 'join-code.v1',
+            configured: false,
+        });
+        jest.spyOn(ComputeClusterService, 'joinRequests').mockResolvedValue({
+            schema_version: 'join-request-list.v1',
+            requests: [],
+            pending_count: 0,
+        });
         jest.spyOn(ComputeClusterService, 'runtime').mockImplementation(() => new Promise(() => undefined));
         jest.spyOn(ComputeClusterService, 'runtimeInventory').mockImplementation(() => new Promise(() => undefined));
         jest.spyOn(ComputeClusterService, 'runtimeEvents').mockImplementation(() => new Promise(() => undefined));
@@ -298,7 +307,7 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText('图形处理器')).not.toBeInTheDocument();
     });
 
-    it('shows a disconnected path and mixed paths as faulty', async () => {
+    it('keeps the node normal when one explicit control path remains healthy', async () => {
         const remoteNode = node('山东节点', true, false, null, 'Windows', 'tailscale');
         remoteNode.network.lan_ssh_available = false;
         remoteNode.network.tailscale_ssh_available = true;
@@ -313,10 +322,10 @@ describe('ControlCenterView', () => {
         expect(remote.querySelector('.ControlStatusDot')).toHaveClass('healthy');
         const machineState = screen.getByRole('button', {name: /山东节点/})
             .querySelector('.ControlMachineState');
-        expect(machineState).toHaveTextContent('故障');
-        expect(machineState).toHaveClass('warning');
+        expect(machineState).toHaveTextContent('正常');
+        expect(machineState).toHaveClass('healthy');
         expect(screen.getByRole('button', {name: /总览/}).querySelector('.ControlMachineState'))
-            .toHaveClass('warning');
+            .toHaveClass('healthy');
     });
 
     it('does not guess a version when the node reports unknown', async () => {
@@ -1488,55 +1497,92 @@ describe('ControlCenterView', () => {
         expect(ComputeClusterService.groupResources).toHaveBeenCalledWith('group-1', expect.any(AbortSignal));
     });
 
-    it('registers a Main and exposes the signed invitation step', async () => {
+    it('does not expose the resource graph group as a joined field group', async () => {
         const onlineNode = node('在线节点', true);
+        const currentGraph = graph(onlineNode);
+        currentGraph.entities.unshift({
+            entity_id: 'group:stale-group',
+            kind: 'compute_group',
+            label: 'mwn-cross-region-lab',
+            state: 'available',
+            callable: false,
+            modes: [],
+        });
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([onlineNode]);
-        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(onlineNode));
-        const admit = jest.spyOn(ComputeClusterService, 'admitFieldGroup').mockResolvedValue({
-            schema_version: 'field-group-admission.v1',
-            status: 'registered',
-            reporting_installation_id: '00000000-0000-4000-8000-000000000014',
-            name: 'new-field-main',
-            invitation: {target_role: 'main'},
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(currentGraph);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByRole('heading', {name: '在线节点'});
+        fireEvent.click(screen.getByText('相关功能'));
+        fireEvent.click(screen.getByRole('button', {name: /群查询/}));
+
+        expect(await screen.findByText('当前没有可查询的群')).toBeInTheDocument();
+        expect(screen.queryByText('mwn-cross-region-lab')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '加入现场群'})).not.toBeInTheDocument();
+        expect(ComputeClusterService.group).not.toHaveBeenCalled();
+        expect(ComputeClusterService.groupResources).not.toHaveBeenCalled();
+    });
+
+    it('lets the Master approve CLI join requests and rotate the join code', async () => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([node('在线节点', true)]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(node('在线节点', true)));
+        jest.mocked(ComputeClusterService.joinCode).mockResolvedValue({
+            schema_version: 'join-code.v1',
+            configured: true,
+            code: 'mwn1.secret-code',
+            days: 30,
+            issued_at: 1,
+            expires_at: 2_000_000_000,
+            generation: 'generation-1',
+        });
+        jest.mocked(ComputeClusterService.joinRequests).mockResolvedValue({
+            schema_version: 'join-request-list.v1',
+            pending_count: 1,
+            requests: [{
+                schema_version: 'join-request.v1',
+                request_id: '00000000-0000-4000-8000-000000000123',
+                status: 'pending',
+                payload: {
+                    installation_id: '00000000-0000-4000-8000-000000000156',
+                    name: 'baoxin-156-windows',
+                    role: 'node',
+                    ssh_user: 'baoxin1',
+                    control_host: '100.64.0.156',
+                },
+                created_at: 1,
+                updated_at: 1,
+                expires_at: 2_000_000_000,
+            }],
+        });
+        const approve = jest.spyOn(ComputeClusterService, 'decideJoinRequest').mockResolvedValue({
+            ...(await ComputeClusterService.joinRequests()).requests[0],
+            status: 'approved',
+        });
+        const rotate = jest.spyOn(ComputeClusterService, 'rotateJoinCode').mockResolvedValue({
+            schema_version: 'join-code.v1',
+            configured: true,
+            code: 'mwn1.rotated-code',
+            days: 30,
+            issued_at: 2,
+            expires_at: 2_000_000_001,
+            generation: 'generation-2',
         });
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         await screen.findByRole('heading', {name: '在线节点'});
         fireEvent.click(screen.getByText('相关功能'));
         fireEvent.click(screen.getByRole('button', {name: /群查询/}));
-        fireEvent.click(await screen.findByRole('button', {name: '加入现场群'}));
-        const dialog = await screen.findByRole('dialog', {name: '加入现场群'});
-        fireEvent.change(within(dialog).getByLabelText(/Main 名称/), {target: {value: 'new-field-main'}});
-        fireEvent.change(within(dialog).getByLabelText(/安装 ID（UUID）/), {
-            target: {value: '00000000-0000-4000-8000-000000000014'},
-        });
-        fireEvent.change(within(dialog).getByLabelText(/SSH 用户/), {target: {value: 'field-user'}});
-        fireEvent.change(within(dialog).getByLabelText(/Tailscale 地址/), {target: {value: 'fd7a:115c:a1e0::14'}});
-        fireEvent.change(within(dialog).getByLabelText(/Main 公开身份 JSON/), {target: {value: JSON.stringify({
-            owner_id: '00000000-0000-4000-8000-000000000114',
-            group_id: '00000000-0000-4000-8000-000000000214',
-            generation: 1,
-            public_key: 'A'.repeat(43) + '=',
-        })}});
-        fireEvent.click(within(dialog).getByRole('button', {name: '登记并生成邀请'}));
 
-        expect(await screen.findByText(/model-work-node owner trust --invitation/)).toBeInTheDocument();
-        expect(screen.getByRole('button', {name: '下载配对邀请'})).toBeInTheDocument();
-        expect(admit).toHaveBeenCalledWith({
-            installation_id: '00000000-0000-4000-8000-000000000014',
-            name: 'new-field-main',
-            ssh_user: 'field-user',
-            control_host: 'fd7a:115c:a1e0::14',
-            lan_host: null,
-            authority_subject: {
-                role: 'main',
-                installation_id: '00000000-0000-4000-8000-000000000014',
-                owner_id: '00000000-0000-4000-8000-000000000114',
-                group_id: '00000000-0000-4000-8000-000000000214',
-                generation: 1,
-                public_key: 'A'.repeat(43) + '=',
-            },
-        });
+        expect(await screen.findByDisplayValue('mwn1.secret-code')).toBeInTheDocument();
+        expect(screen.getByText('baoxin-156-windows')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '同意'}));
+        await waitFor(() => expect(approve).toHaveBeenCalledWith(
+            '00000000-0000-4000-8000-000000000123', 'approve',
+        ));
+        await screen.findByText(/已同意入群申请/);
+        fireEvent.click(screen.getByRole('button', {name: '立即更换'}));
+        await waitFor(() => expect(rotate).toHaveBeenCalledWith(30));
+        expect(await screen.findByDisplayValue('mwn1.rotated-code')).toBeInTheDocument();
     });
 
     it('removes only the selected field group after confirmation', async () => {

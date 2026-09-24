@@ -1,4 +1,5 @@
 import {TextDecoder, TextEncoder} from 'util';
+import {runInNewContext} from 'vm';
 import {waitFor} from '@testing-library/react';
 import {DetectSessionAPIService} from '../DetectSessionAPIService';
 import {TrackingAPIService} from '../TrackingAPIService';
@@ -34,5 +35,48 @@ describe.each(['detect', 'track'])('%s video stream', kind => {
         expect(callbacks.onDone).toHaveBeenCalledTimes(success ? 1 : 0);
         expect(callbacks.onError).toHaveBeenCalledTimes(success ? 0 : 1);
         if (success) expect(callbacks.onFrame).toHaveBeenCalledWith({frame_idx: 1, detections: [], mask: []});
+    });
+});
+
+
+describe.each(['fetch', 'reader'])('tracking %s rejection', phase => {
+    const previousFetch = global.fetch;
+    const previousDecoder = global.TextDecoder;
+    afterEach(() => { global.fetch = previousFetch; global.TextDecoder = previousDecoder; });
+
+    it.each<{name: string; reason: unknown; message: string | null}>([
+        {name: 'string failure', reason: 'Socket closed', message: 'Socket closed'},
+        {name: 'structured failure', reason: {message: 'Stream unavailable'}, message: 'Stream unavailable'},
+        {name: 'empty failure', reason: undefined, message: 'undefined'},
+        {name: 'structured abort', reason: {name: 'AbortError', message: 'Stopped'}, message: null},
+        {name: 'cross-realm abort', reason: runInNewContext(
+            'Object.assign(new Error("Stopped"), {name: "AbortError"})',
+        ), message: null},
+    ])('preserves $name handling', async ({reason, message}) => {
+        global.TextDecoder = TextDecoder as typeof global.TextDecoder;
+        const failure = Promise.reject(reason);
+        const reader = {
+            read: jest.fn(() => failure), cancel: jest.fn().mockResolvedValue(undefined),
+            releaseLock: jest.fn(),
+        };
+        global.fetch = phase === 'fetch'
+            ? jest.fn(() => failure)
+            : jest.fn().mockResolvedValue({ok: true, body: {getReader: () => reader}});
+        const callbacks = {onFrame: jest.fn(), onDone: jest.fn(), onError: jest.fn()};
+        TrackingAPIService.streamTrack({sessionId: 'fixture', startFrame: 1, endFrame: 1,
+            modelName: 'sam2_t.pt', bbox: [0, 0, 10, 10]}, callbacks);
+        await failure.catch(() => undefined);
+        if (phase === 'reader') {
+            await waitFor(() => expect(reader.releaseLock).toHaveBeenCalled());
+            expect(reader.cancel).toHaveBeenCalledTimes(1);
+        }
+        expect(callbacks.onDone).not.toHaveBeenCalled();
+        expect(callbacks.onFrame).not.toHaveBeenCalled();
+        if (message === null) expect(callbacks.onError).not.toHaveBeenCalled();
+        else {
+            expect(callbacks.onError).toHaveBeenCalledTimes(1);
+            expect(callbacks.onError.mock.calls[0][0]).toBeInstanceOf(Error);
+            expect(callbacks.onError.mock.calls[0][0].message).toBe(message);
+        }
     });
 });

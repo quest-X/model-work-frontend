@@ -14,22 +14,20 @@ import LabelInputField from '../LabelInputField/LabelInputField';
 import EmptyLabelList from '../EmptyLabelList/EmptyLabelList';
 import {LabelActions} from '../../../../logic/actions/LabelActions';
 import {LabelStatus} from '../../../../data/enums/LabelStatus';
-import {findLast} from 'lodash';
 import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
 import {LabelType} from '../../../../data/enums/LabelType';
-import {AISelector} from '../../../../store/selectors/AISelector';
 
 interface IProps {
     size: ISize;
     imageData: ImageData;
-    updateImageDataByIdAction: (id: string, newImageData: ImageData) => any;
+    updateImageDataByIdAction: typeof updateImageDataById;
     activeLabelId: string;
     highlightedLabelId: string;
-    updateActiveLabelNameIdAction: (activeLabelId: string) => any;
+    updateActiveLabelNameIdAction: typeof updateActiveLabelNameId;
     labelNames: LabelName[];
-    updateActiveLabelIdAction: (activeLabelId: string) => any;
+    updateActiveLabelIdAction: typeof updateActiveLabelId;
     language: Language;
-    imageAIStates: Map<string, { aiLabelsVisible: boolean; segmentationLabelsVisible: boolean; inferenceHistory: Array<any> }>;
+    imageAIStates: AppState['ai']['imageAIStates'];
 }
 
 interface LabelItem {
@@ -165,7 +163,7 @@ const AllLabelsList: React.FC<IProps> = (
     const updateAllLabelById = (labelItem: LabelItem, labelNameId: string) => {
         if (!imageData?.id) return;
         
-        let newImageData = { ...imageData };
+        const newImageData = { ...imageData };
         
         switch (labelItem.type) {
             case LabelType.RECT:
@@ -219,18 +217,22 @@ const AllLabelsList: React.FC<IProps> = (
         
         // 根据标签类型获取实际的可见性状态
         switch (labelItem.type) {
-            case LabelType.RECT:
+            case LabelType.RECT: {
                 const rect = imageData.labelRects?.find(r => r.id === labelItem.id);
                 return rect ? rect.isVisible : false;
-            case LabelType.POINT:
+            }
+            case LabelType.POINT: {
                 const point = imageData.labelPoints?.find(p => p.id === labelItem.id);
                 return point ? point.isVisible : false;
-            case LabelType.POLYGON:
+            }
+            case LabelType.POLYGON: {
                 const polygon = imageData.labelPolygons?.find(p => p.id === labelItem.id);
                 return polygon ? polygon.isVisible : false;
-            case LabelType.LINE:
+            }
+            case LabelType.LINE: {
                 const line = imageData.labelLines?.find(l => l.id === labelItem.id);
                 return line ? line.isVisible : false;
+            }
             default:
                 return false;
         }

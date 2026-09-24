@@ -17,6 +17,8 @@ import { TaskType } from '../store/tasks/types';
 import { LanguageConfig } from '../data/LanguageConfig';
 import {QueueItem, QueueItemType} from '../store/queue/types';
 import {ImageData} from '../store/labels/types';
+import type {AppState} from '../store';
+import type {VideoData} from '../store/video/types';
 
 const MAX_RECOVERY_BYTES = 500 * 1024 * 1024;
 
@@ -38,7 +40,7 @@ const fileDescriptor = (file: File | null | undefined): PersistableValue => file
     lastModified: file.lastModified,
 } : null;
 
-const canonicalize = (value: any): PersistableValue => {
+const canonicalize = (value: unknown): PersistableValue => {
     if (value === null) return null;
     if (value === undefined) return '__undefined__';
     if (typeof File !== 'undefined' && value instanceof File) return fileDescriptor(value);
@@ -58,22 +60,22 @@ const canonicalize = (value: any): PersistableValue => {
         return Object.keys(value)
             .sort()
             .reduce<Record<string, PersistableValue>>((result, key) => {
-                result[key] = canonicalize(value[key]);
+                result[key] = canonicalize(Reflect.get(value, key));
                 return result;
             }, {});
     }
     return String(value);
 };
 
-const normalizeQueueItem = (item: QueueItem): Record<string, any> => {
+const normalizeQueueItem = (item: QueueItem): Record<string, unknown> => {
     const {
         file,
         files,
         extractedFrames,
-        // Runtime backend leases are intentionally not durable.
-        videoSessionId: _videoSessionId,
         ...metadata
     } = item;
+    // Runtime backend leases are intentionally not durable.
+    delete metadata.videoSessionId;
     return {
         ...metadata,
         file: fileDescriptor(file),
@@ -98,7 +100,7 @@ const annotationFrameFor = (
     labelNameIds: image.labelNameIds || [],
 });
 
-const queueAnnotationSnapshotsFor = (state: any): StoredQueueAnnotationSnapshot[] => {
+const queueAnnotationSnapshotsFor = (state: AppState): StoredQueueAnnotationSnapshot[] => {
     const activeQueueItemId = state.queue?.activeQueueItemId || null;
     return (state.queue?.items || []).flatMap((item: QueueItem) => {
         const images = item.id === activeQueueItemId
@@ -112,7 +114,7 @@ const queueAnnotationSnapshotsFor = (state: any): StoredQueueAnnotationSnapshot[
     });
 };
 
-const activeVideoQueueItemFor = (state: any, activeVideo: any): QueueItem | undefined => {
+const activeVideoQueueItemFor = (state: AppState, activeVideo: VideoData | null): QueueItem | undefined => {
     const queueItems: QueueItem[] = state.queue?.items || [];
     const activeQueueItem = queueItems.find(
         item => item.id === state.queue?.activeQueueItemId,
@@ -124,7 +126,7 @@ const activeVideoQueueItemFor = (state: any, activeVideo: any): QueueItem | unde
 };
 
 /** Exact signature of every state field written by AutoSaveService. */
-export const buildPersistenceSignature = (state: any): string => {
+export const buildPersistenceSignature = (state: AppState): string => {
     const activeVideo = state.video?.activeVideo;
     const activeVideoQueueItem = activeVideoQueueItemFor(state, activeVideo);
     const signatureState = {
@@ -178,7 +180,7 @@ export const buildPersistenceSignature = (state: any): string => {
     return JSON.stringify(canonicalize(signatureState));
 };
 
-const extractionMetadataFor = (activeVideo: any): StoredExtractionMetadata => ({
+const extractionMetadataFor = (activeVideo: VideoData | null): StoredExtractionMetadata => ({
     fps: activeVideo?.fps || 0,
     duration: activeVideo?.duration || 0,
     totalFrames: activeVideo?.totalFrames || 0,
@@ -186,7 +188,7 @@ const extractionMetadataFor = (activeVideo: any): StoredExtractionMetadata => ({
     height: activeVideo?.videoSize?.height || 0,
 });
 
-const playbackModeFor = (activeVideo: any): StoredVideoPlaybackMode => {
+const playbackModeFor = (activeVideo: VideoData | null): StoredVideoPlaybackMode => {
     if (activeVideo?.preExtractedFrames) return 'pre-extracted';
     if (activeVideo?.sessionId) return 'on-demand';
     return 'raw';
@@ -375,7 +377,7 @@ export class AutoSaveService {
         AIStateStorageManager.saveImageAIStates(store.getState().ai.imageAIStates);
     }
 
-    private static videoRecoveryFor(state: any): StoredVideoRecoveryData | undefined {
+    private static videoRecoveryFor(state: AppState): StoredVideoRecoveryData | undefined {
         const activeVideo = state.video?.isVideoMode ? state.video.activeVideo : null;
         if (!activeVideo) return undefined;
         const activeQueueItem = activeVideoQueueItemFor(state, activeVideo);
@@ -398,17 +400,14 @@ export class AutoSaveService {
         videoRecovery: StoredVideoRecoveryData | undefined,
     ): QueueItem[] {
         return queueItems.map(item => {
-            const runtimeItem = item as QueueItem & {videoSessionId?: string};
-            const {
-                videoSessionId: _videoSessionId,
-                ...durableItem
-            } = runtimeItem;
-            if (item.id !== videoRecovery?.sourceQueueItemId) return durableItem as QueueItem;
+            const durableItem = {...item};
+            delete durableItem.videoSessionId;
+            if (item.id !== videoRecovery?.sourceQueueItemId) return durableItem;
             return {
                 ...durableItem,
                 file: undefined,
                 extractedFrames: undefined,
-            } as QueueItem;
+            };
         });
     }
 
@@ -485,8 +484,8 @@ export class AutoSaveService {
             decisions.map(decision => this.storedImageFor(decision)),
         );
 
-        const imageSegmentationResults: Record<string, any[]> = {};
-        state.ai?.imageSegmentationResults?.forEach((results: any[], imageId: string) => {
+        const imageSegmentationResults: Record<string, AppState['ai']['segmentationResults']> = {};
+        state.ai?.imageSegmentationResults?.forEach((results, imageId) => {
             imageSegmentationResults[imageId] = results;
         });
 

@@ -19,10 +19,10 @@ interface EngineServiceDescriptor {
 }
 
 export interface IProps {
-    updateActivePopupTypeAction: (activePopupType: PopupWindowType | null) => any;
-    addAIModelAction: (model: AIModel) => any;
-    setActiveAIModelAction: (modelId: string | null) => any;
-    deleteAIModelAction: (modelId: string) => any;
+    updateActivePopupTypeAction: typeof updateActivePopupType;
+    addAIModelAction: typeof addAIModel;
+    setActiveAIModelAction: typeof setActiveAIModel;
+    deleteAIModelAction: typeof deleteAIModel;
     aiModels: AIModel[];
     activeModelId: string | null;
     language: Language;
@@ -31,7 +31,6 @@ export interface IProps {
 export const ManageAIModelsPopup: React.FC<IProps> = ({
     updateActivePopupTypeAction,
     addAIModelAction,
-    setActiveAIModelAction,
     deleteAIModelAction,
     aiModels,
     activeModelId,
@@ -47,13 +46,6 @@ export const ManageAIModelsPopup: React.FC<IProps> = ({
             setSelectedModelId(aiModels[0].id);
         }
     }, [aiModels, selectedModelId]);
-
-    const onAccept = () => {
-        if (selectedModelId) {
-            setActiveAIModelAction(selectedModelId);
-        }
-        updateActivePopupTypeAction(null);
-    };
 
     const onReject = () => {
         updateActivePopupTypeAction(null);

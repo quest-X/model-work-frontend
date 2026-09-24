@@ -273,7 +273,8 @@ describe('ComputeClusterPopup', () => {
         expect(nodeCard.querySelector('.ComputeNodeHeartbeat strong')).toHaveTextContent('刚刚');
         expect(nodeCard.querySelector('.ComputeNodeVersion')).toHaveTextContent('SERVICE v0.1.0');
         expect(screen.queryByRole('button', {name: '节点升级 1'})).not.toBeInTheDocument();
-        await user.click(screen.getByRole('button', {name: '管理 edge-01 节点升级'}));
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toBeDisabled();
+        await user.click(screen.getByRole('button', {name: '批量升级'}));
         expect(await screen.findByRole('heading', {name: '一键升级节点'})).toBeInTheDocument();
         expect(screen.getByText('统一查看资源关系、工作调度、网络资产、节点状态与终端连接。')).toBeInTheDocument();
         expect(nodeCard.querySelector('.ComputeNodeResourceGrid')).toHaveTextContent('16');
@@ -363,7 +364,7 @@ describe('ComputeClusterPopup', () => {
         await user.click(screen.getByRole('button', {name: '正常 2'}));
         expect(Array.from(container.querySelectorAll('.ComputeNodeCard h3')).map(element => element.textContent))
             .toEqual(['shandong-a', 'shanghai-a']);
-        expect(screen.getByRole('button', {name: '可升级 3'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '可升级 0'})).toBeInTheDocument();
     });
 
     it('maximizes and restores the compute cluster workspace', async () => {
@@ -495,7 +496,7 @@ describe('ComputeClusterPopup', () => {
             }],
         });
         service.tasks.mockResolvedValue({
-            version: 1, group_id: 'group-1', total: 3, counts: {running: 2, succeeded: 1}, nodes: [],
+            version: 1, group_id: 'group-1', total: 4, counts: {running: 3, succeeded: 1}, nodes: [],
             tasks: [{
                 task_id: 'peer-probe-1', node_id: 'node-12345678', node_name: 'edge-01',
                 source_entity_id: 'node:node-12345678',
@@ -515,6 +516,13 @@ describe('ComputeClusterPopup', () => {
                 task_type: 'network.peer_probe', mode: 'online', state: 'succeeded',
                 created_at: 1, updated_at: 2, lease_seconds: 60, attempt: 1,
                 parameters: {peer_id: 'node-offline-87654321'},
+            }, {
+                task_id: 'camera-connect-1', node_id: 'node-12345678', node_name: 'edge-01',
+                source_entity_id: 'managed-device:node-12345678:edge-1',
+                target_entity_id: 'managed-device:node-12345678:camera-1',
+                task_type: 'camera.connect', mode: 'background', state: 'running',
+                created_at: 1, updated_at: 2, lease_seconds: 60, attempt: 1,
+                parameters: {},
             }],
         });
 
@@ -573,7 +581,7 @@ describe('ComputeClusterPopup', () => {
         const onlineNode = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
 
         const taskFlow = screen.getByLabelText('任务流 edge-01 → edge-offline');
-        expect(screen.getAllByTestId('resource-graph-task-flow')).toHaveLength(1);
+        expect(screen.getAllByTestId('resource-graph-task-flow')).toHaveLength(2);
         expect(taskFlow).toHaveAttribute('data-source-entity-id', 'node:node-12345678');
         expect(taskFlow).toHaveAttribute('data-target-entity-id', 'node:node-offline-87654321');
         expect(taskFlow.querySelectorAll('animateMotion')).toHaveLength(3);
@@ -585,6 +593,9 @@ describe('ComputeClusterPopup', () => {
         expect(offlineNode).toHaveClass('relation-focused');
         expect(camera).toHaveClass('muted');
         await user.unhover(taskFlowHit);
+        expect(screen.getByLabelText('任务流 AIPACK-01 → IP CAMERA')).toHaveAttribute(
+            'data-target-entity-id', 'managed-device:node-12345678:camera-1',
+        );
 
         const edgeConnection = screen.getByLabelText('连接 edge-01 ↔ AIPACK-01');
         await user.hover(edgeConnection);
@@ -727,11 +738,11 @@ describe('ComputeClusterPopup', () => {
                     target_id: main.entity_id, active: true, reason: 'available',
                 }, ...edges.map(edge => ({
                     relation_id: `manages:${edge.entity_id}`, kind: 'manages' as const,
-                    source_id: main.entity_id, target_id: edge.entity_id, active: true, reason: 'available',
+                    source_id: main.entity_id, target_id: edge.entity_id, active: true, reason: 'available' as const,
                 })), ...cameras.map((camera, index) => ({
                     relation_id: `manages:${camera.entity_id}`, kind: 'manages' as const,
                     source_id: edges[index % edges.length].entity_id,
-                    target_id: camera.entity_id, active: true, reason: 'available',
+                    target_id: camera.entity_id, active: true, reason: 'available' as const,
                 }))],
             }}
             nodes={await service.nodes()}
@@ -837,6 +848,32 @@ describe('ComputeClusterPopup', () => {
                 resources: expect.objectContaining({cpu_cores: 1, memory_bytes: 1024 ** 3}),
             }),
         ));
+    });
+
+    it('shows direct camera tasks without unsupported lifecycle controls', async () => {
+        const user = userEvent.setup();
+        service.status.mockResolvedValue({
+            state: 'ready', version: '0.1.0', protocol_version: 1,
+            admin_configured: true,
+            task_control: {enabled: true, allowed_task_types: ['system.wait']},
+            nodes: {total: 1, online: 1, gpu_total: 1, device_total: 1},
+        });
+        service.tasks.mockResolvedValue({
+            version: 1, group_id: 'group-1', total: 1, counts: {running: 1}, nodes: [],
+            tasks: [{
+                task_id: 'camera-task', node_id: 'node-12345678', node_name: 'edge-01',
+                task_type: 'camera.connect', mode: 'background', state: 'running',
+                created_at: 1, updated_at: 2, lease_seconds: 60, attempt: 1,
+                parameters: {},
+            }],
+        });
+
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+
+        await user.click(await screen.findByRole('button', {name: '工作调度 1'}));
+        expect(screen.getByText('摄像头连接 · edge-01')).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '暂停'})).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '取消'})).not.toBeInTheDocument();
     });
 
     it('dispatches the information work agent and renders redacted evidence metadata', async () => {
@@ -1264,6 +1301,36 @@ describe('ComputeClusterPopup', () => {
         await user.click(screen.getByRole('button', {name: '刷新版本'}));
         expect(await screen.findByText('当前控制端尚未发布可用安装包。请先发布目标版本，再刷新列表。')).toBeInTheDocument();
         expect(screen.getByRole('button', {name: '创建升级批次'})).toBeDisabled();
+    });
+
+    it('does not advertise a node already on the published target version', async () => {
+        const user = userEvent.setup();
+        const manifest = {
+            version: 1 as const,
+            purpose: 'model-work-node.ota-release.v1' as const,
+            release_version: '1.1.1', minimum_node_version: '1.0.0', source_revision: 'b'.repeat(40),
+            platform: 'windows' as const, architecture: 'x86_64' as const,
+            artifact_url: 'https://releases.example/model-work-node-1.1.1-windows-x86_64.zip',
+            sha256: 'c'.repeat(64), size_bytes: 4096, signature: `${'A'.repeat(86)}==`,
+        };
+        const nodes = await service.nodes();
+        service.nodes.mockResolvedValue(nodes.map(node => ({
+            ...node,
+            agent_version: '1.1.1',
+            resources: {...node.resources, platform: 'windows', architecture: 'amd64'},
+        })));
+        service.upgradeReleases.mockResolvedValue({source: 'main', releases: [manifest]});
+
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await user.click(await screen.findByRole('button', {name: '节点管理 1'}));
+        await waitFor(() => expect(service.upgradeReleases).toHaveBeenCalledTimes(1));
+        expect(screen.getByRole('button', {name: '可升级 0'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toBeDisabled();
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toHaveTextContent('暂无可用升级');
+
+        await user.click(screen.getByRole('button', {name: '批量升级'}));
+        await user.selectOptions(screen.getByLabelText('当前控制端的升级版本'), '1.1.1');
+        expect(screen.getByText('已是目标版本，无需升级')).toBeInTheDocument();
     });
 
     it('creates an OTA batch from a Main version without uploading a manifest', async () => {

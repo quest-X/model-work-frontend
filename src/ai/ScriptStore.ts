@@ -64,7 +64,7 @@ export const ScriptStore = {
     hasPreprocess(): boolean { return !!_state.preprocess; },
     hasPostprocess(): boolean { return !!_state.postprocess; },
     /** 解析 params 字符串为 dict；非法 JSON 时返回 null。空串返回 {}。 */
-    parsedParams(): Record<string, any> | null {
+    parsedParams(): Record<string, unknown> | null {
         const s = _state.params.trim();
         if (!s) return {};
         try {

@@ -39,16 +39,17 @@ interface IProps {
     processingProgress?: number; // 视频处理进度 (0-100)
 }
 
+const isAbortError = (cause: unknown): boolean =>
+    typeof cause === 'object' && cause !== null && Reflect.get(cause, 'name') === 'AbortError';
+
 const VideoPlayer: React.FC<IProps> = ({
     language,
     videoSrc,
     currentTime,
-    currentFrame,
     fps,
     size,
     onTimeUpdate,
     onLoadedMetadata,
-    onPlay,
     onPause,
     onPlayPause,
     isPlaying = false,
@@ -69,7 +70,7 @@ const VideoPlayer: React.FC<IProps> = ({
     const [detectedFps, setDetectedFps] = useState<number>(fps || 60);
     const videoFrameCallbackIdRef = useRef<number>();
     const playPromiseRef = useRef<Promise<void> | null>(null); // 跟踪 play() Promise
-    const [isVideoEnded, setIsVideoEnded] = useState(false); // 视频是否播放完毕
+    const [, setIsVideoEnded] = useState(false); // 视频是否播放完毕
     const isVideoEndedRef = useRef(false); // ref 版本，避免 play effect 因 state 变化双重触发
     const firstFrameDrawnRef = useRef<boolean>(false); // 跟踪第一帧是否已绘制
     const totalFramesRef = useRef<number>(0); // 整数总帧数，避免从 duration 浮点重算
@@ -110,7 +111,7 @@ const VideoPlayer: React.FC<IProps> = ({
         if (video) {
             if (videoFrameCallbackIdRef.current !== undefined) {
                 if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-                    (video as any).cancelVideoFrameCallback(videoFrameCallbackIdRef.current);
+                    video.cancelVideoFrameCallback(videoFrameCallbackIdRef.current);
                 }
                 videoFrameCallbackIdRef.current = undefined;
             }
@@ -130,27 +131,27 @@ const VideoPlayer: React.FC<IProps> = ({
                 // 只需要 2 帧就能从 metadata 推算帧率
                 let firstMediaTime: number | null = null;
 
-                const callback = (now: number, metadata: any) => {
+                const callback = (now: number, metadata: VideoFrameMetadata) => {
                     if (firstMediaTime === null) {
                         firstMediaTime = metadata.mediaTime;
-                        (video as any).requestVideoFrameCallback(callback);
+                        video.requestVideoFrameCallback(callback);
                     } else {
                         // 两帧时间差的倒数就是帧率
                         const frameDuration = metadata.mediaTime - firstMediaTime;
-                        const detectedFps = frameDuration > 0 ? Math.round(1 / frameDuration) : 30;
+                        const measuredFps = frameDuration > 0 ? Math.round(1 / frameDuration) : 30;
 
                         video.pause();
                         video.currentTime = 0;
                         setIsFpsDetecting(false);
-                        resolve(detectedFps);
+                        resolve(measuredFps);
                     }
                 };
 
                 video.currentTime = 0;
                 video.play().then(() => {
-                    (video as any).requestVideoFrameCallback(callback);
-                }).catch((err) => {
-                    if (err.name !== 'AbortError') {
+                    video.requestVideoFrameCallback(callback);
+                }).catch((err: unknown) => {
+                    if (!isAbortError(err)) {
                         console.error('帧率检测播放失败:', err);
                     }
                     setIsFpsDetecting(false);
@@ -268,14 +269,14 @@ const VideoPlayer: React.FC<IProps> = ({
         const video = videoRef.current;
         if (!video || !onTimeUpdateRef.current) return;
 
-        const currentTime = video.currentTime;
-        const currentFrame = Math.round(currentTime * detectedFps);
+        const videoTime = video.currentTime;
+        const videoFrame = Math.round(videoTime * detectedFps);
 
         // 关键优化：先立即请求下一帧，避免延迟累积
         // 如果视频还在播放，继续请求下一帧（必须在执行耗时操作之前）
         if (!video.paused && !video.ended) {
             if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-                videoFrameCallbackIdRef.current = (video as any).requestVideoFrameCallback(updateVideoFrame);
+                videoFrameCallbackIdRef.current = video.requestVideoFrameCallback(updateVideoFrame);
             } else {
                 // 降级方案：使用 requestAnimationFrame
                 requestRef.current = requestAnimationFrame(updateVideoFrame);
@@ -284,7 +285,7 @@ const VideoPlayer: React.FC<IProps> = ({
 
         // 然后执行耗时操作（Redux 更新）
         // 这些操作不会阻塞下一帧的请求
-        onTimeUpdateRef.current(currentTime, currentFrame);
+        onTimeUpdateRef.current(videoTime, videoFrame);
         // Skip canvas drawFrame() during playback: the <video> element is shown
         // directly via CSS (display:block) so drawing to canvas is redundant overhead.
         // drawFrame() is still called on pause, seek, and first frame.
@@ -295,12 +296,16 @@ const VideoPlayer: React.FC<IProps> = ({
         const video = videoRef.current;
         if (!video || !onTimeUpdateRef.current || isPlaying) return; // 播放时不使用 timeupdate
 
-        const currentTime = video.currentTime;
-        const currentFrame = Math.round(currentTime * detectedFps);
+        const videoTime = video.currentTime;
+        const videoFrame = Math.round(videoTime * detectedFps);
 
-        onTimeUpdateRef.current(currentTime, currentFrame);
+        onTimeUpdateRef.current(videoTime, videoFrame);
         drawFrame();
     }, [detectedFps, drawFrame, isPlaying]);
+
+    // 处理视频播放完毕
+    const hasEndedRef = useRef<boolean>(false); // 防止重复触发
+
 
     // 播放控制 - 只有在视频加载完成且帧率检测完成后才允许播放
     useEffect(() => {
@@ -340,9 +345,9 @@ const VideoPlayer: React.FC<IProps> = ({
                         
                         updateVideoFrame();
                     }
-                } catch (err: any) {
+                } catch (err: unknown) {
                     // 忽略 AbortError，这是正常的暂停行为
-                    if (err.name !== 'AbortError') {
+                    if (!isAbortError(err)) {
                         console.error('视频播放失败:', err);
                     }
                 } finally {
@@ -370,7 +375,7 @@ const VideoPlayer: React.FC<IProps> = ({
                 // 取消逐帧更新循环
                 if (videoFrameCallbackIdRef.current !== undefined) {
                     if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-                        (video as any).cancelVideoFrameCallback(videoFrameCallbackIdRef.current);
+                        video.cancelVideoFrameCallback(videoFrameCallbackIdRef.current);
                     }
                     videoFrameCallbackIdRef.current = undefined;
                 }
@@ -390,7 +395,7 @@ const VideoPlayer: React.FC<IProps> = ({
         return () => {
             if (videoFrameCallbackIdRef.current !== undefined) {
                 if ('requestVideoFrameCallback' in HTMLVideoElement.prototype && video) {
-                    (video as any).cancelVideoFrameCallback(videoFrameCallbackIdRef.current);
+                    video.cancelVideoFrameCallback(videoFrameCallbackIdRef.current);
                 }
             }
             if (requestRef.current) {
@@ -410,9 +415,6 @@ const VideoPlayer: React.FC<IProps> = ({
             seekToTime(currentTime);
         }
     }, [currentTime, isVideoLoaded, isPlaying, seekToTime]);
-
-    // 处理视频播放完毕
-    const hasEndedRef = useRef<boolean>(false); // 防止重复触发
     const handleVideoEnded = useCallback(() => {
         // 防止重复触发
         if (hasEndedRef.current) {
@@ -425,7 +427,7 @@ const VideoPlayer: React.FC<IProps> = ({
         // 立即取消所有帧回调，避免残留回调干扰状态
         if (video && videoFrameCallbackIdRef.current !== undefined) {
             if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-                (video as any).cancelVideoFrameCallback(videoFrameCallbackIdRef.current);
+                video.cancelVideoFrameCallback(videoFrameCallbackIdRef.current);
             }
             videoFrameCallbackIdRef.current = undefined;
         }
@@ -560,4 +562,3 @@ const VideoPlayer: React.FC<IProps> = ({
 };
 
 export default VideoPlayer;
-

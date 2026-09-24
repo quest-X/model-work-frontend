@@ -24,6 +24,11 @@ const KeyboardShortcutsPopup: React.FC<IProps> = ({language}) => {
         }
     }, [status]);
 
+    const onClose = () => {
+        PopupActions.close();
+    };
+
+
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
@@ -37,10 +42,6 @@ const KeyboardShortcutsPopup: React.FC<IProps> = ({language}) => {
             document.removeEventListener('keydown', handleKeyDown);
         };
     }, []);
-
-    const onClose = () => {
-        PopupActions.close();
-    };
 
     const isMac = PlatformUtil.isMac(window.navigator.userAgent);
 

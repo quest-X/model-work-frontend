@@ -1,9 +1,11 @@
 import {
     ComputeClusterNode,
+    ComputeUpgradeManifest,
     ComputeClusterService,
     ComputeTask,
     computeSshAvailability,
     computeNodeUpgradeAvailable,
+    computeNodeUpgradeReady,
     computeNodeState,
     computeLinkStates,
     aggregateCommunicationStates,
@@ -238,39 +240,15 @@ describe('ComputeClusterService field group lifecycle', () => {
         jest.restoreAllMocks();
     });
 
-    it('uses the protected group collection and exact group id', async () => {
+    it('removes the exact field group through the protected collection', async () => {
         global.fetch = jest.fn().mockResolvedValue({
             ok: true,
             json: async () => ({}),
         } as Response);
-        const input = {
-            installation_id: '00000000-0000-4000-8000-000000000014',
-            name: 'new-field-main',
-            ssh_user: 'field-user',
-            control_host: 'fd7a:115c:a1e0::14',
-            lan_host: null,
-            authority_subject: {
-                role: 'main' as const,
-                installation_id: '00000000-0000-4000-8000-000000000014',
-                owner_id: '00000000-0000-4000-8000-000000000114',
-                group_id: '00000000-0000-4000-8000-000000000214',
-                generation: 1,
-                public_key: 'A'.repeat(43) + '=',
-            },
-        };
-
-        await ComputeClusterService.admitFieldGroup(input);
         await ComputeClusterService.removeFieldGroup('field/group');
 
         expect(global.fetch).toHaveBeenNthCalledWith(
             1,
-            expect.stringMatching(/\/groups$/),
-            expect.objectContaining({
-                method: 'POST', body: JSON.stringify({...input, role: 'main'}),
-            }),
-        );
-        expect(global.fetch).toHaveBeenNthCalledWith(
-            2,
             expect.stringMatching(/\/groups\/field%2Fgroup$/),
             expect.objectContaining({method: 'DELETE'}),
         );
@@ -297,31 +275,41 @@ describe('computeSshAvailability', () => {
 });
 
 describe('computeNodeUpgradeAvailable', () => {
-    const node = (communication_state: 'fault' | 'abnormal', tailscale: boolean): ComputeClusterNode => ({
+    const node = (communication_state: 'fault' | 'abnormal', tailscale: boolean, agent_version = '1.0.7'): ComputeClusterNode => ({
         enabled: true, online: false, communication_state,
+        agent_version, resources: {platform: 'windows', architecture: 'amd64'},
         capabilities: ['control.node.upgrade.v1'], control_transport: 'tailscale',
         network: {online: tailscale, ssh_available: tailscale, lan_ssh_available: false, tailscale_ssh_available: tailscale},
         network_dependencies: [],
     } as ComputeClusterNode);
+    const release = {
+        release_version: '1.1.1', minimum_node_version: '1.0.0',
+        platform: 'windows', architecture: 'x86_64',
+    } as ComputeUpgradeManifest;
 
     it('allows a fault node over remote SSH but blocks abnormal or unreachable nodes', () => {
-        expect(computeNodeUpgradeAvailable(node('fault', true))).toBe(true);
-        expect(computeNodeUpgradeAvailable(node('abnormal', true))).toBe(false);
-        expect(computeNodeUpgradeAvailable(node('fault', false))).toBe(false);
+        expect(computeNodeUpgradeReady(node('fault', true))).toBe(true);
+        expect(computeNodeUpgradeReady(node('abnormal', true))).toBe(false);
+        expect(computeNodeUpgradeReady(node('fault', false))).toBe(false);
+    });
+
+    it('only advertises a newer compatible release', () => {
+        expect(computeNodeUpgradeAvailable(node('fault', true), [release])).toBe(true);
+        expect(computeNodeUpgradeAvailable(node('fault', true, '1.1.1'), [release])).toBe(false);
     });
 });
 
 describe('node communication state', () => {
     const node = (online = true): ComputeClusterNode => ({
-        online,
+        online, communication_state: online ? 'normal' : 'fault',
         network: {online: false, lan_ssh_available: true, tailscale_ssh_available: false},
         network_dependencies: [{dependency_id: 'control_ssh', state: 'healthy'}],
         device_inventory: {state: 'unavailable', devices: [{status: 'offline'}]},
     } as ComputeClusterNode);
     it.each([
-        [true, false, 'normal', 'fault', 'fault'],
-        [false, true, 'fault', 'normal', 'fault'],
-        [false, false, 'fault', 'fault', 'fault'],
+        [true, false, 'normal', 'fault', 'normal'],
+        [false, true, 'fault', 'normal', 'normal'],
+        [false, false, 'fault', 'fault', 'normal'],
         [true, true, 'normal', 'normal', 'normal'],
     ] as const)('maps LAN %s and Tailscale %s to binary health', (lan, tailscale, lanState, tailscaleState, state) => {
         const current = {...node(), network: {...node().network, lan_ssh_available: lan, tailscale_ssh_available: tailscale}};

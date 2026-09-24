@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import './ExportLabelPopup.scss';
 import { AnnotationFormatType } from '../../../data/enums/AnnotationFormatType';
-import { RectLabelsExporter } from '../../../logic/export/RectLabelsExporter';
 import { LabelType } from '../../../data/enums/LabelType';
 import { ILabelFormatData } from '../../../interfaces/ILabelFormatData';
 import { PointLabelsExporter } from '../../../logic/export/PointLabelsExporter';

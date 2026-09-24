@@ -1,15 +1,16 @@
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {connect} from 'react-redux';
-import {Button, Dialog, DialogActions, DialogTitle, DialogContent, TextField} from '@mui/material';
+import {Button, Dialog, DialogActions, DialogTitle, DialogContent} from '@mui/material';
 import {Language} from '../../data/LanguageConfig';
 import {Direction} from '../../data/enums/Direction';
 import {PopupWindowType} from '../../data/enums/PopupWindowType';
 import {updateActivePopupType} from '../../store/general/actionCreators';
 import {
     ComputeClusterNode,
-    ComputeFieldGroupAdmission,
     ComputeGroupDetail,
     ComputeGroupMembership,
+    ComputeJoinCode,
+    ComputeJoinRequest,
     ComputeGroupResources,
     ComputeLanAsset,
     ComputeManagedDevice,
@@ -86,29 +87,6 @@ type TaskHistoryItem = {
     state: string;
     updatedAt: number;
 };
-type FieldGroupAdmissionDraft = {
-    installation_id: string;
-    name: string;
-    ssh_user: string;
-    control_host: string;
-    lan_host: string;
-    authority_identity: string;
-};
-
-const emptyFieldGroupAdmission: FieldGroupAdmissionDraft = {
-    installation_id: '',
-    name: '',
-    ssh_user: '',
-    control_host: '',
-    lan_host: '',
-    authority_identity: '',
-};
-const fieldGroupInputSx = {
-    '& .MuiInputBase-input': {color: '#eee'},
-    '& .MuiInputLabel-root': {color: '#aaa'},
-    '& .MuiOutlinedInput-notchedOutline': {borderColor: '#666'},
-};
-
 type ResourceMetricId = 'cpu' | 'memory' | 'gpu' | 'disk' | 'network';
 type ResourceSample = {
     nodeId: string;
@@ -387,11 +365,13 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [selectedGroupResources, setSelectedGroupResources] = useState<ComputeGroupResources | null>(null);
     const [groupResourceError, setGroupResourceError] = useState<{groupId: string; message: string} | null>(null);
     const [activeGroupResources, setActiveGroupResources] = useState<ComputeGroupResources | null>(null);
-    const [groupAdmissionOpen, setGroupAdmissionOpen] = useState(false);
-    const [groupAdmissionDraft, setGroupAdmissionDraft] = useState(emptyFieldGroupAdmission);
-    const [groupAdmission, setGroupAdmission] = useState<ComputeFieldGroupAdmission | null>(null);
     const [groupMutationBusy, setGroupMutationBusy] = useState(false);
     const [groupMutationMessage, setGroupMutationMessage] = useState('');
+    const [joinCode, setJoinCode] = useState<ComputeJoinCode | null>(null);
+    const [joinRequests, setJoinRequests] = useState<ComputeJoinRequest[]>([]);
+    const [joinDays, setJoinDays] = useState<7 | 30 | 180>(30);
+    const [joinAdminBusy, setJoinAdminBusy] = useState(false);
+    const [joinAdminError, setJoinAdminError] = useState('');
     const [lanAssets, setLanAssets] = useState<ComputeLanAsset[]>([]);
     const [resourceGraph, setResourceGraph] = useState<ComputeResourceGraph | null>(null);
     const [computeTasks, setComputeTasks] = useState<ComputeTask[]>([]);
@@ -520,6 +500,22 @@ export const ControlCenterView: React.FC<IProps> = ({
         }
     }, []);
 
+    const refreshJoinAdmin = useCallback(async () => {
+        try {
+            const [code, requests] = await Promise.all([
+                ComputeClusterService.joinCode(),
+                ComputeClusterService.joinRequests(),
+            ]);
+            if (!mounted.current) return;
+            setJoinCode(code);
+            setJoinRequests(requests.requests);
+            if (code.days) setJoinDays(code.days);
+            setJoinAdminError('');
+        } catch (reason) {
+            if (mounted.current) setJoinAdminError(reason instanceof Error ? reason.message : String(reason));
+        }
+    }, []);
+
     useEffect(() => {
         mounted.current = true;
         void refresh(true);
@@ -530,6 +526,13 @@ export const ControlCenterView: React.FC<IProps> = ({
             window.clearInterval(timer);
         };
     }, [refresh]);
+
+    useEffect(() => {
+        if (workspace !== 'groups') return undefined;
+        void refreshJoinAdmin();
+        const timer = window.setInterval(() => void refreshJoinAdmin(), 5000);
+        return () => window.clearInterval(timer);
+    }, [refreshJoinAdmin, workspace]);
 
     useEffect(() => {
         if (!selectedGroupId) return undefined;
@@ -684,18 +687,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const overviewResourceGraph = activeGroupResources?.resource_graph || resourceGraph;
     const overviewNodes = activeGroupResources?.nodes || nodes;
     const currentGroup = overviewResourceGraph?.entities.find(entity => entity.kind === 'compute_group') || null;
-    const visibleGroups: ComputeGroupMembership[] = groupMemberships.length
-        ? groupMemberships
-        : currentGroup ? [{
-            index: 1,
-            group_id: overviewResourceGraph?.group_id || currentGroup.entity_id,
-            group_name: currentGroup.label,
-            owner_name: null,
-            relationship: 'member',
-            scope: 'local',
-            joined_at: 0,
-            credential_types: [],
-        }] : [];
+    const visibleGroups = groupMemberships;
     const currentGroupTone: Tone = currentGroup?.state === 'available' ? 'healthy' : 'offline';
     const selectedGroup = visibleGroups.find(group => group.group_id === selectedGroupId);
     const groupDetail = selectedGroupDetail?.group.group_id === selectedGroup?.group_id
@@ -710,47 +702,35 @@ export const ControlCenterView: React.FC<IProps> = ({
     const selectedGroupResourceError = groupResourceError && groupResourceError.groupId === selectedGroup?.group_id
         ? groupResourceError.message
         : '';
-    const submitFieldGroupAdmission = async (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        setGroupMutationBusy(true);
-        setGroupMutationMessage('');
+    const pendingJoinRequests = joinRequests.filter(request => request.status === 'pending');
+    const rotateJoinCode = async () => {
+        setJoinAdminBusy(true);
         try {
-            const publicIdentity = JSON.parse(groupAdmissionDraft.authority_identity);
-            const installationId = groupAdmissionDraft.installation_id.trim();
-            const admission = await ComputeClusterService.admitFieldGroup({
-                installation_id: installationId,
-                name: groupAdmissionDraft.name.trim(),
-                ssh_user: groupAdmissionDraft.ssh_user.trim(),
-                control_host: groupAdmissionDraft.control_host.trim(),
-                lan_host: groupAdmissionDraft.lan_host.trim() || null,
-                authority_subject: {
-                    role: 'main',
-                    installation_id: installationId,
-                    owner_id: publicIdentity.owner_id,
-                    group_id: publicIdentity.group_id,
-                    generation: publicIdentity.generation,
-                    public_key: publicIdentity.public_key,
-                },
-            });
-            setGroupAdmission(admission);
+            const code = await ComputeClusterService.rotateJoinCode(joinDays);
+            setJoinCode(code);
+            setJoinRequests(current => current.map(request => request.status === 'pending'
+                ? {...request, status: 'expired'} : request));
+            setJoinAdminError('');
+            setGroupMutationMessage(zh ? '已生成新群号，旧群号及其待审批申请已失效。' : 'New join code created; the old code and its pending requests expired.');
         } catch (reason) {
-            setGroupMutationMessage(reason instanceof Error ? reason.message : String(reason));
+            setJoinAdminError(reason instanceof Error ? reason.message : String(reason));
         } finally {
-            setGroupMutationBusy(false);
+            setJoinAdminBusy(false);
         }
     };
-    const downloadFieldGroupInvitation = () => {
-        if (!groupAdmission) return;
-        const url = window.URL.createObjectURL(new Blob([
-            `${JSON.stringify(groupAdmission.invitation, null, 2)}\n`,
-        ], {type: 'application/json'}));
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${groupAdmission.name}.master-invitation.json`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(url);
+    const decideJoinRequest = async (requestId: string, action: 'approve' | 'reject') => {
+        setJoinAdminBusy(true);
+        try {
+            await ComputeClusterService.decideJoinRequest(requestId, action);
+            await refreshJoinAdmin();
+            setGroupMutationMessage(action === 'approve'
+                ? (zh ? '已同意入群申请，节点将在下一次轮询时自动加入。' : 'Join approved; the node will join on its next poll.')
+                : (zh ? '已拒绝入群申请。' : 'Join request rejected.'));
+        } catch (reason) {
+            setJoinAdminError(reason instanceof Error ? reason.message : String(reason));
+        } finally {
+            setJoinAdminBusy(false);
+        }
     };
     const removeSelectedFieldGroup = async () => {
         if (!selectedGroup || selectedGroup.scope === 'central' || !groupDetail) return;
@@ -1431,7 +1411,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     node.name,
                                     remoteLan,
                                 )}
-                            >＋</button>}
+                            >{cameras.length} ＋</button>}
                         </div>
                         <div className='ControlCameraGrid'>
                             {cameras.map(camera => <button
@@ -1493,7 +1473,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     node.name,
                                     remoteLan,
                                 )}
-                            >＋</button>}
+                            >{edgeDevices.length} ＋</button>}
                         </div>
                         <div className='ControlCameraGrid'>
                             {edgeDevices.map(device => <button
@@ -1782,19 +1762,68 @@ export const ControlCenterView: React.FC<IProps> = ({
                             <h1>{zh ? '群查询' : 'Groups'}</h1>
                             <p>{zh ? '查看当前安装能够确认的群成员关系' : 'Groups confirmed by this installation'}</p>
                         </div>
-                        <Button
-                            variant='outlined'
-                            onClick={() => {
-                                setGroupAdmission(null);
-                                setGroupMutationMessage('');
-                                setGroupAdmissionOpen(true);
-                            }}
-                        >{zh ? '加入现场群' : 'Add field group'}</Button>
                     </header>
                     {groupMutationMessage && <p role='status' className='ControlGroupRoleNotice'>
                         {groupMutationMessage}
                     </p>}
                     <section className='ControlSection ControlSectionFirst'>
+                        <div className='ControlSectionHeading'>
+                            <h2>{zh ? '群号' : 'Join code'}</h2>
+                        </div>
+                        <div className='ControlJoinCode'>
+                            {joinCode?.configured && joinCode.code
+                                ? <>
+                                    <input aria-label={zh ? '群号' : 'Join code'} readOnly value={joinCode.code}/>
+                                    <button type='button' onClick={() => void navigator.clipboard.writeText(joinCode.code || '')}>
+                                        {zh ? '复制' : 'Copy'}
+                                    </button>
+                                </>
+                                : <span>{zh ? '尚未生成群号' : 'No join code yet'}</span>}
+                            <select aria-label={zh ? '群号自动更换周期' : 'Join-code rotation period'}
+                                value={joinDays} disabled={joinAdminBusy}
+                                onChange={event => setJoinDays(Number(event.target.value) as 7 | 30 | 180)}>
+                                {[7, 30, 180].map(days => <option value={days} key={days}>
+                                    {days} {zh ? '天' : 'days'}
+                                </option>)}
+                            </select>
+                            <button type='button' disabled={joinAdminBusy} onClick={() => void rotateJoinCode()}>
+                                {joinCode?.configured ? (zh ? '立即更换' : 'Rotate now') : (zh ? '生成群号' : 'Create code')}
+                            </button>
+                        </div>
+                        {joinCode?.expires_at && <small className='ControlJoinExpiry'>
+                            {zh ? '自动更换时间：' : 'Rotates at: '}
+                            {new Date(joinCode.expires_at * 1000).toLocaleString(zh ? 'zh-CN' : 'en-US')}
+                        </small>}
+                        {joinAdminError && <p role='alert' className='ControlJoinError'>{joinAdminError}</p>}
+                    </section>
+                    <section className='ControlSection'>
+                        <div className='ControlSectionHeading'>
+                            <h2>{zh ? '待审批入群申请' : 'Pending join requests'}</h2>
+                            <span>{pendingJoinRequests.length}</span>
+                        </div>
+                        {pendingJoinRequests.length
+                            ? <div className='ControlServiceGrid' aria-label={zh ? '待审批入群申请' : 'Pending join requests'}>
+                                {pendingJoinRequests.map(request => <article className='ControlServiceCard' key={request.request_id}>
+                                    <div>
+                                        <span>{request.payload.installation_id}</span>
+                                        <strong>{request.payload.name}</strong>
+                                        <small>{request.payload.ssh_user} · {request.payload.control_host}</small>
+                                        <div className='ControlJoinActions'>
+                                            <button type='button' disabled={joinAdminBusy}
+                                                onClick={() => void decideJoinRequest(request.request_id, 'approve')}>
+                                                {zh ? '同意' : 'Approve'}
+                                            </button>
+                                            <button type='button' disabled={joinAdminBusy}
+                                                onClick={() => void decideJoinRequest(request.request_id, 'reject')}>
+                                                {zh ? '拒绝' : 'Reject'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </article>)}
+                            </div>
+                            : <div className='ControlEmptyBlock'>{zh ? '当前没有待审批申请' : 'No pending requests'}</div>}
+                    </section>
+                    <section className='ControlSection'>
                         <div className='ControlSectionHeading'>
                             <h2>{zh ? '已加入的群' : 'Joined groups'}</h2>
                             <span>{visibleGroups.length}</span>
@@ -1827,72 +1856,6 @@ export const ControlCenterView: React.FC<IProps> = ({
                             </div>
                             : <div className='ControlEmptyBlock'>{graphError || (zh ? '当前没有可查询的群' : 'No queryable groups')}</div>}
                     </section>
-                    <Dialog open={groupAdmissionOpen} onClose={() => {
-                        if (!groupMutationBusy) setGroupAdmissionOpen(false);
-                    }} fullWidth maxWidth='sm' aria-labelledby='group-admission-title'
-                    PaperProps={{sx: {backgroundColor: '#242424', color: '#eee'}}}>
-                        <form onSubmit={event => void submitFieldGroupAdmission(event)}>
-                            <DialogTitle id='group-admission-title' sx={{backgroundColor: '#171717', color: '#fff'}}>
-                                {zh ? '加入现场群' : 'Add field group'}
-                            </DialogTitle>
-                            <DialogContent sx={{pt: '24px !important', display: 'grid', gap: 2}}>
-                                {groupAdmission
-                                    ? <>
-                                        <p>{zh
-                                            ? `已登记 Main：${groupAdmission.name}。下载签名邀请并安全传到该 Main。`
-                                            : `Main ${groupAdmission.name} is registered. Download the signed invitation and transfer it securely.`}</p>
-                                        <code>model-work-node owner trust --invitation {groupAdmission.name}.master-invitation.json</code>
-                                        <small>{zh
-                                            ? '在 Main 上执行后重启节点服务，再返回刷新群列表。'
-                                            : 'Run it on the Main, restart its node service, then refresh the group list.'}</small>
-                                    </>
-                                    : <>
-                                        <p>{zh
-                                            ? '先在现场 Main 运行 model-work-node show 和 model-work-node owner show，再填写稳定身份和 SSH 连接信息。'
-                                            : 'Run model-work-node show and model-work-node owner show on the field Main, then enter its stable identity and SSH connection.'}</p>
-                                        <TextField required size='small' label={zh ? 'Main 名称' : 'Main name'}
-                                            sx={fieldGroupInputSx}
-                                            value={groupAdmissionDraft.name}
-                                            onChange={event => setGroupAdmissionDraft(current => ({...current, name: event.target.value}))}/>
-                                        <TextField required size='small' label={zh ? '安装 ID（UUID）' : 'Installation ID (UUID)'}
-                                            sx={fieldGroupInputSx}
-                                            value={groupAdmissionDraft.installation_id}
-                                            onChange={event => setGroupAdmissionDraft(current => ({...current, installation_id: event.target.value}))}/>
-                                        <TextField required size='small' label={zh ? 'SSH 用户' : 'SSH user'}
-                                            sx={fieldGroupInputSx}
-                                            value={groupAdmissionDraft.ssh_user}
-                                            onChange={event => setGroupAdmissionDraft(current => ({...current, ssh_user: event.target.value}))}/>
-                                        <TextField required size='small' label={zh ? 'Tailscale 地址' : 'Tailscale address'}
-                                            sx={fieldGroupInputSx}
-                                            value={groupAdmissionDraft.control_host}
-                                            onChange={event => setGroupAdmissionDraft(current => ({...current, control_host: event.target.value}))}/>
-                                        <TextField size='small' label={zh ? '局域网地址（可选）' : 'LAN address (optional)'}
-                                            sx={fieldGroupInputSx}
-                                            value={groupAdmissionDraft.lan_host}
-                                            onChange={event => setGroupAdmissionDraft(current => ({...current, lan_host: event.target.value}))}/>
-                                        <TextField required multiline minRows={3} size='small'
-                                            label={zh ? 'Main 公开身份 JSON' : 'Main public identity JSON'}
-                                            helperText={zh ? '粘贴 model-work-node owner show 的完整输出' : 'Paste the complete model-work-node owner show output'}
-                                            sx={fieldGroupInputSx}
-                                            value={groupAdmissionDraft.authority_identity}
-                                            onChange={event => setGroupAdmissionDraft(current => ({...current, authority_identity: event.target.value}))}/>
-                                    </>}
-                                {groupAdmissionOpen && groupMutationMessage && <span role='alert'>{groupMutationMessage}</span>}
-                            </DialogContent>
-                            <DialogActions sx={{px: 3, pb: 3}}>
-                                <Button onClick={() => setGroupAdmissionOpen(false)} disabled={groupMutationBusy}>
-                                    {groupAdmission ? (zh ? '完成' : 'Done') : (zh ? '取消' : 'Cancel')}
-                                </Button>
-                                {groupAdmission
-                                    ? <Button variant='contained' onClick={downloadFieldGroupInvitation}>
-                                        {zh ? '下载配对邀请' : 'Download invitation'}
-                                    </Button>
-                                    : <Button type='submit' variant='contained' disabled={groupMutationBusy}>
-                                        {groupMutationBusy ? (zh ? '正在登记…' : 'Registering…') : (zh ? '登记并生成邀请' : 'Register and create invitation')}
-                                    </Button>}
-                            </DialogActions>
-                        </form>
-                    </Dialog>
                     <Dialog open={Boolean(selectedGroup)} onClose={() => setSelectedGroupId('')}
                         fullWidth maxWidth='md' aria-labelledby='group-members-title'
                         PaperProps={{sx: {backgroundColor: '#242424', color: '#eee'}}}>

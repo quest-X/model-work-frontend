@@ -1,4 +1,6 @@
 import {store} from '../index';
+import {ImageData} from '../store/labels/types';
+import {VisualSearchResultItem} from '../store/visualSearch/types';
 import {QuerySnapshotService} from './QuerySnapshotService';
 import {visualSearchAcceptanceService} from './VisualSearchAcceptanceService';
 import {visualSearchJobService} from './VisualSearchJobService';
@@ -8,6 +10,7 @@ import {
 } from '../views/PopupView/VisualSearchPopup/VisualSearchPopup';
 import {
     collectionSupportsQuery,
+    VisualSearchCollection,
     loadVisualSearchCollections,
 } from '../views/PopupView/VisualSearchPopup/VisualSearchCatalog';
 import {deriveEditorVisualSearchQuery} from '../views/PopupView/VisualSearchPopup/VisualSearchGeometry';
@@ -35,14 +38,24 @@ const resultFrameIndex = (item: {fileName: string; path: string}): number | null
     return Number.isSafeInteger(value) ? value : null;
 };
 
-/**
- * Runs the snapshot-based visual-search pipeline without opening its inspection
- * popup, then accepts every exact result geometry into the matching loaded asset.
- */
-export const runDirectVisualSearch = async ({
-    collectionName,
-    topK = 12,
-}: DirectVisualSearchOptions): Promise<DirectVisualSearchResult> => {
+function selectFallbackQuery(activeImage: ImageData, query: ReturnType<typeof deriveEditorVisualSearchQuery>) {
+    const visibleSeeds = [
+        ...activeImage.labelRects.filter(item => item.isVisible !== false && !item.isPrompt),
+        ...activeImage.labelPolygons.filter(item => item.isVisible !== false),
+    ];
+    const manualRects = activeImage.labelRects.filter(item =>
+        item.isVisible !== false && !item.isPrompt && !item.isCreatedByAI);
+    const fallbackSeed = manualRects.length === 1
+        ? manualRects[0]
+        : visibleSeeds.length === 1 ? visibleSeeds[0] : null;
+    if (fallbackSeed) {
+        store.dispatch(updateActiveLabelId(fallbackSeed.id));
+        query = deriveEditorVisualSearchQuery(activeImage, fallbackSeed.id);
+    }
+    return query;
+}
+
+async function resolveDirectQuery() {
     let initial = store.getState();
     const activeImageIndex = initial.video.isVideoMode && initial.video.activeVideo
         ? initial.video.activeVideo.currentFrame
@@ -52,19 +65,7 @@ export const runDirectVisualSearch = async ({
 
     let query = deriveEditorVisualSearchQuery(activeImage, initial.labels.activeLabelId);
     if (query.kind === 'image') {
-        const visibleSeeds = [
-            ...activeImage.labelRects.filter(item => item.isVisible !== false && !item.isPrompt),
-            ...activeImage.labelPolygons.filter(item => item.isVisible !== false),
-        ];
-        const manualRects = activeImage.labelRects.filter(item =>
-            item.isVisible !== false && !item.isPrompt && !item.isCreatedByAI);
-        const fallbackSeed = manualRects.length === 1
-            ? manualRects[0]
-            : visibleSeeds.length === 1 ? visibleSeeds[0] : null;
-        if (fallbackSeed) {
-            store.dispatch(updateActiveLabelId(fallbackSeed.id));
-            query = deriveEditorVisualSearchQuery(activeImage, fallbackSeed.id);
-        }
+        query = selectFallbackQuery(activeImage, query);
     }
     if (query.kind === 'image') {
         const selectedPoint = activeImage.labelPoints.find(
@@ -91,6 +92,62 @@ export const runDirectVisualSearch = async ({
         throw new Error('当前有多个候选标注，请先点击一个 bbox/mask；也可以用 point 生成 seed mask');
     }
 
+    return {initial, activeImageIndex, activeImage, query};
+}
+
+async function acceptScopedResults(clientJobId: string, items: VisualSearchResultItem[], multipleImages: boolean): Promise<DirectVisualSearchResult> {
+    let accepted = 0;
+    const failures: string[] = [];
+    for (const item of items) {
+        try {
+            // Keep acceptance sequential: it verifies the exact target asset
+            // digest and may decode canonical masks for each result.
+            await visualSearchAcceptanceService.accept(clientJobId, item.resultId);
+            accepted += 1;
+        } catch (cause) {
+            failures.push(cause instanceof Error ? cause.message : String(cause));
+        }
+    }
+    if (items.length === 0) {
+        throw new Error(multipleImages
+            ? '所选帧中没有检索到相似目标'
+            : '当前图中没有检索到相似目标');
+    }
+    if (accepted === 0) {
+        throw new Error(failures[0] || '检索结果没有可写回的精确 bbox 或 mask');
+    }
+    return {
+        returned: items.length,
+        accepted,
+        rejected: items.length - accepted,
+    };
+}
+
+function bindCollectionToDataset(selectedCollection: VisualSearchCollection, queueDatasetId?: string) {
+    const targetDatasetId = selectedCollection.datasetId ?? queueDatasetId ?? null;
+    const targetDatasetRevision = selectedCollection.datasetRevision
+        ?? (targetDatasetId ? selectedCollection.datasetRevisions[targetDatasetId] : null)
+        ?? null;
+    if (!targetDatasetId || targetDatasetRevision === null) {
+        throw new Error('所选向量数据库没有当前数据集的权威版本，请重新入库');
+    }
+    return {
+        ...selectedCollection,
+        datasetId: targetDatasetId,
+        datasetRevision: targetDatasetRevision,
+    };
+}
+
+/**
+ * Runs the snapshot-based visual-search pipeline without opening its inspection
+ * popup, then accepts every exact result geometry into the matching loaded asset.
+ */
+export const runDirectVisualSearch = async ({
+    collectionName,
+    topK = 12,
+}: DirectVisualSearchOptions): Promise<DirectVisualSearchResult> => {
+    const {initial, activeImageIndex, activeImage, query} = await resolveDirectQuery();
+
     const collections = await loadVisualSearchCollections();
     const selectedCollection = collections.find(item => item.name === collectionName);
     if (!selectedCollection) throw new Error(`向量数据库不存在：${collectionName}`);
@@ -102,18 +159,7 @@ export const runDirectVisualSearch = async ({
         item => item.id === initial.queue.activeQueueItemId,
     ) ?? null;
     const className = initial.labels.labels.find(label => label.id === query.labelId)?.name;
-    const targetDatasetId = selectedCollection.datasetId ?? activeQueueItem?.datasetId ?? null;
-    const targetDatasetRevision = selectedCollection.datasetRevision
-        ?? (targetDatasetId ? selectedCollection.datasetRevisions[targetDatasetId] : null)
-        ?? null;
-    if (!targetDatasetId || targetDatasetRevision === null) {
-        throw new Error('所选向量数据库没有当前数据集的权威版本，请重新入库');
-    }
-    const boundCollection = {
-        ...selectedCollection,
-        datasetId: targetDatasetId,
-        datasetRevision: targetDatasetRevision,
-    };
+    const boundCollection = bindCollectionToDataset(selectedCollection, activeQueueItem?.datasetId);
     const explicitlySelected = initial.labels.imagesData
         .map((image, index) => ({image, index}))
         .filter(entry => entry.image.isSelected);
@@ -163,32 +209,7 @@ export const runDirectVisualSearch = async ({
             }
             return scopeFileNames.has(resultFileName(item));
         });
-        let accepted = 0;
-        const failures: string[] = [];
-        for (const item of items) {
-            try {
-                // Keep acceptance sequential: it verifies the exact target asset
-                // digest and may decode canonical masks for each result.
-                // eslint-disable-next-line no-await-in-loop
-                await visualSearchAcceptanceService.accept(run.clientJobId, item.resultId);
-                accepted += 1;
-            } catch (cause) {
-                failures.push(cause instanceof Error ? cause.message : String(cause));
-            }
-        }
-        if (items.length === 0) {
-            throw new Error(scopeEntries.length > 1
-                ? '所选帧中没有检索到相似目标'
-                : '当前图中没有检索到相似目标');
-        }
-        if (accepted === 0) {
-            throw new Error(failures[0] || '检索结果没有可写回的精确 bbox 或 mask');
-        }
-        return {
-            returned: items.length,
-            accepted,
-            rejected: items.length - accepted,
-        };
+        return await acceptScopedResults(run.clientJobId, items, scopeEntries.length > 1);
     } finally {
         source.release();
     }

@@ -1,6 +1,6 @@
-export interface VGGShape {}
+export type VGGShape = VGGRect | VGGPolygon;
 
-export interface VGGRect extends VGGShape {
+export interface VGGRect {
     name: string,
     x: number,
     y: number,
@@ -8,7 +8,7 @@ export interface VGGRect extends VGGShape {
     height: number
 }
 
-export interface VGGPolygon extends VGGShape {
+export interface VGGPolygon {
     name: string,
     all_points_x: number[],
     all_points_y: number[]

@@ -16,7 +16,6 @@ import {getEngineBaseUrl, getExtensionEngineBaseUrl} from '../../../utils/Defaul
 import {AUTH_PREVIEW_SIGN_OUT_EVENT} from '../../AuthPreview/AuthPreview';
 import {
     ACCOUNT_SESSION_CHANGED, AccountUser, currentAccountSession,
-    uploadAccountAvatar as saveAccountAvatar,
 } from '../../../services/AccountService';
 import {AccountCenter} from '../../AccountCenter/AccountCenter';
 
@@ -36,8 +35,6 @@ interface IProps {
 }
 
 type ServicesDropdown = 'core' | 'extension' | null;
-const ACCOUNT_AVATAR_MAX_BYTES = 2 * 1024 * 1024;
-const ACCOUNT_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 // Top navigation intentionally owns its mutually exclusive menus and platform mode.
 // eslint-disable-next-line complexity
@@ -57,7 +54,6 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
     const accountAvatar = account?.avatar_url || '';
     const accountAvatarText = account?.role === 'admin' ? '管' : (account?.display_name?.[0] || 'A').toUpperCase();
     const renameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const avatarInputRef = useRef<HTMLInputElement | null>(null);
     const activeQueueItem = props.queueItems.find(item => item.id === props.activeQueueItemId);
     const localChangeCount = props.queueItems.filter(
         item => item.dataSyncStatus === QueueDataSyncStatus.DIRTY,
@@ -216,18 +212,6 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
         setShowActionsDropdown(false);
         setActiveServicesDropdown(null);
         setShowAccountDropdown(open => !open);
-    };
-
-    const uploadAccountAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        event.target.value = '';
-        if (!file) return;
-        if (!ACCOUNT_AVATAR_TYPES.has(file.type) || file.size > ACCOUNT_AVATAR_MAX_BYTES) {
-            window.alert(currentTexts.account.avatarUploadError);
-            return;
-        }
-        try { setAccount(await saveAccountAvatar(file)); }
-        catch { window.alert(currentTexts.account.avatarUploadError); }
     };
 
     useEffect(() => {
@@ -458,34 +442,28 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                         >
                             {accountAvatar ? <img src={accountAvatar} alt=''/> : accountAvatarText}
                         </button>
-                        <input
-                            ref={avatarInputRef}
-                            className='AccountAvatarInput'
-                            type='file'
-                            accept='image/jpeg,image/png,image/webp'
-                            aria-label={currentTexts.account.uploadAvatar}
-                            onChange={uploadAccountAvatar}
-                        />
                         {showAccountDropdown && <div
                             className='AccountDropdown'
                             role='menu'
                             aria-label={currentTexts.account.menuLabel}
                         >
-                            <div className='AccountSummary'>
-                                <button
-                                    type='button'
-                                    className='AccountSummaryAvatar'
-                                    aria-label={currentTexts.account.uploadAvatar}
-                                    title={currentTexts.account.uploadAvatar}
-                                    onClick={() => avatarInputRef.current?.click()}
-                                >
+                            <button
+                                type='button'
+                                role='menuitem'
+                                className='AccountSummary'
+                                onClick={() => {
+                                    setShowAccountDropdown(false);
+                                    setShowAccountCenter(true);
+                                }}
+                            >
+                                <span className='AccountSummaryAvatar'>
                                     {accountAvatar ? <img src={accountAvatar} alt=''/> : accountAvatarText}
-                                </button>
+                                </span>
                                 <span className='AccountSummaryText'>
                                     <strong>{account?.display_name || currentTexts.account.displayName}</strong>
                                     <small>{account?.role === 'admin' ? currentTexts.account.role : account?.username}</small>
                                 </span>
-                            </div>
+                            </button>
                             <div className='AccountMenuDivider'/>
                             <button
                                 type='button'
@@ -500,13 +478,6 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                                 {controlMode
                                     ? currentTexts.account.switchToAnnotationPlatform
                                     : currentTexts.account.switchToControlPlatform}
-                            </button>
-                            <button type='button' role='menuitem' className='AccountMenuItem' onClick={() => {
-                                setShowAccountDropdown(false);
-                                setShowAccountCenter(true);
-                            }}>
-                                <img src='/ico/secure.png' alt=''/>
-                                {currentTexts.account.personalCenter}
                             </button>
                             <button
                                 type='button'

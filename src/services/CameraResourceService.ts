@@ -91,11 +91,9 @@ export type CameraDiscoveryProgressHandler = (
 
 type CameraDiscoveryProgressResponse = {
     state: 'idle' | 'running' | 'succeeded' | 'failed';
-    completed?: number;
-    total?: number;
-    percent?: number;
-    completed_hosts?: number;
-    total_hosts?: number;
+    completed: number;
+    total: number;
+    percent: number;
 };
 
 export type CameraImageMetrics = {
@@ -221,8 +219,7 @@ export class CameraResourceService {
                 const response = await fetch(`${discoveryUrl}/progress`, {signal});
                 if (response.ok && !finished) {
                     const progress = await response.json() as CameraDiscoveryProgressResponse;
-                    const completed = progress.completed ?? progress.completed_hosts ?? 0;
-                    const total = progress.total ?? progress.total_hosts ?? 0;
+                    const {completed, total} = progress;
                     if (progress.state === 'running' && total > 0) {
                         onProgress?.(
                             Math.round(progress.percent ?? completed / total * 100),

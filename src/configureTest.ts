@@ -10,7 +10,7 @@ Object.defineProperty(global.self, 'crypto', {
   }
 });
 
-import { unmountComponentAtNode } from "react-dom";
+import { cleanup } from "@testing-library/react";
 
 let container = null;
 beforeEach(() => {
@@ -22,7 +22,7 @@ beforeEach(() => {
 
 afterEach(() => {
   // cleanup on exiting
-  unmountComponentAtNode(container);
+  cleanup();
   container.remove();
   container = null;
 });

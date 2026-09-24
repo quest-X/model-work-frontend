@@ -79,6 +79,12 @@ describe('AccountService', () => {
         await expect(loginAccount('admin', 'password', false)).rejects.toThrow('HTTP 422');
     });
 
+    it('explains machine admission rejection', async () => {
+        (fetch as jest.Mock).mockResolvedValueOnce(response({detail: 'node_admission_required'}, 503));
+        await expect(loginAccount('admin', 'password', false))
+            .rejects.toThrow('当前机器未通过 OpenSight Master/Main 准入');
+    });
+
     it.each([
         ['profile', () => updateAccountProfile('Old account')],
         ['avatar', () => uploadAccountAvatar(new File(['image'], 'avatar.png'))],

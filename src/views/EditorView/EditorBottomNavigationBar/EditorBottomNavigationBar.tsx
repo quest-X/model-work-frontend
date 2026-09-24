@@ -8,7 +8,7 @@ import {ISize} from "../../../interfaces/ISize";
 import {ContextType} from "../../../data/enums/ContextType";
 import classNames from "classnames";
 import {ImageActions} from "../../../logic/actions/ImageActions";
-import {Language, LanguageConfig} from "../../../data/LanguageConfig";
+import {Language} from "../../../data/LanguageConfig";
 import {LocalStorageManager} from "../../../utils/LocalStorageManager";
 import { Tooltip } from '@mui/material';
 
@@ -21,10 +21,9 @@ interface IProps {
     language: Language;
 }
 
-const EditorBottomNavigationBar: React.FC<IProps> = ({size, imageData, totalImageCount, activeImageIndex, activeContext, language}) => {
+const EditorBottomNavigationBar: React.FC<IProps> = ({size, imageData, totalImageCount, activeImageIndex, activeContext}) => {
     const minWidth:number = 400;
-    const [lastSavedTime, setLastSavedTime] = useState<number>(0);
-    const currentTexts = LanguageConfig[language];
+    const [, setLastSavedTime] = useState<number>(0);
 
     useEffect(() => {
         // 获取初始保存时间
@@ -53,20 +52,6 @@ const EditorBottomNavigationBar: React.FC<IProps> = ({size, imageData, totalImag
 
     const getImageCounter = () => {
         return (activeImageIndex + 1) + " / " + totalImageCount;
-    };
-
-    const getDetailedSavedTimeTooltip = () => {
-        if (lastSavedTime === 0) {
-            return language === Language.CHINESE ? '项目尚未保存' : 'Project has not been saved yet';
-        }
-        
-        const date = new Date(lastSavedTime);
-        const dateString = date.toLocaleDateString();
-        const timeString = date.toLocaleTimeString();
-        
-        return language === Language.CHINESE 
-            ? `最后保存时间：${dateString} ${timeString}`
-            : `Last saved: ${dateString} ${timeString}`;
     };
 
     const getClassName = () => {

@@ -3,7 +3,7 @@ import { store } from '../../../index';
 import { updateLabelNames } from '../../../store/labels/actionCreators';
 import { updateSegmentationResults } from '../../../store/ai/actionCreators';
 import { LabelUtil } from '../../../utils/LabelUtil';
-import { SegmentationResult } from '../../../ai/SegmentationAPIDetector';
+import { SegmentationResult } from '../../../store/ai/types';
 
 describe('LabelActions', () => {
     describe('removeLabelNames', () => {

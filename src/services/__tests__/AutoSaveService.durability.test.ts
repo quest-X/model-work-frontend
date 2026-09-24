@@ -6,6 +6,12 @@ import {LocalStorageManager} from '../../utils/LocalStorageManager';
 import {AIStateStorageManager} from '../../utils/AIStateStorageManager';
 import {TaskTracker} from '../TaskTracker';
 import {ImageRepository} from '../../logic/imageRepository/ImageRepository';
+import type {AppState} from '../../store';
+import type {LabelRect} from '../../store/labels/types';
+import {LabelStatus} from '../../data/enums/LabelStatus';
+import {Language} from '../../data/LanguageConfig';
+import {LabelType} from '../../data/enums/LabelType';
+import {ProjectType} from '../../data/enums/ProjectType';
 
 const MEBIBYTE = 1024 * 1024;
 
@@ -14,36 +20,61 @@ const sizedFile = (
     size: number,
     type: string = 'image/jpeg',
     byte: number = 1,
-): File => ({
-    name,
-    size,
-    type,
-    lastModified: 1,
-    arrayBuffer: jest.fn().mockResolvedValue(new Uint8Array([byte]).buffer),
-} as unknown as File);
+): File => {
+    const file = new File([new Uint8Array([byte])], name, {type, lastModified: 1});
+    Object.defineProperties(file, {
+        size: {value: size},
+        arrayBuffer: {value: jest.fn().mockResolvedValue(new Uint8Array([byte]).buffer)},
+    });
+    return file;
+};
 
-const emptyAIState = () => ({
+const originalMethods = {
+    saveProjectData: AutoSaveService['saveProjectData'],
+    saveSettings: AutoSaveService['saveSettings'],
+    saveAIState: AutoSaveService['saveAIState'],
+    performSave: AutoSaveService['performSave'],
+};
+const mockMethod = <K extends keyof typeof originalMethods>(name: K) => {
+    const mock = jest.fn<ReturnType<typeof originalMethods[K]>, Parameters<typeof originalMethods[K]>>();
+    Object.defineProperty(AutoSaveService, name, {value: mock, writable: true, configurable: true});
+    return mock;
+};
+
+const initialState = store.getState();
+const annotation = (id: string, rect: LabelRect['rect']): LabelRect => ({
+    id, rect, labelId: 'label-1', isVisible: true, isCreatedByAI: false,
+    status: LabelStatus.ACCEPTED, suggestedLabel: '',
+});
+
+const emptyAIState = (): AppState['ai'] => ({
+    ...initialState.ai,
     segmentationResults: [],
     imageSegmentationResults: new Map(),
     imageAIStates: new Map(),
 });
 
-const signatureState = (rectX: number = 1, labelName: string = 'steel', fps: number = 25) => ({
+const signatureState = (rectX: number = 1, labelName: string = 'steel', fps: number = 25): AppState => ({
+    ...initialState,
     general: {
-        language: 'zh',
-        projectData: {name: 'mill', type: 'OBJECT_DETECTION'},
+        ...initialState.general,
+        language: Language.CHINESE,
+        projectData: {name: 'mill', type: ProjectType.OBJECT_DETECTION},
         zoom: 1,
         imageDragMode: false,
         smartAnnotationActive: false,
     },
     labels: {
+        ...initialState.labels,
         activeImageIndex: 0,
-        activeLabelType: 'RECT',
+        activeLabelType: LabelType.RECT,
         labels: [{id: 'label-1', name: labelName, color: '#fff'}],
         imagesData: [{
             id: 'frame-0',
+            loadStatus: false,
+            isVisitedByRoboflowAPI: false,
             fileData: new File([], 'frame_000000.jpg', {type: 'image/jpeg'}),
-            labelRects: [{id: 'rect-1', labelId: 'label-1', rect: {x: rectX, y: 2, width: 3, height: 4}}],
+            labelRects: [annotation('rect-1', {x: rectX, y: 2, width: 3, height: 4})],
             labelPoints: [],
             labelLines: [],
             labelPolygons: [],
@@ -51,6 +82,7 @@ const signatureState = (rectX: number = 1, labelName: string = 'steel', fps: num
         }],
     },
     video: {
+        ...initialState.video,
         isVideoMode: true,
         activeVideoIndex: 0,
         activeVideo: {
@@ -62,19 +94,21 @@ const signatureState = (rectX: number = 1, labelName: string = 'steel', fps: num
             totalFrames: 50,
             videoSize: {width: 1920, height: 1080},
             sessionId: 'runtime-only',
+            currentFrame: 0, currentTime: 0, isPlaying: false, frames: new Map(),
         },
     },
-    queue: {items: [], activeQueueItemId: null},
+    queue: {...initialState.queue, items: [], activeQueueItemId: null},
     ai: emptyAIState(),
 });
 
 describe('AutoSaveService durability', () => {
     afterEach(async () => {
         jest.restoreAllMocks();
+        Object.assign(AutoSaveService, originalMethods);
         await AutoSaveService.drain();
         ImageRepository.clearAllCache();
         localStorage.clear();
-        Object.assign(AutoSaveService as any, {
+        Object.assign(AutoSaveService, {
             inFlightSave: null,
             pendingSave: false,
             pendingForce: false,
@@ -94,12 +128,13 @@ describe('AutoSaveService durability', () => {
     it('persists zero-byte video frames as indexed annotation records and stores the source once', async () => {
         const placeholder = new File([], 'frame_000042.jpg', {type: 'image/jpeg'});
         const source = new File(['video-source'], 'coil.mp4', {type: 'video/mp4'});
-        const state = signatureState() as any;
+        const state = signatureState();
         state.labels.imagesData = [{
             id: 'frame-42',
+            isVisitedByRoboflowAPI: false,
             fileData: placeholder,
             loadStatus: true,
-            labelRects: [{id: 'rect-1', labelId: 'label-1', rect: {x: 10, y: 20, width: 30, height: 40}}],
+            labelRects: [annotation('rect-1', {x: 10, y: 20, width: 30, height: 40})],
             labelPoints: [],
             labelLines: [],
             labelPolygons: [],
@@ -130,7 +165,7 @@ describe('AutoSaveService durability', () => {
             return true;
         });
 
-        await (AutoSaveService as any).saveProjectData();
+        await AutoSaveService['saveProjectData']();
 
         expect(savedProject?.images).toHaveLength(1);
         expect(savedProject?.images[0]).toEqual(expect.objectContaining({
@@ -147,12 +182,14 @@ describe('AutoSaveService durability', () => {
             sessionId: 'ephemeral-session',
         }));
         expect(savedProject?.queueItems?.[0].file).toBeUndefined();
-        expect((savedProject?.queueItems?.[0] as any).videoSessionId).toBeUndefined();
+        expect(savedProject?.queueItems?.[0].videoSessionId).toBeUndefined();
+        expect(state.queue.items[0].videoSessionId).toBe('ephemeral-session');
+        expect(state.queue.items[0].file).toBe(source);
     });
 
     it('never truncates non-video image bytes to satisfy the recovery budget', async () => {
-        const state = signatureState() as any;
-        state.video = {isVideoMode: false, activeVideo: null, activeVideoIndex: -1};
+        const state = signatureState();
+        state.video = {...initialState.video, isVideoMode: false, activeVideo: null, activeVideoIndex: -1};
         state.labels.imagesData = [
             {...state.labels.imagesData[0], id: 'image-a', fileData: sizedFile('a.jpg', 300 * MEBIBYTE, 'image/jpeg', 1)},
             {...state.labels.imagesData[0], id: 'image-b', fileData: sizedFile('b.jpg', 300 * MEBIBYTE, 'image/jpeg', 2)},
@@ -164,7 +201,7 @@ describe('AutoSaveService durability', () => {
             return true;
         });
 
-        await (AutoSaveService as any).saveProjectData();
+        await AutoSaveService['saveProjectData']();
 
         expect(savedProject?.images.map(image => ({
             bytes: (image.fileData as ArrayBuffer).byteLength,
@@ -176,7 +213,7 @@ describe('AutoSaveService durability', () => {
     });
 
     it('never truncates pre-extracted frames without a durable source or dataset', async () => {
-        const state = signatureState() as any;
+        const state = signatureState();
         const missingSource = sizedFile('source.mp4', 0, 'video/mp4');
         const frames = [
             sizedFile('frame-0.jpg', 300 * MEBIBYTE, 'image/jpeg', 1),
@@ -206,7 +243,7 @@ describe('AutoSaveService durability', () => {
             return true;
         });
 
-        await (AutoSaveService as any).saveProjectData();
+        await AutoSaveService['saveProjectData']();
 
         expect(savedProject?.videoRecovery?.sourceFile).toBeUndefined();
         expect(savedProject?.images.every(image => !image.isPlaceholder)).toBe(true);
@@ -216,7 +253,7 @@ describe('AutoSaveService durability', () => {
     });
 
     it('stores an oversized video source once and only budgets its rebuildable frame cache', async () => {
-        const state = signatureState() as any;
+        const state = signatureState();
         const source = sizedFile('source.mp4', 600 * MEBIBYTE, 'video/mp4');
         const frames = [
             sizedFile('frame-0.jpg', 300 * MEBIBYTE, 'image/jpeg', 1),
@@ -244,7 +281,7 @@ describe('AutoSaveService durability', () => {
             return true;
         });
 
-        await (AutoSaveService as any).saveProjectData();
+        await AutoSaveService['saveProjectData']();
 
         expect(savedProject?.videoRecovery?.sourceFile).toBe(source);
         expect(savedProject?.queueItems?.[0].file).toBeUndefined();
@@ -252,12 +289,12 @@ describe('AutoSaveService durability', () => {
         expect(savedProject?.images.map(
             image => (image.fileData as ArrayBuffer).byteLength,
         )).toEqual([1, 0]);
-        expect((source.arrayBuffer as jest.Mock)).not.toHaveBeenCalled();
+        expect(source.arrayBuffer).not.toHaveBeenCalled();
     });
 
     it('includes inactive queue annotation caches without duplicating source bytes', async () => {
-        const state = signatureState() as any;
-        state.video = {isVideoMode: false, activeVideo: null, activeVideoIndex: -1};
+        const state = signatureState();
+        state.video = {...initialState.video, isVideoMode: false, activeVideo: null, activeVideoIndex: -1};
         state.queue.activeQueueItemId = 'active-image';
         state.queue.items = [
             {
@@ -281,7 +318,7 @@ describe('AutoSaveService durability', () => {
             ...state.labels.imagesData[0],
             id: 'inactive-frame',
             fileData: state.queue.items[1].file,
-            labelRects: [{id: 'inactive-rect', rect: {x: 7, y: 8, width: 9, height: 10}}],
+            labelRects: [annotation('inactive-rect', {x: 7, y: 8, width: 9, height: 10})],
         };
         ImageRepository.saveFileCache('inactive-image', [inactiveFrame]);
         const initialSignature = buildPersistenceSignature(state);
@@ -292,7 +329,7 @@ describe('AutoSaveService durability', () => {
             return true;
         });
 
-        await (AutoSaveService as any).saveProjectData();
+        await AutoSaveService['saveProjectData']();
 
         const inactiveSnapshot = savedProject?.queueAnnotationSnapshots?.find(
             snapshot => snapshot.queueItemId === 'inactive-image',
@@ -313,40 +350,41 @@ describe('AutoSaveService durability', () => {
     });
 
     it('does not advance lightweight save timestamps when the project commit fails', async () => {
-        const state = signatureState() as any;
+        const state = signatureState();
         localStorage.setItem('make-sense-project-settings', JSON.stringify({
-            language: 'zh',
+            language: Language.CHINESE,
             projectName: 'previous',
             lastSaved: 123,
             zoom: 1,
             imageDragMode: false,
             smartAnnotationActive: false,
             currentImageIndex: 0,
-            activeLabelType: 'RECT',
+            activeLabelType: LabelType.RECT,
         }));
         jest.spyOn(store, 'getState').mockReturnValue(state);
         jest.spyOn(TaskTracker, 'startTask').mockReturnValue({
+            id: 'save-task', update: jest.fn(), cancel: jest.fn(),
             complete: jest.fn(),
             fail: jest.fn(),
-        } as any);
-        jest.spyOn(AutoSaveService as any, 'saveProjectData').mockResolvedValue(false);
-        const saveSettings = jest.spyOn(AutoSaveService as any, 'saveSettings');
-        const saveAIState = jest.spyOn(AutoSaveService as any, 'saveAIState');
+        });
+        mockMethod('saveProjectData').mockResolvedValue(false);
+        const saveSettings = mockMethod('saveSettings');
+        const saveAIState = mockMethod('saveAIState');
 
-        await (AutoSaveService as any).performSave(true);
+        await AutoSaveService['performSave'](true);
 
         expect(saveSettings).not.toHaveBeenCalled();
         expect(saveAIState).not.toHaveBeenCalled();
         expect(LocalStorageManager.getLastSavedTime()).toBe(123);
         expect(AIStateStorageManager.getLastSavedTime()).toBe(0);
-        expect((AutoSaveService as any).lastSavedSignature).toBe('');
+        expect(AutoSaveService['lastSavedSignature']).toBe('');
     });
 
     it('serializes overlapping save requests and coalesces them into one newer write', async () => {
         const releases: Array<() => void> = [];
         let active = 0;
         let maxActive = 0;
-        const performSave = jest.spyOn(AutoSaveService as any, 'performSave')
+        const performSave = mockMethod('performSave')
             .mockImplementation(async () => {
                 active++;
                 maxActive = Math.max(maxActive, active);
@@ -374,7 +412,7 @@ describe('AutoSaveService durability', () => {
 
     it('drops queued save work across a suspend and drain boundary', async () => {
         let release: (() => void) | undefined;
-        const performSave = jest.spyOn(AutoSaveService as any, 'performSave')
+        const performSave = mockMethod('performSave')
             .mockImplementation(() => new Promise<void>(resolve => { release = resolve; }));
 
         void AutoSaveService.saveCurrentState();

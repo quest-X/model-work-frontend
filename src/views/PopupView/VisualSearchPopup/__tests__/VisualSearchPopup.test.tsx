@@ -116,6 +116,7 @@ const collection = (
     collectionRevision: null,
     datasetId: 'dataset-without-revision',
     datasetRevision: null,
+    datasetRevisions: {},
     compatible: true,
     compatibilityReason: null,
 });
@@ -437,7 +438,7 @@ describe('VisualSearchPopup', () => {
         expect(await screen.findByTestId('visual-search-query-overlay')).toBeInTheDocument();
         expect(screen.getByRole('combobox')).toHaveValue('scene/masks/v1');
         expect(screen.getByTestId('submit-visual-search')).toBeEnabled();
-        await act(async () => fireEvent.click(screen.getByTestId('submit-visual-search')));
+        await act(async () => { fireEvent.click(screen.getByTestId('submit-visual-search')); });
         await waitFor(() => expect(props.snapshotCapture).toHaveBeenCalledTimes(1));
         const input = props.snapshotCapture.mock.calls[0][0] as QuerySnapshotInput;
         expect(input.geometry).toEqual({

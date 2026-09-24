@@ -6,7 +6,6 @@ import { ImageLoadManager } from "../../../../logic/imageRepository/ImageLoadMan
 import { IRect } from "../../../../interfaces/IRect";
 import { ISize } from "../../../../interfaces/ISize";
 import { ImageRepository } from "../../../../logic/imageRepository/ImageRepository";
-import { AppState } from "../../../../store";
 import { updateImageDataById, deleteImageById, deleteSelectedImages } from "../../../../store/labels/actionCreators";
 import { ImageData } from "../../../../store/labels/types";
 import { FileUtil } from "../../../../utils/FileUtil";
@@ -24,13 +23,13 @@ interface IProps {
     isScrolling?: boolean;
     isChecked?: boolean;
     isInferred?: boolean;
-    onClick?: () => any;
+    onClick?: () => void;
     isSelected?: boolean;
     isMultiSelected?: boolean;
     isFirstSelected?: boolean;
-    updateImageDataById: (id: string, newImageData: ImageData) => any;
-    deleteImageById: (id: string) => any;
-    deleteSelectedImages: () => any;
+    updateImageDataById: typeof updateImageDataById;
+    deleteImageById: typeof deleteImageById;
+    deleteSelectedImages: typeof deleteSelectedImages;
 }
 
 interface IState {
@@ -44,7 +43,7 @@ export class ImagePreview extends React.Component<IProps, IState> {
     private requestGeneration: number = 0;
     private mounted: boolean = false;
 
-    constructor(props) {
+    constructor(props: IProps) {
         super(props);
 
         this.state = {
@@ -89,7 +88,7 @@ export class ImagePreview extends React.Component<IProps, IState> {
         }
     }
 
-    shouldComponentUpdate(nextProps: Readonly<IProps>, nextState: Readonly<IState>, nextContext: any): boolean {
+    shouldComponentUpdate(nextProps: Readonly<IProps>, nextState: Readonly<IState>): boolean {
         return (
             this.props.imageData.id !== nextProps.imageData.id ||
             this.props.imageData.loadStatus !== nextProps.imageData.loadStatus ||
@@ -262,7 +261,7 @@ export class ImagePreview extends React.Component<IProps, IState> {
         }
     };
 
-    private handleLoadImageError = (imageData?: ImageData, generation?: number, error?: any) => {
+    private handleLoadImageError = (imageData?: ImageData, generation?: number, error?: unknown) => {
         if (imageData && generation !== undefined) this.finishLoading(imageData.id, generation);
         else {
             this.isLoading = false;
@@ -292,7 +291,7 @@ export class ImagePreview extends React.Component<IProps, IState> {
             ...(imageData.labelLines || []),
         ];
         if (allLabels.length === 0) return 'none';
-        const hasManual = allLabels.some((l: any) => !l.isCreatedByAI);
+        const hasManual = allLabels.some((l) => !l.isCreatedByAI);
         if (hasManual) return 'manual';
         return 'ai';
     };
@@ -313,7 +312,6 @@ export class ImagePreview extends React.Component<IProps, IState> {
 
     public render() {
         const {
-            isChecked,
             style,
             onClick
         } = this.props;
@@ -385,7 +383,7 @@ const mapDispatchToProps = {
     deleteSelectedImages
 };
 
-const mapStateToProps = (state: AppState) => ({});
+const mapStateToProps = () => ({});
 
 export default connect(
     mapStateToProps,

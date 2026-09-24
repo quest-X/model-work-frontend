@@ -15,9 +15,10 @@ export const resolveExportImageFiles = async (
         return map;
     }
 
-    if (activeVideo.preExtractedFrames?.length) {
+    const preExtractedFrames = activeVideo.preExtractedFrames;
+    if (preExtractedFrames?.length) {
         allImagesData.forEach((img, idx) => {
-            const f = activeVideo.preExtractedFrames![idx];
+            const f = preExtractedFrames[idx];
             if (f) map.set(img.id, f);
         });
         return map;

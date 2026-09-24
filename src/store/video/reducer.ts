@@ -1,4 +1,4 @@
-import { VideoState, VideoData } from './types';
+import { VideoState, VideoData, VideoActionTypes } from './types';
 import {
     UPDATE_VIDEO_MODE,
     ADD_VIDEO_DATA,
@@ -21,7 +21,27 @@ const initialState: VideoState = {
     activeVideoIndex: -1
 };
 
-export function videoReducer(state = initialState, action: any): VideoState {
+const updateMatchingVideo = (
+    state: VideoState, videoId: string, update: (video: VideoData) => VideoData,
+): VideoState => ({
+    ...state,
+    videos: state.videos.map(video => video.id === videoId ? update(video) : video),
+    activeVideo: state.activeVideo?.id === videoId ? update(state.activeVideo) : state.activeVideo,
+});
+
+const removeVideo = (state: VideoState, videoId: string): VideoState => {
+    const videos = state.videos.filter(video => video.id !== videoId);
+    return {
+        ...state,
+        videos,
+        activeVideoIndex: state.activeVideoIndex >= videos.length ? videos.length - 1 : state.activeVideoIndex,
+        activeVideo: state.activeVideo?.id === videoId
+            ? videos[Math.min(state.activeVideoIndex, videos.length - 1)] || null
+            : state.activeVideo,
+    };
+};
+
+export function videoReducer(state = initialState, action: VideoActionTypes): VideoState {
     switch (action.type) {
         case UPDATE_VIDEO_MODE:
             return {
@@ -29,7 +49,7 @@ export function videoReducer(state = initialState, action: any): VideoState {
                 isVideoMode: action.payload.isVideoMode
             };
 
-        case ADD_VIDEO_DATA:
+        case ADD_VIDEO_DATA: {
             const newVideos = [...state.videos, action.payload.videoData];
             return {
                 ...state,
@@ -37,6 +57,7 @@ export function videoReducer(state = initialState, action: any): VideoState {
                 activeVideoIndex: newVideos.length - 1,
                 activeVideo: action.payload.videoData
             };
+        }
 
         case UPDATE_ACTIVE_VIDEO_INDEX:
             return {
@@ -46,190 +67,54 @@ export function videoReducer(state = initialState, action: any): VideoState {
             };
 
         case UPDATE_VIDEO_CURRENT_FRAME:
-            return {
-                ...state,
-                videos: state.videos.map(video =>
-                    video.id === action.payload.videoId
-                        ? {
-                              ...video,
-                              currentFrame: action.payload.frameNumber,
-                              currentTime: action.payload.timestamp
-                          }
-                        : video
-                ),
-                activeVideo:
-                    state.activeVideo?.id === action.payload.videoId
-                        ? {
-                              ...state.activeVideo,
-                              currentFrame: action.payload.frameNumber,
-                              currentTime: action.payload.timestamp
-                          }
-                        : state.activeVideo
-            };
+            return updateMatchingVideo(state, action.payload.videoId, video => ({
+                ...video, currentFrame: action.payload.frameNumber, currentTime: action.payload.timestamp,
+            }));
 
         case UPDATE_VIDEO_PLAYING_STATUS:
-            return {
-                ...state,
-                videos: state.videos.map(video =>
-                    video.id === action.payload.videoId
-                        ? { ...video, isPlaying: action.payload.isPlaying }
-                        : video
-                ),
-                activeVideo:
-                    state.activeVideo?.id === action.payload.videoId
-                        ? { ...state.activeVideo, isPlaying: action.payload.isPlaying }
-                        : state.activeVideo
-            };
+            return updateMatchingVideo(state, action.payload.videoId, video => ({
+                ...video, isPlaying: action.payload.isPlaying,
+            }));
 
         case UPDATE_VIDEO_METADATA:
-            return {
-                ...state,
-                videos: state.videos.map(video =>
-                    video.id === action.payload.videoId
-                        ? {
-                              ...video,
-                              duration: action.payload.duration,
-                              fps: action.payload.fps,
-                              totalFrames: action.payload.totalFrames,
-                              videoSize: action.payload.videoSize,
-                              loadStatus: true
-                          }
-                        : video
-                ),
-                activeVideo:
-                    state.activeVideo?.id === action.payload.videoId
-                        ? {
-                              ...state.activeVideo,
-                              duration: action.payload.duration,
-                              fps: action.payload.fps,
-                              totalFrames: action.payload.totalFrames,
-                              videoSize: action.payload.videoSize,
-                              loadStatus: true
-                          }
-                        : state.activeVideo
-            };
+            return updateMatchingVideo(state, action.payload.videoId, video => ({
+                ...video, duration: action.payload.duration, fps: action.payload.fps,
+                totalFrames: action.payload.totalFrames, videoSize: action.payload.videoSize, loadStatus: true,
+            }));
 
         case ADD_VIDEO_FRAME:
-            return {
-                ...state,
-                videos: state.videos.map(video => {
-                    if (video.id === action.payload.videoId) {
-                        const newFrames = new Map(video.frames);
-                        newFrames.set(action.payload.frameData.frameNumber, action.payload.frameData);
-                        return { ...video, frames: newFrames };
-                    }
-                    return video;
-                }),
-                activeVideo:
-                    state.activeVideo?.id === action.payload.videoId
-                        ? (() => {
-                              const newFrames = new Map(state.activeVideo.frames);
-                              newFrames.set(
-                                  action.payload.frameData.frameNumber,
-                                  action.payload.frameData
-                              );
-                              return { ...state.activeVideo, frames: newFrames };
-                          })()
-                        : state.activeVideo
-            };
+            return updateMatchingVideo(state, action.payload.videoId, video => {
+                const frames = new Map(video.frames);
+                frames.set(action.payload.frameData.frameNumber, action.payload.frameData);
+                return {...video, frames};
+            });
 
         case UPDATE_VIDEO_FRAME_ANNOTATION_STATUS:
-            return {
-                ...state,
-                videos: state.videos.map(video => {
-                    if (video.id === action.payload.videoId) {
-                        const newFrames = new Map(video.frames);
-                        const frame = newFrames.get(action.payload.frameNumber);
-                        if (frame) {
-                            newFrames.set(action.payload.frameNumber, {
-                                ...frame,
-                                hasAnnotations: action.payload.hasAnnotations
-                            });
-                        }
-                        return { ...video, frames: newFrames };
-                    }
-                    return video;
-                }),
-                activeVideo:
-                    state.activeVideo?.id === action.payload.videoId
-                        ? (() => {
-                              const newFrames = new Map(state.activeVideo.frames);
-                              const frame = newFrames.get(action.payload.frameNumber);
-                              if (frame) {
-                                  newFrames.set(action.payload.frameNumber, {
-                                      ...frame,
-                                      hasAnnotations: action.payload.hasAnnotations
-                                  });
-                              }
-                              return { ...state.activeVideo, frames: newFrames };
-                          })()
-                        : state.activeVideo
-            };
+            return updateMatchingVideo(state, action.payload.videoId, video => {
+                const frames = new Map(video.frames);
+                const frame = frames.get(action.payload.frameNumber);
+                if (frame) frames.set(action.payload.frameNumber, {...frame, hasAnnotations: action.payload.hasAnnotations});
+                return {...video, frames};
+            });
 
         case MARK_VIDEO_FRAME_AS_KEYFRAME:
-            return {
-                ...state,
-                videos: state.videos.map(video => {
-                    if (video.id === action.payload.videoId) {
-                        const newFrames = new Map(video.frames);
-                        const frame = newFrames.get(action.payload.frameNumber);
-                        if (frame) {
-                            newFrames.set(action.payload.frameNumber, {
-                                ...frame,
-                                isKeyframe: action.payload.isKeyframe
-                            });
-                        }
-                        return { ...video, frames: newFrames };
-                    }
-                    return video;
-                }),
-                activeVideo:
-                    state.activeVideo?.id === action.payload.videoId
-                        ? (() => {
-                              const newFrames = new Map(state.activeVideo.frames);
-                              const frame = newFrames.get(action.payload.frameNumber);
-                              if (frame) {
-                                  newFrames.set(action.payload.frameNumber, {
-                                      ...frame,
-                                      isKeyframe: action.payload.isKeyframe
-                                  });
-                              }
-                              return { ...state.activeVideo, frames: newFrames };
-                          })()
-                        : state.activeVideo
-            };
+            return updateMatchingVideo(state, action.payload.videoId, video => {
+                const frames = new Map(video.frames);
+                const frame = frames.get(action.payload.frameNumber);
+                if (frame) frames.set(action.payload.frameNumber, {...frame, isKeyframe: action.payload.isKeyframe});
+                return {...video, frames};
+            });
 
         case REMOVE_VIDEO_DATA:
-            const filteredVideos = state.videos.filter(video => video.id !== action.payload.videoId);
-            return {
-                ...state,
-                videos: filteredVideos,
-                activeVideoIndex:
-                    state.activeVideoIndex >= filteredVideos.length
-                        ? filteredVideos.length - 1
-                        : state.activeVideoIndex,
-                activeVideo:
-                    state.activeVideo?.id === action.payload.videoId
-                        ? filteredVideos[Math.min(state.activeVideoIndex, filteredVideos.length - 1)] || null
-                        : state.activeVideo
-            };
+            return removeVideo(state, action.payload.videoId);
 
         case CLEAR_ALL_VIDEOS:
             return initialState;
 
         case UPDATE_VIDEO_SESSION_ID:
-            return {
-                ...state,
-                videos: state.videos.map(v =>
-                    v.id === action.payload.videoId
-                        ? { ...v, sessionId: action.payload.sessionId }
-                        : v
-                ),
-                activeVideo:
-                    state.activeVideo?.id === action.payload.videoId
-                        ? { ...state.activeVideo, sessionId: action.payload.sessionId }
-                        : state.activeVideo,
-            };
+            return updateMatchingVideo(state, action.payload.videoId, video => ({
+                ...video, sessionId: action.payload.sessionId,
+            }));
 
         default:
             return state;

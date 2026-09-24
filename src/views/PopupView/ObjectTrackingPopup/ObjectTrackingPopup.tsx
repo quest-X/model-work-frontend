@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { connect } from 'react-redux';
 import './ObjectTrackingPopup.scss';
 import { AppState } from '../../../store';
-import { Language, LanguageConfig } from '../../../data/LanguageConfig';
+import { Language } from '../../../data/LanguageConfig';
 import { PopupActions } from '../../../logic/actions/PopupActions';
 import { GenericYesNoPopup } from '../GenericYesNoPopup/GenericYesNoPopup';
 import { ObjectTrackingActions } from '../../../logic/actions/ObjectTrackingActions';

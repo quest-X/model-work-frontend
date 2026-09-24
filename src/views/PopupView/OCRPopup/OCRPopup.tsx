@@ -26,7 +26,7 @@ export const OCRPanel: React.FC<{language: Language}> = ({language}) => {
     const request = useRef<AbortController | null>(null);
 
     useEffect(() => {
-        if (!file) { setPreview(''); return; }
+        if (!file) { setPreview(''); return undefined; }
         const url = URL.createObjectURL(file);
         setPreview(url);
         return () => URL.revokeObjectURL(url);

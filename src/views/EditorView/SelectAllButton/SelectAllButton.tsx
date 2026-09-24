@@ -4,17 +4,16 @@ import {connect} from 'react-redux';
 import {AppState} from '../../../store';
 import {ImageData} from '../../../store/labels/types';
 import {Language, LanguageConfig} from '../../../data/LanguageConfig';
-import {ImageActions} from '../../../logic/actions/ImageActions';
-import {selectAllImages} from '../../../store/labels/actionCreators';
+import {selectAllImages as selectAllImagesAction} from '../../../store/labels/actionCreators';
 
 interface IProps {
     imagesData: ImageData[];
     activeImageIndex: number;
     language: Language;
-    selectAllImages: (selectAll: boolean) => any;
+    selectAllImages: typeof selectAllImagesAction;
 }
 
-const SelectAllButton: React.FC<IProps> = ({imagesData, activeImageIndex, language, selectAllImages}) => {
+const SelectAllButton: React.FC<IProps> = ({imagesData, language, selectAllImages}) => {
     const currentTexts = LanguageConfig[language];
     
     const handleSelectAll = () => {
@@ -60,7 +59,7 @@ const mapStateToProps = (state: AppState) => ({
 });
 
 const mapDispatchToProps = {
-    selectAllImages
+    selectAllImages: selectAllImagesAction
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(SelectAllButton);

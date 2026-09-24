@@ -1,4 +1,5 @@
 import {ImageData} from '../store/labels/types';
+import type JSZip from 'jszip';
 
 export type DatasetSplit = {
     train: ImageData[];
@@ -28,7 +29,7 @@ export class DatasetSplitUtil {
     }
 
     public static async addImagesToZip(
-        zip: any,
+        zip: JSZip,
         images: ImageData[],
         basePath: string
     ): Promise<void> {

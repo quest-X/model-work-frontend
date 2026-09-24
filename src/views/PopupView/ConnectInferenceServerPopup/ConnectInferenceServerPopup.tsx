@@ -127,7 +127,8 @@ const ConnectInferenceServerPopup: React.FC<IProps> = (
             PopupActions.close();
 
             const activeImageData: ImageData = LabelsSelector.getActiveImageData();
-            AIActions.detect(activeImageData.id, ImageRepository.getById(activeImageData.id));
+            ImageRepository.getById(activeImageData.id); // Retain the active-image LRU touch.
+            AIActions.detect(activeImageData.id);
         }
 
         const onFailure = () => {

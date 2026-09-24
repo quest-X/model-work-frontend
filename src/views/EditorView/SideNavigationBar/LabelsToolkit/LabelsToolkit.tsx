@@ -31,10 +31,10 @@ interface IProps {
     smartAnnotationActive: boolean;
     imagesData: ImageData[];
     projectType: ProjectType;
-    updateImageDataById: (id: string, newImageData: ImageData) => any;
-    updateActiveLabelType: (activeLabelType: LabelType) => any;
-    updateActiveLabelViewType: (activeLabelViewType: LabelType) => any;
-    updateActiveLabelId: (highlightedLabelId: string) => any;
+    updateImageDataById: typeof updateImageDataById;
+    updateActiveLabelType: typeof updateActiveLabelType;
+    updateActiveLabelViewType: typeof updateActiveLabelViewType;
+    updateActiveLabelId: typeof updateActiveLabelId;
     language: Language;
 }
 
@@ -46,7 +46,7 @@ class LabelsToolkit extends React.Component<IProps, IState> {
     private labelsToolkitRef: HTMLDivElement;
     private readonly tabs: LabelType[];
 
-    constructor(props) {
+    constructor(props: IProps) {
         super(props);
 
         this.state = {
