@@ -70,7 +70,7 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [base]);
+    }, [base, nonce]);
 
     useEffect(() => {
         setState('loading');
