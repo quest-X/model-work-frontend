@@ -734,6 +734,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const statisticsPastDates = statisticsDates.filter(date => date <= todayDateKey());
     const statisticsLoadedDays = statisticsPastDates.filter(date => statisticsMonthCounts[statisticsDayKey(date)] !== undefined).length;
     const statisticsFailedDays = statisticsPastDates.filter(date => statisticsMonthCounts[statisticsDayKey(date)] === null).length;
+    const statisticsPendingDays = statisticsPastDates.length - statisticsLoadedDays;
     const statisticsMonthMaximum = Math.max(
         0,
         ...statisticsDates.map(date => statisticsMonthCounts[statisticsDayKey(date)]?.count || 0),
@@ -1471,7 +1472,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     })}
                                 </div>
                                 <div className='load-status' role='status'>
-                                    <span>{zh ? '当月读取' : 'Month'} {statisticsLoadedDays} / {statisticsPastDates.length}
+                                    <span>{statisticsPendingDays === 0 && statisticsFailedDays === 0
+                                        ? (zh ? '当月已读取完成' : 'Month loaded')
+                                        : `${zh ? '当月读取' : 'Month'} ${statisticsLoadedDays} / ${statisticsPastDates.length}`}
                                         {statisticsFailedDays > 0 && ` · ${statisticsFailedDays} ${zh ? '天失败' : 'failed'}`}</span>
                                     {statisticsFailedDays > 0 && <button type='button'
                                         aria-label={zh ? '重试失败日期' : 'Retry failed days'}
@@ -1482,7 +1485,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     </button>}
                                 </div>
                                 <div className='status-legend'>
-                                    <span>{zh ? '... 待读取' : '... Not read'}</span>
+                                    {statisticsPendingDays > 0 && <span>{zh ? '... 待读取' : '... Not read'}</span>}
                                     <span>{zh ? '- 无记录' : '- No records'}</span>
                                 </div>
                                 <footer>

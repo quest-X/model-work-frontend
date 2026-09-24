@@ -719,19 +719,32 @@ describe('ProgramRunnerPanel', () => {
         expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-24，无记录'})).toHaveClass('empty');
         expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-22，0 次溢渣'})).toHaveClass('recorded');
         expect(within(calendar).getByRole('status')).toHaveTextContent('当月读取 24 / 25');
+        expect(within(calendar).getByText('... 待读取')).toBeInTheDocument();
+        expect(within(calendar).queryByText('当月已读取完成')).not.toBeInTheDocument();
         await act(async () => rejectOlder());
         expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-23，读取失败'})).toHaveClass('failed');
         expect(within(calendar).getByRole('status')).toHaveTextContent('25 / 25 · 1 天失败');
+        expect(within(calendar).queryByText('... 待读取')).not.toBeInTheDocument();
+        expect(within(calendar).queryByText('当月已读取完成')).not.toBeInTheDocument();
         fireEvent.click(within(calendar).getByRole('button', {name: '重试失败日期'}));
         await within(calendar).findByRole('button', {name: '统计日期 2026-09-23，0 次溢渣'});
         expect(statistics.mock.calls.filter(call => call[2] === '2026-09-24')).toHaveLength(1);
         expect(within(calendar).queryByRole('button', {name: '重试失败日期'})).not.toBeInTheDocument();
+        expect(within(calendar).getByRole('status')).toHaveTextContent('当月已读取完成');
+        expect(within(calendar).queryByText('... 待读取')).not.toBeInTheDocument();
+        expect(within(calendar).getByText('- 无记录')).toBeInTheDocument();
+
+        panel.rerender(<ProgramRunnerPanel {...props} zh={false}/>);
+        calendar = screen.getByLabelText('Statistics calendar');
+        expect(within(calendar).getByRole('status')).toHaveTextContent('Month loaded');
+        expect(within(calendar).queryByText('... Not read')).not.toBeInTheDocument();
 
         panel.rerender(<ProgramRunnerPanel {...props} node={{...calendarNode, node_id: 'calendar-other-node'}}/>);
         fireEvent.click(screen.getByRole('button', {name: '统计'}));
         fireEvent.click(await screen.findByRole('button', {name: '选择统计日期 2026-09-25'}));
         calendar = screen.getByLabelText('统计日历');
         expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-24，待读取'})).toHaveClass('pending');
+        expect(within(calendar).getByText('... 待读取')).toBeInTheDocument();
         panel.unmount();
         expect(statistics.mock.calls.filter(call => call[0] === 'calendar-other-node')
             .every(call => call[4].aborted)).toBe(true);
