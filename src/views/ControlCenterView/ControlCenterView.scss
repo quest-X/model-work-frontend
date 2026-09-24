@@ -1825,7 +1825,13 @@ button.ControlServiceCard {
   .ControlProgramConnection { display: inline-flex; align-items: center; gap: 5px; }
   .ControlProgramConnection .ControlStatusDot { margin: 0; }
   .ControlProgramEndpointCount { color: rgba(255, 255, 255, 0.42); font-size: 10px; white-space: nowrap; }
-  .ControlProgramEndpointAddress { max-width: 420px; word-break: break-all; }
+  .ControlProgramEndpointAddress { max-width: 220px; }
+  .ControlProgramEndpointAddress code {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .ControlProgramEndpointName { display: flex; align-items: center; gap: 8px; }
   .ControlProgramEndpointName .ControlStatusDot { margin: 0; }
   .ControlProgramEndpointName > span:last-child { display: grid; gap: 2px; }
@@ -2088,6 +2094,380 @@ button.ControlServiceCard {
 .ControlProgramLogType { color: rgba(255, 255, 255, 0.46); font-family: SFMono-Regular, Consolas, monospace; }
 .ControlProgramError { margin: 0 0 12px; color: #ef8b8b; font-size: 9px; }
 
+.ControlProgramStatistics {
+  position: relative;
+  min-width: 0;
+  overflow: auto;
+  padding: 18px 20px;
+}
+
+.ControlMachineHistory {
+  min-width: 0;
+  overflow: auto;
+  padding: 18px 20px;
+}
+
+.ControlMachineHistoryRefresh {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 2px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.68);
+  cursor: pointer;
+
+  svg { width: 14px; height: 14px; }
+  &:hover,
+  &:focus-visible { border-color: rgba(105, 198, 255, 0.72); outline: 0; color: white; }
+  &:disabled { cursor: default; opacity: 0.4; }
+}
+
+.ControlMachineHistorySummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+
+  article {
+    min-width: 0;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-top-color: rgba(105, 198, 255, 0.68);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.025);
+    padding: 12px;
+  }
+  span { display: block; color: rgba(255, 255, 255, 0.34); font-size: 8px; }
+  strong { display: block; overflow: hidden; margin-top: 8px; color: rgba(255, 255, 255, 0.88); font-size: 18px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+.ControlMachineHistoryWorkspace {
+  display: grid;
+  min-height: 320px;
+  grid-template-columns: 230px minmax(0, 1fr);
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+
+  > nav {
+    overflow: auto;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.12);
+  }
+  > nav button {
+    display: block;
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: transparent;
+    padding: 10px 12px;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  > nav button:hover,
+  > nav button:focus-visible { outline: 0; background: rgba(255, 255, 255, 0.05); }
+  > nav button[aria-current='page'] { background: rgba(0, 154, 255, 0.12); }
+  > nav strong,
+  > nav span,
+  > nav small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  > nav strong { color: rgba(255, 255, 255, 0.82); font-size: 10px; }
+  > nav span { margin-top: 4px; color: #69c6ff; font-size: 8px; }
+  > nav small { margin-top: 3px; color: rgba(255, 255, 255, 0.3); font-size: 8px; }
+  > article { min-width: 0; overflow: auto; padding: 14px 16px; }
+  > article > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  > article h4 { margin: 0; color: rgba(255, 255, 255, 0.88); font-size: 13px; font-weight: 500; }
+  > article p,
+  > article header span { margin: 4px 0 0; color: rgba(255, 255, 255, 0.38); font-size: 8px; }
+  > article pre {
+    overflow: auto;
+    margin: 12px 0 0;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(0, 0, 0, 0.16);
+    padding: 12px;
+    color: rgba(255, 255, 255, 0.76);
+    font: 9px/1.6 SFMono-Regular, Consolas, monospace;
+    white-space: pre-wrap;
+  }
+}
+
+.ControlProgramStatisticsDateButton {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.16);
+  padding: 0 8px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 10px;
+  cursor: pointer;
+
+  svg { width: 13px; height: 13px; }
+  &:hover,
+  &:focus-visible,
+  &[aria-expanded='true'] { border-color: rgba(105, 198, 255, 0.72); outline: 0; }
+}
+
+.ControlProgramStatisticsCalendar {
+  position: absolute;
+  z-index: 5;
+  top: 56px;
+  right: 20px;
+  width: 250px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 4px;
+  background: #1b1e20;
+  padding: 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+
+  > header {
+    display: grid;
+    grid-template-columns: 28px 1fr 28px;
+    align-items: center;
+  }
+  > header strong {
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 11px;
+    font-weight: 500;
+    text-align: center;
+  }
+  button {
+    box-sizing: border-box;
+    border: 0;
+    border-radius: 3px;
+    color: rgba(255, 255, 255, 0.56);
+    cursor: pointer;
+  }
+  > header button {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    background: transparent;
+  }
+  > header svg { width: 14px; height: 14px; }
+  button:hover:not(:disabled),
+  button:focus-visible { outline: 1px solid rgba(105, 198, 255, 0.72); }
+  button:disabled { cursor: default; opacity: 0.25; }
+  .weekdays,
+  .days {
+    display: grid;
+    grid-template-columns: repeat(7, 28px);
+    gap: 5px;
+  }
+  .weekdays {
+    margin: 10px 0 6px;
+    color: rgba(255, 255, 255, 0.28);
+    font-size: 8px;
+    text-align: center;
+  }
+  .days button {
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.055);
+    font-size: 9px;
+  }
+  .days button[aria-pressed='true'] {
+    outline: 1px solid #69c6ff;
+    color: white;
+  }
+  .level-1 { background: rgba(121, 216, 158, 0.28) !important; }
+  .level-2 { background: rgba(94, 201, 137, 0.52) !important; }
+  .level-3 { background: rgba(52, 177, 107, 0.76) !important; color: white !important; }
+  .level-4 { background: #16824e !important; color: white !important; }
+  > footer {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 10px;
+    color: rgba(255, 255, 255, 0.32);
+    font-size: 8px;
+  }
+  > footer span:first-child { margin-left: auto; }
+  > footer i {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.055);
+  }
+}
+
+.ControlProgramStatisticCards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+
+  article {
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 14px;
+  }
+  article.small { border-top-color: #79d89e; }
+  article.medium { border-top-color: #e8bd79; }
+  article.large { border-top-color: #ef8b8b; }
+  span { display: block; color: rgba(255, 255, 255, 0.42); font-size: 9px; }
+  strong { display: block; margin-top: 8px; color: white; font-size: 26px; font-weight: 500; }
+}
+
+.ControlProgramStatisticSummary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 18px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+  div { padding: 13px 0; }
+  div + div { border-left: 1px solid rgba(255, 255, 255, 0.08); padding-left: 18px; }
+  dt { color: rgba(255, 255, 255, 0.36); font-size: 8px; }
+  dd { margin: 6px 0 0; color: rgba(255, 255, 255, 0.78); font-size: 11px; }
+}
+
+.ControlProgramHourlyStatistics {
+  margin-top: 18px;
+
+  > strong { color: rgba(255, 255, 255, 0.52); font-size: 9px; }
+  > div {
+    display: grid;
+    height: 130px;
+    grid-template-columns: repeat(24, minmax(4px, 1fr));
+    align-items: end;
+    gap: 3px;
+    margin-top: 12px;
+  }
+  span { display: grid; height: 100%; grid-template-rows: minmax(0, 1fr) 14px; align-items: end; }
+  i { display: block; min-height: 2px; background: #69c6ff; }
+  small { color: rgba(255, 255, 255, 0.28); font-size: 7px; font-style: normal; text-align: center; }
+}
+
+.ControlProgramStatisticsNote { margin: 12px 0 0; color: #e8bd79; font-size: 9px; }
+
+.ControlProgramHeatReports {
+  margin-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 16px;
+
+  > header > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  > header strong { color: rgba(255, 255, 255, 0.72); font-size: 10px; }
+  > header span { color: rgba(255, 255, 255, 0.34); font-size: 8px; }
+}
+
+.ControlProgramHeatReportBody {
+  display: grid;
+  min-height: 280px;
+  grid-template-columns: 180px minmax(0, 1fr);
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+
+  > nav {
+    max-height: 430px;
+    overflow: auto;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  > nav button {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 1fr auto;
+    gap: 5px 8px;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: transparent;
+    padding: 10px 12px;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  > nav button:hover,
+  > nav button.active { background: rgba(105, 198, 255, 0.09); }
+  > nav button:focus-visible { outline: 1px solid #69c6ff; outline-offset: -1px; }
+  > nav strong { color: rgba(255, 255, 255, 0.74); font-size: 9px; font-weight: 500; }
+  > nav span { grid-row: 2; color: rgba(255, 255, 255, 0.34); font-size: 8px; }
+  > nav em {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    align-self: center;
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 8px;
+    font-style: normal;
+  }
+  > nav em.small { color: #79d89e; }
+  > nav em.medium { color: #e8bd79; }
+  > nav em.large { color: #ef8b8b; }
+
+  > article {
+    min-width: 0;
+    padding: 16px 18px;
+  }
+  > article > header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  > article h4 { margin: 0; color: white; font-size: 13px; font-weight: 500; }
+  > article header p { margin: 5px 0 0; color: rgba(255, 255, 255, 0.38); font-size: 8px; }
+  > article header > span {
+    overflow: hidden;
+    max-width: 50%;
+    color: rgba(255, 255, 255, 0.28);
+    font: 8px SFMono-Regular, Consolas, monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  > article dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 16px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-left: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  > article dl div {
+    border-right: 1px solid rgba(255, 255, 255, 0.07);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    padding: 9px 10px;
+  }
+  > article dt { color: rgba(255, 255, 255, 0.32); font-size: 8px; }
+  > article dd { margin: 5px 0 0; color: rgba(255, 255, 255, 0.72); font-size: 10px; }
+  > article > strong { color: rgba(255, 255, 255, 0.5); font-size: 9px; }
+  > article > p,
+  > article ol { margin: 10px 0 0; }
+  > article > p { color: rgba(255, 255, 255, 0.34); font-size: 9px; }
+  > article ol {
+    max-height: 180px;
+    overflow: auto;
+    padding: 0;
+    list-style: none;
+  }
+  > article li {
+    display: grid;
+    grid-template-columns: 72px 70px 70px minmax(90px, 1fr);
+    gap: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 7px 0;
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 8px;
+  }
+  > article li em { font-style: normal; }
+  > article li em.small { color: #79d89e; }
+  > article li em.medium { color: #e8bd79; }
+  > article li em.large { color: #ef8b8b; }
+}
+
+.ControlProgramHeatEmpty {
+  margin: 12px 0 0;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 9px;
+}
+
 .ControlProgramArtifacts {
   display: flex;
   min-width: 0;
@@ -2171,19 +2551,24 @@ button.ControlServiceCard {
     &[aria-current='page'] { border-color: rgba(0, 154, 255, 0.72); background: rgba(0, 154, 255, 0.1); }
   }
 
-  .ControlProgramArtifactGroup {
-    margin-bottom: 10px;
+  .ControlProgramArtifactFolder {
+    margin-bottom: 4px;
 
-    > header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 4px 10px;
+    > summary {
+      border: 1px solid transparent;
+      border-radius: 3px;
+      outline: 0;
+      padding: 8px 10px;
+      cursor: pointer;
     }
 
-    > header strong { color: rgba(255, 255, 255, 0.48); font-size: 9px; font-weight: 500; }
-    > header span { margin: 0; color: rgba(255, 255, 255, 0.28); font-size: 8px; }
-    > button { margin-bottom: 2px; }
+    > summary:hover,
+    > summary:focus-visible { border-color: rgba(0, 154, 255, 0.5); }
+    > summary strong { display: inline; margin-left: 4px; }
+    > summary span { display: inline; margin-left: 6px; }
+    > summary small { margin-left: 16px; }
+    > div { padding-left: 14px; }
+    > div > button { margin-bottom: 2px; }
   }
 
   strong,
@@ -2687,6 +3072,10 @@ button.ControlServiceCard {
   .ControlProgramList { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
   .ControlProgramList > button { flex: 0 0 230px; }
   .ControlProgramDetail dl { grid-template-columns: 1fr; }
+  .ControlMachineHistorySummary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ControlMachineHistoryWorkspace { display: block; }
+  .ControlMachineHistoryWorkspace > nav { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+  .ControlMachineHistoryWorkspace > nav button { flex: 0 0 210px; }
   .ControlProgramDetail dl > div:nth-child(odd),
   .ControlProgramDetail dl > div:nth-child(even) { border-left: 0; padding-right: 0; padding-left: 0; }
   .ControlProgramLogs li { grid-template-columns: 110px minmax(0, 1fr); }
@@ -2694,9 +3083,11 @@ button.ControlServiceCard {
   .ControlProgramLogs li strong { grid-column: 2; grid-row: 2; }
   .ControlProgramLogs li .ControlProgramLogMessage { grid-column: 2; grid-row: 2; }
   .ControlProgramLogs li small { grid-column: 2; }
+  .ControlProgramStatisticCards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ControlProgramArtifactWorkspace { display: block; overflow: auto; }
   .ControlProgramArtifactWorkspace > aside { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-right: 0; }
-  .ControlProgramArtifactWorkspace > aside button { flex: 0 0 230px; }
+  .ControlProgramArtifactWorkspace > aside > details { flex: 0 0 250px; }
+  .ControlProgramArtifactWorkspace > aside button { flex: none; }
   .ControlProgramArtifactPreview { min-height: 360px; padding-left: 0; }
   .ControlProgramArtifactFilters { max-width: 100%; justify-content: flex-start; }
   .ControlProgramArtifactFilters input[type='search'] { width: 150px; }

@@ -50,10 +50,16 @@ import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
 import {PerformanceModePanel} from './PerformanceModePanel';
 import {ProgramRunnerPanel} from './ProgramRunnerPanel';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
+import {version as appVersion} from '../../../package.json';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
 import '../PopupView/ComputeClusterPopup/ComputeClusterPopup.scss';
 import './ControlCenterView.scss';
+
+declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
+
+const appEdition = typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
+    && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ ? 'Commercial' : 'Main';
 
 const ClusterGeographicMap = React.lazy(() => import('./ClusterGeographicMap')
     .then(module => ({default: module.ClusterGeographicMap})));
@@ -214,6 +220,30 @@ const bytes = (value: number | null, zh: boolean): string => {
 const bytesPerSecond = (value: number | null, zh: boolean): string => value === null
     ? (zh ? '未上报' : 'Not reported')
     : `${bytes(value, zh)}/s`;
+
+const gpuMetricDetail = (
+    node: ComputeClusterNode | undefined,
+    memoryUsedMb: number,
+    memoryTotalMb: number,
+    temperature: number,
+    zh: boolean,
+): string => {
+    if (!node?.resources.gpus.length) {
+        if (node && machineIconKind(node) === 'jetson') {
+            return zh ? 'Jetson GPU 指标未上报' : 'Jetson GPU metrics are not reported';
+        }
+        return zh ? '未检测到 GPU' : 'No GPU detected';
+    }
+    const memory = memoryTotalMb > 0
+        ? `${bytes(memoryUsedMb * 1024 ** 2, zh)} / ${bytes(memoryTotalMb * 1024 ** 2, zh)}`
+        : (zh ? '共享系统内存' : 'shared system memory');
+    const hottest = Number.isFinite(temperature)
+        ? `${temperature}°C`
+        : (zh ? '未上报' : 'not reported');
+    return zh
+        ? `${node.resources.gpus.length} GPU · 显存 ${memory} · 最高温度 ${hottest}`
+        : `${node.resources.gpus.length} GPU · Memory ${memory} · Hottest ${hottest}`;
+};
 
 const percentUsed = (total: number | null, available: number | null): string => {
     if (!total || available === null) return '—';
@@ -464,6 +494,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [monitorMaximized, setMonitorMaximized] = useState(false);
     const [programRunnerOpen, setProgramRunnerOpen] = useState(false);
     const [programRunnerMaximized, setProgramRunnerMaximized] = useState(false);
+    const [pageVisible, setPageVisible] = useState(() => !document.hidden);
     const [monitorView, setMonitorView] = useState<MonitorView>('performance');
     const [deviceManagementTab, setDeviceManagementTab] = useState<'camera' | 'edge' | null>(null);
     const [cameraViewerId, setCameraViewerId] = useState('');
@@ -630,9 +661,17 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, []);
 
     useEffect(() => {
+        const updateVisibility = () => setPageVisible(!document.hidden);
+        document.addEventListener('visibilitychange', updateVisibility);
+        return () => document.removeEventListener('visibilitychange', updateVisibility);
+    }, []);
+
+    useEffect(() => {
         mounted.current = true;
         void refresh(true);
-        const timer = window.setInterval(() => void refresh(), 15000);
+        const timer = window.setInterval(() => {
+            if (!document.hidden) void refresh();
+        }, 15000);
         return () => {
             mounted.current = false;
             runtimeInventoryAbort.current?.abort();
@@ -641,6 +680,8 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [refresh]);
 
     useEffect(() => {
+        // The runner polls its own node; fleet snapshots must not compete with its live stream.
+        if (!pageVisible || programRunnerOpen) return undefined;
         const targets = nodes;
         if (targets.length === 0) return undefined;
         const controller = new AbortController();
@@ -673,7 +714,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [nodes]);
+    }, [nodes, pageVisible, programRunnerOpen]);
 
     useEffect(() => {
         if (workspace !== 'groups') return undefined;
@@ -2098,11 +2139,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         id: 'gpu',
         label: zh ? '图形处理器' : 'GPU',
         value: gpuUsage === null ? '—' : `${gpuUsage}%`,
-        detail: selectedNode?.resources.gpus.length
-            ? (zh
-                ? `${selectedNode.resources.gpus.length} GPU · 显存 ${bytes(gpuMemoryUsedMb * 1024 ** 2, true)} / ${bytes(gpuMemoryTotalMb * 1024 ** 2, true)} · 最高温度 ${Number.isFinite(gpuTemperature) ? `${gpuTemperature}°C` : '未上报'}`
-                : `${selectedNode.resources.gpus.length} GPU · Memory ${bytes(gpuMemoryUsedMb * 1024 ** 2, false)} / ${bytes(gpuMemoryTotalMb * 1024 ** 2, false)} · Hottest ${Number.isFinite(gpuTemperature) ? `${gpuTemperature}°C` : 'not reported'}`)
-            : (zh ? '未检测到 GPU' : 'No GPU detected'),
+        detail: gpuMetricDetail(selectedNode, gpuMemoryUsedMb, gpuMemoryTotalMb, gpuTemperature, zh),
         values: selectedResourceHistory.map(sample => sample.gpu),
         color: '#ad83ff',
         emptyLabel: zh ? '等待 GPU 数据' : 'Waiting for GPU data',
@@ -2160,7 +2197,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     isActive={sidePanel === 'features'}
                     style={{top: '167px'}}
                 />
-                <div className='VersionWatermark'>v2.9.6 Commercial</div>
+                <div className='VersionWatermark'>v{appVersion} {appEdition}</div>
             </>}
             renderContent={sidePanel === 'features' ? renderFeatureList : renderMachineList}
         />

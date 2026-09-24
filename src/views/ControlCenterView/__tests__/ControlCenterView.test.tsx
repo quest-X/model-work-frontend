@@ -220,6 +220,7 @@ describe('ControlCenterView', () => {
     });
 
     afterEach(() => {
+        jest.useRealTimers();
         jest.restoreAllMocks();
         Object.defineProperty(global, 'fetch', {configurable: true, writable: true, value: originalFetch});
         window.localStorage.clear();
@@ -529,6 +530,44 @@ describe('ControlCenterView', () => {
         expect(document.querySelector('.ControlToolbarGroup > .ControlStatusDot')).toHaveClass('warning');
         fireEvent.click(noProgram);
         expect(document.querySelector('.ControlToolbarGroup > .ControlStatusDot')).not.toBeInTheDocument();
+    });
+
+    it('releases fleet polling while the runner is open or the page is hidden', async () => {
+        jest.useFakeTimers();
+        const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+        const selected = runtimeNode('AIPACK-07');
+        const other = runtimeNode('AIPACK-08');
+        for (const machine of [selected, other]) machine.capabilities.push('runtime.programs.read.v1');
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([selected, other]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(selected));
+        const programs = jest.spyOn(ComputeClusterService, 'programs')
+            .mockResolvedValue(programSnapshot('healthy', 'running'));
+        const otherCalls = () => programs.mock.calls.filter(([id]) => id === other.node_id);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await waitFor(() => expect(otherCalls()).toHaveLength(1));
+        const firstSignal = otherCalls()[0][1];
+        await selectMachine(selected.name);
+        fireEvent.click(screen.getByRole('button', {name: '打开程序运行器'}));
+        expect(firstSignal.aborted).toBe(true);
+        await act(async () => { jest.advanceTimersByTime(30000); });
+        expect(otherCalls()).toHaveLength(1);
+        expect(programs).toHaveBeenCalledWith(selected.node_id, expect.any(AbortSignal));
+
+        fireEvent.keyDown(document, {key: 'Escape'});
+        await waitFor(() => expect(otherCalls()).toHaveLength(2));
+        const resumedSignal = otherCalls()[1][1];
+        hidden.mockReturnValue(true);
+        fireEvent(document, new Event('visibilitychange'));
+        expect(resumedSignal.aborted).toBe(true);
+        const nodeCalls = jest.mocked(ComputeClusterService.nodes).mock.calls.length;
+        await act(async () => { jest.advanceTimersByTime(30000); });
+        expect(otherCalls()).toHaveLength(2);
+        expect(ComputeClusterService.nodes).toHaveBeenCalledTimes(nodeCalls);
+
+        hidden.mockReturnValue(false);
+        fireEvent(document, new Event('visibilitychange'));
+        await waitFor(() => expect(otherCalls()).toHaveLength(3));
+        expect(otherCalls()[2][1].aborted).toBe(false);
     });
 
     it('uses the worst state when one explicit control path fails', async () => {
@@ -1238,16 +1277,40 @@ describe('ControlCenterView', () => {
     });
 
     it('uses the reported system icon and reserves the device image for Jetson', async () => {
+        const jetsonTelemetry = node('Integrated GPU', true, false, 'NVIDIA Jetson AGX Orin', 'linux');
+        jetsonTelemetry.resources.gpus = [{
+            index: 0,
+            uuid: 'JETSON-INTEGRATED-GPU-0',
+            name: 'NVIDIA Jetson AGX Orin Integrated GPU',
+            memory_total_mb: 0,
+            memory_used_mb: 0,
+            utilization_percent: 37,
+            temperature_celsius: 44,
+        }];
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
             node('Jetson', true, false, 'NVIDIA Jetson AGX Orin', 'linux'),
+            jetsonTelemetry,
             node('Windows', true, false, null, 'windows'),
             node('Linux', true, false, null, 'linux'),
             node('Mac', true, false, null, 'darwin'),
         ]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await selectMachine('Jetson');
-        expect(screen.getByRole('img', {name: 'Jetson'})).toHaveAttribute('src', '/ico/jetson-agx-orin.png');
+        const machineList = screen.getByRole('complementary', {name: '机器列表'});
+        const jetsonButton = (await within(machineList).findByText('Jetson')).closest('button') as HTMLElement;
+        fireEvent.click(jetsonButton);
+        await screen.findByRole('heading', {name: 'Jetson'});
+        expect(within(jetsonButton).getByRole('img', {name: 'Jetson'}))
+            .toHaveAttribute('src', '/ico/jetson-agx-orin.png');
+        fireEvent.click(screen.getByRole('button', {name: '打开资源监视器'}));
+        const missingMonitor = screen.getByRole('dialog', {name: 'Jetson 资源监视器'});
+        expect(missingMonitor).toHaveTextContent('Jetson GPU 指标未上报');
+        fireEvent.mouseDown(missingMonitor.closest('.ControlResourceMonitorBackdrop') as HTMLElement);
+        fireEvent.click((await within(machineList).findByText('Integrated GPU')).closest('button') as HTMLElement);
+        await screen.findByRole('heading', {name: 'Integrated GPU'});
+        fireEvent.click(screen.getByRole('button', {name: '打开资源监视器'}));
+        expect(screen.getByRole('dialog', {name: 'Integrated GPU 资源监视器'}))
+            .toHaveTextContent('显存 共享系统内存');
         expect(screen.getByRole('img', {name: 'Windows'}).querySelector('image')).toHaveAttribute('href', '/ico/system-windows.svg');
         expect(screen.getByRole('img', {name: 'Linux'}).querySelector('image')).toHaveAttribute('href', '/ico/system-linux.svg');
         expect(screen.getByRole('img', {name: 'macOS'}).querySelector('image')).toHaveAttribute('href', '/ico/system-macos.svg');

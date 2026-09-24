@@ -300,6 +300,53 @@ export type ComputeProgramSnapshot = {
     }[];
 };
 
+export type ComputeProgramOverflowStatistics = {
+    schema_version: 'runtime.program-overflow-statistics.v1';
+    captured_at: number;
+    program_id: string;
+    date: string;
+    timezone_offset_minutes: number;
+    total_frames: number;
+    overflow_frames: number;
+    episodes: {
+        small: number;
+        medium: number;
+        large: number;
+        unknown: number;
+    };
+    hourly: number[];
+    latest_overflow_at: number | null;
+    heats: {
+        heat_id: string;
+        sequence: number;
+        label: string;
+        start_at: number;
+        end_at: number;
+        duration_seconds: number;
+        overflow_events: number;
+        levels: {
+            small: number;
+            medium: number;
+            large: number;
+            unknown: number;
+        };
+        total_overflow_duration_seconds: number;
+        max_event_duration_seconds: number;
+        avg_overflow_intensity: number;
+        max_overflow_intensity: number;
+        camera_drops: number;
+        result_folder: string;
+        events: {
+            start_at: number;
+            end_at: number;
+            duration_seconds: number;
+            level: 'small' | 'medium' | 'large' | 'unknown';
+            max_intensity: number;
+            overflow_ratio: number;
+        }[];
+    }[];
+};
+
 export type ComputeStartupItem = {
     item_id: string;
     name: string;
@@ -1417,6 +1464,21 @@ export class ComputeClusterService {
 
     public static programs(nodeId: string, signal?: AbortSignal): Promise<ComputeProgramSnapshot> {
         return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/programs`, signal);
+    }
+
+    public static programOverflowStatistics(
+        nodeId: string,
+        programId: string,
+        date: string,
+        timezoneOffsetMinutes: number,
+        signal?: AbortSignal,
+    ): Promise<ComputeProgramOverflowStatistics> {
+        return request(
+            `/nodes/${encodeURIComponent(nodeId)}/runtime/programs/${encodeURIComponent(programId)}`
+            + `/overflow-statistics?date=${encodeURIComponent(date)}`
+            + `&timezone_offset_minutes=${timezoneOffsetMinutes}`,
+            signal,
+        );
     }
 
     public static programInterfaceUrl(

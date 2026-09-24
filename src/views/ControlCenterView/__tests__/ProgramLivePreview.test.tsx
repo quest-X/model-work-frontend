@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import Hls from 'hls.js';
 import {ProgramLivePreview} from '../ProgramLivePreview';
 
@@ -20,7 +20,12 @@ jest.mock('../../EditorView/CameraTimeline/CameraTimeline', () => ({
 
 const originalFetch = global.fetch;
 
+beforeEach(() => {
+    jest.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
+});
+
 afterEach(() => {
+    jest.useRealTimers();
     global.fetch = originalFetch;
     jest.restoreAllMocks();
     jest.clearAllMocks();
@@ -34,7 +39,6 @@ it('switches actual HLS modes, releases readers, and never labels external playb
             protocols: ['mjpeg', 'hls', 'llhls', 'webrtc', 'rtsp', 'srt'],
         }),
     });
-    jest.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
     const close = jest.fn();
     window.MediaMTXWebRTCReader = jest.fn(() => ({close}));
     const {container, unmount} = render(<ProgramLivePreview
@@ -79,4 +83,170 @@ it('preserves MJPEG when a node has no media trial', async () => {
     expect(screen.getByText('连接失败')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', {name: '重试'}));
     expect(screen.getByText('连接中')).toBeTruthy();
+});
+
+it.each(['重新连接', '重试'])('retries a failed protocol directory using %s', async button => {
+    global.fetch = jest.fn()
+        .mockResolvedValueOnce({ok: false, status: 503})
+        .mockResolvedValue({
+            ok: true, json: async () => ({
+                schema_version: 'program.media.trial.v1', protocols: ['mjpeg', 'llhls'],
+            }),
+        });
+    render(<ProgramLivePreview nodeId='node03' programId='dlk' name='DLK' path='/stream.mjpeg' zh/>);
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('combobox')).toBeNull();
+    const image = screen.getByRole('img');
+    const originalSource = image.getAttribute('src');
+    if (button === '重试') fireEvent.error(image);
+    fireEvent.click(screen.getByRole('button', {name: button}));
+    fireEvent.change(await screen.findByRole('combobox'), {target: {value: 'llhls'}});
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(image.hasAttribute('src')).toBe(false);
+    expect(originalSource).toContain('&v=0');
+    expect(Hls).toHaveBeenLastCalledWith({lowLatencyMode: true});
+});
+
+it.each(['reconnect', 'unmount'])('ignores an old protocol directory after %s', async action => {
+    let resolveDirectory: (value: unknown) => void;
+    const directory = new Promise(resolve => { resolveDirectory = resolve; });
+    const json = jest.fn(() => directory);
+    const readOldProtocols = jest.fn(() => ['mjpeg', 'srt']);
+    const fetchDirectory = jest.fn()
+        .mockResolvedValueOnce({ok: true, json})
+        .mockResolvedValue({
+            ok: true, json: async () => ({
+                schema_version: 'program.media.trial.v1', protocols: ['mjpeg', 'llhls'],
+            }),
+        });
+    global.fetch = fetchDirectory;
+    const {unmount} = render(<ProgramLivePreview
+        nodeId='node03' programId='dlk' name='DLK' path='/stream.mjpeg' zh
+    />);
+    await waitFor(() => expect(json).toHaveBeenCalledTimes(1));
+    const signal = fetchDirectory.mock.calls[0][1].signal as AbortSignal;
+    if (action === 'reconnect') {
+        fireEvent.click(screen.getByRole('button', {name: '重新连接'}));
+        await screen.findByRole('option', {name: 'LL-HLS'});
+    } else {
+        unmount();
+    }
+    expect(signal.aborted).toBe(true);
+    await act(async () => {
+        resolveDirectory({
+            schema_version: 'program.media.trial.v1',
+            get protocols() { return readOldProtocols(); },
+        });
+        await directory;
+    });
+    expect(readOldProtocols).not.toHaveBeenCalled();
+    if (action === 'reconnect') {
+        expect(screen.queryByRole('option', {name: 'SRT'})).toBeNull();
+        expect(screen.getByRole('option', {name: 'LL-HLS'})).toBeTruthy();
+        unmount();
+        expect(fetchDirectory.mock.calls[1][1].signal.aborted).toBe(true);
+    }
+});
+
+it.each(['mjpeg', 'hls', 'llhls', 'webrtc'])('releases hidden %s previews and reconnects on return', async protocol => {
+    const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    global.fetch = jest.fn().mockResolvedValue({
+        ok: true, json: async () => ({
+            schema_version: 'program.media.trial.v1', protocols: ['mjpeg', 'hls', 'llhls', 'webrtc'],
+        }),
+    });
+    const close = jest.fn();
+    window.MediaMTXWebRTCReader = jest.fn(() => ({close}));
+    const {container, unmount} = render(<ProgramLivePreview
+        nodeId='node04' programId='dlk-overflow' name='DLK' path='/stream.mjpeg' zh
+    />);
+    const select = await screen.findByRole('combobox');
+    const image = screen.getByRole('img');
+    fireEvent.change(select, {target: {value: protocol}});
+    if (protocol !== 'mjpeg') expect(image.hasAttribute('src')).toBe(false);
+    const hls = (Hls as unknown as jest.Mock).mock.results.at(-1)?.value;
+    const instances = (Hls as unknown as jest.Mock).mock.calls.length;
+    hidden.mockReturnValue(true);
+    fireEvent(document, new Event('visibilitychange'));
+    expect(container.querySelector('img, video')).toBeNull();
+    expect(image.hasAttribute('src')).toBe(false);
+    if (hls) expect(hls.destroy).toHaveBeenCalled();
+    if (protocol === 'webrtc') expect(close).toHaveBeenCalledTimes(1);
+    hidden.mockReturnValue(false);
+    fireEvent(document, new Event('visibilitychange'));
+    expect(container.querySelector(protocol === 'mjpeg' ? 'img' : 'video')).not.toBeNull();
+    expect(screen.getByText('连接中')).toBeTruthy();
+    if (hls) expect(Hls).toHaveBeenCalledTimes(instances + 1);
+    if (protocol === 'webrtc') expect(window.MediaMTXWebRTCReader).toHaveBeenCalledTimes(2);
+    const resumedImage = container.querySelector('img');
+    unmount();
+    if (resumedImage) expect(resumedImage.hasAttribute('src')).toBe(false);
+});
+
+it('does not open a media connection when initially hidden', () => {
+    jest.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    global.fetch = jest.fn().mockResolvedValue({ok: false});
+    const {container} = render(<ProgramLivePreview
+        nodeId='node04' programId='dlk-overflow' name='DLK' path='/stream.mjpeg' zh
+    />);
+    expect(container.querySelector('img, video')).toBeNull();
+    expect(Hls).not.toHaveBeenCalled();
+});
+
+it('restores the MJPEG source on effect replay and language changes', () => {
+    global.fetch = jest.fn().mockResolvedValue({ok: false});
+    const preview = (zh: boolean) => <React.StrictMode><ProgramLivePreview
+        nodeId='node04' programId='dlk-overflow' name='DLK' path='/stream.mjpeg' zh={zh}
+    /></React.StrictMode>;
+    const {rerender, unmount} = render(preview(true));
+    expect(screen.getByRole('img').getAttribute('src')).toContain('path=%2Fstream.mjpeg');
+    rerender(preview(false));
+    const image = screen.getByRole('img');
+    expect(image.getAttribute('src')).toContain('path=%2Fstream.mjpeg');
+    unmount();
+    expect(image.hasAttribute('src')).toBe(false);
+});
+
+it('allows a slow LL-HLS first frame, then detects an established stream stall', async () => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn().mockResolvedValue({
+        ok: true, json: async () => ({
+            schema_version: 'program.media.trial.v1', protocols: ['mjpeg', 'llhls'],
+        }),
+    });
+    const {container} = render(<ProgramLivePreview
+        nodeId='node04' programId='dlk-overflow' name='DLK' path='/stream.mjpeg' zh
+    />);
+    fireEvent.change(await screen.findByRole('combobox'), {target: {value: 'llhls'}});
+    const hls = (Hls as unknown as jest.Mock).mock.results[0].value;
+    let frames = 0;
+    Object.defineProperty(container.querySelector('video'), 'getVideoPlaybackQuality', {
+        value: () => ({totalVideoFrames: frames}),
+    });
+    act(() => { jest.advanceTimersByTime(25000); });
+    expect(screen.getByText('连接中')).toBeTruthy();
+    expect(screen.queryByText('LIVE')).toBeNull();
+    frames = 1;
+    act(() => { jest.advanceTimersByTime(1000); });
+    expect(screen.getByText('LIVE')).toBeTruthy();
+    act(() => { jest.advanceTimersByTime(21000); });
+    expect(screen.getByText('20 秒内未收到新视频帧')).toBeTruthy();
+    expect(hls.destroy).toHaveBeenCalledTimes(1);
+});
+
+it('bounds LL-HLS first-frame loading at 30 seconds', async () => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn().mockResolvedValue({
+        ok: true, json: async () => ({
+            schema_version: 'program.media.trial.v1', protocols: ['mjpeg', 'llhls'],
+        }),
+    });
+    render(<ProgramLivePreview nodeId='node04' programId='dlk' name='DLK' path='/stream.mjpeg' zh/>);
+    fireEvent.change(await screen.findByRole('combobox'), {target: {value: 'llhls'}});
+    const hls = (Hls as unknown as jest.Mock).mock.results[0].value;
+    act(() => { jest.advanceTimersByTime(30000); });
+    expect(screen.getByText('连接中')).toBeTruthy();
+    act(() => { jest.advanceTimersByTime(1000); });
+    expect(screen.getByText('实时画面首帧加载超时')).toBeTruthy();
+    expect(hls.destroy).toHaveBeenCalledTimes(1);
 });

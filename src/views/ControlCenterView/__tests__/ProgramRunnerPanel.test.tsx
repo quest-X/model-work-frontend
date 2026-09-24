@@ -4,6 +4,7 @@ import {
     ComputeClusterNode,
     ComputeClusterService,
 } from '../../../services/ComputeClusterService';
+import {MachineHistoryService} from '../../../services/MachineHistoryService';
 import {ProgramRunnerPanel} from '../ProgramRunnerPanel';
 
 const node: ComputeClusterNode = {
@@ -11,7 +12,12 @@ const node: ComputeClusterNode = {
     installation_id: 'aipack-13-installation',
     name: 'AIPACK-13',
     agent_version: '1.1.2',
-    capabilities: ['runtime.read.v1', 'runtime.inventory.v1', 'runtime.programs.read.v1'],
+    capabilities: [
+        'runtime.read.v1',
+        'runtime.inventory.v1',
+        'runtime.programs.read.v1',
+        'machine.history.read.v1',
+    ],
     control_transport: 'lan',
     network: {
         provider: 'tailscale',
@@ -252,6 +258,14 @@ describe('ProgramRunnerPanel', () => {
                     content_type: 'application/x-ndjson',
                     size_bytes: 128,
                     modified_at: today - 3,
+                }, {
+                    artifact_id: 'e'.repeat(32),
+                    name: 'session.jsonl',
+                    relative_path: 'runs/20260918/017/internal/session.jsonl',
+                    kind: 'data',
+                    content_type: 'application/x-ndjson',
+                    size_bytes: 64,
+                    modified_at: today - 4,
                 }],
             }],
         });
@@ -269,6 +283,79 @@ describe('ProgramRunnerPanel', () => {
                 message: 'Task execution started',
                 task_id: '00000000-0000-4000-8000-000000000007',
             }],
+        });
+        const statistics = jest.spyOn(ComputeClusterService, 'programOverflowStatistics').mockResolvedValue({
+            schema_version: 'runtime.program-overflow-statistics.v1',
+            captured_at: today,
+            program_id: 'vision-ocr',
+            date: todayValue,
+            timezone_offset_minutes: -new Date().getTimezoneOffset(),
+            total_frames: 100,
+            overflow_frames: 12,
+            episodes: {small: 1, medium: 2, large: 1, unknown: 0},
+            hourly: [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            latest_overflow_at: today,
+            heats: [{
+                heat_id: '026_1559_1604_5m07s',
+                sequence: 26,
+                label: '倾炉',
+                start_at: today - 307,
+                end_at: today,
+                duration_seconds: 307,
+                overflow_events: 2,
+                levels: {small: 1, medium: 0, large: 1, unknown: 0},
+                total_overflow_duration_seconds: 3.5,
+                max_event_duration_seconds: 2.5,
+                avg_overflow_intensity: 1.2,
+                max_overflow_intensity: 2.4,
+                camera_drops: 0,
+                result_folder: 'runs/20260922/026_1559_1604_5m07s',
+                events: [{
+                    start_at: today - 100,
+                    end_at: today - 99,
+                    duration_seconds: 1,
+                    level: 'small',
+                    max_intensity: 0.4,
+                    overflow_ratio: 1,
+                }, {
+                    start_at: today - 50,
+                    end_at: today - 47.5,
+                    duration_seconds: 2.5,
+                    level: 'large',
+                    max_intensity: 2.4,
+                    overflow_ratio: 1,
+                }],
+            }],
+        });
+        jest.spyOn(MachineHistoryService, 'status').mockResolvedValue({
+            schema_version: 'machine-history.status.v1',
+            encrypted: true,
+            objects: 2,
+            versions: 4,
+            plaintext_bytes: 2048,
+        });
+        jest.spyOn(MachineHistoryService, 'objects').mockResolvedValue({
+            schema_version: 'machine-history.list.v1',
+            objects: [{
+                namespace: 'program-overflow',
+                object_key: `vision-ocr:${todayValue}:480`,
+                version: 2,
+                created_at: today,
+                captured_at: today,
+                digest: 'a'.repeat(64),
+                size_bytes: 1024,
+            }],
+        });
+        jest.spyOn(MachineHistoryService, 'object').mockResolvedValue({
+            schema_version: 'machine-history.object.v1',
+            namespace: 'program-overflow',
+            object_key: `vision-ocr:${todayValue}:480`,
+            version: 2,
+            created_at: today,
+            captured_at: today,
+            digest: 'a'.repeat(64),
+            size_bytes: 1024,
+            payload: {date: todayValue, overflow_frames: 12},
         });
         const toggleMaximized = jest.fn();
 
@@ -314,7 +401,7 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(dialog).getByRole('button', {name: '接口'}));
         const endpoints = await within(dialog).findByLabelText('程序接口');
         expect(within(endpoints).getAllByRole('columnheader').map(header => header.textContent))
-            .toEqual(['提交方式', '完整地址', '用途', '状态', '最近检查']);
+            .toEqual(['提交方式', '原始地址', '用途', '状态', '最近检查']);
         expect(endpoints).toHaveTextContent('5 个接口');
         expect(endpoints).toHaveTextContent('GET');
         expect(endpoints).toHaveTextContent('健康检查');
@@ -329,19 +416,14 @@ describe('ProgramRunnerPanel', () => {
             'vision-ocr',
             '/health',
         );
-        const displayUrl = ComputeClusterService.programInterfaceUrl(
-            node.node_id,
-            'vision-ocr',
-            '/display',
-        );
-        expect(endpoints).toHaveTextContent(displayUrl);
-        expect(within(endpoints).getByRole('link', {name: healthUrl})).toHaveAttribute(
+        expect(endpoints).toHaveTextContent('/display');
+        expect(within(endpoints).getByRole('link', {name: '/health'})).toHaveAttribute(
             'href',
             healthUrl,
         );
-        expect(within(endpoints).getByRole('link', {name: healthUrl}))
+        expect(within(endpoints).getByRole('link', {name: '/health'}))
             .toHaveAttribute('target', '_blank');
-        expect(within(endpoints).queryByRole('link', {name: displayUrl}))
+        expect(within(endpoints).queryByRole('link', {name: '/display'}))
             .not.toBeInTheDocument();
         expect(endpoints).not.toHaveTextContent('节点服务');
         expect(endpoints).not.toHaveTextContent('任务执行器');
@@ -350,6 +432,13 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
         expect(within(dialog).getByLabelText('筛选结果日期')).toHaveValue(todayValue);
         const artifacts = await within(dialog).findByLabelText('程序结果');
+        const resultFolder = within(artifacts).getByLabelText('结果文件夹 017');
+        expect(resultFolder.parentElement).toHaveAttribute('open');
+        expect(resultFolder.parentElement).toHaveTextContent('5 个文件');
+        fireEvent.click(resultFolder);
+        expect(resultFolder.parentElement).not.toHaveAttribute('open');
+        fireEvent.click(resultFolder);
+        expect(resultFolder.parentElement).toHaveAttribute('open');
         expect(artifacts).toHaveTextContent('017.mp4');
         expect(within(dialog).getByRole('status', {name: '在线 · 结果预览期间暂停状态刷新'}))
             .toBeInTheDocument();
@@ -436,6 +525,49 @@ describe('ProgramRunnerPanel', () => {
         expect(logs).toHaveTextContent('Vision OCR');
         const logFilter = within(logs).getByRole('combobox', {name: '筛选日志程序'});
         expect(within(logFilter).queryByRole('option', {name: '电文'})).not.toBeInTheDocument();
+
+        fireEvent.click(within(dialog).getByRole('button', {name: '统计'}));
+        const statisticsView = await within(dialog).findByLabelText('大炉口溢渣统计');
+        expect(await within(statisticsView).findAllByText('溢渣次数')).toHaveLength(2);
+        expect(within(statisticsView).queryByLabelText('统计日历')).not.toBeInTheDocument();
+        fireEvent.click(within(statisticsView).getByRole('button', {
+            name: `选择统计日期 ${todayValue}`,
+        }));
+        const calendar = await within(statisticsView).findByLabelText('统计日历');
+        const selectedDate = await within(calendar).findByRole('button', {
+            name: new RegExp(`统计日期 ${todayValue}，4 次溢渣`),
+        });
+        expect(selectedDate).toHaveAttribute('aria-pressed', 'true');
+        expect(within(calendar).getByRole('button', {name: '下个月'})).toBeDisabled();
+        fireEvent.click(selectedDate);
+        expect(within(statisticsView).queryByLabelText('统计日历')).not.toBeInTheDocument();
+        expect(statisticsView).toHaveTextContent('小溢渣1');
+        expect(statisticsView).toHaveTextContent('中溢渣2');
+        expect(statisticsView).toHaveTextContent('大溢渣1');
+        expect(statisticsView).toHaveTextContent('12 / 100 · 12.0%');
+        expect(within(statisticsView).getByLabelText('炉次列表')).toHaveTextContent('第 026 次');
+        const heatReport = within(statisticsView).getByLabelText('炉次详细报告');
+        expect(heatReport).toHaveTextContent('溢渣次数2');
+        expect(heatReport).toHaveTextContent('小溢渣');
+        expect(heatReport).toHaveTextContent('大溢渣');
+        expect(heatReport).toHaveTextContent('最大强度2.400');
+        expect(statistics).toHaveBeenCalledWith(
+            node.node_id,
+            'vision-ocr',
+            todayValue,
+            -new Date().getTimezoneOffset(),
+            expect.any(AbortSignal),
+        );
+
+        fireEvent.click(within(dialog).getByRole('button', {name: '历史'}));
+        const history = await within(dialog).findByLabelText('机器历史');
+        expect(await within(history).findByText('已加密')).toBeInTheDocument();
+        expect(history).toHaveTextContent('vision-ocr');
+        expect(history).toHaveTextContent('"overflow_frames": 12');
+        expect(MachineHistoryService.status).toHaveBeenCalledWith(
+            node.node_id,
+            expect.any(AbortSignal),
+        );
 
         fireEvent.click(within(dialog).getByRole('button', {name: '放大程序运行器窗口'}));
         expect(toggleMaximized).toHaveBeenCalledTimes(1);
