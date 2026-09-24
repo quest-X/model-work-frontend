@@ -14,6 +14,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.3',
+        date: '2026-09-24',
+        changes: [
+            { zh: '【编辑器】拆分文件导入、视口与推理阶段，降低编辑器主流程耦合', en: '[Editor] Split file import, viewport, and inference phases to reduce coupling in the main editor flow' },
+            { zh: '【视频】完善帧捕获、缓存、重试、取消与批量推理状态处理', en: '[Video] Improved frame capture, caching, retries, cancellation, and batch inference state handling' },
+            { zh: '【导入】修复 COCO、VGG、VOC、LabelMe 等格式的失败处理与完整标注恢复', en: '[Import] Fixed failure handling and complete annotation restoration for COCO, VGG, VOC, and LabelMe formats' },
+            { zh: '【可靠性】加强自动保存、历史状态、IndexedDB 与项目恢复耐久性', en: '[Reliability] Hardened autosave, history state, IndexedDB, and project restoration durability' },
+        ],
+    },
+    {
         version: '2.9.2',
         date: '2026-09-24',
         changes: [
