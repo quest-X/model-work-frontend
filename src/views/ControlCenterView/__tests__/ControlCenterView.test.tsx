@@ -151,6 +151,12 @@ const graph = (clusterNode: ComputeClusterNode): ComputeResourceGraph => ({
     }],
 });
 
+const selectMachine = async (name: string): Promise<HTMLElement> => {
+    const machines = screen.getByRole('complementary', {name: '机器列表'});
+    fireEvent.click(await within(machines).findByRole('button', {name: new RegExp(name)}));
+    return screen.findByRole('heading', {name});
+};
+
 describe('ControlCenterView', () => {
     beforeEach(() => {
         jest.spyOn(ComputeClusterService, 'groups').mockResolvedValue({
@@ -254,7 +260,7 @@ describe('ControlCenterView', () => {
         ]);
         const {container, rerender} = render(<ControlCenterView language={Language.CHINESE}/>);
 
-        expect(await screen.findByRole('heading', {name: '在线节点'})).toBeInTheDocument();
+        expect(await selectMachine('在线节点')).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '基础信息'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '网络情况'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '资源监控'})).toBeInTheDocument();
@@ -352,7 +358,7 @@ describe('ControlCenterView', () => {
         ]);
         const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
 
-        expect(await screen.findByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
+        expect(await selectMachine('AIPACK-05')).toBeInTheDocument();
         expect(screen.queryByText('边缘计算设备')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', {name: '发现并添加局域网边缘计算设备'}))
             .not.toBeInTheDocument();
@@ -412,6 +418,7 @@ describe('ControlCenterView', () => {
         });
         const {rerender} = render(<ControlCenterView language={Language.CHINESE}/>);
 
+        await selectMachine('局域网节点');
         const lan = await screen.findByRole('button', {name: /SSH 局域网/});
         expect(within(lan).queryByText('IPv4: 192.168.10.166')).not.toBeInTheDocument();
         expect(lan.nextElementSibling).toHaveTextContent('IPv4: 192.168.10.166');
@@ -447,6 +454,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
+        await selectMachine('旧节点');
         const information = await screen.findByLabelText('设备信息');
         expect(within(information).getByText('—')).toBeInTheDocument();
         expect(within(information).queryByText('unknown')).not.toBeInTheDocument();
@@ -475,6 +483,7 @@ describe('ControlCenterView', () => {
         await waitFor(() => expect(machineState()).toHaveTextContent('故障'));
         expect(machineState()).toHaveClass('warning');
 
+        await selectMachine('异常节点');
         fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
         await waitFor(() => expect(nodes).toHaveBeenCalledTimes(2));
         await waitFor(() => expect(machineState()).toHaveTextContent('正常'));
@@ -626,6 +635,7 @@ describe('ControlCenterView', () => {
         });
         render(<ControlCenterView language={Language.CHINESE}/>);
 
+        await selectMachine('节点甲');
         await screen.findByRole('button', {name: '打开资源监视器'});
         expect(await screen.findByText('处理器 · 内存 · 显卡 · 磁盘 · 网络')).toBeInTheDocument();
         expect(screen.getByText(/^最后检查 /)).toBeInTheDocument();
@@ -761,6 +771,7 @@ describe('ControlCenterView', () => {
         jest.mocked(ComputeClusterService.runtime).mockRejectedValue(new Error('HTTP 503'));
         render(<ControlCenterView language={Language.CHINESE}/>);
 
+        await selectMachine('故障节点');
         expect(await screen.findByText('资源监视器')).toBeInTheDocument();
         expect(screen.queryByText('运行详情暂不可用')).not.toBeInTheDocument();
         expect(screen.queryByLabelText('最近异常')).not.toBeInTheDocument();
@@ -779,7 +790,7 @@ describe('ControlCenterView', () => {
         ]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        expect(await screen.findByRole('heading', {name: '旧节点'})).toBeInTheDocument();
+        expect(await selectMachine('旧节点')).toBeInTheDocument();
         expect(ComputeClusterService.runtime).not.toHaveBeenCalled();
         expect(ComputeClusterService.runtimeEvents).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', {name: /离线节点/}));
@@ -814,7 +825,7 @@ describe('ControlCenterView', () => {
             .mockRejectedValueOnce(new Error('HTTP 500'));
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        expect(await screen.findByRole('heading', {name: '在线节点'})).toBeInTheDocument();
+        expect(await selectMachine('在线节点')).toBeInTheDocument();
         expect(screen.queryByText('运行详情暂不可用')).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
         await waitFor(() => expect(nodes).toHaveBeenCalledTimes(2));
@@ -831,7 +842,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([node('在线节点', true)]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        expect(await screen.findByRole('heading', {name: '在线节点'})).toBeInTheDocument();
+        expect(await selectMachine('在线节点')).toBeInTheDocument();
         expect(screen.queryByRole('button', {name: '在侧边栏询问 Agent'})).not.toBeInTheDocument();
     });
 
@@ -850,7 +861,7 @@ describe('ControlCenterView', () => {
         window.localStorage.setItem('opensight.control-center.node-tags.在线节点-id', '["上海市"]');
         let view = render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '在线节点'});
+        await selectMachine('在线节点');
         const tags = screen.getByLabelText('节点标签');
         expect(within(tags).getByText('地域 (上海市)')).toBeInTheDocument();
         expect(within(tags).getByText('作业区(办公室)')).toBeInTheDocument();
@@ -862,7 +873,7 @@ describe('ControlCenterView', () => {
         view.unmount();
         locatedNode.labels.site_name = '';
         view = render(<ControlCenterView language={Language.CHINESE}/>);
-        await screen.findByRole('heading', {name: '在线节点'});
+        await selectMachine('在线节点');
         fireEvent.change(screen.getByRole('textbox', {name: '自定义作业区'}), {
             target: {value: '上海-热轧作业区'},
         });
@@ -874,6 +885,7 @@ describe('ControlCenterView', () => {
 
         view.unmount();
         render(<ControlCenterView language={Language.CHINESE}/>);
+        await selectMachine('在线节点');
         expect(await screen.findByText('作业区(上海-热轧作业区)')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', {name: '清除作业区 上海-热轧作业区'}));
@@ -1061,7 +1073,7 @@ describe('ControlCenterView', () => {
         ]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: 'Jetson'});
+        await selectMachine('Jetson');
         expect(screen.getByRole('img', {name: 'Jetson'})).toHaveAttribute('src', '/ico/jetson-agx-orin.png');
         expect(screen.getByRole('img', {name: 'Windows'}).querySelector('image')).toHaveAttribute('href', '/ico/system-windows.svg');
         expect(screen.getByRole('img', {name: 'Linux'}).querySelector('image')).toHaveAttribute('href', '/ico/system-linux.svg');
@@ -1101,7 +1113,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(regionGraph);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: 'Charlie'});
+        await selectMachine('Charlie');
         const list = screen.getByRole('complementary', {name: '机器列表'});
         expect(within(screen.getByRole('combobox', {name: '节点状态'})).getAllByRole('option')
             .map(option => option.textContent)).toEqual(['所有状态', '仅正常', '仅故障', '仅异常']);
@@ -1186,7 +1198,7 @@ describe('ControlCenterView', () => {
         });
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '01 笔记本'});
+        await selectMachine('01 笔记本');
         const list = screen.getByRole('complementary', {name: '机器列表'});
         expect(Array.from(list.querySelectorAll('.ControlMachineItem strong')).map(item => item.textContent))
             .toEqual(['总览', '01 笔记本', '02 笔记本', 'AIPACK-13', 'yy-camera']);
@@ -1293,6 +1305,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
+        await selectMachine('在线节点');
         fireEvent.click(await screen.findByRole('button', {name: '打开车间相机实时画面'}));
 
         const dialog = await screen.findByRole('dialog', {name: '相机实时画面'});
@@ -1316,7 +1329,7 @@ describe('ControlCenterView', () => {
             .mockResolvedValue([cameraNode]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '在线节点'});
+        await selectMachine('在线节点');
         expect(screen.queryByText('车间相机')).not.toBeInTheDocument();
         fireEvent(window, new CustomEvent('opensight:camera-resource-updated'));
 
@@ -1331,6 +1344,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
+        await selectMachine('旧版本节点');
         const camera = await screen.findByRole('button', {name: '打开车间相机实时画面'});
         expect(camera).toBeDisabled();
         expect(camera).toHaveAttribute('title', '此相机不支持实时画面（需要 camera.stream.v1）');
@@ -1344,6 +1358,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
+        await selectMachine('在线节点');
         const camera = await screen.findByRole('button', {name: '打开车间相机实时画面'});
         expect(camera).toBeDisabled();
         fireEvent.click(camera);
@@ -1361,6 +1376,7 @@ describe('ControlCenterView', () => {
             updateActivePopupTypeAction={updateActivePopupTypeAction}
         />);
 
+        await selectMachine('远程节点');
         expect(await screen.findByLabelText('1 个相关设备')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '添加局域网摄像头'}));
 
@@ -1381,6 +1397,7 @@ describe('ControlCenterView', () => {
             updateActivePopupTypeAction={updateActivePopupTypeAction}
         />);
 
+        await selectMachine('旧节点');
         const button = await screen.findByRole('button', {name: '添加局域网摄像头'});
         expect(button).toBeDisabled();
         expect(button).toHaveAttribute('title', '此节点不支持连接相机（需要 task.camera.connect.v1）');
@@ -1400,6 +1417,7 @@ describe('ControlCenterView', () => {
                 updateActivePopupTypeAction={updateActivePopupTypeAction}
             />);
 
+            await selectMachine('兼容节点');
             const button = await screen.findByRole('button', {name: '发现并添加局域网摄像头'});
             expect(button).toBeEnabled();
             fireEvent.click(button);
@@ -1420,6 +1438,7 @@ describe('ControlCenterView', () => {
             updateActivePopupTypeAction={updateActivePopupTypeAction}
         />);
 
+        await selectMachine('离线节点');
         const button = await screen.findByRole('button', {name: '发现并添加局域网摄像头'});
         expect(button).toBeDisabled();
         expect(screen.queryByRole('button', {name: '添加局域网摄像头'})).not.toBeInTheDocument();
@@ -1495,7 +1514,7 @@ describe('ControlCenterView', () => {
 
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '山东节点'});
+        await selectMachine('山东节点');
         expect(screen.queryByText('jetson-orin')).not.toBeInTheDocument();
         fireEvent(window, new CustomEvent('opensight:edge-device-updated'));
         await waitFor(() => expect(lanAssets).toHaveBeenCalledTimes(2));
@@ -1548,7 +1567,7 @@ describe('ControlCenterView', () => {
         });
         const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '在线节点'});
+        await selectMachine('在线节点');
         fireEvent.click(screen.getByText('相关功能'));
         fireEvent.click(within(screen.getByLabelText('相关功能列表')).getByRole('button', {name: /终端连接/}));
 
@@ -1564,7 +1583,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '在线节点'});
+        await selectMachine('在线节点');
         fireEvent.click(screen.getByText('相关功能'));
         fireEvent.click(within(screen.getByLabelText('相关功能列表')).getByRole('button', {name: /实用工具/}));
 
@@ -1595,7 +1614,7 @@ describe('ControlCenterView', () => {
         });
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '在线节点'});
+        await selectMachine('在线节点');
         fireEvent.click(screen.getByText('相关功能'));
         const performanceMode = within(screen.getByLabelText('相关功能列表'))
             .getByRole('button', {name: /性能模式/});
@@ -1644,7 +1663,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'terminal').mockResolvedValue(terminalSession);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '在线节点'});
+        await selectMachine('在线节点');
         expect(screen.getByRole('button', {name: /SSH 局域网.*打开当前节点终端连接/})).toBeEnabled();
         fireEvent.click(screen.getByRole('button', {name: /Tailscale 远程.*打开当前节点终端连接/}));
 
@@ -1661,7 +1680,7 @@ describe('ControlCenterView', () => {
         ]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '在线节点'});
+        await selectMachine('在线节点');
         fireEvent.click(screen.getByText('相关功能'));
         fireEvent.click(screen.getByRole('button', {name: /网络资产/}));
 
@@ -1680,6 +1699,7 @@ describe('ControlCenterView', () => {
             updateActivePopupTypeAction={updateActivePopupTypeAction}
         />);
 
+        await selectMachine('远程节点');
         fireEvent.click(await screen.findByRole('button', {name: '发现并添加局域网边缘计算设备'}));
 
         expect(updateActivePopupTypeAction).toHaveBeenCalledWith(
@@ -1700,6 +1720,7 @@ describe('ControlCenterView', () => {
             updateActivePopupTypeAction={updateActivePopupTypeAction}
         />);
 
+        await selectMachine('扫描节点');
         const button = await screen.findByRole('button', {name: '发现并添加局域网边缘计算设备'});
         expect(button).toBeDisabled();
         expect(button).toHaveAttribute('title', '此节点不支持 SSH 设备认证');
@@ -1784,7 +1805,7 @@ describe('ControlCenterView', () => {
         jest.mocked(ComputeClusterService.groupResources).mockResolvedValue(fieldGroupResources);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '在线节点'});
+        await selectMachine('在线节点');
         fireEvent.click(screen.getByText('相关功能'));
         fireEvent.click(screen.getByRole('button', {name: /群查询/}));
 
@@ -1838,7 +1859,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(currentGraph);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '在线节点'});
+        await selectMachine('在线节点');
         fireEvent.click(screen.getByText('相关功能'));
         fireEvent.click(screen.getByRole('button', {name: /群查询/}));
 
@@ -1895,7 +1916,7 @@ describe('ControlCenterView', () => {
         });
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '在线节点'});
+        await selectMachine('在线节点');
         fireEvent.click(screen.getByText('相关功能'));
         fireEvent.click(screen.getByRole('button', {name: /群查询/}));
 
@@ -1956,7 +1977,7 @@ describe('ControlCenterView', () => {
         });
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: '在线节点'});
+        await selectMachine('在线节点');
         fireEvent.click(screen.getByText('相关功能'));
         fireEvent.click(screen.getByRole('button', {name: /群查询/}));
         const list = await screen.findByLabelText('当前群列表');

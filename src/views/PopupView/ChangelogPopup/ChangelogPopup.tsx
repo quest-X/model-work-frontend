@@ -14,6 +14,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.3',
+        date: '2026-09-24',
+        changes: [
+            { zh: '【设备】按作业区分组节点与摄像头，完善 AIPACK 设备层级和归属展示', en: '[Devices] Grouped nodes and cameras by work area with improved AIPACK hierarchy and ownership display' },
+            { zh: '【节点】新增紧凑节点详情、资源状态和相关设备入口', en: '[Nodes] Added compact node details, resource status, and related-device entry points' },
+            { zh: '【性能】支持查看节点性能模式，并对选定节点执行授权优化', en: '[Performance] Added node performance-mode inspection and authorized optimization for selected nodes' },
+            { zh: '【部署】新增固定提交、备份与部署锁保护的山钢前端交付脚本', en: '[Deployment] Added a Shandong frontend delivery script with pinned commits, backups, and deployment locking' },
+        ],
+    },
+    {
         version: '2.9.2',
         date: '2026-09-24',
         changes: [
