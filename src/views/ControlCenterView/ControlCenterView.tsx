@@ -1259,16 +1259,22 @@ export const ControlCenterView: React.FC<IProps> = ({
             || [device.display_name, device.hostname].some(name =>
                 name?.trim().toLowerCase() === candidate.name.trim().toLowerCase()))
     );
+    const activeNodeIds = new Set(nodes.map(node => node.node_id));
     const cameraParentAssetId = (node: ComputeClusterNode, camera: ComputeManagedDevice) =>
         lanAssets.find(asset =>
-            asset.node_id === node.node_id
-            && asset.device_kind === 'camera'
+            asset.device_kind === 'camera'
             && asset.display_name === camera.name
+            && (!camera.ip_address || asset.address === camera.ip_address)
+            && (asset.node_id === node.node_id || !activeNodeIds.has(asset.node_id))
         )?.parent_asset_id || '';
     const edgeCameras = (node: ComputeClusterNode, device: ComputeLanAsset) =>
         node.device_inventory.devices.filter(camera =>
             camera.kind === 'camera' && cameraParentAssetId(node, camera) === device.asset_id
         );
+    const edgeInventoryNode = (device: ComputeLanAsset) =>
+        nodes.find(candidate => candidate.node_id === device.node_id)
+        || nodes.find(candidate => edgeCameras(candidate, device).length > 0)
+        || installedSidebarNode(device);
     const installedSidebarNodeIds = new Set(lanAssets
         .map(device => installedSidebarNode(device)?.node_id)
         .filter((nodeId): nodeId is string => Boolean(nodeId)));
@@ -1474,8 +1480,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                 return devices.length > 0 && <React.Fragment key={area.id}>
                     {renderMachineGroupHeading(groupId, zh ? area.zh : area.en, devices.length)}
                     {!collapsedMachineGroups.has(groupId) && devices.map(device => {
-                        const node = nodes.find(item => item.node_id === device.node_id);
-                        return node && renderSidebarEdge(node, device, 0, installedSidebarNode(device));
+                        const installedNode = installedSidebarNode(device);
+                        const inventoryNode = edgeInventoryNode(device);
+                        return inventoryNode && renderSidebarEdge(inventoryNode, device, 0, installedNode);
                     })}
                 </React.Fragment>;
             })}
@@ -1702,7 +1709,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             )
             : undefined;
         const cameraInventoryNode = installedEdgeDevice
-            ? nodes.find(candidate => candidate.node_id === installedEdgeDevice.node_id) || node
+            ? edgeInventoryNode(installedEdgeDevice) || node
             : node;
         const cameras = installedEdgeDevice
             ? edgeCameras(cameraInventoryNode, installedEdgeDevice)

@@ -1487,7 +1487,7 @@ describe('ControlCenterView', () => {
     });
 
     it('moves installed AIPACK nodes into their work area without losing the node page', async () => {
-        const main = {...node('shangang-aipac-02', true, true), role: 'main' as const};
+        const main = {...node('baosight-01', true, true), role: 'main' as const};
         main.device_inventory.devices[0].capabilities = ['camera.stream.v1'];
         const aipack = {
             ...node('AIPACK-05', true, false, 'Jetson AGX Orin Developer Kit', 'Linux'),
@@ -1502,8 +1502,8 @@ describe('ControlCenterView', () => {
             latest_scans: [],
             assets: [{
                 asset_id: 'edge-05',
-                node_id: main.node_id,
-                node_name: main.name,
+                node_id: 'retired-scanner',
+                node_name: 'shangang-aipac-02',
                 cidr: '10.168.10.0/24',
                 address: '10.168.10.24',
                 hostname: 'aipack-05',
@@ -1520,8 +1520,8 @@ describe('ControlCenterView', () => {
                 change_type: 'unchanged',
             }, {
                 asset_id: 'camera-1',
-                node_id: main.node_id,
-                node_name: main.name,
+                node_id: 'retired-scanner',
+                node_name: 'shangang-aipac-02',
                 cidr: '10.168.10.0/24',
                 address: '10.168.10.30',
                 hostname: 'camera-1',
@@ -1564,10 +1564,10 @@ describe('ControlCenterView', () => {
             .toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByLabelText('1 个相关设备')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '打开车间相机实时画面'}));
-        expect(await screen.findByRole('dialog', {name: '相机实时画面'})).toHaveTextContent('shangang-aipac-02');
+        expect(await screen.findByRole('dialog', {name: '相机实时画面'})).toHaveTextContent('baosight-01');
         expect(screen.getByAltText('车间相机 实时画面')).toHaveAttribute(
             'src',
-            expect.stringContaining('/nodes/shangang-aipac-02-id/cameras/camera-1/mjpeg'),
+            expect.stringContaining('/nodes/baosight-01-id/cameras/camera-1/mjpeg'),
         );
     });
 
