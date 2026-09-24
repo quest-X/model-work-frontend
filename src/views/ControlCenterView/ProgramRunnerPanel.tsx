@@ -1498,7 +1498,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             {statisticsError
                                 ? unavailable(zh ? '每日统计暂不可用' : 'Daily statistics are unavailable', statisticsError)
                                 : statisticsLoading && !overflowStatistics
-                                    ? unavailable(zh ? '正在统计当日溢渣…' : 'Calculating daily overflow…')
+                                    ? unavailable(zh ? '正在读取缓存统计…' : 'Loading cached statistics…')
                                     : overflowStatistics
                                         ? <>
                                             <div className='ControlProgramStatisticCards'>
