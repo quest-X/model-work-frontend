@@ -37,6 +37,12 @@ import {DataBatchSyncService} from '../../../services/DataBatchSyncService';
 import {EditorViewportContent} from './EditorViewportContent';
 import {useDatasetDirtyTracking} from './useDatasetDirtyTracking';
 import {createDroppedMediaQueueItems, VideoImportProgress} from './EditorFileImport';
+import {version as appVersion} from '../../../../package.json';
+
+declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
+
+const appEdition = typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
+    && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ ? 'Commercial' : 'Main';
 
 interface IProps {
     windowSize: ISize;
@@ -349,7 +355,9 @@ const EditorContainer: React.FC<IProps> = (
                 isActive={leftTabStatus && showQueueList}
                 style={{top: '167px'}}
             />
-            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>v2.9.1</div>
+            <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>
+                v{appVersion} {appEdition}
+            </div>
             <div
                 className='SaveButtonBottom'
                 onClick={handleSave}
