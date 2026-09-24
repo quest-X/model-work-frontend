@@ -1820,6 +1820,12 @@ export class ComputeClusterService {
         return request('/terminal-targets', signal);
     }
 
+    public static openPlatform(nodeId: string): Promise<{url: string; expires_in: number}> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/platform`, undefined, {
+            method: 'POST',
+        });
+    }
+
     public static startTerminal(
         nodeId: string,
         transport?: 'lan' | 'tailscale',
