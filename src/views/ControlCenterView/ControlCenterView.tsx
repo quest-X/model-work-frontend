@@ -2040,7 +2040,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     isActive={sidePanel === 'features'}
                     style={{top: '167px'}}
                 />
-                <div className='VersionWatermark'>v2.9.4 Commercial</div>
+                <div className='VersionWatermark'>v2.9.5 Commercial</div>
             </>}
             renderContent={sidePanel === 'features' ? renderFeatureList : renderMachineList}
         />

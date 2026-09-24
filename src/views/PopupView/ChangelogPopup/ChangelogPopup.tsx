@@ -14,6 +14,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.5',
+        date: '2026-09-24',
+        changes: [
+            { zh: '【运维】恢复 Commercial 节点工具和 Agent 任务入口，支持从图谱进入程序运行器', en: '[Operations] Restored Commercial node tools and Agent tasks with runner access from the topology' },
+            { zh: '【Telegram】分类并筛选 Ixcom 消息，支持格式化视图与原始日志切换', en: '[Telegram] Classified and filtered Ixcom messages with formatted and raw log views' },
+            { zh: '【结果】为 GET 接口提供受控链接，离线时保留缓存并展示请求进度', en: '[Results] Added controlled links for GET APIs, retained offline cache, and displayed request progress' },
+            { zh: '【图谱】按主节点、AIPACK 和摄像头归属形成关系环，完整展示设备拓扑', en: '[Graph] Arranged ownership rings for main nodes, AIPACK devices, and cameras to show the full topology' },
+        ],
+    },
+    {
         version: '2.9.4',
         date: '2026-09-24',
         changes: [
