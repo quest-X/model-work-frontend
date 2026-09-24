@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {Language} from '../../../data/LanguageConfig';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {
@@ -7,6 +7,7 @@ import {
     ComputeClusterService,
     ComputeGroupDetail,
     ComputeGroupResources,
+    ComputeProgramSnapshot,
     ComputeResourceGraph,
 } from '../../../services/ComputeClusterService';
 import {AgentChatService} from '../../../services/AgentChatService';
@@ -100,7 +101,30 @@ const node = (
 
 const runtimeNode = (name: string, online = true): ComputeClusterNode => {
     const value = node(name, online);
-    return {...value, capabilities: [...value.capabilities, 'runtime.read.v1', 'runtime.inventory.v1']};
+    return {...value, capabilities: [
+        ...value.capabilities, 'runtime.read.v1', 'runtime.inventory.v1', 'runtime.programs.read.v1',
+    ]};
+};
+
+const mountedProgram: ComputeProgramSnapshot = {
+    schema_version: 'runtime.programs.v1',
+    captured_at: 1,
+    invalid_manifests: 0,
+    programs: [{
+        program_id: 'dlk',
+        name: '大炉口溢渣',
+        version: '1.0.0',
+        root: '/opt/dlk',
+        environment: '/opt/dlk/.venv',
+        mode: 'production',
+        encryption: 'encrypted',
+        state: 'healthy',
+        service: {name: 'dlk', state: 'running', pid: 123, uptime_seconds: 60},
+        health: {state: 'healthy', checked_at: 1, status_code: 200, latency_ms: 1},
+        interfaces: [],
+        events: [],
+        artifacts: [],
+    }],
 };
 
 const graph = (clusterNode: ComputeClusterNode): ComputeResourceGraph => ({
@@ -178,6 +202,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'runtime').mockImplementation(() => new Promise(() => undefined));
         jest.spyOn(ComputeClusterService, 'runtimeInventory').mockImplementation(() => new Promise(() => undefined));
         jest.spyOn(ComputeClusterService, 'runtimeEvents').mockImplementation(() => new Promise(() => undefined));
+        jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({...mountedProgram, programs: []});
         jest.spyOn(ComputeClusterService, 'lanAssets').mockResolvedValue({
             version: 1,
             group_id: 'group-1',
@@ -189,6 +214,7 @@ describe('ControlCenterView', () => {
 
     afterEach(() => {
         jest.restoreAllMocks();
+        jest.useRealTimers();
         Object.defineProperty(global, 'fetch', {configurable: true, writable: true, value: originalFetch});
         window.localStorage.clear();
     });
@@ -200,22 +226,101 @@ describe('ControlCenterView', () => {
 
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        expect(screen.getByText(`v${appVersion} Main`)).toBeInTheDocument();
+        expect(screen.getByText(`v${appVersion} Master`)).toBeInTheDocument();
         expect(screen.getByText('正在读取计算群 0%')).toBeInTheDocument();
         await waitFor(() => expect(screen.queryByText(/正在读取计算群/)).not.toBeInTheDocument());
         expect(screen.getByText('暂无机器')).toBeInTheDocument();
     });
 
-    it('opens the program runner from a main node page', async () => {
-        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([node('主线节点', true)]);
+    it.each([
+        ['healthy', '程序运行正常'],
+        ['degraded', '程序运行异常'],
+        ['unavailable', '程序已停止或不可用'],
+        ['unknown', '程序状态未知'],
+    ] as const)('opens the runner for a mounted program in state %s', async (state, label) => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([runtimeNode('主线节点')]);
+        jest.mocked(ComputeClusterService.programs).mockResolvedValue({
+            ...mountedProgram,
+            programs: [{...mountedProgram.programs[0], state}],
+        });
 
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         expect(await screen.findByRole('heading', {name: '主线节点'})).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', {name: '打开程序运行器'}));
+        const runner = await screen.findByRole('button', {name: '打开程序运行器'});
+        expect(runner).toHaveTextContent(label);
+        fireEvent.click(runner);
         expect(screen.getByRole('dialog', {name: '主线节点 程序运行器'})).toBeInTheDocument();
         fireEvent.keyDown(document, {key: 'Escape'});
         expect(screen.queryByRole('dialog', {name: '主线节点 程序运行器'})).not.toBeInTheDocument();
+    });
+
+    it.each(['empty', 'failed', 'unsupported'])('hides an unconfirmed runner when programs are %s', async condition => {
+        const machine = runtimeNode('无挂载节点');
+        if (condition === 'unsupported') machine.capabilities = ['runtime.read.v1'];
+        if (condition === 'failed') {
+            jest.mocked(ComputeClusterService.programs).mockRejectedValue(new Error('node unavailable'));
+        } else {
+            jest.mocked(ComputeClusterService.programs).mockResolvedValue({
+                ...mountedProgram, invalid_manifests: 1, programs: [],
+            });
+        }
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByRole('heading', {name: machine.name});
+        expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '打开资源监视器'})).toBeInTheDocument();
+        if (condition === 'unsupported') expect(ComputeClusterService.programs).not.toHaveBeenCalled();
+        else expect(ComputeClusterService.programs).toHaveBeenCalledWith(machine.node_id, expect.any(AbortSignal));
+    });
+
+    it('retains a confirmed mount on query failure and offline, but removes a confirmed empty mount', async () => {
+        jest.useFakeTimers();
+        const machine = runtimeNode('已挂载节点');
+        const nodes = jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        jest.mocked(ComputeClusterService.programs).mockResolvedValue(mountedProgram);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        expect(await screen.findByRole('button', {name: '打开程序运行器'})).toHaveTextContent('程序运行正常');
+
+        jest.mocked(ComputeClusterService.programs).mockRejectedValue(new Error('timeout'));
+        await act(async () => { jest.advanceTimersByTime(15000); });
+        expect(screen.getByRole('button', {name: '打开程序运行器'})).toHaveTextContent('程序状态未知');
+
+        nodes.mockResolvedValue([{...machine, online: false}]);
+        fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
+        await waitFor(() => expect(screen.getByRole('button', {name: '打开程序运行器'}))
+            .toHaveTextContent('程序已停止或不可用'));
+
+        nodes.mockResolvedValue([machine]);
+        fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
+        await waitFor(() => expect(screen.getByRole('button', {name: '打开程序运行器'}))
+            .toHaveTextContent('程序状态未知'));
+        jest.mocked(ComputeClusterService.programs).mockResolvedValue({...mountedProgram, programs: []});
+        await act(async () => { jest.advanceTimersByTime(15000); });
+        expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+    });
+
+    it('does not let a slow node or directory refresh block another mounted node', async () => {
+        const slow = runtimeNode('慢节点');
+        const ready = runtimeNode('快节点');
+        let resolveSlow: (value: ComputeProgramSnapshot) => void;
+        const pending = new Promise<ComputeProgramSnapshot>(resolve => { resolveSlow = resolve; });
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([slow, ready]);
+        jest.mocked(ComputeClusterService.programs).mockImplementation(id =>
+            id === slow.node_id ? pending : Promise.resolve(mountedProgram));
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await screen.findByRole('heading', {name: slow.name});
+        expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+        const slowSignal = jest.mocked(ComputeClusterService.programs).mock.calls[0][1];
+        fireEvent.click(screen.getByRole('button', {name: /快节点 活跃于/}));
+        expect(await screen.findByRole('button', {name: '打开程序运行器'})).toHaveTextContent('程序运行正常');
+        fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
+        await waitFor(() => expect(ComputeClusterService.nodes).toHaveBeenCalledTimes(2));
+        expect(slowSignal?.aborted).toBe(false);
+        await act(async () => { resolveSlow({...mountedProgram, programs: []}); });
+        fireEvent.click(screen.getByRole('button', {name: /慢节点 活跃于/}));
+        expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
     });
 
     it('cycles status regions from the highest node count', () => {
