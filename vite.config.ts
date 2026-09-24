@@ -67,6 +67,8 @@ export default ({ mode }: UserConfig): UserConfigExport => {
   } : serviceProxy;
   return defineConfig({
     base,
+    // Worktrees share node_modules, but must not overwrite each other's optimized deps.
+    cacheDir: '.vite',
     plugins: [react(), devRevisionPlugin],
     define: {
       __OPENSIGHT_HOST_SYSTEM__: JSON.stringify(
