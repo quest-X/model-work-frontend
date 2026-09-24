@@ -14,6 +14,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.7',
+        date: '2026-09-24',
+        changes: [
+            { zh: '【统计】新增每日溢出统计、时段分布、热度报告和月历视图', en: '[Statistics] Added daily overflow metrics, hourly distribution, heat reports, and a monthly calendar' },
+            { zh: '【历史】新增机器历史控制台，查看加密快照及其对象明细', en: '[History] Added a machine-history console for encrypted snapshots and object details' },
+            { zh: '【预览】改进隐藏流释放、首帧等待和目录重试，提升实时画面恢复能力', en: '[Preview] Improved hidden-stream cleanup, first-frame grace, and directory retries for live-preview recovery' },
+            { zh: '【界面】按实体状态着色图谱边框，明确 Jetson 显存信息，并自动显示 Commercial 版本标识', en: '[UI] Colored graph borders by entity state, clarified Jetson memory telemetry, and automated the Commercial version label' },
+        ],
+    },
+    {
         version: '2.9.6',
         date: '2026-09-24',
         changes: [
