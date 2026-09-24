@@ -293,6 +293,8 @@ describe('ControlCenterView', () => {
         expect(screen.getByText('Tailscale 远程')).toBeInTheDocument();
         const cameraCard = screen.getByText('DS-2CD2686FWDA2-IZS')
             .closest('.ControlCameraCard') as HTMLElement;
+        expect(cameraCard.querySelector('.ControlCameraIcon img'))
+            .toHaveAttribute('src', '/ico/camera.png');
         expect(within(cameraCard).getByText('正常')).toBeInTheDocument();
         expect(screen.queryByText('摄像头注册表')).not.toBeInTheDocument();
         expect(screen.queryByText('运行详情暂不可用')).not.toBeInTheDocument();
@@ -367,6 +369,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([remoteNode]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
+        fireEvent.click(await screen.findByRole('button', {name: /山东节点/}));
         const lan = await screen.findByRole('button', {name: /SSH 局域网/});
         const remote = screen.getByRole('button', {name: /Tailscale 远程/});
         expect(lan).toHaveTextContent('故障');
@@ -379,6 +382,8 @@ describe('ControlCenterView', () => {
         expect(machineState).toHaveClass('warning');
         expect(screen.getByRole('button', {name: /总览/}).querySelector('.ControlMachineState'))
             .toHaveClass('warning');
+        expect(within(screen.getByRole('button', {name: '打开资源监视器'})).getByText('正常'))
+            .toBeInTheDocument();
     });
 
     it('copies SSH commands from reported LAN and Tailscale addresses', async () => {
@@ -876,7 +881,7 @@ describe('ControlCenterView', () => {
         expect(window.localStorage.getItem('opensight.control-center.node-tags.在线节点-id')).toBe('[]');
     });
 
-    it('opens the pinned overview and switches map and graph views', async () => {
+    it('opens the graph overview by default and switches map and graph views', async () => {
         const districtFetch = jest.fn();
         Object.defineProperty(global, 'fetch', {configurable: true, writable: true, value: districtFetch});
         const onlineNode = node('在线节点', true);
@@ -937,13 +942,13 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(resourceGraph);
         const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
 
-        expect(await screen.findByRole('heading', {name: '在线节点'})).toBeInTheDocument();
+        expect(await screen.findByText('边缘集群图谱', {selector: 'strong'})).toBeInTheDocument();
         const machineList = screen.getByRole('complementary', {name: '机器列表'});
+        await within(machineList).findByText('上海市');
         expect(new Set(Array.from(machineList.querySelectorAll('.ControlMachineGroupHeading strong'))
             .map(item => item.textContent))).toEqual(new Set(['上海市', '山东省']));
-        const machine = screen.getByRole('button', {name: /在线节点/});
-        const overview = screen.getByRole('button', {name: /总览/});
-        fireEvent.click(overview);
+        const machine = within(machineList).getByRole('button', {name: /在线节点/});
+        const overview = within(machineList).getByRole('button', {name: /总览/});
 
         expect(machine).toHaveAttribute('aria-pressed', 'false');
         expect(overview).toHaveAttribute('aria-pressed', 'true');
@@ -1192,24 +1197,31 @@ describe('ControlCenterView', () => {
             .toHaveClass('tree-depth-0');
         const camera = within(list).getByRole('button', {name: '打开 yy-camera 实时画面'});
         expect(camera).toHaveClass('tree-depth-1');
+        expect(camera.querySelector('img')).toHaveAttribute('src', '/ico/camera.png');
 
         fireEvent.click(camera);
+        expect(camera).toHaveClass('selected');
+        expect(within(list).getByRole('button', {name: /02 笔记本/}))
+            .toHaveAttribute('aria-pressed', 'false');
+        expect(within(list).getByRole('button', {name: /02 笔记本/}))
+            .not.toHaveClass('selected');
         expect(await screen.findByRole('heading', {name: '02 笔记本'})).toBeInTheDocument();
         expect(await screen.findByRole('dialog', {name: '相机实时画面'})).toBeInTheDocument();
     });
 
     it('moves installed AIPACK nodes into their work area without losing the node page', async () => {
-        const main = {...node('shangang-aipac-02', true), role: 'main' as const};
+        const main = {...node('shangang-aipac-02', true, true), role: 'main' as const};
+        main.device_inventory.devices[0].capabilities = ['camera.stream.v1'];
         const aipack = {
             ...node('AIPACK-05', true, false, 'Jetson AGX Orin Developer Kit', 'Linux'),
             role: 'node' as const,
         };
         aipack.network.lan_address = '10.168.10.24';
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([main, aipack]);
-        jest.mocked(ComputeClusterService.lanAssets).mockResolvedValue({
+        const lanAssets = jest.mocked(ComputeClusterService.lanAssets).mockResolvedValueOnce({
             version: 1,
             group_id: 'group-1',
-            summary: {total: 1, online: 1, offline: 0, new: 0, changed: 0, networks: 1},
+            summary: {total: 2, online: 2, offline: 0, new: 0, changed: 0, networks: 1},
             latest_scans: [],
             assets: [{
                 asset_id: 'edge-05',
@@ -1229,13 +1241,29 @@ describe('ControlCenterView', () => {
                 last_seen_at: 1,
                 last_changed_at: 1,
                 change_type: 'unchanged',
+            }, {
+                asset_id: 'camera-1',
+                node_id: main.node_id,
+                node_name: main.name,
+                cidr: '10.168.10.0/24',
+                address: '10.168.10.30',
+                hostname: 'camera-1',
+                mac: '00:04:4b:00:00:30',
+                device_kind: 'camera',
+                display_name: '车间相机',
+                parent_asset_id: 'edge-05',
+                ports: [],
+                online: true,
+                first_seen_at: 1,
+                last_seen_at: 1,
+                last_changed_at: 1,
+                change_type: 'unchanged',
             }],
-        });
+        }).mockRejectedValue(new Error('temporary asset failure'));
         render(<ControlCenterView language={Language.CHINESE}/>);
 
-        await screen.findByRole('heading', {name: 'shangang-aipac-02'});
         const list = screen.getByRole('complementary', {name: '机器列表'});
-        const installed = within(list).getByRole('button', {name: '查看 AIPACK-05 节点信息'});
+        const installed = await within(list).findByRole('button', {name: '查看 AIPACK-05 节点信息'});
         expect(installed).toHaveClass('edge-device', 'tree-depth-0');
         expect(installed.querySelector('img')).toHaveAttribute('src', '/ico/jetson-agx-orin.png');
         expect(within(list).getAllByText('AIPACK-05')).toHaveLength(1);
@@ -1243,8 +1271,20 @@ describe('ControlCenterView', () => {
         expect(within(list).queryByRole('button', {name: '打开 AIPACK-05 边缘设备终端'}))
             .not.toBeInTheDocument();
 
+        fireEvent(window, new CustomEvent('opensight:edge-device-updated'));
+        await waitFor(() => expect(lanAssets).toHaveBeenCalledTimes(2));
+        expect(within(list).getByRole('button', {name: '查看 AIPACK-05 节点信息'}))
+            .toBeInTheDocument();
+
         fireEvent.click(installed);
         expect(await screen.findByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
+        expect(screen.getByLabelText('1 个相关设备')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '打开车间相机实时画面'}));
+        expect(await screen.findByRole('dialog', {name: '相机实时画面'})).toHaveTextContent('shangang-aipac-02');
+        expect(screen.getByAltText('车间相机 实时画面')).toHaveAttribute(
+            'src',
+            expect.stringContaining('/nodes/shangang-aipac-02-id/cameras/camera-1/mjpeg'),
+        );
     });
 
     it('opens a registered camera with devices on the left and live view on the right', async () => {
@@ -1531,6 +1571,42 @@ describe('ControlCenterView', () => {
         expect(screen.getByRole('heading', {name: '存储分析'})).toBeInTheDocument();
         expect(screen.getByText('只读 · 正常')).toBeInTheDocument();
         expect(screen.getByRole('textbox', {name: '扫描目录'})).toBeInTheDocument();
+    });
+
+    it('opens fleet performance mode inspection from related features', async () => {
+        const machine = node('在线节点', true);
+        machine.capabilities.push('runtime.performance.mode.read.v1');
+        const unsupported = node('旧版节点', true);
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine, unsupported]);
+        const inspect = jest.spyOn(ComputeClusterService, 'performanceMode').mockResolvedValue({
+            schema_version: 'performance.mode-result.v1',
+            captured_at: 1,
+            platform: 'windows',
+            available: true,
+            compliant: true,
+            current_mode: 'high_performance',
+            target_mode: 'high_performance',
+            checks: [{
+                code: 'windows_power_scheme',
+                passed: true,
+                observed: 'high_performance',
+                expected: 'high_performance',
+            }],
+        });
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByRole('heading', {name: '在线节点'});
+        fireEvent.click(screen.getByText('相关功能'));
+        const performanceMode = within(screen.getByLabelText('相关功能列表'))
+            .getByRole('button', {name: /性能模式/});
+        expect(within(performanceMode).getByText('故障')).toHaveClass('warning');
+        fireEvent.click(performanceMode);
+
+        expect(screen.getByRole('heading', {name: '性能模式'})).toBeInTheDocument();
+        expect(screen.getByText('尚未扫描')).toBeInTheDocument();
+        expect(inspect).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', {name: '开始扫描'}));
+        expect(await screen.findByText('1 / 2 正常')).toBeInTheDocument();
     });
 
     it('opens terminal connection from the network status cards', async () => {

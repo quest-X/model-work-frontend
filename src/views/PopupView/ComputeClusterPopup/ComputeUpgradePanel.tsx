@@ -89,13 +89,13 @@ export const ComputeUpgradePanel: React.FC<{
     releasesLoading: boolean;
     releasesError: string;
     refreshReleases: () => Promise<void>;
+    selected: string[];
     zh: boolean;
-}> = ({nodes, releases, releasesLoading, releasesError, refreshReleases, zh}) => { // eslint-disable-line complexity
+}> = ({nodes, releases, releasesLoading, releasesError, refreshReleases, selected, zh}) => { // eslint-disable-line complexity
     const [release, setRelease] = useState('');
     const manifests = useMemo(() => Object.fromEntries(releases.filter(item => item.release_version === release)
         .map(item => [manifestKey(item), item])), [releases, release]);
     const versions = Array.from(new Set(releases.map(item => item.release_version)));
-    const [selected, setSelected] = useState<string[]>([]);
     const [batch, setBatch] = useState<ComputeUpgradeBatch | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
@@ -205,7 +205,6 @@ export const ComputeUpgradePanel: React.FC<{
                 <label htmlFor='compute-main-release'>{zh ? '当前控制端的升级版本' : 'Release on this controller'}</label>
                 <select id='compute-main-release' value={release} disabled={releasesLoading || busy} onChange={event => {
                     setRelease(event.target.value);
-                    setSelected([]);
                 }}>
                     <option value=''>{releasesLoading ? (zh ? '正在读取控制端安装包…' : 'Loading controller packages…') : (zh ? '请选择目标版本' : 'Select target version')}</option>
                     {versions.map(version => <option key={version} value={version}>v{version}</option>)}
@@ -214,16 +213,18 @@ export const ComputeUpgradePanel: React.FC<{
                 <small>{zh ? '安装包由当前控制端分发，发布信息和校验由系统自动处理。' : 'This controller distributes the package and handles release metadata and verification.'}</small>
                 {!releasesLoading && !releasesError && versions.length === 0 && <p role='status'>{zh ? '当前控制端尚未发布可用安装包。请先发布目标版本，再刷新列表。' : 'No packages published on this controller. Publish a target release, then refresh.'}</p>}
             </div>
-            <div className='ComputeUpgradeNodes'>
-                {eligible.map(node => <label key={node.node_id}>
-                    <input type='checkbox' disabled={busy || !compatible(node)} checked={selected.includes(node.node_id)} onChange={event => setSelected(current =>
-                        event.target.checked ? [...current, node.node_id] : current.filter(id => id !== node.node_id))}/>
+            <div className='ComputeUpgradeSelection'>
+                <div><strong>{zh ? `已选择 ${selected.length} 台设备` : `${selected.length} devices selected`}</strong><small>{zh ? '在下方作业区中勾选升级设备。' : 'Select upgrade devices in the work areas below.'}</small></div>
+                {selected.map(nodeId => {
+                    const node = eligible.find(item => item.node_id === nodeId);
+                    return node && <article key={node.node_id}>
                     <div><strong>{node.name}</strong><small>{node.resources.platform} · {node.resources.architecture}</small></div>
                     <div className='ComputeUpgradeNodeState'>
                         <strong>{zh ? '当前版本' : 'Current version'} v{node.agent_version}</strong>
                         <span>{compatibilityLabel(node)}</span>
                     </div>
-                </label>)}
+                </article>;
+                })}
                 {eligible.length === 0 && <p>{zh ? '没有已启用 OTA、非异常且可联通的节点。' : 'No enabled, reachable, non-abnormal OTA nodes.'}</p>}
             </div>
             <button type='button' disabled={busy || releasesLoading || !release || selected.length === 0 || selected.some(id => {

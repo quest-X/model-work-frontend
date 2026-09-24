@@ -1360,10 +1360,17 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
                     type='button'
                     id='AgentChatNodeSuggestion-0'
                     role='option'
+                    aria-label={allDevicesMention}
                     aria-selected={activeNodeIndex === 0}
+                    aria-describedby='AgentChatAllNodesCount'
                     className={activeNodeIndex === 0 ? 'active' : ''}
                     onClick={selectAllDevices}
-                ><strong>{allDevicesMention}</strong></button>}
+                >
+                    <strong>{allDevicesMention}</strong>
+                    <span id='AgentChatAllNodesCount' className='device-count'>
+                        {zh ? `共 ${nodes.length} 台设备` : `${nodes.length} devices`}
+                    </span>
+                </button>}
                 {matchingNodes.map((node, index) => {
                     const optionIndex = index + (nodes === null ? 0 : 1);
                     return <button

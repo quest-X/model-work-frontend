@@ -321,6 +321,11 @@ describe('node communication state', () => {
         expect(computeNodeState(node(false))).toBe('fault');
         expect(computeNodeState({...node(), network: {...node().network, error: 'refresh failed'}})).toBe('fault');
     });
+    it('ignores the hidden Tailscale path for AIPACK nodes', () => {
+        const current = {...node(), name: 'AIPACK-13'};
+        expect(computeNodeState(current)).toBe('normal');
+        expect(computeLinkStates(current)).toEqual({lan: 'normal', tailscale: 'fault'});
+    });
     it.each([['normal', '正常'], ['fault', '故障'], ['abnormal', '异常']] as const)(
         'uses authoritative %s state even with cached online flags', (state, label) => {
             const current = {...node(), network: {...node().network, tailscale_ssh_available: true}, communication_state: state};

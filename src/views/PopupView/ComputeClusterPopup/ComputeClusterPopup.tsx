@@ -40,6 +40,30 @@ const AUTO_PLACEMENT = '__automatic__';
 type ComputeWorkspace = 'graph' | 'tasks' | 'network' | 'nodes' | 'terminal';
 type NodeFilter = 'all' | 'normal' | 'fault' | 'abnormal' | 'upgradeable';
 
+const NODE_WORK_AREAS = [
+    {zh: '废钢作业区', en: 'Scrap area', addresses: ['10.168.10.10', '10.168.10.11', '10.168.10.12', '10.168.10.13']},
+    {zh: '炉前作业区', en: 'Furnace-front area', addresses: ['10.168.10.14', '10.168.10.15', '10.168.10.16', '10.168.10.17']},
+    {zh: '炉后作业区', en: 'Furnace-back area', addresses: ['10.168.10.20', '10.168.10.21', '10.168.10.22', '10.168.10.23', '10.168.10.24', '10.168.10.25', '10.168.10.26', '10.168.10.27', '10.168.10.28', '10.168.10.29']},
+];
+
+const storedNodeWorkArea = (nodeId: string): string => {
+    try {
+        const value = JSON.parse(window.localStorage.getItem(`opensight.control-center.node-tags.${nodeId}`) || '[]');
+        return Array.isArray(value) && typeof value[0] === 'string' ? value[0].trim() : '';
+    } catch {
+        return '';
+    }
+};
+
+const nodeWorkArea = (node: ComputeClusterNode, zh: boolean): string => {
+    const stored = typeof window === 'undefined' ? '' : storedNodeWorkArea(node.node_id);
+    if (stored) return stored;
+    if (node.labels?.site_name?.trim()) return node.labels.site_name.trim();
+    const addresses = [node.network.lan_address, ...(node.lan_scan_targets || []).map(target => target.address)];
+    const known = NODE_WORK_AREAS.find(area => addresses.some(address => address && area.addresses.includes(address)));
+    return known ? known[zh ? 'zh' : 'en'] : (zh ? '未分配作业区' : 'Unassigned work area');
+};
+
 const bytes = (value: number | null, zh: boolean): string => {
     if (value === null || !Number.isFinite(value)) return zh ? '未知' : 'Unknown';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -222,48 +246,51 @@ const TaskCard: React.FC<TaskCardProps> = ({task, zh, busy, onControl}) => {
 
 interface NodeCardProps {
     node: ComputeClusterNode;
-    releases: ComputeUpgradeManifest[];
     zh: boolean;
-    region?: string;
-    onUpgrade?: () => void;
+    managing: boolean;
+    selected: boolean;
+    onOpen: () => void;
+    onSelectedChange: (selected: boolean) => void;
 }
 
+const NodeCardOverview: React.FC<{node: ComputeClusterNode; zh: boolean}> = ({node, zh}) => <div className='ComputeNodeOverview'>
+    <div className='ComputeNodeIdentity'>
+        <h3>{node.name}</h3>
+        <small>{node.resources.hardware_model || `${node.resources.platform} · ${node.resources.architecture}`}</small>
+    </div>
+    <span className='ComputeNodeStatus'><i/>{computeNodeLabel(node, zh)}</span>
+    <div className='ComputeNodeCompactStats'>
+        <span>CPU <strong>{node.resources.cpu_percent == null ? node.resources.cpu_logical : `${Math.round(node.resources.cpu_percent)}%`}</strong></span>
+        <span>MEM <strong>{percentUsed(node.resources.memory_total_bytes, node.resources.memory_available_bytes)}</strong></span>
+        <span>DISK <strong>{percentUsed(node.resources.disk_total_bytes, node.resources.disk_free_bytes)}</strong></span>
+    </div>
+    <span className='ComputeNodeVersion'>v{node.agent_version}</span>
+</div>;
+
 // Resource, network, GPU, and device variants are one presentational node boundary.
-// eslint-disable-next-line complexity
-const NodeCard: React.FC<NodeCardProps> = ({node, releases, zh, region, onUpgrade}) => <details className={`ComputeNodeCard ${computeNodeState(node)}`}>
-    <summary className='ComputeNodeHeading'>
-        <div className='ComputeNodeIdentity'>
-            <span className='ComputeNodeStatus'><i/>{computeNodeLabel(node, zh)}</span>
+/* eslint-disable complexity */
+const NodeDetail: React.FC<{
+    node: ComputeClusterNode;
+    zh: boolean;
+    onBack: () => void;
+}> = ({node, zh, onBack}) => <section
+    className={`ComputeNodeDetail ${computeNodeState(node)}`}
+    aria-label={`${node.name} ${zh ? '节点详情' : 'node details'}`}
+>
+    <header className='ComputeNodeDetailHeader'>
+        <button
+            type='button'
+            className='ComputeNodeBackButton'
+            aria-label={zh ? '返回节点管理' : 'Back to node management'}
+            onClick={onBack}
+        ><span aria-hidden='true'>←</span>{zh ? '返回' : 'Back'}</button>
+        <div>
+            <small>{nodeWorkArea(node, zh)}</small>
             <h3>{node.name}</h3>
-            <span className='ComputeNodeRegion'>{region || (zh ? '未分组' : 'Unassigned')}</span>
+            <span>{node.resources.hardware_model || `${node.resources.platform} · ${node.resources.architecture}`}</span>
         </div>
-        <div className='ComputeNodeCompactStats'>
-            <span>CPU <strong>{node.resources.cpu_percent == null ? node.resources.cpu_logical : `${Math.round(node.resources.cpu_percent)}%`}</strong></span>
-            <span>MEM <strong>{percentUsed(node.resources.memory_total_bytes, node.resources.memory_available_bytes)}</strong></span>
-            <span>GPU <strong>{node.resources.gpus.length}</strong></span>
-            <span>DISK <strong>{percentUsed(node.resources.disk_total_bytes, node.resources.disk_free_bytes)}</strong></span>
-            <span>DEVICE <strong>{node.device_inventory.devices.length}</strong></span>
-        </div>
-        <div className='ComputeNodeHeaderActions'>
-            <div className='ComputeNodeHeartbeat'>
-                <span>HEARTBEAT</span>
-                <strong>{lastSeen(node.heartbeat_age_seconds, zh)}</strong>
-            </div>
-            <span className='ComputeNodeVersion'>SERVICE <strong>v{node.agent_version}</strong></span>
-            {onUpgrade && <button
-                type='button'
-                disabled={!computeNodeUpgradeAvailable(node, releases)}
-                aria-label={`${zh ? '管理' : 'Manage'} ${node.name} ${zh ? '节点升级' : 'node upgrade'}`}
-                onClick={onUpgrade}
-            >{computeNodeUpgradeAvailable(node, releases)
-                ? (zh ? '升级节点' : 'Upgrade node')
-                : node.communication_state === 'abnormal'
-                    ? (zh ? '异常，暂不可升级' : 'Abnormal; upgrade unavailable')
-                    : computeNodeUpgradeReady(node)
-                        ? (zh ? '暂无可用升级' : 'No upgrade available')
-                    : (zh ? '无法联通，暂不可升级' : 'Unreachable; upgrade unavailable')}</button>}
-        </div>
-    </summary>
+        <span className='ComputeNodeStatus'><i/>{computeNodeLabel(node, zh)}</span>
+    </header>
 
     <div className='ComputeNodeResourceGrid'>
         <div><span>CPU</span><strong>{node.resources.cpu_logical}</strong><small>{zh ? '逻辑核心' : 'logical cores'}</small></div>
@@ -315,7 +342,27 @@ const NodeCard: React.FC<NodeCardProps> = ({node, releases, zh, region, onUpgrad
             : healthLabel(false, zh)}</span>
         <span>{node.capabilities.length} {zh ? '项能力' : 'capabilities'}</span>
     </footer>
-</details>;
+</section>;
+/* eslint-enable complexity */
+
+const NodeCard: React.FC<NodeCardProps> = ({node, zh, managing, selected, onOpen, onSelectedChange}) => managing
+    ? <label className={`ComputeNodeSelectCard ${computeNodeState(node)}${selected ? ' selected' : ''}`}>
+        <input
+            type='checkbox'
+            aria-label={`${zh ? '选择' : 'Select'} ${node.name}`}
+            disabled={!computeNodeUpgradeReady(node)}
+            checked={selected}
+            onChange={event => onSelectedChange(event.target.checked)}
+        />
+        <NodeCardOverview node={node} zh={zh}/>
+        {!computeNodeUpgradeReady(node) && <small className='ComputeNodeUnavailable'>{zh ? '当前不可升级' : 'Upgrade unavailable'}</small>}
+    </label>
+    : <button
+        type='button'
+        className={`ComputeNodeCard ${computeNodeState(node)}`}
+        aria-label={`${zh ? '查看' : 'View'} ${node.name} ${zh ? '节点详情' : 'node details'}`}
+        onClick={onOpen}
+    ><NodeCardOverview node={node} zh={zh}/></button>;
 
 // This container intentionally owns the polling lifecycle and the complete modal state.
 // eslint-disable-next-line complexity
@@ -340,6 +387,8 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const [nodeFilter, setNodeFilter] = useState<NodeFilter>('all');
     const [upgradeOpen, setUpgradeOpen] = useState(() => typeof window !== 'undefined'
         && Boolean(window.localStorage.getItem(ACTIVE_BATCH_KEY)));
+    const [selectedUpgradeNodes, setSelectedUpgradeNodes] = useState<string[]>([]);
+    const [nodeDetailId, setNodeDetailId] = useState('');
     const [error, setError] = useState('');
     const [taskError, setTaskError] = useState('');
     const [selectedNode, setSelectedNode] = useState(preferredNodeId || AUTO_PLACEMENT);
@@ -368,7 +417,6 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const refreshingRef = useRef(false);
     const heartbeats = useRef<Record<string, number>>({});
     const taskFormRef = useRef<HTMLDivElement | null>(null);
-    const upgradePanelRef = useRef<HTMLDivElement | null>(null);
 
     const refreshUpgradeReleases = useCallback(async (signal?: AbortSignal) => {
         setUpgradeReleasesLoading(true);
@@ -387,11 +435,6 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
             if (mounted.current) setUpgradeReleasesLoading(false);
         }
     }, []);
-
-    const openUpgrade = () => {
-        setUpgradeOpen(true);
-        window.setTimeout(() => upgradePanelRef.current?.scrollIntoView?.({behavior: 'smooth', block: 'start'}));
-    };
 
     // The refresh is one atomic snapshot transaction: directory, tasks, and online leases.
     // eslint-disable-next-line complexity
@@ -658,6 +701,19 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const filteredNodes = useMemo(() => sortedNodes.filter(node => nodeFilter === 'all'
         || (nodeFilter === 'upgradeable' && computeNodeUpgradeAvailable(node, upgradeReleases))
         || computeNodeState(node) === nodeFilter), [nodeFilter, sortedNodes, upgradeReleases]);
+    const groupedNodes = useMemo(() => {
+        const groups = new Map<string, ComputeClusterNode[]>();
+        filteredNodes.forEach(node => {
+            const area = nodeWorkArea(node, zh);
+            groups.set(area, [...(groups.get(area) || []), node]);
+        });
+        const order = new Map(NODE_WORK_AREAS.map((area, index) => [area[zh ? 'zh' : 'en'], index]));
+        return Array.from(groups.entries()).sort(([left], [right]) =>
+            (order.get(left) ?? NODE_WORK_AREAS.length) - (order.get(right) ?? NODE_WORK_AREAS.length)
+            || left.localeCompare(right, zh ? 'zh-CN' : 'en')
+        );
+    }, [filteredNodes, zh]);
+    const nodeDetail = nodes.find(node => node.node_id === nodeDetailId);
 
     const taskControlEnabled = status?.task_control?.enabled === true;
     const orchestrationEnabled = taskControlEnabled
@@ -761,7 +817,10 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                     key={workspace}
                     className={activeWorkspace === workspace ? 'active' : ''}
                     aria-current={activeWorkspace === workspace ? 'page' : undefined}
-                    onClick={() => setActiveWorkspace(workspace)}
+                    onClick={() => {
+                        setNodeDetailId('');
+                        setActiveWorkspace(workspace);
+                    }}
                 ><span>{label}</span><strong>{count}</strong></button>)}
             </nav>}
 
@@ -1021,7 +1080,12 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                 {!loading && activeWorkspace === 'terminal' && !status?.task_control?.terminal_sessions && <div className='ComputeTaskDisabled'>
                     {zh ? 'Mac Client 尚未启用终端控制。' : 'Terminal control is not enabled on the Mac Client.'}
                 </div>}
-                {!loading && activeWorkspace === 'nodes' && nodes.length > 0 && <div className='ComputeNodeSectionTitle'>
+                {!loading && activeWorkspace === 'nodes' && nodeDetail && <NodeDetail
+                    node={nodeDetail}
+                    zh={zh}
+                    onBack={() => setNodeDetailId('')}
+                />}
+                {!loading && activeWorkspace === 'nodes' && !nodeDetail && nodes.length > 0 && <div className='ComputeNodeSectionTitle'>
                     <div><strong>{zh ? '节点资源与版本' : 'Node resources and versions'}</strong><span>{nodes.length}</span></div>
                     <div className='ComputeNodeToolbar'>
                         <div className='ComputeNodeFilters' role='group' aria-label={zh ? '节点筛选' : 'Node filters'}>
@@ -1042,13 +1106,17 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                             type='button'
                             className='ComputeBatchUpgradeButton'
                             aria-expanded={upgradeOpen}
-                            onClick={() => setUpgradeOpen(current => !current)}
-                        >{upgradeOpen ? (zh ? '收起节点升级' : 'Hide node upgrade') : (zh ? '批量升级' : 'Batch upgrade')}</button>
+                            onClick={() => setUpgradeOpen(current => {
+                                if (current) setSelectedUpgradeNodes([]);
+                                return !current;
+                            })}
+                        >{upgradeOpen ? (zh ? '完成' : 'Done') : (zh ? '管理' : 'Manage')}</button>
                     </div>
                 </div>}
-                {!loading && activeWorkspace === 'nodes' && upgradeOpen && <div className='ComputeNodeUpgradeArea' ref={upgradePanelRef}>
+                {!loading && activeWorkspace === 'nodes' && !nodeDetail && upgradeOpen && <div className='ComputeNodeUpgradeArea'>
                     <ComputeUpgradePanel
                         nodes={nodes}
+                        selected={selectedUpgradeNodes}
                         releases={upgradeReleases}
                         releasesLoading={upgradeReleasesLoading}
                         releasesError={upgradeReleasesError}
@@ -1056,17 +1124,25 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                         zh={zh}
                     />
                 </div>}
-                {!loading && activeWorkspace === 'nodes' && filteredNodes.length === 0 && <div className='ComputeNodeFilterEmpty'>
+                {!loading && activeWorkspace === 'nodes' && !nodeDetail && filteredNodes.length === 0 && <div className='ComputeNodeFilterEmpty'>
                     {zh ? '没有符合当前筛选条件的节点。' : 'No nodes match the current filter.'}
                 </div>}
-                {!loading && activeWorkspace === 'nodes' && filteredNodes.map(node => <NodeCard
-                    key={node.node_id}
-                    node={node}
-                    releases={upgradeReleases}
-                    zh={zh}
-                    region={regionByNode.get(node.node_id)?.region_name || regionByNode.get(node.node_id)?.region_id}
-                    onUpgrade={node.capabilities.includes('control.node.upgrade.v1') ? openUpgrade : undefined}
-                />)}
+                {!loading && activeWorkspace === 'nodes' && !nodeDetail && groupedNodes.map(([area, areaNodes]) => <section className='ComputeNodeGroup' key={area}>
+                    <header><strong>{area}</strong><span>{areaNodes.length}</span></header>
+                    <div className='ComputeNodeGrid'>
+                        {areaNodes.map(node => <NodeCard
+                            key={node.node_id}
+                            node={node}
+                            zh={zh}
+                            managing={upgradeOpen}
+                            selected={selectedUpgradeNodes.includes(node.node_id)}
+                            onOpen={() => setNodeDetailId(node.node_id)}
+                            onSelectedChange={checked => setSelectedUpgradeNodes(current => checked
+                                ? Array.from(new Set([...current, node.node_id]))
+                                : current.filter(id => id !== node.node_id))}
+                        />)}
+                    </div>
+                </section>)}
             </div>
         </section>
     </div>;

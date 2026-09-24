@@ -46,6 +46,7 @@ import {StorageAnalysisPanel} from './StorageAnalysisPanel';
 import {DuplicateAnalysisPanel} from './DuplicateAnalysisPanel';
 import {StartupItemsPanel} from './StartupItemsPanel';
 import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
+import {PerformanceModePanel} from './PerformanceModePanel';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
@@ -71,7 +72,7 @@ const toneLabel = (tone: Tone, zh: boolean): string => tone === 'healthy'
     ? zh ? '正常' : 'Normal'
     : zh ? '故障' : 'Fault';
 type SidePanel = 'machines' | 'features';
-type Workspace = 'node' | 'network' | 'files' | 'utilities' | 'terminal' | 'groups';
+type Workspace = 'node' | 'network' | 'files' | 'utilities' | 'performance-mode' | 'terminal' | 'groups';
 type MachineIconKind = 'jetson' | 'windows' | 'linux' | 'macos' | 'computer';
 type NodeGrouping = 'none' | 'region' | 'platform';
 type NodeOrdering = 'status' | 'activity' | 'name';
@@ -305,6 +306,10 @@ const regionDisplayName = (name: string, zh: boolean): string => zh
 const communicationTone = (state: 'normal' | 'fault' | 'abnormal'): Tone =>
     state === 'normal' ? 'healthy' : state === 'abnormal' ? 'offline' : 'warning';
 const machineTone = (node: ComputeClusterNode): Tone => communicationTone(computeNodeState(node));
+const resourceMonitorTone = (node?: ComputeClusterNode): Tone =>
+    node?.online && Number.isFinite(node.resources.captured_at) && node.resources.captured_at > 0
+        ? 'healthy'
+        : node ? machineTone(node) : 'warning';
 
 const cameraTone = (status: ComputeManagedDevice['status']): Tone =>
     status === 'registered' || status === 'online' ? 'healthy' : 'offline';
@@ -431,7 +436,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [overviewView, setOverviewView] = useState<OverviewView>('graph');
     const mounted = useRef(true);
     const refreshInFlight = useRef(false);
-    const overviewSelected = useRef(false);
+    const overviewSelected = useRef(true);
     const selectedNodeIdRef = useRef('');
     const runtimeInventoryRequest = useRef(0);
     const runtimeInventoryPendingNode = useRef('');
@@ -479,7 +484,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 ),
                 ComputeClusterService.lanAssets().then(
                     value => value.assets,
-                    () => [] as ComputeLanAsset[],
+                    () => null,
                 ),
                 ComputeClusterService.groups().then(
                     value => value.groups,
@@ -492,7 +497,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             ]);
             if (!mounted.current) return;
             setNodes(nextNodes);
-            setLanAssets(assetResult);
+            if (assetResult !== null) setLanAssets(assetResult);
             setGroupMemberships(memberships);
             setTerminalTargets(targets);
             if (graphResult.value) setResourceGraph(graphResult.value);
@@ -777,6 +782,10 @@ export const ControlCenterView: React.FC<IProps> = ({
     const terminalAvailable = Boolean(selectedNode?.online && selectedNode.network.ssh_available);
     const filesAvailable = overviewNodes.some(node => node.online && node.capabilities.includes('filesystem.list.v1'));
     const utilitiesAvailable = overviewNodes.some(node => node.online && node.capabilities.includes('task.storage.scan.v1'));
+    const performanceModeAvailable = overviewNodes.length > 0 && overviewNodes.every(node =>
+        node.online && node.capabilities.includes('runtime.performance.mode.read.v1')
+    );
+    const performanceModeTone: Tone = performanceModeAvailable ? 'healthy' : 'warning';
     const toolbarTone: Tone | null = workspace === 'groups'
         ? visibleGroups.length ? currentGroupTone : null
         : workspace === 'network'
@@ -787,6 +796,8 @@ export const ControlCenterView: React.FC<IProps> = ({
                     ? (filesAvailable ? 'healthy' : 'offline')
                 : workspace === 'utilities'
                     ? (utilitiesAvailable ? 'healthy' : 'offline')
+                : workspace === 'performance-mode'
+                    ? performanceModeTone
                 : selectedNode
                     ? machineTone(selectedNode)
                     : overviewNodes.length ? overviewTone : null;
@@ -1043,7 +1054,13 @@ export const ControlCenterView: React.FC<IProps> = ({
             setCameraViewerId(camera.device_id);
         }}
     >
-        <span className='ControlMachineIcon camera' aria-hidden='true'>◉</span>
+        <img
+            className='ControlMachineIcon camera'
+            src='/ico/camera.png'
+            alt=''
+            aria-hidden='true'
+            draggable={false}
+        />
         <span className='ControlMachineIdentity'>
             <strong>{camera.name}</strong>
             <small>{camera.model || camera.device_id} · {camera.channels} {zh
@@ -1061,6 +1078,16 @@ export const ControlCenterView: React.FC<IProps> = ({
             || [device.display_name, device.hostname].some(name =>
                 name?.trim().toLowerCase() === candidate.name.trim().toLowerCase()))
     );
+    const cameraParentAssetId = (node: ComputeClusterNode, camera: ComputeManagedDevice) =>
+        lanAssets.find(asset =>
+            asset.node_id === node.node_id
+            && asset.device_kind === 'camera'
+            && asset.display_name === camera.name
+        )?.parent_asset_id || '';
+    const edgeCameras = (node: ComputeClusterNode, device: ComputeLanAsset) =>
+        node.device_inventory.devices.filter(camera =>
+            camera.kind === 'camera' && cameraParentAssetId(node, camera) === device.asset_id
+        );
     const installedSidebarNodeIds = new Set(lanAssets
         .map(device => installedSidebarNode(device)?.node_id)
         .filter((nodeId): nodeId is string => Boolean(nodeId)));
@@ -1076,23 +1103,15 @@ export const ControlCenterView: React.FC<IProps> = ({
         let ariaLabel = zh
             ? `打开 ${label} 边缘设备终端`
             : `Open edge device terminal for ${label}`;
-        let stateTone = device.online ? 'healthy' : 'offline';
+        let stateTone: Tone = device.online ? 'healthy' : 'offline';
         let stateLabel = toneLabel(stateTone, zh);
         if (installedNode) {
-            selected = installedNode.node_id === selectedNodeId;
+            selected = installedNode.node_id === selectedNodeId && !cameraViewerId;
             ariaLabel = zh ? `查看 ${label} 节点信息` : `View node details for ${label}`;
             stateTone = machineTone(installedNode);
             stateLabel = computeNodeLabel(installedNode, zh);
         }
-        const cameras = node.device_inventory.devices.filter(candidate => candidate.kind === 'camera');
-        const cameraParents = new Map(cameras.map(camera => [
-            camera.device_id,
-            lanAssets.find(asset =>
-                asset.node_id === node.node_id
-                && asset.device_kind === 'camera'
-                && asset.display_name === camera.name
-            )?.parent_asset_id || '',
-        ]));
+        const cameras = edgeCameras(node, device);
         return <React.Fragment key={device.asset_id}>
             <button
                 type='button'
@@ -1119,9 +1138,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     {stateLabel}
                 </span>
             </button>
-            {cameras
-                .filter(camera => cameraParents.get(camera.device_id) === device.asset_id)
-                .map(camera => renderSidebarCamera(node, camera, depth + 1))}
+            {cameras.map(camera => renderSidebarCamera(node, camera, depth + 1))}
         </React.Fragment>;
     };
 
@@ -1206,21 +1223,13 @@ export const ControlCenterView: React.FC<IProps> = ({
                         const edgeDevices = allEdgeDevices.filter(asset => !sidebarWorkArea(asset));
                         const edgeIds = new Set(allEdgeDevices.map(device => device.asset_id));
                         const cameras = node.device_inventory.devices.filter(device => device.kind === 'camera');
-                        const cameraParents = new Map(cameras.map(camera => [
-                            camera.device_id,
-                            lanAssets.find(asset =>
-                                asset.node_id === node.node_id
-                                && asset.device_kind === 'camera'
-                                && asset.display_name === camera.name
-                            )?.parent_asset_id || '',
-                        ]));
                         return <React.Fragment key={node.node_id}>
                             <button
                                 type='button'
                                 className={`ControlMachineItem ${
                                     nodeDepth ? `tree-child tree-depth-${nodeDepth} ` : ''
-                                }${node.node_id === selectedNodeId ? 'selected' : ''}`}
-                                aria-pressed={node.node_id === selectedNodeId}
+                                }${node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''}`}
+                                aria-pressed={node.node_id === selectedNodeId && !cameraViewerId}
                                 onClick={() => selectSidebarNode(node.node_id)}
                             >
                                 <MachinePlatformIcon node={node}/>
@@ -1236,7 +1245,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             </button>
                             {edgeDevices.map(device => renderSidebarEdge(node, device, nodeDepth + 1))}
                             {cameras
-                                .filter(camera => !edgeIds.has(cameraParents.get(camera.device_id) || ''))
+                                .filter(camera => !edgeIds.has(cameraParentAssetId(node, camera)))
                                 .map(camera => renderSidebarCamera(node, camera, nodeDepth + 1))}
                         </React.Fragment>;
                     })}
@@ -1296,6 +1305,21 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </span>
                 <span className={`ControlMachineState ${error ? 'offline' : 'healthy'}`}>
                     {toneLabel(error ? 'offline' : 'healthy', zh)}
+                </span>
+            </button>
+            <button
+                type='button'
+                className={`ControlMachineItem ${workspace === 'performance-mode' ? 'selected' : ''}`}
+                aria-pressed={workspace === 'performance-mode'}
+                onClick={() => setWorkspace('performance-mode')}
+            >
+                <span className='ControlMachineIcon network' aria-hidden='true'>PWR</span>
+                <span className='ControlMachineIdentity'>
+                    <strong>{zh ? '性能模式' : 'Performance mode'}</strong>
+                    <small>{zh ? '检查全部机器的目标性能配置' : 'Check target configuration on all machines'}</small>
+                </span>
+                <span className={`ControlMachineState ${performanceModeTone}`}>
+                    {toneLabel(performanceModeTone, zh)}
                 </span>
             </button>
             <button
@@ -1401,8 +1425,8 @@ export const ControlCenterView: React.FC<IProps> = ({
 
     // eslint-disable-next-line complexity
     const renderResourceMonitorCard = () => {
-        const monitorTone = selectedNode ? machineTone(selectedNode) : 'warning';
-        const monitorStatus = computeNodeLabel(selectedNode, zh);
+        const monitorTone = resourceMonitorTone(selectedNode);
+        const monitorStatus = toneLabel(monitorTone, zh);
         return <button
             type='button'
             className='ControlServiceCard ControlRuntimeService'
@@ -1424,12 +1448,23 @@ export const ControlCenterView: React.FC<IProps> = ({
         // Dependency health belongs to the latest node snapshot. Once that
         // snapshot expires, an old green state is no longer current evidence.
         const {lan: lanState, tailscale: tailscaleState} = computeLinkStates(node);
-        const cameras = node.device_inventory.devices.filter(device => device.kind === 'camera');
         const edgeDevices = lanAssets.filter(asset =>
             asset.node_id === node.node_id
             && asset.device_kind === 'edge_compute'
         );
         const aipackNode = /^AIPACK-/i.test(node.name.trim());
+        const installedEdgeDevice = aipackNode
+            ? lanAssets.find(asset =>
+                asset.device_kind === 'edge_compute'
+                && installedSidebarNode(asset)?.node_id === node.node_id
+            )
+            : undefined;
+        const cameraInventoryNode = installedEdgeDevice
+            ? nodes.find(candidate => candidate.node_id === installedEdgeDevice.node_id) || node
+            : node;
+        const cameras = installedEdgeDevice
+            ? edgeCameras(cameraInventoryNode, installedEdgeDevice)
+            : node.device_inventory.devices.filter(device => device.kind === 'camera');
         const relatedDeviceCount = cameras.length + (aipackNode ? 0 : edgeDevices.length);
         const cameraConnectCapable = Boolean(
             node.online && node.capabilities?.includes('task.camera.connect.v1'),
@@ -1609,7 +1644,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             onClick={() => setDeviceManagementTab(
                                 !aipackNode && cameras.length === 0 && edgeDevices.length > 0 ? 'edge' : 'camera',
                             )}
-                        >{relatedDeviceCount}</button>
+                        >+</button>
                     </div>
                 </div>
                 <div className={`ControlRelatedDeviceGrid${aipackNode ? ' camera-only' : ''}`}>
@@ -1706,7 +1741,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 title={cameraStreamUnavailableTitle(node, camera, zh)}
                                 onClick={() => setCameraViewerId(camera.device_id)}
                             >
-                                <div className='ControlCameraIcon' aria-hidden='true'>◉</div>
+                                <div className='ControlCameraIcon' aria-hidden='true'>
+                                    <img src='/ico/camera.png' alt=''/>
+                                </div>
                                 <div className='ControlCameraIdentity'>
                                     <strong>{camera.name}</strong>
                                     <small>{camera.model || camera.device_id}</small>
@@ -1778,7 +1815,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             />}
             {cameraViewerId && <CameraLiveViewPopup
                 language={language}
-                node={node}
+                node={cameraInventoryNode}
                 cameras={cameras}
                 initialCameraId={cameraViewerId}
                 onClose={() => setCameraViewerId('')}
@@ -1811,7 +1848,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         Number.NEGATIVE_INFINITY,
     );
     const {lan: controlNetworkState, tailscale: remoteNetworkState} = computeLinkStates(selectedNode);
-    const networkValue = computeNodeLabel(selectedNode, zh);
+    const networkValue = toneLabel(resourceMonitorTone(selectedNode), zh);
     const selectedResourceHistory = resourceHistory.filter(sample => sample.nodeId === selectedNode?.node_id);
     const resourceMetrics: {
         id: ResourceMetricId;
@@ -1930,7 +1967,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                         ? (zh ? '网络资产' : 'Network assets')
                         : workspace === 'terminal'
                             ? (zh ? '终端连接' : 'Terminal connection')
-                            : workspace === 'files'
+                        : workspace === 'performance-mode'
+                            ? (zh ? '性能模式' : 'Performance mode')
+                        : workspace === 'files'
                                 ? (zh ? '文件管理' : 'File manager')
                             : workspace === 'utilities'
                                 ? (zh ? '实用工具' : 'Utilities')
@@ -2176,6 +2215,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </div>}
                 {workspace === 'files' && <div className='ControlFeatureWorkspace'>
                     <ComputeFilePanel nodes={overviewNodes} zh={zh}/>
+                </div>}
+                {workspace === 'performance-mode' && <div className='ControlFeatureWorkspace'>
+                    <PerformanceModePanel nodes={overviewNodes} lanAssets={lanAssets} zh={zh} visible/>
                 </div>}
                 <div className='ControlFeatureWorkspace' hidden={workspace !== 'utilities'}>
                     {!selectedNode && <><StorageAnalysisPanel node={null} zh={zh} visible={workspace === 'utilities'}/><DuplicateAnalysisPanel node={null} zh={zh} visible={workspace === 'utilities'}/></>}

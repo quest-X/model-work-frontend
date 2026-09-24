@@ -163,9 +163,11 @@ export const computeLinkStates = (node?: ComputeClusterNode): {lan: ComputeCommu
 
 export const computeNodeState = (node?: ComputeClusterNode): ComputeCommunicationState => {
     if (!node) return 'fault';
+    const links = computeLinkStates(node);
     return aggregateCommunicationStates([
         node.online && !node.network.error ? node.communication_state ?? 'normal' : 'fault',
-        ...Object.values(computeLinkStates(node)),
+        links.lan,
+        ...(/^AIPACK-/i.test(node.name?.trim() || '') ? [] : [links.tailscale]),
     ]);
 };
 
@@ -324,6 +326,84 @@ export type ComputePerformanceSnapshot = {
     schema_version: 'performance.snapshot-result.v1';
     captured_at: number;
     metrics: Record<ComputePerformanceMetric, number | null>;
+};
+
+export type ComputePerformanceModeCheck = {
+    code:
+        | 'inspection_available'
+        | 'jetson_power_profile'
+        | 'linux_boost'
+        | 'linux_governor'
+        | 'linux_max_frequency'
+        | 'macos_energy_mode'
+        | 'windows_power_scheme'
+        | 'windows_processor_maximum';
+    passed: boolean;
+    observed: string;
+    expected: string;
+};
+
+export type ComputePerformanceMode = {
+    schema_version: 'performance.mode-result.v1';
+    captured_at: number;
+    platform: 'windows' | 'linux' | 'jetson' | 'macos' | 'unsupported';
+    available: boolean;
+    compliant: boolean;
+    current_mode: string;
+    target_mode: string;
+    checks: ComputePerformanceModeCheck[];
+};
+
+export type ComputePerformanceModeRequest = {
+    schema_version: 'agentos.capability-request.v1';
+    request_id: string;
+    idempotency_key: string;
+    tool: 'agentos.performance.mode_apply';
+    node_id: string;
+    arguments: {expected_current_mode: string; target_mode: string};
+};
+
+export type ComputePerformanceModeAuthorization = ApprovalRequest & {
+    operation: 'agentos.performance.mode_apply';
+    target: {
+        kind: 'performance_mode';
+        request_id: string;
+        idempotency_key: string;
+    };
+    parameters: {expected_current_mode: string; target_mode: string};
+    state: 'pending' | 'approved' | 'executing' | 'succeeded' | 'failed' | 'rejected' | 'expired';
+    error_code: string | null;
+    node_name?: string;
+};
+
+export type ComputePerformanceModeResponse = {
+    schema_version: 'agentos.capability-response.v1';
+    request_id: string;
+    tool: 'agentos.performance.mode_apply';
+    node_id: string;
+    state: 'authorization_required' | 'succeeded';
+    task_id: null;
+    progress: null;
+    result: {
+        schema_version: 'performance.mode-apply-result.v1';
+        before: ComputePerformanceMode;
+        after: ComputePerformanceMode;
+        changed: true;
+    } | null;
+    authorization: {
+        authorization_id: string;
+        operation: 'agentos.performance.mode_apply';
+        target_summary: string;
+        parameters_summary: string;
+        expires_at: number;
+    } | null;
+    error: null;
+};
+
+export type ComputePerformanceModeAuthorizationResult = {
+    authorization: ComputePerformanceModeAuthorization;
+    evidence?: ComputePerformanceMode;
+    response: ComputePerformanceModeResponse;
 };
 
 export type ComputePerformanceEvidence = {
@@ -1291,6 +1371,52 @@ export class ComputeClusterService {
         signal?: AbortSignal,
     ): Promise<ComputePerformanceSnapshot> {
         return request(`/nodes/${encodeURIComponent(nodeId)}/agentos/performance/snapshot`, signal);
+    }
+
+    public static performanceMode(
+        nodeId: string,
+        signal?: AbortSignal,
+    ): Promise<ComputePerformanceMode> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/agentos/performance/mode`, signal);
+    }
+
+    public static createPerformanceModeAuthorization(
+        nodeId: string,
+        input: {
+            request: ComputePerformanceModeRequest;
+            user: ComputeFilesystemAuthorizationRequest['user'];
+            ttl_seconds: number;
+        },
+        signal?: AbortSignal,
+    ): Promise<ComputePerformanceModeAuthorizationResult> {
+        return request(
+            `/nodes/${encodeURIComponent(nodeId)}/agentos/performance/mode/authorizations`,
+            signal,
+            {method: 'POST', body: JSON.stringify(input)},
+        );
+    }
+
+    public static approvePerformanceModeAuthorization(
+        authorizationId: string,
+        signature: string,
+        signal?: AbortSignal,
+    ): Promise<ComputePerformanceModeAuthorizationResult> {
+        return request(
+            `/agentos/performance/authorizations/${encodeURIComponent(authorizationId)}/approve`,
+            signal,
+            {method: 'POST', body: JSON.stringify({signature})},
+        );
+    }
+
+    public static rejectPerformanceModeAuthorization(
+        authorizationId: string,
+        signal?: AbortSignal,
+    ): Promise<ComputePerformanceModeAuthorization & {state: 'rejected'}> {
+        return request(
+            `/agentos/performance/authorizations/${encodeURIComponent(authorizationId)}/reject`,
+            signal,
+            {method: 'POST', body: '{}'},
+        );
     }
 
     public static performanceDiagnosis(
