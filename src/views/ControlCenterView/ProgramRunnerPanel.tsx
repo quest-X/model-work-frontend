@@ -1498,9 +1498,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         <RefreshCw aria-hidden='true'/>
                                     </button>}
                                 </div>
-                                <div className='status-legend'>
-                                    <span>{zh ? '- 无统计记录' : '- No statistics records'}</span>
-                                </div>
                                 <footer>
                                     <span>{zh ? '少' : 'Less'}</span>
                                     <i className='level-0'/>

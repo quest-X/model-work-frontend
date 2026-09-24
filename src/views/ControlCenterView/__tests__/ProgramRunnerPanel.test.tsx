@@ -739,13 +739,13 @@ describe('ProgramRunnerPanel', () => {
         expect(within(calendar).queryByRole('button', {name: '重试失败日期'})).not.toBeInTheDocument();
         expect(within(calendar).getByRole('status')).toHaveTextContent('当月已读取完成');
         expect(within(calendar).queryByText('... 待读取')).not.toBeInTheDocument();
-        expect(within(calendar).getByText('- 无统计记录')).toBeInTheDocument();
+        expect(within(calendar).queryByText('- 无统计记录')).not.toBeInTheDocument();
 
         panel.rerender(<ProgramRunnerPanel {...props} zh={false}/>);
         calendar = screen.getByLabelText('Statistics calendar');
         expect(within(calendar).getByRole('status')).toHaveTextContent('Month loaded');
         expect(within(calendar).queryByText('... Not read')).not.toBeInTheDocument();
-        expect(within(calendar).getByText('- No statistics records')).toBeInTheDocument();
+        expect(within(calendar).queryByText('- No statistics records')).not.toBeInTheDocument();
 
         panel.rerender(<ProgramRunnerPanel {...props} node={{...calendarNode, node_id: 'calendar-other-node'}}/>);
         fireEvent.click(screen.getByRole('button', {name: '统计'}));
