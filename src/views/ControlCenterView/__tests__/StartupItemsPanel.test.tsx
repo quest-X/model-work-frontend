@@ -6,6 +6,7 @@ import {
     ComputeStartupAuthorization,
     ComputeStartupAuthorizationResult,
     ComputeStartupItem,
+    ComputeStartupList,
 } from '../../../services/ComputeClusterService';
 import * as ApprovalIdentity from '../../../services/ApprovalIdentityService';
 import {StartupItemsPanel} from '../StartupItemsPanel';

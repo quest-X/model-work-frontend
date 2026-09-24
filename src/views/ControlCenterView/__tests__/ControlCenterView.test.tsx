@@ -1097,6 +1097,16 @@ describe('ControlCenterView', () => {
         fireEvent.mouseEnter(graphNode);
         expect(within(graphPanel).getByText('正常 · 心跳 刚刚')).toHaveClass('online');
         expect(screen.getByText('边缘集群图谱', {selector: 'strong'})).toBeInTheDocument();
+        fireEvent.doubleClick(graphNode);
+        fireEvent.click(within(graphPanel).getByRole('button', {name: /程序运行器/}));
+        const graphRunner = await screen.findByRole('dialog', {name: '在线节点 程序运行器'});
+        expect(screen.getByRole('region', {name: '主节点、计算节点与摄像头拓扑'})).toBeInTheDocument();
+        expect(overview).toHaveAttribute('aria-pressed', 'true');
+        expect(machine).toHaveAttribute('aria-pressed', 'false');
+        fireEvent.mouseDown(graphRunner.parentElement as HTMLElement);
+        await waitFor(() => expect(screen.queryByRole('dialog', {name: '在线节点 程序运行器'}))
+            .not.toBeInTheDocument());
+        expect(screen.getByRole('region', {name: '主节点、计算节点与摄像头拓扑'})).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '地图'}));
         expect(screen.getByRole('region', {name: '计算群地理地图'})).toBeInTheDocument();
         expect(nodesRequest).toHaveBeenCalledTimes(1);

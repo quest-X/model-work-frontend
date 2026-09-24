@@ -79,13 +79,6 @@ const percentUsed = (total: number | null, available: number | null): string => 
     return `${Math.round(Math.max(0, Math.min(1, 1 - available / total)) * 100)}%`;
 };
 
-const lastSeen = (seconds: number, zh: boolean): string => {
-    if (seconds < 5) return zh ? '刚刚' : 'Just now';
-    if (seconds < 60) return zh ? `${Math.round(seconds)} 秒前` : `${Math.round(seconds)}s ago`;
-    const minutes = Math.round(seconds / 60);
-    return zh ? `${minutes} 分钟前` : `${minutes}m ago`;
-};
-
 const healthLabel = (healthy: boolean, zh: boolean): string =>
     healthy ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
 

@@ -8,15 +8,14 @@ import {
     ComputeRuntimeSnapshot,
 } from '../../services/ComputeClusterService';
 
-type ProgramRunnerView = 'programs' | 'endpoints' | 'artifacts' | 'logs';
+type ProgramRunnerView = 'programs' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
-type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'log';
+type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'telegram' | 'log';
 
 interface IProps {
     node: ComputeClusterNode;
     zh: boolean;
     maximized: boolean;
-    onClose: () => void;
     onToggleMaximized: () => void;
 }
 
@@ -97,6 +96,7 @@ type ProgramArtifact = ComputeProgramSnapshot['programs'][number]['artifacts'][n
 const artifactCategory = (artifact: ProgramArtifact): Exclude<ResultCategory, 'all'> => {
     if (artifact.kind === 'video') return 'video';
     if (artifact.kind === 'image') return 'image';
+    if (artifact.name.toLowerCase() === 'ixcom.jsonl') return 'telegram';
     if (artifact.name.toLowerCase().endsWith('.jsonl')) return 'log';
     return 'data';
 };
@@ -106,6 +106,7 @@ const artifactCategoryLabel = (category: ResultCategory, zh: boolean): string =>
     video: zh ? '视频' : 'Videos',
     image: zh ? '图片' : 'Images',
     data: zh ? '数据' : 'Data',
+    telegram: zh ? '电文' : 'Telegrams',
     log: zh ? '日志' : 'Logs',
 }[category]);
 
@@ -115,6 +116,7 @@ const localDateKey = (timestamp: number): string => {
     const day = `${date.getDate()}`.padStart(2, '0');
     return `${date.getFullYear()}-${month}-${day}`;
 };
+const todayDateKey = (): string => localDateKey(Date.now() / 1000);
 
 const RESULT_PREVIEW_BYTES = 256 * 1024;
 
@@ -127,6 +129,23 @@ const formatResultPreview = (contentType: string, value: string, truncated: bool
         }
     }
     return value;
+};
+
+const isTelegramLog = (message: string): boolean => {
+    try {
+        return JSON.parse(message)?.src === 'ixcom';
+    } catch {
+        return false;
+    }
+};
+
+const bufferedPercent = (media: HTMLMediaElement): number => {
+    if (!Number.isFinite(media.duration) || media.duration <= 0) return 0;
+    let bufferedSeconds = 0;
+    for (let index = 0; index < media.buffered.length; index += 1) {
+        bufferedSeconds += Math.max(0, media.buffered.end(index) - media.buffered.start(index));
+    }
+    return Math.min(100, Math.floor(bufferedSeconds / media.duration * 100));
 };
 
 const taskStateLabel = (state: string, zh: boolean): string => ({
@@ -144,7 +163,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     node,
     zh,
     maximized,
-    onClose,
     onToggleMaximized,
 }) => {
     const cached = programRunnerCache.get(node.node_id);
@@ -157,12 +175,14 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [eventsError, setEventsError] = useState('');
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [logServiceId, setLogServiceId] = useState('');
+    const [prettyTelegramLogs, setPrettyTelegramLogs] = useState(true);
     const [selectedArtifactId, setSelectedArtifactId] = useState('');
-    const [artifactDate, setArtifactDate] = useState('');
+    const [artifactDate, setArtifactDate] = useState(todayDateKey);
     const [artifactCategoryFilter, setArtifactCategoryFilter] = useState<ResultCategory>('all');
     const [artifactQuery, setArtifactQuery] = useState('');
     const [loadedVideoId, setLoadedVideoId] = useState('');
     const [readyVideoId, setReadyVideoId] = useState('');
+    const [videoPreviewProgress, setVideoPreviewProgress] = useState(0);
     const [videoPreviewError, setVideoPreviewError] = useState('');
     const [loadedImageId, setLoadedImageId] = useState('');
     const [imagePreviewError, setImagePreviewError] = useState('');
@@ -170,9 +190,18 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [resultPreviewError, setResultPreviewError] = useState('');
     const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const [refreshVersion, setRefreshVersion] = useState(0);
+    const [refreshProgress, setRefreshProgress] = useState(0);
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
     const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
+    const runtimeVisible = runtimeCapable || snapshot !== null;
+    const programsVisible = programsCapable || programs !== null;
+    const logsVisible = runtimeVisible || programsVisible || events.length > 0;
+    const showingCache = !node.online && (snapshot !== null || programs !== null || events.length > 0);
+    const connectionLabel = node.online
+        ? (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
+        : showingCache
+            ? (zh ? '离线 · 显示最后缓存' : 'Offline · showing last cached data')
+            : (zh ? '离线' : 'Offline');
 
     useEffect(() => {
         const next = programRunnerCache.get(node.node_id);
@@ -185,18 +214,21 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setEventsError('');
         setSelectedServiceId('');
         setLogServiceId('');
+        setPrettyTelegramLogs(true);
         setSelectedArtifactId('');
-        setArtifactDate('');
+        setArtifactDate(todayDateKey());
         setArtifactCategoryFilter('all');
         setArtifactQuery('');
         setLoadedVideoId('');
         setReadyVideoId('');
+        setVideoPreviewProgress(0);
         setVideoPreviewError('');
         setLoadedImageId('');
         setImagePreviewError('');
         setResultPreview('');
         setResultPreviewError('');
         setResultPreviewLoading(false);
+        setRefreshProgress(0);
     }, [node.node_id]);
 
     useEffect(() => {
@@ -208,15 +240,24 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             if (inFlight) return;
             inFlight = true;
             setRefreshing(true);
+            setRefreshProgress(0);
+            const requestCount = Number(runtimeCapable) * 2 + Number(programsCapable);
+            let completedRequests = 0;
+            const track = <T,>(request: Promise<T>): Promise<T> => request.finally(() => {
+                completedRequests += 1;
+                if (!controller.signal.aborted) {
+                    setRefreshProgress(Math.round(completedRequests / requestCount * 100));
+                }
+            });
             const [runtimeResult, programsResult, eventsResult] = await Promise.allSettled([
                 runtimeCapable
-                    ? ComputeClusterService.runtime(node.node_id, controller.signal)
+                    ? track(ComputeClusterService.runtime(node.node_id, controller.signal))
                     : Promise.resolve(null),
                 programsCapable
-                    ? ComputeClusterService.programs(node.node_id, controller.signal)
+                    ? track(ComputeClusterService.programs(node.node_id, controller.signal))
                     : Promise.resolve(null),
                 runtimeCapable
-                    ? ComputeClusterService.runtimeEvents(node.node_id, 0, 100, controller.signal)
+                    ? track(ComputeClusterService.runtimeEvents(node.node_id, 0, 100, controller.signal))
                     : Promise.resolve(null),
             ]);
             if (!controller.signal.aborted) {
@@ -270,7 +311,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [node.node_id, programsCapable, refreshVersion, runtimeCapable]);
+    }, [node.node_id, programsCapable, runtimeCapable]);
 
     const selectedService = snapshot?.services.find(service =>
         service.service_id === selectedServiceId
@@ -285,15 +326,20 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         program.interfaces.map(endpoint => ({
             ...endpoint,
             key: `${program.program_id}-${endpoint.method}-${endpoint.path}`,
+            program_id: program.program_id,
             program_name: program.name,
         }))
     );
+    const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
+        view === 'telegrams'
+            ? isTelegramLog(event.message)
+            : !logServiceId || event.service_id === logServiceId;
     const filteredEvents = [...events]
-        .filter(event => !logServiceId || event.service_id === logServiceId)
+        .filter(matchesLogFilter)
         .reverse();
     const programEvents = (programs?.programs || []).flatMap(program =>
         program.events.map(event => ({...event, service_id: program.program_id}))
-    ).filter(event => !logServiceId || event.service_id === logServiceId)
+    ).filter(matchesLogFilter)
         .sort((left, right) => right.created_at - left.created_at);
     const logRows = [
         ...filteredEvents.map(event => ({...event, key: `runtime-${event.cursor}`})),
@@ -326,7 +372,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const selectedArtifact = filteredProgramArtifacts.find(artifact =>
         artifact.selection_id === selectedArtifactId
     ) || filteredProgramArtifacts[0] || null;
-    const artifactGroups = (['video', 'image', 'data', 'log'] as const).map(category => ({
+    const artifactGroups = (['video', 'image', 'data', 'telegram', 'log'] as const).map(category => ({
         category,
         artifacts: filteredProgramArtifacts.filter(artifact => artifactCategory(artifact) === category),
     }));
@@ -346,6 +392,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     useEffect(() => {
         setLoadedVideoId('');
         setReadyVideoId('');
+        setVideoPreviewProgress(0);
         setVideoPreviewError('');
         setLoadedImageId('');
         setImagePreviewError('');
@@ -409,19 +456,14 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                 <span>{zh ? '程序运行器' : 'Program Runner'}</span>
                 <h2>{node.name}</h2>
                 <p>
-                    {zh ? '程序状态每 5 秒刷新' : 'Program status refreshes every 5 seconds'}
+                    <span className='ControlProgramConnection' role='status' aria-label={connectionLabel}>
+                        <span className={`ControlStatusDot ${node.online ? 'healthy' : 'offline'}`} aria-hidden='true'/>
+                        {connectionLabel}
+                    </span>
                     {' · '}{dateTime(capturedAt, zh)}
                 </p>
             </div>
             <div className='ComputeClusterHeaderActions'>
-                <button
-                    type='button'
-                    className='ControlProgramRefresh'
-                    aria-label={zh ? '刷新程序运行器' : 'Refresh program runner'}
-                    title={zh ? '刷新' : 'Refresh'}
-                    disabled={refreshing}
-                    onClick={() => setRefreshVersion(current => current + 1)}
-                >↻</button>
                 <button
                     type='button'
                     className={`window-toggle ${maximized ? 'restore' : 'maximize'}`}
@@ -431,12 +473,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     aria-pressed={maximized}
                     onClick={onToggleMaximized}
                 ><i aria-hidden='true'/></button>
-                <button
-                    type='button'
-                    aria-label={zh ? '关闭程序运行器' : 'Close program runner'}
-                    title={zh ? '关闭' : 'Close'}
-                    onClick={onClose}
-                >×</button>
             </div>
         </header>
 
@@ -446,6 +482,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     ['programs', zh ? '程序' : 'Programs'],
                     ['endpoints', zh ? '接口' : 'APIs'],
                     ['artifacts', zh ? '结果' : 'Results'],
+                    ['telegrams', zh ? '电文' : 'Telegrams'],
                     ['logs', zh ? '日志' : 'Logs'],
                 ] as [ProgramRunnerView, string][]).map(([item, label]) => <button
                     type='button'
@@ -456,7 +493,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             </nav>
 
             <div className='ControlMonitorContent'>
-                {view === 'programs' && (!runtimeCapable
+                {view === 'programs' && (!runtimeVisible
                     ? unavailable(
                         zh ? '当前节点尚不支持程序状态' : 'Program status is not supported',
                         node.online
@@ -598,7 +635,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             runtimeError,
                         ))}
 
-                {view === 'endpoints' && (!programsCapable
+                {view === 'endpoints' && (!programsVisible
                     ? unavailable(
                         zh ? '当前节点尚不支持程序接口' : 'Program APIs are not supported',
                         node.online
@@ -630,7 +667,18 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             <tbody>{endpointRows.map(endpoint => <tr key={endpoint.key}>
                                 <td>{endpoint.program_name}</td>
                                 <td><code>{endpoint.method}</code></td>
-                                <td><code>{endpoint.path}</code></td>
+                                <td>{endpoint.method === 'GET'
+                                    ? <a
+                                        className='ControlProgramEndpointLink'
+                                        href={ComputeClusterService.programInterfaceUrl(
+                                            node.node_id,
+                                            endpoint.program_id,
+                                            endpoint.path,
+                                        )}
+                                        target='_blank'
+                                        rel='noreferrer'
+                                    ><code>{endpoint.path}</code></a>
+                                    : <code>{endpoint.path}</code>}</td>
                                 <td><span className='ControlProgramEndpointName'>
                                     <span className={`ControlStatusDot ${interfaceTone(endpoint.state)}`} aria-hidden='true'/>
                                     <span><strong>{endpoint.name}</strong><small>{endpoint.description}</small></span>
@@ -649,7 +697,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         )}
                     </section>)}
 
-                {view === 'artifacts' && (!programsCapable
+                {view === 'artifacts' && (!programsVisible
                     ? unavailable(
                         zh ? '当前节点尚不支持程序结果' : 'Program results are not supported',
                         node.online
@@ -681,7 +729,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     value={artifactCategoryFilter}
                                     onChange={event => setArtifactCategoryFilter(event.target.value as ResultCategory)}
                                 >
-                                    {(['all', 'video', 'image', 'data', 'log'] as ResultCategory[]).map(category => <option
+                                    {(['all', 'video', 'image', 'data', 'telegram', 'log'] as ResultCategory[]).map(category => <option
                                         key={category}
                                         value={category}
                                     >{artifactCategoryLabel(category, zh)}</option>)}
@@ -697,7 +745,13 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 <span>{filteredProgramArtifacts.length}/{programArtifacts.length}</span>
                             </div>
                         </header>
-                        {programsError
+                        {programsError && programs && <div className='ControlRefreshWarning' role='status'>
+                            <span>
+                                {zh ? '刷新失败，正在重试：' : 'Refresh failed; retrying: '}
+                                {programsError}
+                            </span>
+                        </div>}
+                        {programsError && !programs
                             ? <p className='ControlProgramError' role='status'>{programsError}</p>
                             : programArtifacts.length > 0 && selectedArtifact
                                 ? <div className='ControlProgramArtifactWorkspace'>
@@ -745,19 +799,37 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                                         setLoadedVideoId('');
                                                                         setVideoPreviewError('');
                                                                         setReadyVideoId('');
+                                                                        setVideoPreviewProgress(0);
                                                                     }}
                                                             >{zh ? '重新加载视频' : 'Reload video'}</button>
                                                         </div>
                                                         : readyVideoId !== selectedArtifact.selection_id && <div className='ControlProgramPreviewPlaceholder'>
-                                                            <strong>{zh ? '正在加载视频预览…' : 'Loading video preview…'}</strong>
+                                                            <strong>{zh
+                                                                ? `正在加载视频预览 ${videoPreviewProgress}%`
+                                                                : `Loading video preview ${videoPreviewProgress}%`}</strong>
                                                             <span>{zh ? '正在读取视频文件' : 'Reading the video file'}</span>
                                                         </div>}
+                                                    {readyVideoId === selectedArtifact.selection_id
+                                                        && videoPreviewProgress < 100
+                                                        && <span className='ControlProgramPreviewProgress'>
+                                                            {zh
+                                                                ? `视频加载 ${videoPreviewProgress}%`
+                                                                : `Video loading ${videoPreviewProgress}%`}
+                                                        </span>}
                                                     <video
                                                         className={readyVideoId === selectedArtifact.selection_id ? '' : 'is-loading'}
                                                         controls
-                                                        preload='metadata'
+                                                        preload='auto'
                                                         src={selectedArtifactUrl}
-                                                        onLoadedData={() => setReadyVideoId(selectedArtifact.selection_id)}
+                                                        onDurationChange={event =>
+                                                            setVideoPreviewProgress(bufferedPercent(event.currentTarget))}
+                                                        onProgress={event =>
+                                                            setVideoPreviewProgress(bufferedPercent(event.currentTarget))}
+                                                        onLoadedData={event => {
+                                                            setVideoPreviewProgress(bufferedPercent(event.currentTarget));
+                                                            setReadyVideoId(selectedArtifact.selection_id);
+                                                        }}
+                                                        onCanPlayThrough={() => setVideoPreviewProgress(100)}
                                                         onError={() => setVideoPreviewError(zh ? '无法读取视频文件' : 'Unable to read the video file')}
                                                     />
                                                 </div>
@@ -769,6 +841,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                         onClick={() => {
                                                             setLoadedVideoId(selectedArtifact.selection_id);
                                                             setReadyVideoId('');
+                                                            setVideoPreviewProgress(0);
                                                             setVideoPreviewError('');
                                                         }}
                                                     >{zh ? '加载视频预览' : 'Load video preview'}</button>
@@ -826,34 +899,67 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 )}
                     </section>)}
 
-                {view === 'logs' && (!runtimeCapable && !programsCapable
+                {(view === 'telegrams' || view === 'logs') && (!logsVisible
                     ? unavailable(
-                        zh ? '当前节点尚不支持结构化日志' : 'Structured logs are not supported',
+                        view === 'telegrams'
+                            ? (zh ? '当前节点尚不支持电文' : 'Telegrams are not supported')
+                            : (zh ? '当前节点尚不支持结构化日志' : 'Structured logs are not supported'),
                         node.online
-                            ? (zh ? '升级节点程序后可查看日志。' : 'Upgrade the node software to view logs.')
-                            : (zh ? '节点恢复在线后才能读取日志。' : 'The node must return online before logs can be read.'),
+                            ? (view === 'telegrams'
+                                ? (zh ? '升级节点程序后可查看电文。' : 'Upgrade the node software to view telegrams.')
+                                : (zh ? '升级节点程序后可查看日志。' : 'Upgrade the node software to view logs.'))
+                            : (view === 'telegrams'
+                                ? (zh ? '节点恢复在线后才能读取电文。' : 'The node must return online before telegrams can be read.')
+                                : (zh ? '节点恢复在线后才能读取日志。' : 'The node must return online before logs can be read.')),
                     )
-                    : <section className='ControlProgramLogs' aria-label={zh ? '程序日志' : 'Program logs'}>
+                    : <section
+                        className='ControlProgramLogs'
+                        aria-label={view === 'telegrams'
+                            ? (zh ? '程序电文' : 'Program telegrams')
+                            : (zh ? '程序日志' : 'Program logs')}
+                    >
                         <header className='ControlMonitorSearchHeader'>
                             <div>
-                                <h3>{zh ? '结构化日志' : 'Structured logs'}</h3>
-                                <p>{zh ? '任务与程序运行事件' : 'Task and program runtime events'}</p>
+                                <h3>{view === 'telegrams'
+                                    ? (zh ? '电文' : 'Telegrams')
+                                    : (zh ? '结构化日志' : 'Structured logs')}</h3>
+                                <p>{view === 'telegrams'
+                                    ? (zh ? '程序收发电文' : 'Program telegram traffic')
+                                    : (zh ? '任务与程序运行事件' : 'Task and program runtime events')}</p>
                             </div>
-                            <select
-                                aria-label={zh ? '筛选日志程序' : 'Filter log program'}
-                                value={logServiceId}
-                                onChange={event => setLogServiceId(event.target.value)}
-                            >
-                                <option value=''>{zh ? '全部程序' : 'All programs'}</option>
-                                {(snapshot?.services || []).map(service => <option
-                                    key={service.service_id}
-                                    value={service.service_id}
-                                >{programName(service, zh)}</option>)}
-                                {(programs?.programs || []).map(program => <option
-                                    key={program.program_id}
-                                    value={program.program_id}
-                                >{program.name}</option>)}
-                            </select>
+                            <div className='ControlProgramLogTools'>
+                                {view === 'telegrams' && <div
+                                    className='ControlProgramLogFormat'
+                                    role='group'
+                                    aria-label={zh ? '电文显示格式' : 'Telegram display format'}
+                                >
+                                    <button
+                                        type='button'
+                                        aria-pressed={prettyTelegramLogs}
+                                        onClick={() => setPrettyTelegramLogs(true)}
+                                    >{zh ? '美化格式' : 'Pretty'}</button>
+                                    <button
+                                        type='button'
+                                        aria-pressed={!prettyTelegramLogs}
+                                        onClick={() => setPrettyTelegramLogs(false)}
+                                    >{zh ? '原始格式' : 'Raw'}</button>
+                                </div>}
+                                {view === 'logs' && <select
+                                    aria-label={zh ? '筛选日志程序' : 'Filter log program'}
+                                    value={logServiceId}
+                                    onChange={event => setLogServiceId(event.target.value)}
+                                >
+                                    <option value=''>{zh ? '全部程序' : 'All programs'}</option>
+                                    {(snapshot?.services || []).map(service => <option
+                                        key={service.service_id}
+                                        value={service.service_id}
+                                    >{programName(service, zh)}</option>)}
+                                    {(programs?.programs || []).map(program => <option
+                                        key={program.program_id}
+                                        value={program.program_id}
+                                    >{program.name}</option>)}
+                                </select>}
+                            </div>
                         </header>
                         {(eventsError || programsError) && <p className='ControlProgramError' role='status'>
                             {[eventsError, programsError].filter(Boolean).join(' · ')}
@@ -865,15 +971,27 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     {serviceNames.get(event.service_id) || event.service_id}
                                 </span>
                                 <span className='ControlProgramLogType'>{event.event_type}</span>
-                                <strong>{event.message}</strong>
+                                {view === 'telegrams'
+                                    ? <pre className='ControlProgramLogMessage' aria-label={zh ? '电文内容' : 'Telegram content'}>
+                                        {prettyTelegramLogs
+                                            ? JSON.stringify(JSON.parse(event.message), null, 2)
+                                            : event.message}
+                                    </pre>
+                                    : <strong>{event.message}</strong>}
                                 <small>{event.task_id ? `${zh ? '任务' : 'Task'} ${event.task_id}` : ''}</small>
                             </li>)}
                         </ol> : unavailable(
                             eventsError || programsError
-                                ? (zh ? '日志暂不可用' : 'Logs are unavailable')
+                                ? (view === 'telegrams'
+                                    ? (zh ? '电文暂不可用' : 'Telegrams are unavailable')
+                                    : (zh ? '日志暂不可用' : 'Logs are unavailable'))
                                 : refreshing
-                                    ? (zh ? '正在读取日志…' : 'Loading logs…')
-                                    : (zh ? '暂无结构化日志' : 'No structured logs'),
+                                    ? (view === 'telegrams'
+                                        ? (zh ? `正在读取电文… ${refreshProgress}%` : `Loading telegrams… ${refreshProgress}%`)
+                                        : (zh ? `正在读取日志… ${refreshProgress}%` : `Loading logs… ${refreshProgress}%`))
+                                    : (view === 'telegrams'
+                                        ? (zh ? '暂无电文' : 'No telegrams')
+                                        : (zh ? '暂无结构化日志' : 'No structured logs')),
                         )}
                     </section>)}
             </div>

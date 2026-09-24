@@ -27,6 +27,10 @@ export {canonicalAuthorizationJson};
 export const filesystemAuthorizationChallenge = authorizationChallenge;
 
 export const AGENT_CHAT_TOGGLE_EVENT = 'opensight:toggle-agent-chat';
+export const AGENT_CHAT_SEND_EVENT = 'opensight:send-agent-message';
+export const sendAgentMessage = (message: string): void => {
+    window.dispatchEvent(new CustomEvent(AGENT_CHAT_SEND_EVENT, {detail: message}));
+};
 
 type ChatMessage = {
     role: 'user' | 'assistant';
@@ -888,8 +892,11 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
     };
 
     // eslint-disable-next-line complexity
-    const sendMessage = async (message: string): Promise<void> => {
-        const deviceCommand = parseNodeCommand(message, nodes);
+    const sendMessage = async (
+        message: string,
+        availableNodes: ComputeClusterNode[] | null = nodes,
+    ): Promise<void> => {
+        const deviceCommand = parseNodeCommand(message, availableNodes);
         const allDevicesMessage = targetsAllDevices(message);
         const targetNode = deviceCommand?.node;
         const targetOperation = deviceCommand?.operation;
@@ -928,7 +935,7 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
             } else {
                 const response = await AgentChatService.send(
                     allDevicesMessage
-                        ? nodeChatMessage(message, nodes || [], zh)
+                        ? nodeChatMessage(message, availableNodes || [], zh)
                         : deviceCommand?.node ? nodeChatMessage(message, deviceCommand.node, zh) : message,
                     conversationIdRef.current,
                     trace.id,
@@ -943,7 +950,7 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
                 )?.result?.node_name;
                 if (requestedNodeName) {
                     filesystemRequest = true;
-                    const requestedNode = (nodes || []).find(node =>
+                    const requestedNode = (availableNodes || []).find(node =>
                         node.name.toLocaleLowerCase() === requestedNodeName.trim().toLocaleLowerCase());
                     if (!requestedNode) throw new Error(zh ? '模型请求的节点不在当前集群中' : 'The model requested a node outside the current cluster');
                     const unavailableReason = filesystemListUnavailableReason(requestedNode, zh);
@@ -990,11 +997,12 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
         }
     };
 
-    const send = (event?: FormEvent) => {
-        event?.preventDefault();
-        const message = draft.trim().replace(/^(@[^\s@]+) {2}/, '$1 ');
+    const submitMessage = (
+        message: string,
+        availableNodes: ComputeClusterNode[] | null = nodes,
+    ) => {
         if (!message) return;
-        const deviceCommand = parseNodeCommand(message, nodes);
+        const deviceCommand = parseNodeCommand(message, availableNodes);
         if (deviceCommand && !deviceCommand.node && !targetsAllDevices(message)) {
             setSendError(zh ? '未找到该节点' : 'Node not found');
             return;
@@ -1018,7 +1026,39 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
             return;
         }
         setSending(true);
-        void sendMessage(message);
+        void sendMessage(message, availableNodes);
+    };
+
+    useEffect(() => {
+        const openAndSend = (event: Event) => {
+            const message = (event as CustomEvent<string>).detail?.trim();
+            if (!message) return;
+            setOpen(true);
+            setExpanded(false);
+            setMinimized(false);
+            setHistoryOpen(false);
+            historyRequestRef.current += 1;
+            void (async () => {
+                try {
+                    const availableNodes = nodes ?? await ComputeClusterService.nodes();
+                    if (nodes === null) setNodes(availableNodes);
+                    submitMessage(message, availableNodes);
+                } catch (error) {
+                    setSendError(error instanceof Error ? error.message : String(error));
+                }
+            })();
+        };
+        window.addEventListener(AGENT_CHAT_SEND_EVENT, openAndSend);
+        return () => window.removeEventListener(AGENT_CHAT_SEND_EVENT, openAndSend);
+    }, [nodes, submitMessage]);
+
+    const send = (event?: FormEvent) => {
+        event?.preventDefault();
+        const message = draft.trim().replace(/^(@[^\s@]+) {2}/, '$1 ');
+        if (!message) return;
+        setDraft('');
+        setSendError('');
+        submitMessage(message);
     };
 
     const moveQueuedMessage = (messageId: number, targetId: number) => {

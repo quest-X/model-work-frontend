@@ -53,6 +53,13 @@ describe('ProgramRunnerPanel', () => {
     });
 
     it('shows programs, endpoint status, previewable results, and structured logs', async () => {
+        const today = Math.floor(Date.now() / 1000);
+        const todayDate = new Date(today * 1000);
+        const todayValue = [
+            todayDate.getFullYear(),
+            `${todayDate.getMonth() + 1}`.padStart(2, '0'),
+            `${todayDate.getDate()}`.padStart(2, '0'),
+        ].join('-');
         global.fetch = jest.fn().mockResolvedValue({
             ok: true,
             status: 206,
@@ -175,6 +182,11 @@ describe('ProgramRunnerPanel', () => {
                     level: 'info',
                     event_type: 'started',
                     message: 'Program started',
+                }, {
+                    created_at: 101,
+                    level: 'info',
+                    event_type: 'frame',
+                    message: '{"src":"ixcom","dir":"out","payload":"LK2"}',
                 }],
                 artifacts: [{
                     artifact_id: 'a'.repeat(32),
@@ -183,7 +195,7 @@ describe('ProgramRunnerPanel', () => {
                     kind: 'video',
                     content_type: 'video/mp4',
                     size_bytes: 111 * 1024 ** 2,
-                    modified_at: 100,
+                    modified_at: today,
                 }, {
                     artifact_id: 'b'.repeat(32),
                     name: '017.png',
@@ -191,7 +203,7 @@ describe('ProgramRunnerPanel', () => {
                     kind: 'image',
                     content_type: 'image/png',
                     size_bytes: 1024,
-                    modified_at: 99,
+                    modified_at: today - 1,
                 }, {
                     artifact_id: 'c'.repeat(32),
                     name: '017.json',
@@ -199,7 +211,15 @@ describe('ProgramRunnerPanel', () => {
                     kind: 'data',
                     content_type: 'application/json; charset=utf-8',
                     size_bytes: 34,
-                    modified_at: 98,
+                    modified_at: today - 2,
+                }, {
+                    artifact_id: 'd'.repeat(32),
+                    name: 'ixcom.jsonl',
+                    relative_path: 'runs/20260918/017/ixcom.jsonl',
+                    kind: 'data',
+                    content_type: 'application/x-ndjson',
+                    size_bytes: 128,
+                    modified_at: today - 3,
                 }],
             }],
         });
@@ -218,14 +238,12 @@ describe('ProgramRunnerPanel', () => {
                 task_id: '00000000-0000-4000-8000-000000000007',
             }],
         });
-        const close = jest.fn();
         const toggleMaximized = jest.fn();
 
         const {unmount} = render(<ProgramRunnerPanel
             node={node}
             zh
             maximized={false}
-            onClose={close}
             onToggleMaximized={toggleMaximized}
         />);
 
@@ -250,11 +268,22 @@ describe('ProgramRunnerPanel', () => {
         expect(endpoints).toHaveTextContent('POST');
         expect(endpoints).toHaveTextContent('/display');
         expect(endpoints).toHaveTextContent('未检查');
+        expect(within(endpoints).getByRole('link', {name: '/health'})).toHaveAttribute(
+            'href',
+            expect.stringContaining(
+                '/runtime/programs/vision-ocr/interfaces?path=%2Fhealth',
+            ),
+        );
+        expect(within(endpoints).getByRole('link', {name: '/health'}))
+            .toHaveAttribute('target', '_blank');
+        expect(within(endpoints).queryByRole('link', {name: '/display'}))
+            .not.toBeInTheDocument();
         expect(endpoints).not.toHaveTextContent('节点服务');
         expect(endpoints).not.toHaveTextContent('任务执行器');
         expect(inventory).not.toHaveBeenCalled();
 
         fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
+        expect(within(dialog).getByLabelText('筛选结果日期')).toHaveValue(todayValue);
         const artifacts = await within(dialog).findByLabelText('程序结果');
         expect(artifacts).toHaveTextContent('017.mp4');
         expect(within(artifacts).getByRole('button', {name: '加载视频预览'})).toBeInTheDocument();
@@ -262,11 +291,35 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(artifacts).getByRole('button', {name: '加载视频预览'}));
         const video = artifacts.querySelector('video');
         expect(video?.getAttribute('src')).toContain('/runtime/programs/vision-ocr/artifacts/');
+        expect(within(artifacts).getByText('正在加载视频预览 0%')).toBeInTheDocument();
+        Object.defineProperties(video, {
+            duration: {configurable: true, value: 100},
+            buffered: {
+                configurable: true,
+                value: {
+                    length: 2,
+                    start: (index: number) => index === 0 ? 0 : 50,
+                    end: (index: number) => index === 0 ? 10 : 65,
+                },
+            },
+        });
+        fireEvent.progress(video as HTMLVideoElement);
+        expect(within(artifacts).getByText('正在加载视频预览 25%')).toBeInTheDocument();
+        fireEvent.loadedData(video as HTMLVideoElement);
+        expect(within(artifacts).getByText('视频加载 25%')).toBeInTheDocument();
+        fireEvent.canPlayThrough(video as HTMLVideoElement);
+        expect(within(artifacts).queryByText('视频加载 25%')).not.toBeInTheDocument();
         fireEvent.change(within(artifacts).getByRole('combobox', {name: '筛选结果类型'}), {
             target: {value: 'image'},
         });
         expect(within(artifacts).getByRole('button', {name: /017.png/})).toBeInTheDocument();
         expect(within(artifacts).queryByRole('button', {name: /017.mp4/})).not.toBeInTheDocument();
+        fireEvent.change(within(artifacts).getByRole('combobox', {name: '筛选结果类型'}), {
+            target: {value: 'telegram'},
+        });
+        expect(within(artifacts).getByRole('option', {name: '电文'})).toBeInTheDocument();
+        expect(within(artifacts).getByRole('button', {name: /ixcom.jsonl/})).toBeInTheDocument();
+        expect(within(artifacts).queryByRole('button', {name: /017.json/})).not.toBeInTheDocument();
         fireEvent.change(within(artifacts).getByRole('combobox', {name: '筛选结果类型'}), {
             target: {value: 'all'},
         });
@@ -288,17 +341,32 @@ describe('ProgramRunnerPanel', () => {
         expect(within(artifacts).queryByRole('link', {name: '下载原文件'}))
             .not.toBeInTheDocument();
 
+        expect(within(dialog).queryByRole('button', {name: '刷新程序运行器'})).not.toBeInTheDocument();
+
+        fireEvent.click(within(dialog).getByRole('button', {name: '电文'}));
+        const telegrams = await within(dialog).findByLabelText('程序电文');
+        expect(telegrams).not.toHaveTextContent('Task execution started');
+        expect(telegrams).not.toHaveTextContent('Program started');
+        expect(within(telegrams).getByRole('button', {name: '美化格式'})).toHaveAttribute('aria-pressed', 'true');
+        expect(within(telegrams).getByLabelText('电文内容').textContent)
+            .toBe('{\n  "src": "ixcom",\n  "dir": "out",\n  "payload": "LK2"\n}');
+        fireEvent.click(within(telegrams).getByRole('button', {name: '原始格式'}));
+        expect(within(telegrams).getByRole('button', {name: '原始格式'})).toHaveAttribute('aria-pressed', 'true');
+        expect(within(telegrams).getByLabelText('电文内容').textContent)
+            .toBe('{"src":"ixcom","dir":"out","payload":"LK2"}');
+
         fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
         const logs = await within(dialog).findByLabelText('程序日志');
         expect(logs).toHaveTextContent('Task execution started');
         expect(logs).toHaveTextContent('任务执行器');
         expect(logs).toHaveTextContent('Program started');
         expect(logs).toHaveTextContent('Vision OCR');
+        const logFilter = within(logs).getByRole('combobox', {name: '筛选日志程序'});
+        expect(within(logFilter).queryByRole('option', {name: '电文'})).not.toBeInTheDocument();
 
         fireEvent.click(within(dialog).getByRole('button', {name: '放大程序运行器窗口'}));
         expect(toggleMaximized).toHaveBeenCalledTimes(1);
-        fireEvent.click(within(dialog).getByRole('button', {name: '关闭程序运行器'}));
-        expect(close).toHaveBeenCalledTimes(1);
+        expect(within(dialog).queryByRole('button', {name: '关闭程序运行器'})).not.toBeInTheDocument();
         unmount();
         expect(jest.mocked(ComputeClusterService.runtime).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.programs).mock.calls[0][1]?.aborted).toBe(true);
@@ -344,22 +412,89 @@ describe('ProgramRunnerPanel', () => {
             node={cachedNode}
             zh
             maximized={false}
-            onClose={jest.fn()}
             onToggleMaximized={jest.fn()}
         />);
         expect((await screen.findAllByText('Cached Service')).length).toBeGreaterThan(0);
         first.unmount();
 
         runtime.mockImplementation(() => new Promise(() => undefined));
-        render(<ProgramRunnerPanel
+        const reopened = render(<ProgramRunnerPanel
             node={cachedNode}
             zh
             maximized={false}
-            onClose={jest.fn()}
             onToggleMaximized={jest.fn()}
         />);
 
         expect(screen.getAllByText('Cached Service').length).toBeGreaterThan(0);
         expect(runtime).toHaveBeenCalledTimes(2);
+        reopened.unmount();
+
+        render(<ProgramRunnerPanel
+            node={{...cachedNode, online: false}}
+            zh
+            maximized={false}
+            onToggleMaximized={jest.fn()}
+        />);
+
+        const offlineDialog = screen.getByRole('dialog', {name: 'AIPACK-13 程序运行器'});
+        const offlineStatus = within(offlineDialog).getByRole('status', {name: /离线 · 显示最后缓存/});
+        expect(offlineStatus.querySelector('.ControlStatusDot')).toHaveClass('offline');
+        expect(within(offlineDialog).getAllByText('Cached Service').length).toBeGreaterThan(0);
+        fireEvent.click(within(offlineDialog).getByRole('button', {name: '日志'}));
+        expect(within(offlineDialog).getByLabelText('程序日志')).toBeInTheDocument();
+        expect(runtime).toHaveBeenCalledTimes(2);
+    });
+
+    it('shows request completion progress while logs are loading', async () => {
+        let resolveRuntime!: (value: Awaited<ReturnType<typeof ComputeClusterService.runtime>>) => void;
+        let resolvePrograms!: (value: Awaited<ReturnType<typeof ComputeClusterService.programs>>) => void;
+        let resolveEvents!: (value: Awaited<ReturnType<typeof ComputeClusterService.runtimeEvents>>) => void;
+        jest.spyOn(ComputeClusterService, 'runtime').mockImplementation(() =>
+            new Promise(resolve => { resolveRuntime = resolve; })
+        );
+        jest.spyOn(ComputeClusterService, 'programs').mockImplementation(() =>
+            new Promise(resolve => { resolvePrograms = resolve; })
+        );
+        jest.spyOn(ComputeClusterService, 'runtimeEvents').mockImplementation(() =>
+            new Promise(resolve => { resolveEvents = resolve; })
+        );
+
+        render(<ProgramRunnerPanel
+            node={{...node, node_id: 'aipack-progress'}}
+            zh
+            maximized={false}
+            onToggleMaximized={jest.fn()}
+        />);
+        const dialog = screen.getByRole('dialog', {name: 'AIPACK-13 程序运行器'});
+        fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
+        expect(await within(dialog).findByText('正在读取日志… 0%')).toBeInTheDocument();
+
+        resolveRuntime({
+            schema_version: 'runtime.snapshot.v1',
+            captured_at: 101,
+            summary: {
+                total: 0, healthy: 0, degraded: 0, unavailable: 0,
+                task_counts: {queued: 0, running: 0, paused: 0, succeeded: 0, failed: 0, cancelled: 0},
+            },
+            services: [],
+        });
+        expect(await within(dialog).findByText('正在读取日志… 33%')).toBeInTheDocument();
+
+        resolvePrograms({
+            schema_version: 'runtime.programs.v1',
+            captured_at: 101,
+            invalid_manifests: 0,
+            programs: [],
+        });
+        expect(await within(dialog).findByText('正在读取日志… 67%')).toBeInTheDocument();
+
+        resolveEvents({
+            schema_version: 'runtime.events.v1',
+            captured_at: 101,
+            cursor: 0,
+            has_more: false,
+            events: [],
+        });
+        expect(await within(dialog).findByText('暂无结构化日志')).toBeInTheDocument();
     });
 });

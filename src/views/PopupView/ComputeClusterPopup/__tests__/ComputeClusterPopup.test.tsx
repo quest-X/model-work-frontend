@@ -5,6 +5,7 @@ import {Language} from '../../../../data/LanguageConfig';
 import {ComputeClusterService} from '../../../../services/ComputeClusterService';
 import {ComputeClusterPopup} from '../ComputeClusterPopup';
 import {ResourceKnowledgeGraph} from '../ResourceKnowledgeGraph';
+import {AGENT_CHAT_SEND_EVENT} from '../../../Common/AgentSideChat/AgentSideChat';
 
 jest.mock('../../../../logic/actions/PopupActions', () => ({
     PopupActions: {close: jest.fn()},
@@ -350,7 +351,7 @@ describe('ComputeClusterPopup', () => {
         const {container} = render(<ComputeClusterPopup language={Language.CHINESE}/>);
         await user.click(await screen.findByRole('button', {name: '节点管理 3'}));
 
-        const groups = Array.from(container.querySelectorAll('.ComputeNodeGroup'));
+        const groups = Array.from(container.querySelectorAll<HTMLElement>('.ComputeNodeGroup'));
         expect(groups.map(group => group.querySelector('header strong')?.textContent))
             .toEqual(['作业区 A', '作业区 B']);
         expect(groups.map(group => group.querySelector('.ComputeNodeGroupTitle span')?.textContent))
@@ -682,7 +683,36 @@ describe('ComputeClusterPopup', () => {
         await waitFor(() => expect(service.resourceGraph).toHaveBeenCalledTimes(1));
     });
 
-    it('puts a direct camera owner at the top without changing the clockwise node order', async () => {
+    it('opens the three classic node tools from a pinned graph card', async () => {
+        const user = userEvent.setup();
+        const graph = await service.resourceGraph();
+        const nodes = await service.nodes();
+        const onOpenNodeTool = jest.fn();
+        render(<ResourceKnowledgeGraph
+            graph={graph}
+            nodes={nodes}
+            zh={true}
+            onSelectWorkAgent={jest.fn()}
+            onOpenNodeTool={onOpenNodeTool}
+        />);
+
+        await user.dblClick(screen.getByRole('button', {name: '查看 edge-01 节点信息'}));
+        const card = screen.getByRole('status', {name: 'edge-01 运维信息'});
+        await user.click(within(card).getByRole('button', {name: /SSH \/ Tailscale/}));
+        await user.click(within(card).getByRole('button', {name: /资源监视器/}));
+        await user.click(within(card).getByRole('button', {name: /程序运行器/}));
+        expect(onOpenNodeTool.mock.calls.map(([, tool]) => tool))
+            .toEqual(['terminal', 'monitor', 'runner']);
+
+        const sent = jest.fn();
+        window.addEventListener(AGENT_CHAT_SEND_EVENT, sent);
+        await user.click(within(card).getByRole('button', {name: /通过 OpenSight Agent 执行 等待诊断/}));
+        expect((sent.mock.calls[0][0] as CustomEvent<string>).detail)
+            .toBe('@edge-01 执行 等待诊断（system.wait） 服务，并将执行结果按表格输出');
+        window.removeEventListener(AGENT_CHAT_SEND_EVENT, sent);
+    });
+
+    it('centers a direct camera owner and keeps peer main nodes outside the ring', async () => {
         const base = await service.resourceGraph();
         const main = base.entities.find(entity => entity.kind === 'compute_node');
         const region = base.entities.find(entity => entity.kind === 'compute_region');
@@ -721,10 +751,12 @@ describe('ComputeClusterPopup', () => {
 
         const camera = screen.getByRole('button', {name: '查看 IP CAMERA 设备信息'});
         const owner = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
-        const clockwiseNext = screen.getByRole('button', {name: '查看 before-1 节点信息'});
-        expect(camera).toHaveStyle({top: '24%'});
+        const peer = screen.getByRole('button', {name: '查看 before-1 节点信息'});
+        expect(Number.parseFloat(owner.style.left)).toBeCloseTo(55, 0);
+        expect(owner).toHaveStyle({top: '52%'});
+        expect(camera).toHaveStyle({top: '12%'});
         expect(owner.style.left).toBe(camera.style.left);
-        expect(Number.parseFloat(clockwiseNext.style.left)).toBeGreaterThan(Number.parseFloat(owner.style.left));
+        expect(Number.parseFloat(peer.style.left)).toBeLessThan(Number.parseFloat(owner.style.left));
     });
 
     it('hides region and packet legend entries in the restricted commercial build', async () => {
@@ -886,6 +918,13 @@ describe('ComputeClusterPopup', () => {
                 && Math.abs(card.y - other.y) < (card.height + other.height) / 2 + 10)
             .map(other => `${card.label}/${other.label}`));
         expect(overlaps).toEqual([]);
+        const center = {x: 55, y: 52};
+        const ring = edges.map(edge => screen.getByRole('button', {name: `查看 ${edge.label} 设备信息`}))
+            .map(card => ({x: parseFloat(card.style.left), y: parseFloat(card.style.top)}));
+        expect(Math.min(...ring.map(point => point.x))).toBeLessThan(center.x);
+        expect(Math.max(...ring.map(point => point.x))).toBeGreaterThan(center.x);
+        expect(Math.min(...ring.map(point => point.y))).toBeLessThan(center.y);
+        expect(Math.max(...ring.map(point => point.y))).toBeGreaterThan(center.y);
     });
 
     it('shows Chinese region names in Chinese and pinyin region IDs in English', async () => {

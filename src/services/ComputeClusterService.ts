@@ -1419,6 +1419,16 @@ export class ComputeClusterService {
         return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/programs`, signal);
     }
 
+    public static programInterfaceUrl(
+        nodeId: string,
+        programId: string,
+        path: string,
+    ): string {
+        return `${baseUrl()}/nodes/${encodeURIComponent(nodeId)}/runtime/programs/${
+            encodeURIComponent(programId)
+        }/interfaces?path=${encodeURIComponent(path)}`;
+    }
+
     public static programArtifactUrl(
         nodeId: string,
         programId: string,

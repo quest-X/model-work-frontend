@@ -8,6 +8,7 @@ import {
     computeNodeLabel,
     aggregateCommunicationStates,
 } from '../../../services/ComputeClusterService';
+import {sendAgentMessage} from '../../Common/AgentSideChat/AgentSideChat';
 
 declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
 
@@ -22,6 +23,10 @@ interface ResourceKnowledgeGraphProps {
     onSelectWorkAgent: (
         agent: ComputeResourceGraphEntity,
         candidateNodeIds: string[],
+    ) => void;
+    onOpenNodeTool?: (
+        node: ComputeClusterNode,
+        tool: 'terminal' | 'monitor' | 'runner',
     ) => void;
 }
 
@@ -202,50 +207,45 @@ const operationsTopology = (
     let minHeight = 440;
     regions.forEach(region => {
         const regionalPoints = new Map<string, GraphPoint>();
-        const centerX = region.left + region.width / 2;
+        const centerX = 55;
         const centerY = 52;
         const rootNodeIds = region.nodeIds.filter(nodeId =>
             nodeRoles.get(nodeId) === 'main' || !ownerByTarget.has(nodeId));
         const layoutNodeIds = rootNodeIds.length ? rootNodeIds : region.nodeIds;
-        const directOwnerIndex = layoutNodeIds.findIndex(nodeId =>
-            (childrenByOwner.get(nodeId) || []).some(child => !isBranch(child)));
-        const orderedNodeIds = directOwnerIndex > 0
-            ? [...layoutNodeIds.slice(directOwnerIndex), ...layoutNodeIds.slice(0, directOwnerIndex)]
-            : layoutNodeIds;
-        const nodeCount = orderedNodeIds.length;
-        const sectorSize = Math.PI * 2 / Math.max(1, nodeCount);
-        const directSensors = orderedNodeIds.flatMap(nodeId =>
+        const ownershipWeight = (nodeId: string): number => (childrenByOwner.get(nodeId) || [])
+            .reduce((total, child) => total + branchWeight(child), 0);
+        const primaryNodeId = layoutNodeIds.reduce((primary, nodeId) =>
+            ownershipWeight(nodeId) > ownershipWeight(primary) ? nodeId : primary, layoutNodeIds[0]);
+        const satelliteNodeIds = layoutNodeIds.filter(nodeId => nodeId !== primaryNodeId);
+        regionalPoints.set(primaryNodeId, {x: centerX, y: centerY});
+        satelliteNodeIds.forEach((nodeId, index) => regionalPoints.set(nodeId, {
+            x: 5,
+            y: centerY + (index - (satelliteNodeIds.length - 1) / 2) * 18,
+        }));
+        const ringBranches = layoutNodeIds.flatMap(nodeId =>
+            (childrenByOwner.get(nodeId) || []).filter(isBranch));
+        const directSensors = layoutNodeIds.flatMap(nodeId =>
             (childrenByOwner.get(nodeId) || []).filter(child => !isBranch(child)));
-        let directSensorIndex = 0;
-        orderedNodeIds.forEach((nodeId, nodeIndex) => {
-            const nodeAngle = -Math.PI / 2 + sectorSize * nodeIndex;
-            regionalPoints.set(nodeId, nodeCount === 1
-                ? {x: centerX, y: centerY}
-                : radialPoint(centerX, centerY, region.width * .12, 10, nodeAngle));
-            const ownedChildren = childrenByOwner.get(nodeId) || [];
-            const childrenWeight = Math.max(1, ownedChildren.reduce((total, child) => total + branchWeight(child), 0));
-            let usedWeight = 0;
-            ownedChildren.forEach(child => {
-                const weight = branchWeight(child);
-                const childAngle = nodeCount === 1
-                    ? -Math.PI / 2 + Math.PI * 2 * (usedWeight + weight / 2) / childrenWeight
-                    : nodeAngle - sectorSize * .38 + sectorSize * .76 * (usedWeight + weight / 2) / childrenWeight;
-                regionalPoints.set(child.entity_id, isBranch(child)
-                    ? radialPoint(centerX, centerY, region.width * .24, 21, childAngle)
-                    : {
-                        x: centerX + region.width * .8 * ((directSensorIndex++ + .5) / directSensors.length - .5),
-                        y: 24,
-                    });
-                const grandchildren = childrenByOwner.get(child.entity_id) || [];
-                const branchArc = (nodeCount === 1 ? Math.PI * 2 : sectorSize * .76) * weight / childrenWeight;
-                grandchildren.forEach((grandchild, index) => regionalPoints.set(
-                    grandchild.entity_id,
-                    radialPoint(centerX, centerY, region.width * .4, 38,
-                        childAngle + branchArc * ((index + .5) / grandchildren.length - .5)),
-                ));
-                usedWeight += weight;
-            });
+        const ringWeight = Math.max(1, ringBranches.reduce((total, branch) => total + branchWeight(branch), 0));
+        let usedWeight = 0;
+        ringBranches.forEach(branch => {
+            const weight = branchWeight(branch);
+            const branchAngle = -Math.PI / 2 + Math.PI * 2 * (usedWeight + weight / 2) / ringWeight;
+            regionalPoints.set(branch.entity_id, radialPoint(centerX, centerY, 25, 25, branchAngle));
+            const grandchildren = childrenByOwner.get(branch.entity_id) || [];
+            const branchArc = Math.PI * 2 * weight / ringWeight;
+            grandchildren.forEach((grandchild, index) => regionalPoints.set(
+                grandchild.entity_id,
+                radialPoint(centerX, centerY, 40, 40,
+                    branchAngle + branchArc * .72 * ((index + .5) / grandchildren.length - .5)),
+            ));
+            usedWeight += weight;
         });
+        directSensors.forEach((sensor, index) => regionalPoints.set(
+            sensor.entity_id,
+            radialPoint(centerX, centerY, 40, 40,
+                -Math.PI / 2 + Math.PI * 2 * index / Math.max(1, directSensors.length)),
+        ));
         // Keep fixed-size cards readable; expanding the canvas preserves the radial ownership layout.
         // ponytail: pairwise bounds suit inventory-sized graphs; use spatial indexing for thousands of cards.
         const entries = [...regionalPoints.entries()];
@@ -299,6 +299,9 @@ const agentLabel = (
 const availabilityLabel = (available: boolean, zh: boolean): string =>
     available ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
 
+const routeAvailabilityLabel = (available: boolean, zh: boolean): string =>
+    available ? (zh ? '正常' : 'Normal') : (zh ? '异常' : 'Abnormal');
+
 const sensorKindLabel = (entity: ComputeResourceGraphEntity, zh: boolean): string => {
     if (entity.device_kind === 'edge_compute') return zh ? '边缘计算设备' : 'Edge device';
     const classification = deviceClass(entity);
@@ -325,6 +328,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
         && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__
     ),
+    onOpenNodeTool,
 }) => {
     const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
     const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
@@ -691,6 +695,10 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         const sshAvailable = dependencyFor(inspectedEntity, 'control_ssh');
                         const publicAvailable = dependencyFor(inspectedEntity, 'public_http');
                         const tailscaleAvailable = dependencyFor(inspectedEntity, 'tailscale');
+                        const terminalAvailable = sshAvailable || tailscaleAvailable;
+                        const runnerAvailable = Boolean(
+                            node?.online && node.capabilities.includes('runtime.read.v1'),
+                        );
                         return <>
                             <span>{zh
                                 ? `${nodeRole === 'main' ? '主节点' : '计算节点'} ${codes.get(inspectedEntity.entity_id)} · 运维信息${pinnedEntityId === inspectedEntity.entity_id ? ' · 已固定（双击节点或点击空白取消）' : ''}`
@@ -699,23 +707,74 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                             <small className={tone}>{computeNodeLabel(node, zh)} · {node?.online
                                 ? (zh ? '心跳' : 'heartbeat')
                                 : (zh ? '最后心跳' : 'last heartbeat')}{' '}{heartbeatLabel(node?.heartbeat_age_seconds, zh)}</small>
-                            <div className='ComputeGraphHoverRoutes'>
+                            {node && onOpenNodeTool ? <div className='ComputeGraphNodeActions'>
+                                <button
+                                    type='button'
+                                    disabled={!terminalAvailable}
+                                    onClick={event => {
+                                        event.stopPropagation();
+                                        onOpenNodeTool(node, 'terminal');
+                                    }}
+                                >
+                                    <span>{routeAvailabilityLabel(terminalAvailable, zh)}</span>
+                                    <strong>SSH / Tailscale</strong>
+                                    <small>{zh ? '打开终端窗口' : 'Open terminal'}</small>
+                                </button>
+                                <button
+                                    type='button'
+                                    onClick={event => {
+                                        event.stopPropagation();
+                                        onOpenNodeTool(node, 'monitor');
+                                    }}
+                                >
+                                    <span>{computeNodeLabel(node, zh)}</span>
+                                    <strong>{zh ? '资源监视器' : 'Resource monitor'}</strong>
+                                    <small>{zh ? '处理器 · 内存 · 显卡 · 磁盘 · 网络' : 'CPU · MEM · GPU · DISK · NETWORK'}</small>
+                                </button>
+                                <button
+                                    type='button'
+                                    onClick={event => {
+                                        event.stopPropagation();
+                                        onOpenNodeTool(node, 'runner');
+                                    }}
+                                >
+                                    <span>{runnerAvailable
+                                        ? (zh ? '正常' : 'Normal')
+                                        : node.online ? (zh ? '待升级' : 'Upgrade required') : computeNodeLabel(node, zh)}</span>
+                                    <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
+                                    <small>{zh ? '程序 · 环境 · 接口 · 状态 · 结果 · 日志' : 'Programs · environments · APIs · status · results · logs'}</small>
+                                </button>
+                            </div> : <div className='ComputeGraphHoverRoutes'>
                                 <div className={sshAvailable ? 'available' : 'unavailable'}>
-                                    <span>{zh ? 'SSH 通路' : 'SSH route'}</span><strong>{availabilityLabel(sshAvailable, zh)}</strong>
+                                    <span>{zh ? 'SSH 通路' : 'SSH route'}</span><strong>{routeAvailabilityLabel(sshAvailable, zh)}</strong>
                                     <small>{node?.network.self_name || node?.network.addresses.join(' · ') || (zh ? '地址待节点上报' : 'Address pending')}</small>
                                 </div>
                                 <div className={publicAvailable ? 'available' : 'unavailable'}>
-                                    <span>{zh ? '公网出口' : 'Public egress'}</span><strong>{availabilityLabel(publicAvailable, zh)}</strong>
+                                    <span>{zh ? '公网出口' : 'Public egress'}</span><strong>{routeAvailabilityLabel(publicAvailable, zh)}</strong>
                                     <small>{zh ? '公开网络访问' : 'Public network access'}</small>
                                 </div>
                                 <div className={tailscaleAvailable ? 'available' : 'unavailable'}>
-                                    <span>{zh ? 'Tailscale 私有组网' : 'Tailscale private overlay'}</span><strong>{availabilityLabel(tailscaleAvailable, zh)}</strong>
+                                    <span>{zh ? 'Tailscale 私有组网' : 'Tailscale private overlay'}</span><strong>{routeAvailabilityLabel(tailscaleAvailable, zh)}</strong>
                                     <small>{node?.network.tailnet || (zh ? '私有链路' : 'Private route')}</small>
                                 </div>
-                            </div>
+                            </div>}
                             <div className='ComputeGraphHoverAgents'>
                                 <span>{zh ? '可调用任务执行器' : 'Callable task workers'}</span>
-                                {agents.length ? <div>{agents.map(agent => <em key={agent.entity_id}>{codes.get(agent.entity_id)} · {agentLabel(agent, zh)}</em>)}</div>
+                                {agents.length ? <div>{agents.map(agent => {
+                                    const service = agentLabel(agent, zh);
+                                    const command = zh
+                                        ? `@${node.name} 执行 ${service}${agent.task_type ? `（${agent.task_type}）` : ''} 服务，并将执行结果按表格输出`
+                                        : `@${node.name} run the ${service}${agent.task_type ? ` (${agent.task_type})` : ''} service and show the result as a table`;
+                                    return <button
+                                        type='button'
+                                        key={agent.entity_id}
+                                        aria-label={zh ? `通过 OpenSight Agent 执行 ${service}` : `Run ${service} with OpenSight Agent`}
+                                        onClick={event => {
+                                            event.stopPropagation();
+                                            sendAgentMessage(command);
+                                        }}
+                                    >{codes.get(agent.entity_id)} · {service}</button>;
+                                })}</div>
                                     : <small>{zh ? '暂无可调用任务执行器' : 'No callable task worker'}</small>}
                             </div>
                         </>;
