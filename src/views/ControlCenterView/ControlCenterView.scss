@@ -69,15 +69,25 @@
 
 .ControlMachineGroupHeading {
   display: flex;
+  box-sizing: border-box;
+  width: 100%;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   min-height: 25px;
+  border: 0;
   background: rgba(255, 255, 255, 0.035);
   padding: 0 10px 0 13px;
   color: rgba(255, 255, 255, 0.42);
+  font: inherit;
   font-size: 9px;
+  text-align: left;
+  cursor: pointer;
 
-  strong { font-weight: 600; }
+  strong { min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  > span { flex: 0 0 auto; }
+  .ControlMachineGroupChevron { margin-left: auto; font-size: 16px; }
+  &[aria-expanded='true'] .ControlMachineGroupChevron { transform: rotate(90deg); }
+  &:focus-visible { outline: 1px solid rgba(0, 154, 255, 0.55); outline-offset: -1px; }
 }
 
 .ControlMachineItem {
@@ -1175,10 +1185,15 @@ button.ComputeFileName:focus-visible { color: white; }
     font-size: 9px;
   }
 
-  .ControlSectionCountButton {
+  > div > .ControlSectionCountButton {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
     border: 0;
     padding: 0;
-    color: rgba(255, 255, 255, 0.58);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    line-height: 1;
     cursor: pointer;
 
     &:hover,
@@ -1797,6 +1812,463 @@ button.ControlServiceCard {
   border-right: 0;
 }
 
+.ControlProgramRunner {
+  .ControlProgramRefresh:disabled { cursor: default; opacity: 0.45; }
+
+  .ControlProgramEndpointCount { color: rgba(255, 255, 255, 0.42); font-size: 10px; }
+  .ControlProgramEndpointName { display: flex; align-items: center; gap: 8px; }
+  .ControlProgramEndpointName .ControlStatusDot { margin: 0; }
+  .ControlProgramEndpointName > span:last-child { display: grid; gap: 2px; }
+  .ControlProgramEndpointName small { color: rgba(255, 255, 255, 0.42); }
+  .ControlProgramInterfaces { overflow: auto; }
+  .ControlProgramInterfaces table { min-width: 980px; }
+  .ControlProgramInterfaces code {
+    color: rgba(255, 255, 255, 0.72);
+    font: inherit;
+    white-space: nowrap;
+  }
+}
+
+.ControlProgramWorkspace {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.ControlProgramList {
+  overflow: auto;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.12);
+  padding: 10px;
+
+  > button {
+    display: grid;
+    width: 100%;
+    min-height: 64px;
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    outline: 0;
+    background: transparent;
+    padding: 9px 10px;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible { border-color: rgba(0, 154, 255, 0.5); }
+    &[aria-current='page'] { border-color: rgba(0, 154, 255, 0.72); background: rgba(0, 154, 255, 0.1); }
+  }
+
+  .ControlStatusDot { margin: 0; }
+  button > span:nth-child(2) { min-width: 0; }
+  strong,
+  small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  strong { color: rgba(255, 255, 255, 0.9); font-size: 11px; }
+  small { margin-top: 4px; color: rgba(255, 255, 255, 0.36); font-size: 8px; }
+  em { color: rgba(255, 255, 255, 0.42); font-size: 8px; font-style: normal; }
+}
+
+.ControlProgramDetail {
+  overflow: auto;
+  background: #202124;
+  padding: 20px 22px;
+
+  > header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 16px;
+
+    span { color: rgba(255, 255, 255, 0.4); font-size: 9px; }
+    h3 { margin: 4px 0 0; color: white; font-size: 22px; font-weight: 500; }
+    p { margin: 5px 0 0; color: rgba(255, 255, 255, 0.34); font-size: 9px; }
+    > strong {
+      flex: 0 0 auto;
+      font-size: 10px;
+      font-weight: 600;
+
+      &.healthy { color: #79d89e; }
+      &.warning { color: #e8bd79; }
+      &.offline { color: #ef8b8b; }
+    }
+  }
+
+  dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+  }
+  dl > div {
+    min-width: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    padding: 14px 0;
+
+    &:nth-child(odd) { padding-right: 20px; }
+    &:nth-child(even) { border-left: 1px solid rgba(255, 255, 255, 0.07); padding-left: 20px; }
+  }
+  dt { color: rgba(255, 255, 255, 0.34); font-size: 8px; }
+  dd { overflow: hidden; margin: 5px 0 0; color: rgba(255, 255, 255, 0.76); font-size: 10px; line-height: 1.5; text-overflow: ellipsis; }
+}
+
+.ControlProgramTaskCounts,
+.ControlProgramLastExit,
+.ControlProgramCapabilityNote {
+  display: flex;
+  flex-direction: column;
+  margin-top: 14px;
+
+  strong { color: rgba(255, 255, 255, 0.5); font-size: 9px; }
+  span { margin-top: 5px; color: rgba(255, 255, 255, 0.72); font-size: 9px; line-height: 1.6; }
+}
+
+.ControlProgramDeployments {
+  margin-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 14px;
+
+  > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    strong { color: rgba(255, 255, 255, 0.62); font-size: 10px; }
+    span { color: rgba(255, 255, 255, 0.34); font-size: 9px; }
+  }
+
+  > p { margin: 12px 0 0; color: rgba(255, 255, 255, 0.42); font-size: 9px; }
+  > p.error { color: #ef8b8b; }
+  > p.warning { color: #e8bd79; }
+  > div { display: grid; gap: 8px; margin-top: 10px; }
+
+  article {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.1);
+    padding: 10px 12px;
+
+    > header {
+      display: grid;
+      grid-template-columns: 8px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+
+      .ControlStatusDot { margin: 0; }
+      strong { overflow: hidden; color: rgba(255, 255, 255, 0.86); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+      em { color: rgba(255, 255, 255, 0.42); font-size: 8px; font-style: normal; }
+    }
+
+    dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    dl > div { padding: 9px 0; }
+  }
+}
+
+.ControlProgramLastExit span { color: #e8bd79; }
+
+.ControlProgramCapabilityNote {
+  border-left: 2px solid rgba(105, 198, 255, 0.55);
+  background: rgba(105, 198, 255, 0.07);
+  padding: 9px 11px;
+}
+
+.ControlProgramLogs {
+  min-width: 0;
+  overflow: auto;
+  padding: 18px 20px;
+
+  .ControlMonitorSearchHeader select {
+    box-sizing: border-box;
+    min-width: 150px;
+    height: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 2px;
+    outline: 0;
+    background: rgba(0, 0, 0, 0.16);
+    padding: 0 8px;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 10px;
+
+    &:focus-visible { border-color: rgba(255, 255, 255, 0.42); }
+  }
+
+  ol { margin: 0; padding: 0; list-style: none; }
+  li {
+    display: grid;
+    grid-template-columns: 126px 120px 120px minmax(0, 1fr);
+    align-items: baseline;
+    gap: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    padding: 10px 8px;
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 9px;
+
+    &.warning { border-left: 2px solid #e8bd79; }
+    &.error { border-left: 2px solid #ef8b8b; }
+  }
+  strong { min-width: 0; color: rgba(255, 255, 255, 0.82); font-size: 9px; font-weight: 500; overflow-wrap: anywhere; }
+  small { grid-column: 4; color: rgba(255, 255, 255, 0.28); font-size: 8px; }
+}
+
+.ControlProgramLogTime,
+.ControlProgramLogProgram,
+.ControlProgramLogType {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ControlProgramLogTime { color: rgba(255, 255, 255, 0.34); }
+.ControlProgramLogProgram { color: #69c6ff; }
+.ControlProgramLogType { color: rgba(255, 255, 255, 0.46); font-family: SFMono-Regular, Consolas, monospace; }
+.ControlProgramError { margin: 0 0 12px; color: #ef8b8b; font-size: 9px; }
+
+.ControlProgramArtifacts {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 18px 20px;
+
+  .ControlMonitorSearchHeader > span {
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 10px;
+  }
+}
+
+.ControlProgramArtifactFilters {
+  display: flex;
+  max-width: 70%;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  input,
+  select,
+  button {
+    box-sizing: border-box;
+    height: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 2px;
+    outline: 0;
+    background: rgba(0, 0, 0, 0.16);
+    padding: 0 7px;
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 9px;
+  }
+
+  input[type='search'] { width: 170px; }
+  input[type='date'] { width: 132px; }
+  select { width: 80px; }
+  button { cursor: pointer; }
+  input:focus-visible,
+  select:focus-visible,
+  button:focus-visible { border-color: rgba(0, 154, 255, 0.72); }
+  > span { margin-left: 4px; white-space: nowrap; }
+}
+
+.ControlProgramArtifactWorkspace {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(230px, 32%) minmax(0, 1fr);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+  > aside {
+    overflow: auto;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 8px 8px 8px 0;
+  }
+
+  > aside button {
+    display: block;
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    outline: 0;
+    background: transparent;
+    padding: 9px 10px;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible { border-color: rgba(0, 154, 255, 0.5); }
+    &[aria-current='page'] { border-color: rgba(0, 154, 255, 0.72); background: rgba(0, 154, 255, 0.1); }
+  }
+
+  .ControlProgramArtifactGroup {
+    margin-bottom: 10px;
+
+    > header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 10px;
+    }
+
+    > header strong { color: rgba(255, 255, 255, 0.48); font-size: 9px; font-weight: 500; }
+    > header span { margin: 0; color: rgba(255, 255, 255, 0.28); font-size: 8px; }
+    > button { margin-bottom: 2px; }
+  }
+
+  strong,
+  span,
+  small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  strong { color: rgba(255, 255, 255, 0.84); font-size: 10px; }
+  span { margin-top: 4px; color: rgba(255, 255, 255, 0.46); font-size: 8px; }
+  small { margin-top: 3px; color: rgba(255, 255, 255, 0.3); font-size: 8px; }
+}
+
+.ControlProgramArtifactPreview {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 0 0 16px;
+
+  > header {
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+
+    div { min-width: 0; }
+    strong,
+    span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    strong { color: rgba(255, 255, 255, 0.84); font-size: 10px; }
+    span { margin-top: 4px; color: rgba(255, 255, 255, 0.34); font-size: 8px; }
+    em { flex: 0 0 auto; color: rgba(255, 255, 255, 0.42); font-size: 9px; font-style: normal; }
+  }
+
+  img,
+  video {
+    display: block;
+    max-width: 100%;
+    max-height: calc(100% - 46px);
+    object-fit: contain;
+  }
+
+  video { width: 100%; height: 100%; background: #080a0c; }
+
+  .ControlProgramPreviewFrame {
+    position: relative;
+    display: flex;
+    width: min(100%, 720px);
+    aspect-ratio: 16 / 9;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #080a0c;
+
+    img,
+    video {
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      max-height: none;
+    }
+
+    .is-loading {
+      position: absolute;
+      inset: 0;
+      visibility: hidden;
+    }
+  }
+
+  .ControlProgramPreviewPlaceholder {
+    display: flex;
+    width: min(100%, 720px);
+    aspect-ratio: 16 / 9;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.22);
+    text-align: center;
+
+    &.error strong { color: #ef8b8b; }
+
+    strong { color: rgba(255, 255, 255, 0.72); font-size: 11px; }
+    span { margin: 0; color: rgba(255, 255, 255, 0.36); font-size: 9px; }
+    button {
+      border: 1px solid rgba(0, 154, 255, 0.5);
+      border-radius: 2px;
+      background: rgba(0, 154, 255, 0.12);
+      padding: 7px 12px;
+      color: #69c6ff;
+      font-size: 9px;
+      cursor: pointer;
+    }
+  }
+
+}
+
+.ControlProgramResultData {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+
+  > p {
+    margin: auto;
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 10px;
+
+    &.error { color: #ef8b8b; }
+  }
+
+  .ControlProgramResultPlaceholder {
+    width: 100%;
+    min-height: 260px;
+    aspect-ratio: auto;
+    flex: 1;
+
+    &.error strong { color: #ef8b8b; }
+  }
+
+  pre {
+    box-sizing: border-box;
+    min-height: 0;
+    flex: 1;
+    overflow: auto;
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    color: rgba(255, 255, 255, 0.76);
+    font: 9px/1.65 SFMono-Regular, Consolas, monospace;
+    white-space: pre;
+  }
+
+  footer {
+    display: flex;
+    min-height: 30px;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+
+    span { color: rgba(255, 255, 255, 0.4); font-size: 9px; }
+  }
+}
+
 .ControlPerformanceDiagnosis {
   > p { margin: 0 0 12px; color: rgba(255, 255, 255, 0.42); font-size: 9px; }
 
@@ -1848,8 +2320,6 @@ button.ControlServiceCard {
   display: grid;
   grid-template-columns: repeat(2, minmax(260px, 1fr));
   gap: 8px;
-
-  &.camera-only { grid-template-columns: 1fr; }
 }
 
 .ControlRelatedDeviceGroup {
@@ -2098,4 +2568,20 @@ button.ControlServiceCard {
   .ControlMonitorConversationHistory { min-height: 420px; overflow: visible; }
   .ControlMonitorProcesses { overflow: visible; }
   .ControlMonitorProcesses { border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+  .ControlProgramWorkspace { display: block; }
+  .ControlProgramList { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+  .ControlProgramList > button { flex: 0 0 230px; }
+  .ControlProgramDetail dl { grid-template-columns: 1fr; }
+  .ControlProgramDetail dl > div:nth-child(odd),
+  .ControlProgramDetail dl > div:nth-child(even) { border-left: 0; padding-right: 0; padding-left: 0; }
+  .ControlProgramLogs li { grid-template-columns: 110px minmax(0, 1fr); }
+  .ControlProgramLogType { grid-column: 1; }
+  .ControlProgramLogs li strong { grid-column: 2; grid-row: 2; }
+  .ControlProgramLogs li small { grid-column: 2; }
+  .ControlProgramArtifactWorkspace { display: block; overflow: auto; }
+  .ControlProgramArtifactWorkspace > aside { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-right: 0; }
+  .ControlProgramArtifactWorkspace > aside button { flex: 0 0 230px; }
+  .ControlProgramArtifactPreview { min-height: 360px; padding-left: 0; }
+  .ControlProgramArtifactFilters { max-width: 100%; justify-content: flex-start; }
+  .ControlProgramArtifactFilters input[type='search'] { width: 150px; }
 }

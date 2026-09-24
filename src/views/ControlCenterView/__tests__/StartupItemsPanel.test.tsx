@@ -87,6 +87,37 @@ const challenge = (enabled: boolean): ComputeStartupAuthorizationResult => ({
 describe('StartupItemsPanel', () => {
     afterEach(() => jest.restoreAllMocks());
 
+    it('loads the latest items on reopen without a refresh button', async () => {
+        let resolveRefresh: (value: ComputeStartupList) => void = () => undefined;
+        const refresh = new Promise<ComputeStartupList>(resolve => {
+            resolveRefresh = resolve;
+        });
+        const load = jest.spyOn(ComputeClusterService, 'startupItems')
+            .mockResolvedValueOnce({
+                schema_version: 'startup.list-result.v1', platform: 'windows', available: true,
+                items: [item],
+            })
+            .mockReturnValueOnce(refresh);
+        const view = render(<StartupItemsPanel node={node} zh visible/>);
+
+        expect(await screen.findByText('已启用')).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '刷新'})).not.toBeInTheDocument();
+        expect(screen.getByRole('searchbox', {name: '搜索启动应用'})).toBeInTheDocument();
+
+        view.rerender(<></>);
+        view.rerender(<StartupItemsPanel node={node} zh visible/>);
+
+        expect(screen.getByText('已启用')).toBeInTheDocument();
+        resolveRefresh({
+            schema_version: 'startup.list-result.v1', platform: 'windows', available: true,
+            items: [{...item, enabled: false}],
+        });
+        expect(await screen.findByText('已禁用')).toBeInTheDocument();
+        expect(load).toHaveBeenCalledTimes(2);
+        expect(load).toHaveBeenLastCalledWith(nodeId);
+        expect(screen.queryByRole('button', {name: '刷新'})).not.toBeInTheDocument();
+    });
+
     it('requires a fresh exact authorization for disable and restore', async () => {
         (ApprovalIdentity.getApprovalIdentity as jest.Mock).mockReturnValue({privateKey: {}, user});
         (ApprovalIdentity.signAuthorization as jest.Mock).mockResolvedValue('signed');

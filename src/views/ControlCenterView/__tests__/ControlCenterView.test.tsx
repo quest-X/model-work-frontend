@@ -263,7 +263,7 @@ describe('ControlCenterView', () => {
         expect(await selectMachine('在线节点')).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '基础信息'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '网络情况'})).toBeInTheDocument();
-        expect(screen.getByRole('heading', {name: '资源监控'})).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: '资源管理'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '相关设备'})).toBeInTheDocument();
         expect(screen.getByText('边缘计算设备')).toBeInTheDocument();
         expect(screen.getByRole('button', {name: '发现并添加局域网边缘计算设备'})).toBeInTheDocument();
@@ -353,9 +353,9 @@ describe('ControlCenterView', () => {
     });
 
     it('shows only camera connections below an AIPACK node', async () => {
-        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
-            node('AIPACK-05', true, true, 'NVIDIA Jetson AGX Orin'),
-        ]);
+        const aipack = node('AIPACK-05', true, true, 'NVIDIA Jetson AGX Orin');
+        aipack.network.tailscale_ssh_available = false;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([aipack]);
         const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
 
         expect(await selectMachine('AIPACK-05')).toBeInTheDocument();
@@ -364,8 +364,52 @@ describe('ControlCenterView', () => {
             .not.toBeInTheDocument();
         expect(screen.getByText('SSH 局域网')).toBeInTheDocument();
         expect(screen.queryByText('Tailscale 远程')).not.toBeInTheDocument();
+        expect(within(screen.getByRole('button', {name: '打开资源监视器'})).getByText('正常'))
+            .toBeInTheDocument();
         expect(screen.getByText('摄像头')).toBeInTheDocument();
         expect(container.querySelector('.ControlRelatedDeviceGrid')).toHaveClass('camera-only');
+    });
+
+    it('opens a node-scoped program runner for every AIPACK and closes it on selection changes', async () => {
+        const fleet = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 18, 19, 20, 21]
+            .map(number => runtimeNode(`AIPACK-${String(number).padStart(2, '0')}`));
+        fleet[1].capabilities = [];
+        fleet[2].online = false;
+        const main = node('baosight-02', true);
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([...fleet, main]);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        const machines = screen.getByRole('complementary', {name: '机器列表'});
+        await within(machines).findByRole('button', {name: /AIPACK-01/});
+        for (const machine of fleet) {
+            fireEvent.click(within(machines).getByRole('button', {name: new RegExp(machine.name)}));
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+            expect(screen.getByRole('heading', {name: '资源管理'})).toBeInTheDocument();
+            expect(screen.queryByRole('heading', {name: '程序运行'})).not.toBeInTheDocument();
+            const launcher = screen.getByRole('button', {name: '打开程序运行器'});
+            expect(launcher).toHaveTextContent(!machine.online
+                ? '故障'
+                : machine.capabilities.length ? '正常' : '待升级');
+            fireEvent.click(launcher);
+            expect(screen.getByRole('dialog', {name: `${machine.name} 程序运行器`}))
+                .toBeInTheDocument();
+            if (!machine.online || !machine.capabilities.length) {
+                expect(ComputeClusterService.runtime).not.toHaveBeenCalledWith(
+                    machine.node_id, expect.any(AbortSignal),
+                );
+            } else {
+                expect(ComputeClusterService.runtime).toHaveBeenLastCalledWith(
+                    machine.node_id, expect.any(AbortSignal),
+                );
+            }
+        }
+        fireEvent.keyDown(document, {key: 'Escape'});
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        for (const [, signal] of jest.mocked(ComputeClusterService.runtime).mock.calls) {
+            expect(signal?.aborted).toBe(true);
+        }
+        fireEvent.click(within(machines).getByRole('button', {name: /baosight-02/}));
+        expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
     });
 
     it('uses the worst state when one explicit control path fails', async () => {
@@ -1129,6 +1173,22 @@ describe('ControlCenterView', () => {
         fireEvent.change(screen.getByRole('combobox', {name: '节点分组'}), {target: {value: 'platform'}});
         expect(list.querySelectorAll('.ControlMachineGroupHeading')).toHaveLength(2);
 
+        const windowsToggle = within(list).getByRole('button', {name: '收起Windows'});
+        expect(windowsToggle).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.click(windowsToggle);
+        expect(windowsToggle).toHaveAttribute('aria-expanded', 'false');
+        expect(within(list).queryByRole('button', {name: /Charlie/})).not.toBeInTheDocument();
+        expect(within(list).queryByRole('button', {name: /Bravo/})).not.toBeInTheDocument();
+        expect(within(list).getByRole('button', {name: /Alpha/})).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'Charlie'})).toBeInTheDocument();
+
+        fireEvent.change(screen.getByRole('combobox', {name: '节点分组'}), {target: {value: 'none'}});
+        expect(list.querySelectorAll('.ControlMachineGroupHeading')).toHaveLength(0);
+        expect(within(list).getByRole('button', {name: /Charlie/})).toBeInTheDocument();
+        fireEvent.change(screen.getByRole('combobox', {name: '节点分组'}), {target: {value: 'platform'}});
+        fireEvent.click(within(list).getByRole('button', {name: '展开Windows'}));
+        expect(within(list).getByRole('button', {name: /Charlie/})).toBeInTheDocument();
+
         fireEvent.change(screen.getByRole('combobox', {name: '节点状态'}), {target: {value: 'fault'}});
         expect(screen.getByRole('button', {name: /Alpha/})).toBeInTheDocument();
         expect(screen.queryByRole('button', {name: /Bravo/})).not.toBeInTheDocument();
@@ -1204,9 +1264,22 @@ describe('ControlCenterView', () => {
             .toEqual(['总览', '01 笔记本', '02 笔记本', 'AIPACK-13', 'yy-camera']);
         expect(Array.from(list.querySelectorAll('.ControlMachineGroupHeading strong')).map(item => item.textContent))
             .toContain('废钢作业区');
-        expect(within(list).getByRole('button', {name: /02 笔记本/})).toHaveClass('tree-depth-1');
+        expect(within(list).getByRole('button', {name: /02 笔记本/})).not.toHaveClass('tree-child');
         expect(within(list).getByRole('button', {name: '打开 AIPACK-13 边缘设备终端'}))
             .toHaveClass('tree-depth-0');
+        const areaToggle = within(list).getByRole('button', {name: '收起废钢作业区'});
+        const areaHeading = areaToggle.closest('.ControlMachineGroupHeading') as HTMLElement;
+        expect(areaHeading.querySelector('strong')?.nextElementSibling).toHaveTextContent('1');
+        expect(areaToggle).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.click(within(areaToggle).getByText('废钢作业区'));
+        expect(areaToggle).toHaveAttribute('aria-expanded', 'false');
+        expect(within(list).queryByRole('button', {name: '打开 AIPACK-13 边缘设备终端'}))
+            .not.toBeInTheDocument();
+        expect(within(list).queryByRole('button', {name: '打开 yy-camera 实时画面'})).not.toBeInTheDocument();
+        expect(within(list).getByRole('button', {name: /02 笔记本/})).toBeInTheDocument();
+        fireEvent.click(within(list).getByRole('button', {name: '展开废钢作业区'}));
+        expect(within(list).getByRole('button', {name: '打开 AIPACK-13 边缘设备终端'}))
+            .toBeInTheDocument();
         const camera = within(list).getByRole('button', {name: '打开 yy-camera 实时画面'});
         expect(camera).toHaveClass('tree-depth-1');
         expect(camera.querySelector('img')).toHaveAttribute('src', '/ico/camera.png');
@@ -1290,6 +1363,13 @@ describe('ControlCenterView', () => {
 
         fireEvent.click(installed);
         expect(await screen.findByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
+        fireEvent.click(within(list).getByRole('button', {name: '收起炉后作业区'}));
+        expect(within(list).queryByRole('button', {name: '查看 AIPACK-05 节点信息'}))
+            .not.toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'AIPACK-05'})).toBeInTheDocument();
+        fireEvent.click(within(list).getByRole('button', {name: '展开炉后作业区'}));
+        expect(within(list).getByRole('button', {name: '查看 AIPACK-05 节点信息'}))
+            .toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByLabelText('1 个相关设备')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '打开车间相机实时画面'}));
         expect(await screen.findByRole('dialog', {name: '相机实时画面'})).toHaveTextContent('shangang-aipac-02');
@@ -1577,6 +1657,29 @@ describe('ControlCenterView', () => {
         expect(container.querySelector('.ControlCenterBody .ComputeTerminalPanel')).toBeInTheDocument();
     });
 
+    it('shows unavailable terminal task control as a yellow fault', async () => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            node('离线节点', false),
+        ]);
+        jest.mocked(ComputeClusterService.terminalTargets)
+            .mockRejectedValue(new Error('model-work-node Client task control is unavailable'));
+        const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByText('离线节点');
+        fireEvent.click(screen.getByText('相关功能'));
+        const terminal = within(screen.getByLabelText('相关功能列表'))
+            .getByRole('button', {name: /终端连接/});
+        const state = within(terminal).getByText('故障');
+        expect(state).toHaveClass('warning');
+        expect(state).not.toHaveClass('offline');
+
+        fireEvent.click(terminal);
+        expect(await screen.findByText('model-work-node Client task control is unavailable'))
+            .toBeInTheDocument();
+        expect(container.querySelector('.ControlTopNavigationBar .ControlStatusDot'))
+            .toHaveClass('warning');
+    });
+
     it('opens single-node storage analysis from related features', async () => {
         const machine = node('在线节点', true);
         machine.capabilities.push('task.storage.scan.v1');
@@ -1597,6 +1700,7 @@ describe('ControlCenterView', () => {
         machine.capabilities.push('runtime.performance.mode.read.v1');
         const unsupported = node('旧版节点', true);
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine, unsupported]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(machine));
         const inspect = jest.spyOn(ComputeClusterService, 'performanceMode').mockResolvedValue({
             schema_version: 'performance.mode-result.v1',
             captured_at: 1,

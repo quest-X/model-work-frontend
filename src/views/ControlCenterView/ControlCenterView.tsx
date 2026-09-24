@@ -47,6 +47,7 @@ import {DuplicateAnalysisPanel} from './DuplicateAnalysisPanel';
 import {StartupItemsPanel} from './StartupItemsPanel';
 import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
 import {PerformanceModePanel} from './PerformanceModePanel';
+import {ProgramRunnerPanel} from './ProgramRunnerPanel';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
@@ -402,6 +403,12 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [inspectedServiceId, setInspectedServiceId] = useState('');
     useEscapeToClose(() => setInspectedServiceId(''), Boolean(inspectedServiceId), 20);
     const [monitorMaximized, setMonitorMaximized] = useState(false);
+    const [programRunnerOpen, setProgramRunnerOpen] = useState(false);
+    const [programRunnerMaximized, setProgramRunnerMaximized] = useState(false);
+    useEscapeToClose(() => {
+        setProgramRunnerOpen(false);
+        setProgramRunnerMaximized(false);
+    }, programRunnerOpen, 21);
     const [monitorView, setMonitorView] = useState<MonitorView>('performance');
     const [deviceManagementTab, setDeviceManagementTab] = useState<'camera' | 'edge' | null>(null);
     const [cameraViewerId, setCameraViewerId] = useState('');
@@ -433,6 +440,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [nodeGrouping, setNodeGrouping] = useState<NodeGrouping>('region');
     const [nodeOrdering, setNodeOrdering] = useState<NodeOrdering>('status');
     const [nodeVisibility, setNodeVisibility] = useState<NodeVisibility>('all');
+    const [collapsedMachineGroups, setCollapsedMachineGroups] = useState<Set<string>>(new Set());
     const [overviewView, setOverviewView] = useState<OverviewView>('graph');
     const mounted = useRef(true);
     const refreshInFlight = useRef(false);
@@ -780,6 +788,9 @@ export const ControlCenterView: React.FC<IProps> = ({
     const normalCount = overviewNodes.filter(node => machineTone(node) === 'healthy').length;
     const overviewTone = communicationTone(aggregateCommunicationStates(overviewNodes.map(computeNodeState)));
     const terminalAvailable = Boolean(selectedNode?.online && selectedNode.network.ssh_available);
+    const terminalFeatureTone: Tone = terminalTargets.some(target => target.available)
+        ? 'healthy'
+        : 'warning';
     const filesAvailable = overviewNodes.some(node => node.online && node.capabilities.includes('filesystem.list.v1'));
     const utilitiesAvailable = overviewNodes.some(node => node.online && node.capabilities.includes('task.storage.scan.v1'));
     const performanceModeAvailable = overviewNodes.length > 0 && overviewNodes.every(node =>
@@ -791,7 +802,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         : workspace === 'network'
             ? (error ? 'offline' : 'healthy')
             : workspace === 'terminal'
-                ? (terminalAvailable ? 'healthy' : 'offline')
+                ? terminalFeatureTone
                 : workspace === 'files'
                     ? (filesAvailable ? 'healthy' : 'offline')
                 : workspace === 'utilities'
@@ -809,6 +820,8 @@ export const ControlCenterView: React.FC<IProps> = ({
         if (nodeChanged) {
             setInspectedServiceId('');
             setMonitorView('performance');
+            setProgramRunnerOpen(false);
+            setProgramRunnerMaximized(false);
         }
         if (nodeChanged || !runtimeInventoryCapable) {
             runtimeInventoryAbort.current?.abort();
@@ -1142,6 +1155,28 @@ export const ControlCenterView: React.FC<IProps> = ({
         </React.Fragment>;
     };
 
+    const renderMachineGroupHeading = (id: string, label: string, count: number) => {
+        const collapsed = collapsedMachineGroups.has(id);
+        const action = zh ? `${collapsed ? '展开' : '收起'}${label}` : `${collapsed ? 'Expand' : 'Collapse'} ${label}`;
+        return <button
+            type='button'
+            className='ControlMachineGroupHeading'
+            aria-label={action}
+            title={action}
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsedMachineGroups(current => {
+                const next = new Set(current);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+            })}
+        >
+            <strong>{label}</strong>
+            <span>{count}</span>
+            <span className='ControlMachineGroupChevron' aria-hidden='true'>&#8250;</span>
+        </button>;
+    };
+
     // eslint-disable-next-line complexity
     const renderMachineList = () => <aside className='ControlMachinePanel' aria-label={zh ? '机器列表' : 'Machine list'}>
         <div className='ControlMachineOrganizer' aria-label={zh ? '节点整理' : 'Organize nodes'}>
@@ -1209,14 +1244,11 @@ export const ControlCenterView: React.FC<IProps> = ({
                 const orderedNodes = hasSingleMain
                     ? [mainNodes[0], ...visibleGroupNodes.filter(node => node.node_id !== mainNodes[0].node_id)]
                     : visibleGroupNodes;
+                const groupId = `${nodeGrouping}:${group}`;
                 return <React.Fragment key={group || 'all'}>
-                    {group && <div className='ControlMachineGroupHeading'>
-                        <strong>{group}</strong>
-                        <span>{visibleGroupNodes.length}</span>
-                    </div>}
-                    {orderedNodes.map(node => {
+                    {group && renderMachineGroupHeading(groupId, group, visibleGroupNodes.length)}
+                    {(!group || !collapsedMachineGroups.has(groupId)) && orderedNodes.map(node => {
                         const tone = machineTone(node);
-                        const nodeDepth = hasSingleMain && node.role !== 'main' ? 1 : 0;
                         const allEdgeDevices = lanAssets.filter(asset =>
                             asset.node_id === node.node_id && asset.device_kind === 'edge_compute'
                         );
@@ -1227,8 +1259,8 @@ export const ControlCenterView: React.FC<IProps> = ({
                             <button
                                 type='button'
                                 className={`ControlMachineItem ${
-                                    nodeDepth ? `tree-child tree-depth-${nodeDepth} ` : ''
-                                }${node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''}`}
+                                    node.node_id === selectedNodeId && !cameraViewerId ? 'selected' : ''
+                                }`}
                                 aria-pressed={node.node_id === selectedNodeId && !cameraViewerId}
                                 onClick={() => selectSidebarNode(node.node_id)}
                             >
@@ -1243,10 +1275,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     {computeNodeLabel(node, zh)}
                                 </span>
                             </button>
-                            {edgeDevices.map(device => renderSidebarEdge(node, device, nodeDepth + 1))}
+                            {edgeDevices.map(device => renderSidebarEdge(node, device, 1))}
                             {cameras
                                 .filter(camera => !edgeIds.has(cameraParentAssetId(node, camera)))
-                                .map(camera => renderSidebarCamera(node, camera, nodeDepth + 1))}
+                                .map(camera => renderSidebarCamera(node, camera, 1))}
                         </React.Fragment>;
                     })}
                 </React.Fragment>;
@@ -1255,12 +1287,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                 const devices = lanAssets.filter(asset =>
                     asset.device_kind === 'edge_compute' && sidebarWorkArea(asset)?.id === area.id
                 );
+                const groupId = `work-area:${area.id}`;
                 return devices.length > 0 && <React.Fragment key={area.id}>
-                    <div className='ControlMachineGroupHeading'>
-                        <strong>{zh ? area.zh : area.en}</strong>
-                        <span>{devices.length}</span>
-                    </div>
-                    {devices.map(device => {
+                    {renderMachineGroupHeading(groupId, zh ? area.zh : area.en, devices.length)}
+                    {!collapsedMachineGroups.has(groupId) && devices.map(device => {
                         const node = nodes.find(item => item.node_id === device.node_id);
                         return node && renderSidebarEdge(node, device, 0, installedSidebarNode(device));
                     })}
@@ -1367,8 +1397,13 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <strong>{zh ? '终端连接' : 'Terminal connection'}</strong>
                     <small>{zh ? '受控 SSH · 输入指令' : 'Controlled SSH · command input'}</small>
                 </span>
-                <span className={`ControlMachineState ${terminalAvailable ? 'healthy' : 'offline'}`}>
-                    {toneLabel(terminalAvailable ? 'healthy' : 'offline', zh)}
+                <span className={`ControlMachineState ${terminalFeatureTone}`}>
+                    {communicationStateLabel(
+                        terminalFeatureTone === 'healthy'
+                            ? 'normal'
+                            : terminalFeatureTone === 'warning' ? 'fault' : 'abnormal',
+                        zh,
+                    )}
                 </span>
             </button>
         </div>
@@ -1438,6 +1473,30 @@ export const ControlCenterView: React.FC<IProps> = ({
                 <span>{monitorStatus}</span>
                 <strong>{zh ? '资源监视器' : 'Resource monitor'}</strong>
                 <small>{zh ? '处理器 · 内存 · 显卡 · 磁盘 · 网络' : 'CPU · MEM · GPU · DISK · NETWORK'}</small>
+            </span>
+            <span className='ControlServiceOpen' aria-hidden='true'>›</span>
+        </button>;
+    };
+
+    const renderProgramRunnerCard = () => {
+        const capable = Boolean(
+            selectedNode?.online && selectedNode.capabilities.includes('runtime.read.v1'),
+        );
+        const tone: Tone = selectedNode?.online ? (capable ? 'healthy' : 'warning') : 'offline';
+        const status = selectedNode?.online
+            ? capable ? (zh ? '正常' : 'Normal') : (zh ? '待升级' : 'Upgrade required')
+            : (zh ? '故障' : 'Fault');
+        return <button
+            type='button'
+            className='ControlServiceCard ControlRuntimeService'
+            aria-label={zh ? '打开程序运行器' : 'Open program runner'}
+            onClick={() => setProgramRunnerOpen(true)}
+        >
+            <span className={`ControlStatusDot ${tone}`} aria-hidden='true'/>
+            <span className='ControlRuntimeIdentity'>
+                <span>{status}</span>
+                <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
+                <small>{zh ? '程序 · 环境 · 接口 · 状态 · 日志' : 'Programs · environments · endpoints · status · logs'}</small>
             </span>
             <span className='ControlServiceOpen' aria-hidden='true'>›</span>
         </button>;
@@ -1623,10 +1682,13 @@ export const ControlCenterView: React.FC<IProps> = ({
             <section className='ControlSection'>
                 <div className='ControlSectionHeading'>
                     <div>
-                        <h2>{zh ? '资源监控' : 'Resource monitoring'}</h2>
+                        <h2>{zh ? '资源管理' : 'Resource management'}</h2>
                     </div>
                 </div>
-                <div className='ControlServiceGrid'>{renderResourceMonitorCard()}</div>
+                <div className='ControlServiceGrid'>
+                    {renderResourceMonitorCard()}
+                    {aipackNode && renderProgramRunnerCard()}
+                </div>
             </section>
 
             <section className='ControlSection'>
@@ -2582,6 +2644,26 @@ export const ControlCenterView: React.FC<IProps> = ({
                     </div>
                 </div>
             </section>
+        </div>}
+        {selectedNode && programRunnerOpen && <div
+            className={`ControlResourceMonitorBackdrop${programRunnerMaximized ? ' maximized' : ''}`}
+            onMouseDown={event => {
+                if (event.target === event.currentTarget) {
+                    setProgramRunnerOpen(false);
+                    setProgramRunnerMaximized(false);
+                }
+            }}
+        >
+            <ProgramRunnerPanel
+                node={selectedNode}
+                zh={zh}
+                maximized={programRunnerMaximized}
+                onClose={() => {
+                    setProgramRunnerOpen(false);
+                    setProgramRunnerMaximized(false);
+                }}
+                onToggleMaximized={() => setProgramRunnerMaximized(current => !current)}
+            />
         </div>}
     </div>;
 };

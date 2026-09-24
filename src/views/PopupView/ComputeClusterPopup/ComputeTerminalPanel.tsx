@@ -160,7 +160,7 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
                 else if (next.output) setOutput(current => current + next.output);
                 setSession(next);
                 if (!['connecting', 'running'].includes(next.state)) sessionIdRef.current = '';
-                if (next.error) setError(next.error);
+                setError(next.error || '');
             } catch (reason) {
                 if ((reason as {name?: string})?.name !== 'AbortError') {
                     setError(reason instanceof Error ? reason.message : String(reason));

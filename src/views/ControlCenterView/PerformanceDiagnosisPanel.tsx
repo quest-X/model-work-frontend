@@ -13,6 +13,8 @@ interface IProps {
     visible: boolean;
 }
 
+const diagnosisCache = new Map<string, ComputePerformanceDiagnosis>();
+
 const metricLabel = (metric: ComputePerformanceMetric, zh: boolean): string => ({
     cpu_percent: zh ? '处理器' : 'CPU',
     memory_used_percent: zh ? '内存' : 'Memory',
@@ -32,10 +34,21 @@ const findingLabel = (code: ComputePerformanceDiagnosis['findings'][number]['cod
 const metricValue = (value: number | null, unit: ComputePerformanceEvidence['unit']): string =>
     value === null ? '—' : `${value.toFixed(1)}${unit === 'percent' ? '%' : '°C'}`;
 
+const evidenceStatus = (item: ComputePerformanceEvidence, zh: boolean): string => {
+    if (item.sustained) return zh ? '持续超阈值' : 'Sustained threshold breach';
+    if (item.sufficient) return zh ? '未持续超阈值' : 'Not sustained';
+    if (item.sample_count === 0 && item.metric.startsWith('gpu_')) {
+        return zh ? '节点未上报 GPU 数据' : 'GPU telemetry not reported';
+    }
+    return zh ? '证据不足' : 'Insufficient';
+};
+
 // Loading, capability, and evidence states share one read-only panel boundary.
 // eslint-disable-next-line complexity
 export const PerformanceDiagnosisPanel: React.FC<IProps> = ({node, zh, visible}) => {
-    const [document, setDocument] = useState<ComputePerformanceDiagnosis>();
+    const [document, setDocument] = useState<ComputePerformanceDiagnosis | undefined>(
+        () => node ? diagnosisCache.get(node.node_id) : undefined,
+    );
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const available = Boolean(
@@ -55,6 +68,7 @@ export const PerformanceDiagnosisPanel: React.FC<IProps> = ({node, zh, visible})
                 result.schema_version !== 'performance.diagnosis-result.v1'
                 || result.window_seconds !== 300
             ) throw new Error('performance_diagnosis_invalid');
+            diagnosisCache.set(node.node_id, result);
             setDocument(result);
         } catch {
             if (!signal?.aborted) setError(
@@ -66,7 +80,7 @@ export const PerformanceDiagnosisPanel: React.FC<IProps> = ({node, zh, visible})
     };
 
     useEffect(() => {
-        setDocument(undefined);
+        setDocument(node ? diagnosisCache.get(node.node_id) : undefined);
         const controller = new AbortController();
         void load(controller.signal);
         return () => controller.abort();
@@ -130,11 +144,7 @@ export const PerformanceDiagnosisPanel: React.FC<IProps> = ({node, zh, visible})
                     ? `${metricValue(item.minimum, item.unit)}–${metricValue(item.maximum, item.unit)} / ${metricValue(item.average, item.unit)}`
                     : '—'}</td>
                 <td>≥ {metricValue(item.threshold, item.unit)}</td>
-                <td>{item.sustained
-                    ? (zh ? '持续超阈值' : 'Sustained threshold breach')
-                    : item.sufficient
-                        ? (zh ? '未持续超阈值' : 'Not sustained')
-                        : (zh ? '证据不足' : 'Insufficient')}</td>
+                <td>{evidenceStatus(item, zh)}</td>
             </tr>)}</tbody>
         </table>
     </section>;

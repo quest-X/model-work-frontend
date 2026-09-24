@@ -17,6 +17,8 @@ interface IProps {
     visible: boolean;
 }
 
+const startupItemsCache = new Map<string, ComputeStartupList>();
+
 const friendlyError = (reason: unknown, zh: boolean): string => {
     const raw = reason instanceof Error ? reason.message : String(reason);
     if (raw.includes('target_changed')) return zh ? '启动项状态已变化，请刷新后重试。' : 'The startup item changed. Refresh and try again.';
@@ -29,7 +31,9 @@ const friendlyError = (reason: unknown, zh: boolean): string => {
 // The capability, authorization, and confirmation states belong in one bounded panel.
 // eslint-disable-next-line complexity
 export const StartupItemsPanel: React.FC<IProps> = ({node, zh, visible}) => {
-    const [document, setDocument] = useState<ComputeStartupList>();
+    const [document, setDocument] = useState<ComputeStartupList | undefined>(
+        () => node ? startupItemsCache.get(node.node_id) : undefined,
+    );
     const [query, setQuery] = useState('');
     const [pending, setPending] = useState<ComputeStartupAuthorizationResult>();
     const [loading, setLoading] = useState(false);
@@ -45,6 +49,7 @@ export const StartupItemsPanel: React.FC<IProps> = ({node, zh, visible}) => {
         try {
             const result = await ComputeClusterService.startupItems(node.node_id);
             if (result.schema_version !== 'startup.list-result.v1') throw new Error('startup_result_invalid');
+            startupItemsCache.set(node.node_id, result);
             setDocument(result);
         } catch (reason) {
             setError(friendlyError(reason, zh));
@@ -54,6 +59,7 @@ export const StartupItemsPanel: React.FC<IProps> = ({node, zh, visible}) => {
     };
 
     useEffect(() => {
+        setDocument(node ? startupItemsCache.get(node.node_id) : undefined);
         void load();
     }, [node?.node_id, readable, visible]);
 
@@ -157,10 +163,15 @@ export const StartupItemsPanel: React.FC<IProps> = ({node, zh, visible}) => {
                 || result.item.enabled !== authorization.parameters.enabled
                 || result.item.protected
             ) throw new Error('startup_result_mismatch');
-            setDocument(current => current ? {
-                ...current,
-                items: current.items.map(item => item.item_id === result.item.item_id ? result.item : item),
-            } : current);
+            setDocument(current => {
+                if (!current || !node) return current;
+                const updated = {
+                    ...current,
+                    items: current.items.map(item => item.item_id === result.item.item_id ? result.item : item),
+                };
+                startupItemsCache.set(node.node_id, updated);
+                return updated;
+            });
             setPending(undefined);
         } catch (reason) {
             setPending(undefined);
@@ -181,7 +192,7 @@ export const StartupItemsPanel: React.FC<IProps> = ({node, zh, visible}) => {
     return <section className='ControlMonitorProcesses ControlMonitorInventory' aria-label={zh ? '启动应用清单' : 'Startup app list'}>
         <header className='ControlMonitorSearchHeader'>
             <h3>{zh ? '启动应用' : 'Startup apps'}</h3>
-            <div className='ControlMonitorSearchTools'><input type='search' value={query} aria-label={zh ? '搜索启动应用' : 'Search startup apps'} placeholder={zh ? '搜索名称、标识、状态或范围' : 'Search name, identifier, status, or scope'} onChange={event => setQuery(event.target.value)}/><button type='button' onClick={() => void load()} disabled={loading}>{zh ? '刷新' : 'Refresh'}</button><span>{items.length}/{document.items.length}</span></div>
+            <div className='ControlMonitorSearchTools'><input type='search' value={query} aria-label={zh ? '搜索启动应用' : 'Search startup apps'} placeholder={zh ? '搜索名称、标识、状态或范围' : 'Search name, identifier, status, or scope'} onChange={event => setQuery(event.target.value)}/><span>{items.length}/{document.items.length}</span></div>
         </header>
         {error && <div className='ControlMonitorUnavailable'><strong>{error}</strong></div>}
         <table><thead><tr><th>{zh ? '名称' : 'Name'}</th><th>{zh ? '标识' : 'Identifier'}</th><th>{zh ? '范围' : 'Scope'}</th><th>{zh ? '状态' : 'Status'}</th><th>{zh ? '操作' : 'Action'}</th></tr></thead><tbody>{items.map(item => <tr key={item.item_id}>

@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen} from '@testing-library/react';
+import {act, render, screen, waitFor} from '@testing-library/react';
 import {
     ComputeClusterNode,
     ComputeClusterService,
@@ -37,25 +37,30 @@ const rules: [ComputePerformanceMetric, 'percent' | 'celsius', number][] = [
     ['gpu_temperature_celsius', 'celsius', 85],
 ];
 
+// eslint-disable-next-line complexity
 const diagnosis = (sustained = false): ComputePerformanceDiagnosis => ({
     schema_version: 'performance.diagnosis-result.v1',
     window_seconds: 300,
     observed_seconds: sustained ? 240 : 0,
     sample_count: sustained ? 3 : 1,
     coverage_sufficient: sustained,
-    evidence: rules.map(([metric, unit, threshold], index) => ({
-        metric,
-        unit,
-        sample_count: sustained ? 3 : 1,
-        minimum: sustained && index === 0 ? 95 : 10,
-        maximum: sustained && index === 0 ? 99 : 10,
-        average: sustained && index === 0 ? 97 : 10,
-        threshold,
-        comparison: 'gte',
-        violating_samples: sustained && index === 0 ? 3 : 0,
-        sufficient: sustained,
-        sustained: sustained && index === 0,
-    })),
+    // eslint-disable-next-line complexity
+    evidence: rules.map(([metric, unit, threshold], index) => {
+        const missingGpu = !sustained && metric.startsWith('gpu_');
+        return {
+            metric,
+            unit,
+            sample_count: missingGpu ? 0 : sustained ? 3 : 1,
+            minimum: missingGpu ? null : sustained && index === 0 ? 95 : 10,
+            maximum: missingGpu ? null : sustained && index === 0 ? 99 : 10,
+            average: missingGpu ? null : sustained && index === 0 ? 97 : 10,
+            threshold,
+            comparison: 'gte',
+            violating_samples: sustained && index === 0 ? 3 : 0,
+            sufficient: sustained,
+            sustained: sustained && index === 0,
+        };
+    }),
     findings: sustained ? [{
         code: 'sustained_high_cpu',
         severity: 'warning',
@@ -75,7 +80,35 @@ describe('PerformanceDiagnosisPanel', () => {
 
         expect(await screen.findByText('证据窗口不足，不生成结论')).toBeInTheDocument();
         expect(screen.getAllByRole('row')).toHaveLength(6);
+        expect(screen.getAllByText('节点未上报 GPU 数据')).toHaveLength(2);
         expect(screen.queryByRole('button', {name: /优化/})).not.toBeInTheDocument();
+        await waitFor(() => expect(screen.getByRole('button', {name: '刷新'})).toBeEnabled());
+    });
+
+    it('shows cached evidence while refreshing on reopen', async () => {
+        const refreshed = diagnosis(true);
+        let resolveRefresh: (value: ComputePerformanceDiagnosis) => void = () => undefined;
+        const refresh = new Promise<ComputePerformanceDiagnosis>(resolve => {
+            resolveRefresh = resolve;
+        });
+        const load = jest.spyOn(ComputeClusterService, 'performanceDiagnosis')
+            .mockResolvedValueOnce(diagnosis())
+            .mockReturnValueOnce(refresh);
+        const view = render(<PerformanceDiagnosisPanel node={node} zh visible/>);
+
+        expect(await screen.findByText('证据窗口不足，不生成结论')).toBeInTheDocument();
+        view.rerender(<></>);
+        view.rerender(<PerformanceDiagnosisPanel node={node} zh visible/>);
+
+        expect(screen.getByText('证据窗口不足，不生成结论')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '诊断中…'})).toBeDisabled();
+        await act(async () => {
+            resolveRefresh(refreshed);
+            await refresh;
+        });
+        expect(await screen.findByText('处理器持续高负载')).toBeInTheDocument();
+        expect(load).toHaveBeenCalledTimes(2);
+        await waitFor(() => expect(screen.getByRole('button', {name: '刷新'})).toBeEnabled());
     });
 
     it('shows only findings backed by sustained fixed-rule evidence', async () => {
@@ -86,6 +119,7 @@ describe('PerformanceDiagnosisPanel', () => {
 
         expect(await screen.findByText('处理器持续高负载')).toBeInTheDocument();
         expect(screen.getByText('持续超阈值')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByRole('button', {name: '刷新'})).toBeEnabled());
         expect(ComputeClusterService.performanceDiagnosis).toHaveBeenCalledWith(
             node.node_id, 300, expect.any(AbortSignal),
         );
