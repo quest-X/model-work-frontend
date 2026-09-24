@@ -591,7 +591,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setResultPreview('');
         setResultPreviewError('');
         setResultPreviewLoading(false);
-        if (!selectedArtifact || selectedArtifact.kind !== 'data' || !selectedArtifactUrl) {
+        if (view !== 'artifacts' || !selectedArtifact || selectedArtifact.kind !== 'data' || !selectedArtifactUrl) {
             return undefined;
         }
         const controller = new AbortController();
@@ -619,6 +619,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         });
         return () => controller.abort();
     }, [
+        view,
         resultPreviewTruncated,
         selectedArtifact?.content_type,
         selectedArtifact?.selection_id,

@@ -250,7 +250,7 @@ describe('ProgramRunnerPanel', () => {
                     kind: 'data',
                     content_type: 'application/json; charset=utf-8',
                     size_bytes: 34,
-                    modified_at: today - 2,
+                    modified_at: today + 1,
                 }, {
                     artifact_id: 'd'.repeat(32),
                     name: 'ixcom.jsonl',
@@ -429,10 +429,14 @@ describe('ProgramRunnerPanel', () => {
         expect(endpoints).not.toHaveTextContent('节点服务');
         expect(endpoints).not.toHaveTextContent('任务执行器');
         expect(inventory).not.toHaveBeenCalled();
+        expect(jest.mocked(global.fetch).mock.calls.some(([url]) =>
+            String(url).includes('/artifacts/')
+        )).toBe(false);
 
         fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
         expect(within(dialog).getByLabelText('筛选结果日期')).toHaveValue(todayValue);
         const artifacts = await within(dialog).findByLabelText('程序结果');
+        fireEvent.click(within(artifacts).getByRole('button', {name: /017.mp4/}));
         const resultFolder = within(artifacts).getByLabelText('结果文件夹 017');
         expect(resultFolder.parentElement).toHaveAttribute('open');
         expect(resultFolder.parentElement).toHaveTextContent('5 个文件');
@@ -506,7 +510,10 @@ describe('ProgramRunnerPanel', () => {
 
         expect(within(dialog).queryByRole('button', {name: '刷新程序运行器'})).not.toBeInTheDocument();
 
+        const previewFetches = jest.mocked(global.fetch).mock.calls.length;
+        const previewSignal = jest.mocked(global.fetch).mock.calls[previewFetches - 1][1]?.signal;
         fireEvent.click(within(dialog).getByRole('button', {name: '电文'}));
+        expect(previewSignal?.aborted).toBe(true);
         const telegrams = await within(dialog).findByLabelText('程序电文');
         expect(telegrams).not.toHaveTextContent('Task execution started');
         expect(telegrams).not.toHaveTextContent('Program started');
@@ -575,6 +582,7 @@ describe('ProgramRunnerPanel', () => {
             node.node_id,
             expect.any(AbortSignal),
         );
+        expect(global.fetch).toHaveBeenCalledTimes(previewFetches);
         await act(async () => { jest.advanceTimersByTime(15000); });
         expect(ComputeClusterService.programs).toHaveBeenCalledTimes(programCalls);
         expect(ComputeClusterService.runtime).toHaveBeenCalledTimes(runtimeCalls);
