@@ -829,6 +829,51 @@ button.ComputeFileName:focus-visible { color: white; }
   margin-top: 8px;
 }
 
+.ControlNodeTitle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  h1 { overflow-wrap: anywhere; }
+}
+
+.ControlRemotePlatform {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+
+  [role='alert'] {
+    max-width: 360px;
+    color: #f59999;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+}
+
+.ControlRemotePlatformButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #9ba9b4;
+  cursor: pointer;
+
+  &:hover:not(:disabled), &:focus-visible {
+    color: #73caff;
+    border-color: #52616b;
+    background: #28323a;
+  }
+  &:disabled { opacity: 0.45; cursor: default; }
+}
+
 .ControlNodeTag,
 .ControlNodeTagForm {
   display: inline-flex;

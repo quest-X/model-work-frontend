@@ -47,6 +47,7 @@ import {DuplicateAnalysisPanel} from './DuplicateAnalysisPanel';
 import {StartupItemsPanel} from './StartupItemsPanel';
 import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
 import {ProgramRunnerPanel} from './ProgramRunnerPanel';
+import {RemotePlatformButton} from './RemotePlatformButton';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import {version as appVersion} from '../../../package.json';
 import '../EditorView/EditorContainer/EditorContainer.scss';
@@ -1385,7 +1386,10 @@ export const ControlCenterView: React.FC<IProps> = ({
         return <>
             <header className='ControlNodeHeader'>
                 <div>
-                    <h1>{node.name}</h1>
+                    <div className='ControlNodeTitle'>
+                        <h1>{node.name}</h1>
+                        <RemotePlatformButton key={node.node_id} node={node} zh={zh}/>
+                    </div>
                     <p>{zh ? '最后检查' : 'Last check'} {runtimeTime(node.resources.captured_at, zh)} · {zh ? '最近通信' : 'Last contact'} {lastSeen(node.heartbeat_age_seconds, zh)}</p>
                     <div className='ControlNodeTags' aria-label={zh ? '节点标签' : 'Node tags'}>
                         {locationTag && <span className='ControlNodeTag location'>
