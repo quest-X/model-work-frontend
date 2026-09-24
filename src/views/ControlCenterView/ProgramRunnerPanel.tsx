@@ -1449,7 +1449,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                             future: zh ? '未来日期' : 'Future date',
                                             pending: zh ? '待读取' : 'Not read yet',
                                             failed: zh ? '读取失败' : 'Read failed',
-                                            empty: zh ? '无记录' : 'No records',
+                                            empty: zh ? '无统计记录' : 'No statistics records',
                                             recorded: `${count} ${zh ? '次溢渣' : 'episodes'}`,
                                         }[state];
                                         const label = `${zh ? '统计日期' : 'Statistics date'} ${date}，${stateLabel}`;
@@ -1467,7 +1467,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                             }}
                                         >
                                             {Number(date.slice(-2))}
-                                            <small aria-hidden='true'>{({pending: '...', failed: '!', empty: '-'})[state]}</small>
+                                            <small aria-hidden='true'>{({failed: '!', empty: '-'})[state]}</small>
                                         </button>;
                                     })}
                                 </div>
@@ -1485,8 +1485,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     </button>}
                                 </div>
                                 <div className='status-legend'>
-                                    {statisticsPendingDays > 0 && <span>{zh ? '... 待读取' : '... Not read'}</span>}
-                                    <span>{zh ? '- 无记录' : '- No records'}</span>
+                                    <span>{zh ? '- 无统计记录' : '- No statistics records'}</span>
                                 </div>
                                 <footer>
                                     <span>{zh ? '少' : 'Less'}</span>
