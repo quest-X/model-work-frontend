@@ -85,6 +85,69 @@ it('preserves MJPEG when a node has no media trial', async () => {
     expect(screen.getByText('连接中')).toBeTruthy();
 });
 
+it.each(['重新连接', '重试'])('retries a failed protocol directory using %s', async button => {
+    global.fetch = jest.fn()
+        .mockResolvedValueOnce({ok: false, status: 503})
+        .mockResolvedValue({
+            ok: true, json: async () => ({
+                schema_version: 'program.media.trial.v1', protocols: ['mjpeg', 'llhls'],
+            }),
+        });
+    render(<ProgramLivePreview nodeId='node03' programId='dlk' name='DLK' path='/stream.mjpeg' zh/>);
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('combobox')).toBeNull();
+    const image = screen.getByRole('img');
+    const originalSource = image.getAttribute('src');
+    if (button === '重试') fireEvent.error(image);
+    fireEvent.click(screen.getByRole('button', {name: button}));
+    fireEvent.change(await screen.findByRole('combobox'), {target: {value: 'llhls'}});
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(image.hasAttribute('src')).toBe(false);
+    expect(originalSource).toContain('&v=0');
+    expect(Hls).toHaveBeenLastCalledWith({lowLatencyMode: true});
+});
+
+it.each(['reconnect', 'unmount'])('ignores an old protocol directory after %s', async action => {
+    let resolveDirectory: (value: unknown) => void;
+    const directory = new Promise(resolve => { resolveDirectory = resolve; });
+    const json = jest.fn(() => directory);
+    const readOldProtocols = jest.fn(() => ['mjpeg', 'srt']);
+    const fetchDirectory = jest.fn()
+        .mockResolvedValueOnce({ok: true, json})
+        .mockResolvedValue({
+            ok: true, json: async () => ({
+                schema_version: 'program.media.trial.v1', protocols: ['mjpeg', 'llhls'],
+            }),
+        });
+    global.fetch = fetchDirectory;
+    const {unmount} = render(<ProgramLivePreview
+        nodeId='node03' programId='dlk' name='DLK' path='/stream.mjpeg' zh
+    />);
+    await waitFor(() => expect(json).toHaveBeenCalledTimes(1));
+    const signal = fetchDirectory.mock.calls[0][1].signal as AbortSignal;
+    if (action === 'reconnect') {
+        fireEvent.click(screen.getByRole('button', {name: '重新连接'}));
+        await screen.findByRole('option', {name: 'LL-HLS'});
+    } else {
+        unmount();
+    }
+    expect(signal.aborted).toBe(true);
+    await act(async () => {
+        resolveDirectory({
+            schema_version: 'program.media.trial.v1',
+            get protocols() { return readOldProtocols(); },
+        });
+        await directory;
+    });
+    expect(readOldProtocols).not.toHaveBeenCalled();
+    if (action === 'reconnect') {
+        expect(screen.queryByRole('option', {name: 'SRT'})).toBeNull();
+        expect(screen.getByRole('option', {name: 'LL-HLS'})).toBeTruthy();
+        unmount();
+        expect(fetchDirectory.mock.calls[1][1].signal.aborted).toBe(true);
+    }
+});
+
 it.each(['mjpeg', 'hls', 'llhls', 'webrtc'])('releases hidden %s previews and reconnects on return', async protocol => {
     const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(false);
     global.fetch = jest.fn().mockResolvedValue({
