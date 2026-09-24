@@ -39,10 +39,7 @@ import {useDatasetDirtyTracking} from './useDatasetDirtyTracking';
 import {createDroppedMediaQueueItems, VideoImportProgress} from './EditorFileImport';
 import {version as appVersion} from '../../../../package.json';
 
-declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
-
-const appEdition = typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
-    && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ ? 'Commercial' : 'Main';
+const appEdition = 'Main';
 
 interface IProps {
     windowSize: ISize;

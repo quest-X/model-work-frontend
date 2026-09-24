@@ -56,10 +56,7 @@ import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
 import '../PopupView/ComputeClusterPopup/ComputeClusterPopup.scss';
 import './ControlCenterView.scss';
 
-declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
-
-const appEdition = typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
-    && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ ? 'Commercial' : 'Main';
+const appEdition = 'Main';
 
 const ClusterGeographicMap = React.lazy(() => import('./ClusterGeographicMap')
     .then(module => ({default: module.ClusterGeographicMap})));
