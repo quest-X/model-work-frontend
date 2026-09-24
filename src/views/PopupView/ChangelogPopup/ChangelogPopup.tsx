@@ -14,6 +14,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.4',
+        date: '2026-09-24',
+        changes: [
+            { zh: '【程序】新增 AIPACK 节点级程序运行器，集中查看程序、环境、接口与运行状态', en: '[Programs] Added an AIPACK node-scoped runner for programs, environments, APIs, and runtime status' },
+            { zh: '【结果】支持预览运行产生的视频、图片和数据文件，并限制大目录加载范围', en: '[Results] Added previews for runtime video, image, and data artifacts with bounded directory loading' },
+            { zh: '【接口】展示程序声明的 API、探针和端点状态，便于定位服务可用性', en: '[APIs] Displayed declared APIs, probes, and endpoint status for service troubleshooting' },
+            { zh: '【缓存】刷新期间复用程序快照和监控数据，保持结果页面连续可用', en: '[Cache] Reused program snapshots and monitoring data during refreshes to keep result pages available' },
+        ],
+    },
+    {
         version: '2.9.3',
         date: '2026-09-24',
         changes: [
