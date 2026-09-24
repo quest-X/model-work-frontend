@@ -1271,6 +1271,29 @@ export const ControlCenterView: React.FC<IProps> = ({
         node.device_inventory.devices.filter(camera =>
             camera.kind === 'camera' && cameraParentAssetId(node, camera) === device.asset_id
         );
+    const discoveredEdgeCameras = (node: ComputeClusterNode, device: ComputeLanAsset) => {
+        const registered = edgeCameras(node, device);
+        return lanAssets
+            .filter(asset =>
+                asset.device_kind === 'camera'
+                && asset.parent_asset_id === device.asset_id
+                && !registered.some(camera =>
+                    camera.name === asset.display_name
+                    && (!camera.ip_address || camera.ip_address === asset.address)
+                )
+            )
+            .map<ComputeManagedDevice>(asset => ({
+                ip_address: asset.address,
+                device_id: asset.asset_id,
+                kind: 'camera',
+                provider: 'camera-connect',
+                name: asset.display_name || asset.hostname || asset.address,
+                model: zh ? '已发现，未注册' : 'Discovered, not registered',
+                status: asset.online ? 'online' : 'offline',
+                channels: 0,
+                capabilities: [],
+            }));
+    };
     const edgeInventoryNode = (device: ComputeLanAsset) =>
         nodes.find(candidate => candidate.node_id === device.node_id)
         || nodes.find(candidate => edgeCameras(candidate, device).length > 0)
@@ -1305,7 +1328,10 @@ export const ControlCenterView: React.FC<IProps> = ({
             stateTone = machineTone(installedNode);
             stateLabel = computeNodeLabel(installedNode, zh);
         }
-        const cameras = edgeCameras(node, device);
+        const cameras = [
+            ...edgeCameras(node, device),
+            ...discoveredEdgeCameras(node, device),
+        ];
         return <React.Fragment key={device.asset_id}>
             <button
                 type='button'
