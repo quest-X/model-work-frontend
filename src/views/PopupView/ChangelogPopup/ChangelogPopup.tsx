@@ -14,6 +14,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.5',
+        date: '2026-09-24',
+        changes: [
+            { zh: '【运行器】新增边缘程序运行器，支持状态、结果、日志与视频产物加载', en: '[Runner] Added an edge program runner with state, results, logs, and video artifact loading' },
+            { zh: '【图谱】新增计算群关系图，并区分离线、故障与正常状态', en: '[Graph] Added a compute-group relationship graph with offline, fault, and healthy states' },
+            { zh: '【快捷操作】可从图谱直接打开终端、资源监控与程序运行器', en: '[Quick Actions] Open terminals, resource monitoring, and the program runner directly from the graph' },
+            { zh: '【Agent】新增图谱 worker 调度与表格化结果展示', en: '[Agent] Added graph worker dispatch and tabular result presentation' },
+        ],
+    },
+    {
         version: '2.9.4',
         date: '2026-09-24',
         changes: [
