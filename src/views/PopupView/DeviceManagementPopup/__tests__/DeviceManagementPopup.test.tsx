@@ -7,7 +7,10 @@ import {DeviceManagementPopup} from '../DeviceManagementPopup';
 const node = {
     node_id: 'node-1', installation_id: 'node-1', name: 'remote-node', agent_version: '0.9.0',
     capabilities: [], control_transport: 'tailscale',
-    network: {provider: 'tailscale', installed: true, online: true, addresses: []},
+    network: {
+        provider: 'tailscale', installed: true, online: true, ssh_available: true,
+        lan_ssh_available: true, tailscale_ssh_available: true, addresses: [],
+    },
     network_dependencies: [],
     resources: {
         captured_at: 1, platform: 'linux', architecture: 'x86_64', cpu_logical: 8,
@@ -132,7 +135,7 @@ describe('DeviceManagementPopup remote camera management', () => {
         expect(screen.getByLabelText('Device summary')).toHaveTextContent('Total3Normal1Fault2');
         expect(screen.getAllByText('Normal').length).toBeGreaterThan(0);
         expect(screen.getAllByText('Fault').length).toBeGreaterThan(0);
-        expect(screen.queryByText('Abnormal')).not.toBeInTheDocument();
+        expect(screen.getByText('Abnormal')).toHaveClass('abnormal');
         expect(screen.queryByText('Healthy')).not.toBeInTheDocument();
         fireEvent.change(screen.getByRole('combobox', {name: 'Filter device status'}), {target: {value: 'fault'}});
         expect(screen.queryByText('Remote camera')).not.toBeInTheDocument();

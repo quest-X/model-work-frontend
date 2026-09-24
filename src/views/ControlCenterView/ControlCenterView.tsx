@@ -17,6 +17,7 @@ import {
     ComputeResourceGraph,
     ComputeTask,
     ComputeRuntimeInventory,
+    ComputeTerminalTarget,
     ComputeClusterService,
     cameraStreamingAvailable,
     computeNodeState,
@@ -74,7 +75,7 @@ type Workspace = 'node' | 'network' | 'files' | 'utilities' | 'terminal' | 'grou
 type MachineIconKind = 'jetson' | 'windows' | 'linux' | 'macos' | 'computer';
 type NodeGrouping = 'none' | 'region' | 'platform';
 type NodeOrdering = 'status' | 'activity' | 'name';
-type NodeVisibility = 'all' | 'normal' | 'fault';
+type NodeVisibility = 'all' | 'normal' | 'fault' | 'abnormal';
 type OverviewView = 'map' | 'graph';
 type MonitorView = 'performance' | 'diagnostics' | 'processes' | 'startup' | 'tasks' | 'conversations';
 type ProcessSortKey = 'name' | 'pid' | 'cpu' | 'memory' | 'state';
@@ -294,7 +295,7 @@ const regionDisplayName = (name: string, zh: boolean): string => zh
     : name;
 
 const communicationTone = (state: 'normal' | 'fault' | 'abnormal'): Tone =>
-    state === 'normal' ? 'healthy' : 'warning';
+    state === 'normal' ? 'healthy' : state === 'abnormal' ? 'offline' : 'warning';
 const machineTone = (node: ComputeClusterNode): Tone => communicationTone(computeNodeState(node));
 
 const cameraTone = (status: ComputeManagedDevice['status']): Tone =>
@@ -357,6 +358,8 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [workspace, setWorkspace] = useState<Workspace>('node');
     const [terminalAutoConnect, setTerminalAutoConnect] = useState(false);
     const [terminalTransport, setTerminalTransport] = useState<'lan' | 'tailscale'>();
+    const [terminalTargets, setTerminalTargets] = useState<ComputeTerminalTarget[]>([]);
+    const [copiedSshAddress, setCopiedSshAddress] = useState('');
     const [nodes, setNodes] = useState<ComputeClusterNode[]>([]);
     const [groupMemberships, setGroupMemberships] = useState<ComputeGroupMembership[]>([]);
     const [selectedGroupId, setSelectedGroupId] = useState('');
@@ -457,7 +460,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         refreshInFlight.current = true;
         if (mounted.current) initial ? setLoading(true) : setRefreshing(true);
         try {
-            const [nextNodes, graphResult, assetResult, memberships] = await Promise.all([
+            const [nextNodes, graphResult, assetResult, memberships, targets] = await Promise.all([
                 ComputeClusterService.nodes(),
                 ComputeClusterService.resourceGraph().then(
                     value => ({value, error: ''}),
@@ -474,11 +477,16 @@ export const ControlCenterView: React.FC<IProps> = ({
                     value => value.groups,
                     () => [] as ComputeGroupMembership[],
                 ),
+                ComputeClusterService.terminalTargets().then(
+                    value => value.targets,
+                    () => [] as ComputeTerminalTarget[],
+                ),
             ]);
             if (!mounted.current) return;
             setNodes(nextNodes);
             setLanAssets(assetResult);
             setGroupMemberships(memberships);
+            setTerminalTargets(targets);
             if (graphResult.value) setResourceGraph(graphResult.value);
             setGraphError(graphResult.error);
             setSelectedNodeId(current => overviewSelected.current
@@ -663,7 +671,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 return left.heartbeat_age_seconds - right.heartbeat_age_seconds || left.name.localeCompare(right.name);
             }
             if (nodeOrdering === 'name') return left.name.localeCompare(right.name);
-            const rank = {normal: 0, fault: 1};
+            const rank = {normal: 0, fault: 1, abnormal: 2};
             return rank[computeNodeState(left)] - rank[computeNodeState(right)] || left.name.localeCompare(right.name);
         });
         if (nodeGrouping === 'none') return [['', visible] as [string, ComputeClusterNode[]]];
@@ -1031,6 +1039,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 <option value='all'>{zh ? '所有状态' : 'All states'}</option>
                 <option value='normal'>{zh ? '仅正常' : 'Normal only'}</option>
                 <option value='fault'>{zh ? '仅故障' : 'Fault only'}</option>
+                <option value='abnormal'>{zh ? '仅异常' : 'Abnormal only'}</option>
             </select>
         </div>
         <div className='ControlMachineList'>
@@ -1189,6 +1198,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         detail: string,
         tone: Tone,
         onClick?: () => void,
+        secondaryDetail?: {label: string; address: string; command?: string},
     ) => {
         const content = <>
             <span className={`ControlStatusDot ${tone}`} aria-hidden='true'/>
@@ -1198,7 +1208,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 <small>{detail}</small>
             </div>
         </>;
-        return onClick
+        const card = onClick
             ? <button
                 type='button'
                 className='ControlServiceCard'
@@ -1209,6 +1219,26 @@ export const ControlCenterView: React.FC<IProps> = ({
                 onClick={onClick}
             >{content}</button>
             : <article className='ControlServiceCard'>{content}</article>;
+        return <div className='ControlServiceItem'>
+            {card}
+            {secondaryDetail && <button
+                type='button'
+                className='ControlServiceAddress'
+                disabled={!secondaryDetail.command}
+                onClick={async () => {
+                    if (!secondaryDetail.command) return;
+                    await navigator.clipboard.writeText(secondaryDetail.command);
+                    setCopiedSshAddress(secondaryDetail.address);
+                    window.setTimeout(() => setCopiedSshAddress(current =>
+                        current === secondaryDetail.address ? '' : current
+                    ), 1000);
+                }}
+            >
+                {`${secondaryDetail.label}: ${secondaryDetail.address}`}
+                {copiedSshAddress === secondaryDetail.address
+                    && (zh ? ' (已复制)' : ' (Copied)')}
+            </button>}
+        </div>;
     };
 
     // eslint-disable-next-line complexity
@@ -1225,7 +1255,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             <span className='ControlRuntimeIdentity'>
                 <span>{monitorStatus}</span>
                 <strong>{zh ? '资源监视器' : 'Resource monitor'}</strong>
-                <small>CPU · MEM · GPU · DISK · NETWORK</small>
+                <small>{zh ? '处理器 · 内存 · 显卡 · 磁盘 · 网络' : 'CPU · MEM · GPU · DISK · NETWORK'}</small>
             </span>
             <span className='ControlServiceOpen' aria-hidden='true'>›</span>
         </button>;
@@ -1248,6 +1278,11 @@ export const ControlCenterView: React.FC<IProps> = ({
             node.capabilities?.includes('task.camera.connect.v1')
             || node.capabilities?.includes('task.camera.discover.v1')
         ));
+        const lanAddresses = node.network.lan_address
+            || node.lan_scan_targets?.map(target => target.address).join(' · ');
+        const tailscaleIpv6Addresses = node.network.tailscale_ipv6_address
+            || node.network.addresses.filter(address => address.includes(':')).join(' · ');
+        const sshUser = terminalTargets.find(target => target.node_id === node.node_id)?.ssh_user;
         const jetsonConnectCapable = Boolean(
             node.online && node.capabilities?.includes('control.jetson.connect.v1'),
         );
@@ -1349,6 +1384,13 @@ export const ControlCenterView: React.FC<IProps> = ({
                             setTerminalTransport('lan');
                             setWorkspace('terminal');
                         },
+                        lanAddresses
+                            ? {
+                                label: 'IPv4',
+                                address: lanAddresses,
+                                command: sshUser ? `ssh ${sshUser}@${lanAddresses}` : undefined,
+                            }
+                            : undefined,
                     )}
                     {renderServiceCard(
                         communicationStateLabel(tailscaleState, zh),
@@ -1360,6 +1402,13 @@ export const ControlCenterView: React.FC<IProps> = ({
                             setTerminalTransport('tailscale');
                             setWorkspace('terminal');
                         },
+                        tailscaleIpv6Addresses
+                            ? {
+                                label: 'IPv6',
+                                address: tailscaleIpv6Addresses,
+                                command: sshUser ? `ssh ${sshUser}@${tailscaleIpv6Addresses}` : undefined,
+                            }
+                            : undefined,
                     )}
                 </div>
             </section>
