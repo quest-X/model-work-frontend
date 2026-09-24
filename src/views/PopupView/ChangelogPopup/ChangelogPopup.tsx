@@ -14,6 +14,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.2',
+        date: '2026-09-24',
+        changes: [
+            { zh: '【任务】新增统一任务中心，并支持 Agent 排队任务调整顺序与移除', en: '[Tasks] Added a unified task center with reordering and removal for queued Agent requests' },
+            { zh: '【运维】扩展节点文件、存储分析、重复项扫描、启动项与性能诊断能力', en: '[Operations] Expanded node file, storage, duplicate scan, startup item, and performance diagnosis tools' },
+            { zh: '【账号】新增成员范围控制与 Agent 项目绑定', en: '[Accounts] Added scoped member controls and Agent project binding' },
+            { zh: '【计算群】支持加入、退出与撤销确认，并统一刷新节点状态', en: '[Compute Groups] Added join, leave, and revocation confirmation with consistent node refresh' },
+        ],
+    },
+    {
         version: '2.9.1',
         date: '2026-09-07',
         changes: [
