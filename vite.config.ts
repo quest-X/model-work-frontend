@@ -1,11 +1,50 @@
 import {
   defineConfig,
   loadEnv,
+  Plugin,
   UserConfig,
   UserConfigExport,
 } from 'vite';
+import {execFileSync} from 'child_process';
 
 import react from '@vitejs/plugin-react';
+
+const readGit = (...args: string[]): string => {
+  try {
+    return execFileSync('git', args, {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    return '';
+  }
+};
+
+const devRevisionPlugin: Plugin = {
+  name: 'opensight-dev-revision',
+  configureServer(server) {
+    server.middlewares.use('/__opensight_dev.json', (_request, response) => {
+      const upstream = readGit(
+        'rev-parse',
+        '--abbrev-ref',
+        '--symbolic-full-name',
+        '@{upstream}',
+      );
+      const [behind = '0', ahead = '0'] = upstream
+        ? readGit('rev-list', '--left-right', '--count', `${upstream}...HEAD`).split(/\s+/)
+        : [];
+      response.setHeader('Content-Type', 'application/json; charset=utf-8');
+      response.end(JSON.stringify({
+        branch: readGit('branch', '--show-current') || 'detached',
+        commit: readGit('rev-parse', '--short=12', 'HEAD') || 'unknown',
+        dirty: Boolean(readGit('status', '--porcelain')),
+        upstream: upstream || null,
+        ahead: Number(ahead),
+        behind: Number(behind),
+      }, null, 2));
+    });
+  },
+};
 
 export default ({ mode }: UserConfig): UserConfigExport => {
   const appMode = mode || 'development';
@@ -28,7 +67,9 @@ export default ({ mode }: UserConfig): UserConfigExport => {
   } : serviceProxy;
   return defineConfig({
     base,
-    plugins: [react()],
+    // Worktrees share node_modules, but must not overwrite each other's optimized deps.
+    cacheDir: '.vite',
+    plugins: [react(), devRevisionPlugin],
     define: {
       __OPENSIGHT_HOST_SYSTEM__: JSON.stringify(
         process.env.VITE_OPENSIGHT_HOST_SYSTEM || '',

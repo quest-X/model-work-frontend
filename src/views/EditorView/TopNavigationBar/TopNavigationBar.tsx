@@ -5,7 +5,6 @@ import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {AppState} from '../../../store';
 import {connect} from 'react-redux';
 import {updateActivePopupType, updateProjectData, updateLanguage} from '../../../store/general/actionCreators';
-import {Settings} from '../../../settings/Settings';
 import {ProjectData} from '../../../store/general/types';
 import DropDownMenu from './DropDownMenu/DropDownMenu';
 import {TextButton} from '../../Common/TextButton/TextButton';
@@ -20,10 +19,10 @@ import {
 import {AccountCenter} from '../../AccountCenter/AccountCenter';
 
 interface IProps {
-    updateActivePopupTypeAction: (activePopupType: PopupWindowType | null) => any;
-    updateProjectDataAction: (projectData: ProjectData) => any;
-    updateLanguageAction: (language: Language) => any;
-    updateQueueItemAction: (itemId: string, updates: Partial<QueueItem>) => any;
+    updateActivePopupTypeAction: typeof updateActivePopupType;
+    updateProjectDataAction: typeof updateProjectData;
+    updateLanguageAction: typeof updateLanguage;
+    updateQueueItemAction: typeof updateQueueItem;
     projectData: ProjectData;
     queueItems: QueueItem[];
     activeQueueItemId: string | null;
@@ -115,11 +114,7 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
         props.updateQueueItemAction,
     ]);
 
-    const closePopup = () => props.updateActivePopupTypeAction(PopupWindowType.EXIT_PROJECT)
-    
     const showKeyboardShortcuts = () => props.updateActivePopupTypeAction(PopupWindowType.KEYBOARD_SHORTCUTS)
-    
-    const openLoadMoreMediaPopup = () => props.updateActivePopupTypeAction(PopupWindowType.IMPORT_IMAGES)
 
     const toggleServicesDropdown = (dropdown: Exclude<ServicesDropdown, null>) => {
         setShowActionsDropdown(false);

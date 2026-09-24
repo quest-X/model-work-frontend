@@ -692,8 +692,8 @@ describe('ComputeClusterPopup', () => {
             onOpenNodeTool={onOpenNodeTool}
         />);
 
-        const node = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
-        await user.dblClick(node);
+        const nodeButton = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
+        await user.dblClick(nodeButton);
         const card = screen.getByRole('status', {name: 'edge-01 运维信息'});
         expect(card).toHaveClass('pinned');
 
