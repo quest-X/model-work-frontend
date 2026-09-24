@@ -48,10 +48,16 @@ import {StartupItemsPanel} from './StartupItemsPanel';
 import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
 import {ProgramRunnerPanel} from './ProgramRunnerPanel';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
+import {version as appVersion} from '../../../package.json';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
 import '../PopupView/ComputeClusterPopup/ComputeClusterPopup.scss';
 import './ControlCenterView.scss';
+
+declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
+
+const appEdition = typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
+    && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ ? 'Commercial' : 'Main';
 
 const ClusterGeographicMap = React.lazy(() => import('./ClusterGeographicMap')
     .then(module => ({default: module.ClusterGeographicMap})));
@@ -1825,7 +1831,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     isActive={sidePanel === 'features'}
                     style={{top: '167px'}}
                 />
-                <div className='VersionWatermark'>v2.9.5</div>
+                <div className='VersionWatermark'>v{appVersion} {appEdition}</div>
             </>}
             renderContent={sidePanel === 'features' ? renderFeatureList : renderMachineList}
         />

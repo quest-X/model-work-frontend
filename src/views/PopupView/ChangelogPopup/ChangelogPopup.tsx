@@ -14,6 +14,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.6',
+        date: '2026-09-24',
+        changes: [
+            { zh: '【质量】补齐浏览器验收脚本、身份服务测试与前端质量门槛', en: '[Quality] Completed browser acceptance scripts, identity service tests, and frontend quality gates' },
+            { zh: '【开发】本地页面可识别分支、提交与端口，减少多实例混淆', en: '[Development] Local pages can identify their branch, commit, and port to reduce multi-instance confusion' },
+            { zh: '【构建】隔离 Vite 缓存，避免共享依赖的多 worktree React 冲突', en: '[Build] Isolated Vite caches to prevent multi-worktree React conflicts with shared dependencies' },
+            { zh: '【版本】编辑器与控制中心左下角统一显示 v版本号 Main / Commercial', en: '[Version] The editor and control center now show vVersion Main / Commercial in the lower-left corner' },
+        ],
+    },
+    {
         version: '2.9.5',
         date: '2026-09-24',
         changes: [

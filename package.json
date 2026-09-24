@@ -1,6 +1,6 @@
 {
   "name": "make-sense",
-  "version": "2.9.5",
+  "version": "2.9.6",
   "private": true,
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

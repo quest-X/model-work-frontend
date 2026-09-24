@@ -12,6 +12,7 @@ import {
 import {AgentChatService} from '../../../services/AgentChatService';
 import {ClusterGeographicMap} from '../ClusterGeographicMap';
 import {ControlCenterView} from '../ControlCenterView';
+import {version as appVersion} from '../../../../package.json';
 
 const originalFetch = global.fetch;
 
@@ -199,6 +200,7 @@ describe('ControlCenterView', () => {
 
         render(<ControlCenterView language={Language.CHINESE}/>);
 
+        expect(screen.getByText(`v${appVersion} Main`)).toBeInTheDocument();
         expect(screen.getByText('正在读取计算群 0%')).toBeInTheDocument();
         await waitFor(() => expect(screen.queryByText(/正在读取计算群/)).not.toBeInTheDocument());
         expect(screen.getByText('暂无机器')).toBeInTheDocument();
