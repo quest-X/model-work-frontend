@@ -14,6 +14,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.6',
+        date: '2026-09-24',
+        changes: [
+            { zh: '【状态】在节点和作业区持续展示 DLK 程序状态，并避免未确认状态误亮', en: '[Status] Displayed DLK program status across nodes and work areas without showing unconfirmed healthy states' },
+            { zh: '【实时画面】内嵌实时流播放器，支持重连、加载进度和每日时间轴', en: '[Live Preview] Embedded a live stream player with reconnect, loading progress, and a daily timeline' },
+            { zh: '【下载】支持下载程序运行结果，并提供清晰的下载状态反馈', en: '[Downloads] Added program-result downloads with clear progress and action states' },
+            { zh: '【协议】支持 HLS、WebRTC 与外部输出切换，并优先使用可用的低延迟预览', en: '[Protocols] Added HLS, WebRTC, and external-output switching with preference for available low-latency previews' },
+        ],
+    },
+    {
         version: '2.9.5',
         date: '2026-09-24',
         changes: [
