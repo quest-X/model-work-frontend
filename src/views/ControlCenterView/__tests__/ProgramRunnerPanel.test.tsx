@@ -1,8 +1,9 @@
 import React from 'react';
-import {act, fireEvent, render, screen, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {
     ComputeClusterNode,
     ComputeClusterService,
+    ComputeProgramOverflowStatistics,
 } from '../../../services/ComputeClusterService';
 import {MachineHistoryService} from '../../../services/MachineHistoryService';
 import {ProgramRunnerPanel} from '../ProgramRunnerPanel';
@@ -614,6 +615,95 @@ describe('ProgramRunnerPanel', () => {
         expect(jest.mocked(ComputeClusterService.runtime).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.programs).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.runtimeEvents).mock.calls[0][3]?.aborted).toBe(true);
+    });
+
+    it('preloads recent calendar days before opening and retains results when collapsed', async () => {
+        jest.spyOn(Date, 'now').mockReturnValue(new Date(2026, 8, 25, 12).getTime());
+        jest.spyOn(ComputeClusterService, 'runtime').mockResolvedValue({
+            schema_version: 'runtime.snapshot.v1', captured_at: 101,
+            summary: {total: 0, healthy: 0, degraded: 0, unavailable: 0, task_counts: {}}, services: [],
+        });
+        jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
+            schema_version: 'runtime.programs.v1', captured_at: 101, invalid_manifests: 0,
+            programs: [{
+                program_id: 'dlk-overflow', name: 'DLK', version: '1', root: '/dlk', environment: '/dlk',
+                mode: 'production', encryption: 'plain', state: 'healthy',
+                service: {name: 'dlk', state: 'running', pid: 1, uptime_seconds: 1},
+                health: {state: 'healthy', checked_at: 101, status_code: 200, latency_ms: 1},
+                interfaces: [], events: [], artifacts: [],
+            }],
+        });
+        const day = (date: string, offset: number): ComputeProgramOverflowStatistics => ({
+            schema_version: 'runtime.program-overflow-statistics.v1', captured_at: 101,
+            program_id: 'dlk-overflow', date, timezone_offset_minutes: offset,
+            total_frames: date.endsWith('-24') ? 0 : 100, overflow_frames: 0,
+            episodes: {small: 0, medium: 0, large: 0, unknown: 0},
+            hourly: Array(24).fill(0), latest_overflow_at: null, heats: [],
+        });
+        let resolveRecent: () => void;
+        let rejectOlder: () => void;
+        let olderAttempts = 0;
+        let active = 0;
+        let maxActive = 0;
+        const statistics = jest.spyOn(ComputeClusterService, 'programOverflowStatistics')
+            .mockImplementation((nodeId, _, date, offset) => {
+                if (nodeId === 'calendar-other-node') return new Promise(() => undefined);
+                if (date === '2026-09-25') return Promise.resolve(day(date, offset));
+                active += 1;
+                maxActive = Math.max(active, maxActive);
+                const result = date === '2026-09-24'
+                    ? new Promise<ComputeProgramOverflowStatistics>(resolve => {
+                        resolveRecent = () => resolve(day(date, offset));
+                    })
+                    : date === '2026-09-23' && olderAttempts++ === 0
+                        ? new Promise<ComputeProgramOverflowStatistics>((resolve, reject) => {
+                            rejectOlder = () => reject(new Error('HTTP 503'));
+                        })
+                        : Promise.resolve(day(date, offset));
+                return result.finally(() => { active -= 1; });
+            });
+        const calendarNode = {...node, node_id: 'calendar-preload'};
+        const props = {node: calendarNode, zh: true, maximized: false, onToggleMaximized: jest.fn()};
+        const panel = render(<ProgramRunnerPanel {...props}/>);
+        await screen.findByText('暂无程序状态');
+        fireEvent.click(screen.getByRole('button', {name: '统计'}));
+        await waitFor(() => expect(statistics).toHaveBeenCalledTimes(3));
+        expect(statistics.mock.calls.map(call => call[2])).toEqual(['2026-09-25', '2026-09-24', '2026-09-23']);
+        expect(screen.queryByLabelText('统计日历')).not.toBeInTheDocument();
+
+        const calendarButton = screen.getByRole('button', {name: '选择统计日期 2026-09-25'});
+        fireEvent.click(calendarButton);
+        let calendar = screen.getByLabelText('统计日历');
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-24，待读取'})).toHaveClass('pending');
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-26，未来日期'})).toBeDisabled();
+        fireEvent.click(calendarButton);
+        expect(statistics.mock.calls[1][4].aborted).toBe(false);
+        expect(statistics.mock.calls[2][4].aborted).toBe(false);
+        await act(async () => resolveRecent());
+        await waitFor(() => expect(statistics).toHaveBeenCalledTimes(25));
+        expect(maxActive).toBe(2);
+
+        fireEvent.click(calendarButton);
+        calendar = screen.getByLabelText('统计日历');
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-24，无记录'})).toHaveClass('empty');
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-22，0 次溢渣'})).toHaveClass('recorded');
+        expect(within(calendar).getByRole('status')).toHaveTextContent('当月读取 24 / 25');
+        await act(async () => rejectOlder());
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-23，读取失败'})).toHaveClass('failed');
+        expect(within(calendar).getByRole('status')).toHaveTextContent('25 / 25 · 1 天失败');
+        fireEvent.click(within(calendar).getByRole('button', {name: '重试失败日期'}));
+        await within(calendar).findByRole('button', {name: '统计日期 2026-09-23，0 次溢渣'});
+        expect(statistics.mock.calls.filter(call => call[2] === '2026-09-24')).toHaveLength(1);
+        expect(within(calendar).queryByRole('button', {name: '重试失败日期'})).not.toBeInTheDocument();
+
+        panel.rerender(<ProgramRunnerPanel {...props} node={{...calendarNode, node_id: 'calendar-other-node'}}/>);
+        fireEvent.click(screen.getByRole('button', {name: '统计'}));
+        fireEvent.click(await screen.findByRole('button', {name: '选择统计日期 2026-09-25'}));
+        calendar = screen.getByLabelText('统计日历');
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-24，待读取'})).toHaveClass('pending');
+        panel.unmount();
+        expect(statistics.mock.calls.filter(call => call[0] === 'calendar-other-node')
+            .every(call => call[4].aborted)).toBe(true);
     });
 
     it('renders history status without waiting for the object list', async () => {
