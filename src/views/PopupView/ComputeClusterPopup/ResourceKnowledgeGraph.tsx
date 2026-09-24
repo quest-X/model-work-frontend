@@ -605,6 +605,8 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     if (!point) return null;
                     const node = entity.node_id ? nodeIndex.get(entity.node_id) : undefined;
                     const isNode = entity.kind === 'compute_node';
+                    const hasMountedProgram = isNode && Boolean(node && programStatus?.(node));
+                    const programBadgeLabel = hasMountedProgram ? (zh ? '已挂载程序' : 'Programs mounted') : undefined;
                     const nodeRole = isNode ? nodeRoles.get(entity.entity_id) || 'node' : undefined;
                     const classification = entity.kind === 'managed_device' ? deviceClass(entity) : '';
                     const isHovered = hoveredEntityId === entity.entity_id;
@@ -633,13 +635,16 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         aria-label={isNode
                             ? `${zh ? '查看' : 'Inspect'} ${entity.label} ${zh ? '节点信息' : 'node details'}`
                             : `${zh ? '查看' : 'Inspect'} ${entity.label} ${zh ? '设备信息' : 'device details'}`}
+                        aria-description={programBadgeLabel}
                         data-testid='resource-graph-node'
                         data-entity-kind={entity.kind}
                         data-entity-role={nodeRole}
                         data-entity-shape={nodeRole === 'main' ? 'circle' : 'rounded-rectangle'}
                         data-entity-state={entity.state}
                     >
-                        <i>{codes.get(entity.entity_id)}</i>
+                        <i className={hasMountedProgram ? 'has-program' : undefined} title={programBadgeLabel}>
+                            {codes.get(entity.entity_id)}
+                        </i>
                         <span>{isNode
                             ? nodeRole === 'main'
                                 ? (zh ? '主节点' : 'Main node')
