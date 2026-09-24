@@ -3,7 +3,12 @@ import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {ComputeClusterNode, ComputeClusterService} from '../../../services/ComputeClusterService';
 import {RemotePlatformButton} from '../RemotePlatformButton';
 
-const node = {node_id: 'main-1', role: 'main', network: {ssh_available: true}} as ComputeClusterNode;
+const node = {
+    node_id: 'main-1',
+    role: 'main',
+    capabilities: ['platform.host.v1'],
+    network: {ssh_available: true},
+} as ComputeClusterNode;
 const url = `http://platform-${'a'.repeat(24)}.localhost:12345/_opensight/open?ticket=${'b'.repeat(43)}`;
 
 afterEach(() => jest.restoreAllMocks());
@@ -38,8 +43,10 @@ it('does not create a proxy when pop-ups are blocked', async () => {
     expect(start).not.toHaveBeenCalled();
 });
 
-it('hides ordinary nodes and disables unreachable Mains', () => {
+it('hides ordinary and platform-less nodes, and disables unreachable Mains', () => {
     const {rerender} = render(<RemotePlatformButton node={{...node, role: 'node'}} zh/>);
+    expect(screen.queryByRole('button')).toBeNull();
+    rerender(<RemotePlatformButton node={{...node, capabilities: []}} zh/>);
     expect(screen.queryByRole('button')).toBeNull();
     rerender(<RemotePlatformButton node={{...node, network: {...node.network, ssh_available: false}}} zh/>);
     expect(screen.getByRole('button')).toBeDisabled();

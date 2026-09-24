@@ -5,7 +5,8 @@ import {ComputeClusterNode, ComputeClusterService} from '../../services/ComputeC
 export const RemotePlatformButton: React.FC<{node: ComputeClusterNode; zh: boolean}> = ({node, zh}) => {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-    if (node.role !== 'main' || !['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)) return null;
+    if (node.role !== 'main' || !node.capabilities.includes('platform.host.v1')
+        || !['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)) return null;
     const label = busy ? (zh ? '正在连接远程平台' : 'Connecting to remote platform')
         : (zh ? '打开远程平台' : 'Open remote platform');
     const open = async () => {
