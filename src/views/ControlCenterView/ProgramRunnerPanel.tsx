@@ -208,7 +208,7 @@ const taskStateLabel = (state: string, zh: boolean): string => ({
     cancelled: zh ? '已取消' : 'Cancelled',
 })[state] || state;
 
-// The four views share one polling boundary so closing the runner cancels every request together.
+// Each source refreshes independently; closing the runner cancels all requests.
 // eslint-disable-next-line complexity
 export const ProgramRunnerPanel: React.FC<IProps> = ({
     node,
@@ -268,14 +268,18 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const programsVisible = programsCapable || programs !== null;
     const logsVisible = runtimeVisible || programsVisible || events.length > 0;
     const showingCache = !node.online && (snapshot !== null || programs !== null || events.length > 0);
-    // Snapshot scans share the node control channel with these lightweight reads.
-    const pollingPaused = view === 'history'
-        || (view === 'artifacts' || view === 'statistics') && programs !== null;
+    // Keep heavy scans off report/preview reads after the initial directory arrives.
+    const programsRequested = programsCapable && (programs === null
+        || view !== 'history' && view !== 'artifacts' && view !== 'statistics');
     const eventsRequested = view === 'telegrams' || view === 'logs';
     const connectionLabel = node.online
-        ? pollingPaused
-            ? (zh ? '在线 · 状态刷新已暂停' : 'Online · status refresh paused')
-            : (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
+        ? runtimeCapable
+            ? runtimeError
+                ? (zh ? '在线 · 状态刷新失败，正在重试' : 'Online · status refresh failed; retrying')
+                : (zh ? '在线 · 基础状态每 5 秒刷新' : 'Online · basic status refreshes every 5 seconds')
+            : programsRequested
+                ? (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
+                : (zh ? '在线' : 'Online')
         : showingCache
             ? (zh ? '离线 · 显示最后缓存' : 'Offline · showing last cached data')
             : (zh ? '离线' : 'Offline');
@@ -321,25 +325,28 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     }, [node.node_id]);
 
     useEffect(() => {
-        if (pollingPaused || !runtimeCapable && !programsCapable) return undefined;
+        if (!runtimeCapable && !programsRequested) return undefined;
         const controller = new AbortController();
-        let inFlight = false;
-        // eslint-disable-next-line complexity
-        const load = async () => {
-            if (inFlight) return;
-            inFlight = true;
+        const inFlight = new Set<keyof ProgramRunnerCache>();
+        const completed = new Set<keyof ProgramRunnerCache>();
+        const requestCount = Number(runtimeCapable)
+            + Number(programsRequested)
+            + Number(runtimeCapable && eventsRequested);
+        setRefreshProgress(0);
+        const track = <T,>(key: keyof ProgramRunnerCache, request: Promise<T>): Promise<T> => {
+            inFlight.add(key);
             setRefreshing(true);
-            setRefreshProgress(0);
-            const requestCount = Number(runtimeCapable)
-                + Number(programsCapable)
-                + Number(runtimeCapable && eventsRequested);
-            let completedRequests = 0;
-            const track = <T,>(request: Promise<T>): Promise<T> => request.finally(() => {
-                completedRequests += 1;
+            return request.finally(() => {
+                inFlight.delete(key);
+                completed.add(key);
                 if (!controller.signal.aborted) {
-                    setRefreshProgress(Math.round(completedRequests / requestCount * 100));
+                    setRefreshProgress(Math.round(completed.size / requestCount * 100));
+                    setRefreshing(inFlight.size > 0);
                 }
             });
+        };
+        // eslint-disable-next-line complexity
+        const load = () => {
             const updateCache = (patch: Partial<ProgramRunnerCache>) => {
                 const current = programRunnerCache.get(node.node_id);
                 programRunnerCache.set(node.node_id, {
@@ -349,9 +356,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     ...patch,
                 });
             };
-            const requests: Promise<void>[] = [];
-            if (runtimeCapable) {
-                requests.push(track(ComputeClusterService.runtime(node.node_id, controller.signal)).then(
+            if (runtimeCapable && !inFlight.has('snapshot')) {
+                void track('snapshot', ComputeClusterService.runtime(node.node_id, controller.signal)).then(
                     value => {
                         if (controller.signal.aborted) return;
                         updateCache({snapshot: value});
@@ -362,10 +368,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         if (controller.signal.aborted) return;
                         setRuntimeError(reason instanceof Error ? reason.message : String(reason));
                     },
-                ));
+                );
             }
-            if (programsCapable) {
-                requests.push(track(ComputeClusterService.programs(node.node_id, controller.signal)).then(
+            if (programsRequested && !inFlight.has('programs')) {
+                void track('programs', ComputeClusterService.programs(node.node_id, controller.signal)).then(
                     value => {
                         if (controller.signal.aborted) return;
                         updateCache({programs: value});
@@ -376,10 +382,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         if (controller.signal.aborted) return;
                         setProgramsError(reason instanceof Error ? reason.message : String(reason));
                     },
-                ));
+                );
             }
-            if (runtimeCapable && eventsRequested) {
-                requests.push(track(ComputeClusterService.runtimeEvents(
+            if (runtimeCapable && eventsRequested && !inFlight.has('events')) {
+                void track('events', ComputeClusterService.runtimeEvents(
                     node.node_id,
                     0,
                     100,
@@ -395,30 +401,20 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         if (controller.signal.aborted) return;
                         setEventsError(reason instanceof Error ? reason.message : String(reason));
                     },
-                ));
+                );
             }
-            await Promise.all(requests);
-            if (!controller.signal.aborted) {
-                if (!runtimeCapable) {
-                    setRuntimeError('');
-                }
-                if (!programsCapable) {
-                    setProgramsError('');
-                }
-                if (!eventsRequested) {
-                    setEventsError('');
-                }
-                setRefreshing(false);
-            }
-            inFlight = false;
         };
-        void load();
-        const timer = window.setInterval(() => void load(), 5000);
+        if (!runtimeCapable) setRuntimeError('');
+        if (!programsCapable) setProgramsError('');
+        if (!eventsRequested) setEventsError('');
+        load();
+        const timer = window.setInterval(load, 5000);
         return () => {
             controller.abort();
             window.clearInterval(timer);
+            setRefreshing(false);
         };
-    }, [eventsRequested, node.node_id, pollingPaused, programsCapable, runtimeCapable]);
+    }, [eventsRequested, node.node_id, programsCapable, programsRequested, runtimeCapable]);
 
     useEffect(() => {
         if (view !== 'history' || !historyCapable) return undefined;
@@ -647,32 +643,45 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     useEffect(() => {
         if (view !== 'statistics' || !node.online || !overflowProgram) return undefined;
         const controller = new AbortController();
-        setStatisticsLoading(true);
+        let inFlight = false;
         setStatisticsError('');
         setOverflowStatistics(current => current?.date === statisticsDate
             && current.program_id === overflowProgram.program_id
             && current.timezone_offset_minutes === -new Date(`${statisticsDate}T12:00:00`).getTimezoneOffset()
             ? current : null);
-        void ComputeClusterService.programOverflowStatistics(
-            node.node_id,
-            overflowProgram.program_id,
-            statisticsDate,
-            -new Date(`${statisticsDate}T12:00:00`).getTimezoneOffset(),
-            controller.signal,
-        ).then(value => {
-            if (!controller.signal.aborted) {
-                setOverflowStatistics(value);
-                updateStatisticsDay(statisticsDate, value);
-                setStatisticsLoading(false);
+        const load = async () => {
+            if (inFlight) return;
+            inFlight = true;
+            setStatisticsLoading(true);
+            try {
+                const value = await ComputeClusterService.programOverflowStatistics(
+                    node.node_id,
+                    overflowProgram.program_id,
+                    statisticsDate,
+                    -new Date(`${statisticsDate}T12:00:00`).getTimezoneOffset(),
+                    controller.signal,
+                );
+                if (!controller.signal.aborted) {
+                    setOverflowStatistics(value);
+                    updateStatisticsDay(statisticsDate, value);
+                    setStatisticsError('');
+                }
+            } catch (error) {
+                if (!controller.signal.aborted) {
+                    setStatisticsError(error instanceof Error ? error.message : String(error));
+                    updateStatisticsDay(statisticsDate, null);
+                }
+            } finally {
+                inFlight = false;
+                if (!controller.signal.aborted) setStatisticsLoading(false);
             }
-        }).catch(error => {
-            if (!controller.signal.aborted) {
-                setStatisticsError(error instanceof Error ? error.message : String(error));
-                updateStatisticsDay(statisticsDate, null);
-                setStatisticsLoading(false);
-            }
-        });
-        return () => controller.abort();
+        };
+        void load();
+        const timer = window.setInterval(() => void load(), 5000);
+        return () => {
+            controller.abort();
+            window.clearInterval(timer);
+        };
     }, [node.node_id, node.online, overflowProgram?.program_id, statisticsDate, statisticsMonthRetry, view]);
 
     useEffect(() => {
@@ -1508,7 +1517,11 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     <span>{zh ? '多' : 'More'}</span>
                                 </footer>
                             </Popover>}
-                            {statisticsError
+                            {statisticsError && overflowStatistics && <p className='ControlRefreshWarning' role='status'>
+                                {zh ? '刷新失败，显示上次统计，正在重试：' : 'Refresh failed; showing previous statistics and retrying: '}
+                                {statisticsError}
+                            </p>}
+                            {statisticsError && !overflowStatistics
                                 ? unavailable(zh ? '每日统计暂不可用' : 'Daily statistics are unavailable', statisticsError)
                                 : statisticsLoading && !overflowStatistics
                                     ? unavailable(zh ? '正在读取缓存统计…' : 'Loading cached statistics…')
