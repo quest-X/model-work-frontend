@@ -17,6 +17,7 @@ interface ResourceKnowledgeGraphProps {
     zh: boolean;
     fitWindow?: boolean;
     selectedTaskType?: string;
+    deviceType?: 'all' | 'main' | 'edge' | 'sensor';
     programStatus?: (node: ComputeClusterNode) => {tone: string; label: string} | null;
     onSelectWorkAgent: (
         agent: ComputeResourceGraphEntity,
@@ -283,6 +284,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     tasks = [],
     zh,
     fitWindow = false,
+    deviceType = 'all',
     programStatus,
     onOpenNodeTool,
 }) => {
@@ -300,8 +302,13 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         [clusterNodes],
     );
     const visibleEntities = useMemo(
-        () => graph.entities.filter(visibleEntity),
-        [graph.entities],
+        () => graph.entities.filter(entity => visibleEntity(entity) && (
+            deviceType === 'all'
+            || (deviceType === 'main' && entity.kind === 'compute_node')
+            || (deviceType === 'edge' && entity.kind === 'managed_device' && entity.device_kind === 'edge_compute')
+            || (deviceType === 'sensor' && entity.kind === 'managed_device' && entity.device_kind !== 'edge_compute')
+        )),
+        [deviceType, graph.entities],
     );
     const visibleEntityIds = useMemo(
         () => new Set(visibleEntities.map(entity => entity.entity_id)),
@@ -338,6 +345,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         const source = task.source_entity_id ? index.get(task.source_entity_id) : undefined;
         const target = task.target_entity_id ? index.get(task.target_entity_id) : undefined;
         return (task.state === 'queued' || task.state === 'running') && source && target && source !== target
+            && visibleEntityIds.has(source.entity_id) && visibleEntityIds.has(target.entity_id)
             ? [{task, source, target}]
             : [];
     });

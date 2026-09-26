@@ -360,7 +360,7 @@ describe('ControlCenterView', () => {
         expect(screen.getByRole('heading', {name: '网络情况'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '资源监控'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '相关设备'})).toBeInTheDocument();
-        expect(screen.getByText('边缘计算设备')).toBeInTheDocument();
+        expect(screen.getByText('边缘计算设备', {selector: 'strong'})).toBeInTheDocument();
         expect(screen.getByRole('button', {name: '发现并添加局域网边缘计算设备'})).toBeInTheDocument();
         expect(screen.queryByRole('button', {name: '添加设备'})).not.toBeInTheDocument();
         expect(screen.queryByText('节点在线')).not.toBeInTheDocument();
@@ -1035,6 +1035,22 @@ describe('ControlCenterView', () => {
             modes: [],
             node_id: onlineNode.node_id,
             device_kind: 'edge_compute',
+        }, {
+            entity_id: 'device:camera-1',
+            kind: 'managed_device',
+            label: '车间相机',
+            state: 'available',
+            callable: false,
+            modes: [],
+            node_id: onlineNode.node_id,
+            device_kind: 'camera',
+        });
+        resourceGraph.relations.push({
+            relation_id: 'manages:edge', kind: 'manages', source_id: `node:${onlineNode.node_id}`,
+            target_id: 'device:edge-1', active: true, reason: 'available',
+        }, {
+            relation_id: 'manages:camera', kind: 'manages', source_id: 'device:edge-1',
+            target_id: 'device:camera-1', active: true, reason: 'available',
         });
         jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(resourceGraph);
         const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
@@ -1059,7 +1075,7 @@ describe('ControlCenterView', () => {
         expect(Array.from(mapStats?.querySelectorAll(':scope > div > span') || []).map(item => item.textContent))
             .toEqual(['地域', '设备总数', '正常节点', '故障节点', '异常节点']);
         expect(Array.from(mapStats?.querySelectorAll(':scope > div > strong') || []).map(item => item.textContent))
-            .toEqual(['1', '1', '2', '0', '1']);
+            .toEqual(['1', '2', '2', '0', '1']);
         expect(container.querySelector('.ControlGeoMapMarker')).toHaveTextContent('2/3');
         expect(container.querySelector('.ControlGeoMapMarker')).toHaveClass('offline');
         expect(screen.queryByRole('heading', {name: '在线节点'})).not.toBeInTheDocument();
@@ -1121,12 +1137,23 @@ describe('ControlCenterView', () => {
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > span') || []).map(item => item.textContent))
             .toEqual(['设备总数', '计算节点', '摄像头']);
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > strong') || []).map(item => item.textContent))
-            .toEqual(['1', '1', '0']);
+            .toEqual(['2', '1', '1']);
         expect(within(graphPanel).getByText('2/2 正常节点')).toBeInTheDocument();
         expect(within(graphPanel).getByText('0/1 正常节点')).toBeInTheDocument();
+        expect(within(graphPanel).getByRole('button', {name: '查看 日照节点 节点信息'})).toHaveClass('node-offline');
+        const deviceType = screen.getByRole('combobox', {name: '设备类型'});
+        fireEvent.change(deviceType, {target: {value: 'edge'}});
+        expect(within(graphPanel).getByRole('button', {name: '查看 AIPACK-01 设备信息'})).toBeInTheDocument();
+        expect(within(graphPanel).queryByRole('button', {name: '查看 在线节点 节点信息'})).not.toBeInTheDocument();
+        fireEvent.change(deviceType, {target: {value: 'sensor'}});
+        expect(within(graphPanel).getByRole('button', {name: '查看 车间相机 设备信息'})).toBeInTheDocument();
+        expect(within(graphPanel).queryByRole('button', {name: '查看 AIPACK-01 设备信息'})).not.toBeInTheDocument();
+        fireEvent.change(deviceType, {target: {value: 'main'}});
+        expect(within(graphPanel).getByRole('button', {name: '查看 在线节点 节点信息'})).toBeInTheDocument();
+        expect(within(graphPanel).queryByRole('button', {name: '查看 车间相机 设备信息'})).not.toBeInTheDocument();
+        fireEvent.change(deviceType, {target: {value: 'all'}});
         const graphNode = within(graphPanel).getByRole('button', {name: '查看 在线节点 节点信息'});
         expect(graphNode).toHaveClass('node-online');
-        expect(within(graphPanel).getByRole('button', {name: '查看 日照节点 节点信息'})).toHaveClass('node-offline');
         fireEvent.change(screen.getByRole('combobox', {name: '节点状态'}), {target: {value: 'normal'}});
         expect(within(graphPanel).getByRole('button', {name: '查看 在线节点 节点信息'})).toBeInTheDocument();
         expect(within(graphPanel).getByRole('button', {name: '查看 上海备用节点 节点信息'})).toBeInTheDocument();
@@ -1208,11 +1235,17 @@ describe('ControlCenterView', () => {
         const list = screen.getByRole('complementary', {name: '机器列表'});
         expect(within(screen.getByRole('combobox', {name: '节点状态'})).getAllByRole('option')
             .map(option => option.textContent)).toEqual(['所有状态', '仅正常', '仅故障', '仅异常']);
+        expect(within(screen.getByRole('combobox', {name: '设备类型'})).getAllByRole('option')
+            .map(option => option.textContent)).toEqual([
+                '全部设备类型',
+                '主节点',
+                '边缘计算设备',
+                '传感器（摄像头等）',
+            ]);
         expect(screen.getByRole('combobox', {name: '节点分组'})).toHaveValue('region');
         expect(list.querySelector('.ControlMachineGroupHeading strong')?.textContent).toBe('上海市');
-        fireEvent.change(screen.getByRole('combobox', {name: '节点排序'}), {target: {value: 'name'}});
         expect(Array.from(list.querySelectorAll('.ControlMachineItem:not(.overview) strong'))
-            .map(item => item.textContent)).toEqual(['Alpha', 'Bravo', 'Charlie']);
+            .map(item => item.textContent)).toEqual(['Charlie', 'Alpha', 'Bravo']);
 
         expect(list.querySelectorAll('.ControlMachineGroupHeading')).toHaveLength(1);
         expect(within(list).queryByText('shanghai')).not.toBeInTheDocument();

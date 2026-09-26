@@ -98,7 +98,7 @@ type SidePanel = 'machines' | 'features';
 type Workspace = 'node' | 'network' | 'files' | 'utilities' | 'terminal' | 'groups';
 type MachineIconKind = 'jetson' | 'windows' | 'linux' | 'macos' | 'computer';
 type NodeGrouping = 'none' | 'region' | 'platform';
-type NodeOrdering = 'status' | 'activity' | 'name';
+type DeviceVisibility = 'all' | 'main' | 'edge' | 'sensor';
 type NodeVisibility = 'all' | 'normal' | 'fault' | 'abnormal';
 type OverviewView = 'map' | 'graph';
 type MonitorView = 'performance' | 'diagnostics' | 'processes' | 'startup' | 'tasks' | 'conversations';
@@ -483,7 +483,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [nodeTags, setNodeTags] = useState<string[]>([]);
     const [tagDraft, setTagDraft] = useState('');
     const [nodeGrouping, setNodeGrouping] = useState<NodeGrouping>('region');
-    const [nodeOrdering, setNodeOrdering] = useState<NodeOrdering>('status');
+    const [deviceVisibility, setDeviceVisibility] = useState<DeviceVisibility>('all');
     const [nodeVisibility, setNodeVisibility] = useState<NodeVisibility>('all');
     const [overviewView, setOverviewView] = useState<OverviewView>('map');
     const mounted = useRef(true);
@@ -810,10 +810,6 @@ export const ControlCenterView: React.FC<IProps> = ({
             return computeNodeState(node) === nodeVisibility;
         });
         visible.sort((left, right) => {
-            if (nodeOrdering === 'activity') {
-                return left.heartbeat_age_seconds - right.heartbeat_age_seconds || left.name.localeCompare(right.name);
-            }
-            if (nodeOrdering === 'name') return left.name.localeCompare(right.name);
             const rank = {normal: 0, fault: 1, abnormal: 2};
             return rank[computeNodeState(left)] - rank[computeNodeState(right)] || left.name.localeCompare(right.name);
         });
@@ -830,7 +826,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             groups.set(group, [...(groups.get(group) || []), node]);
         });
         return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
-    }, [nodeGrouping, nodeOrdering, nodeRegions, nodes, nodeVisibility, zh]);
+    }, [nodeGrouping, nodeRegions, nodes, nodeVisibility, zh]);
     const selectedNode = nodes.find(node => node.node_id === selectedNodeId) || null;
     const overviewBehindTool = Boolean(
         toolOpenedFromOverview && (inspectedServiceId || programRunnerOpen),
@@ -1187,13 +1183,14 @@ export const ControlCenterView: React.FC<IProps> = ({
                 <option value='platform'>{zh ? '按系统' : 'By system'}</option>
             </select>
             <select
-                aria-label={zh ? '节点排序' : 'Node ordering'}
-                value={nodeOrdering}
-                onChange={event => setNodeOrdering(event.target.value as NodeOrdering)}
+                aria-label={zh ? '设备类型' : 'Device type'}
+                value={deviceVisibility}
+                onChange={event => setDeviceVisibility(event.target.value as DeviceVisibility)}
             >
-                <option value='status'>{zh ? '正常优先' : 'Normal first'}</option>
-                <option value='activity'>{zh ? '最近活跃' : 'Recent first'}</option>
-                <option value='name'>{zh ? '按名称' : 'By name'}</option>
+                <option value='all'>{zh ? '全部设备类型' : 'All device types'}</option>
+                <option value='main'>{zh ? '主节点' : 'Main nodes'}</option>
+                <option value='edge'>{zh ? '边缘计算设备' : 'Edge devices'}</option>
+                <option value='sensor'>{zh ? '传感器（摄像头等）' : 'Sensors (cameras, etc.)'}</option>
             </select>
             <select
                 aria-label={zh ? '节点状态' : 'Node status'}
@@ -2269,6 +2266,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 tasks={computeTasks}
                                 zh={zh}
                                 fitWindow
+                                deviceType={deviceVisibility}
                                 onSelectWorkAgent={() => undefined}
                                 programStatus={mountedProgramStatus}
                                 onOpenNodeTool={(node, tool) => {
