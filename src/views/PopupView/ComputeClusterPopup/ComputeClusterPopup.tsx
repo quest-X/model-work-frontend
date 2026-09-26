@@ -741,7 +741,7 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
             <div className='ComputeClusterSummary'>
                 <div><span>{zh ? '地域' : 'Regions'}</span><strong>{resourceGraph?.summary.regions ?? 0}</strong></div>
                 <div><span>{zh ? '节点总数' : 'Total nodes'}</span><strong>{totalNodeCount}</strong></div>
-                <div><span>{zh ? '主节点' : 'Main nodes'}</span><strong>{totals.total}</strong></div>
+                <div><span>{zh ? '计算节点' : 'Compute nodes'}</span><strong>{totals.total}</strong></div>
                 <div><span>{zh ? '正常节点' : 'Normal nodes'}</span><strong className='online'>{totals.online}</strong></div>
                 <div><span>{zh ? '故障节点' : 'Fault nodes'}</span><strong>{nodes.filter(node => computeNodeState(node) === 'fault').length}</strong></div>
                 <div><span>{zh ? '异常节点' : 'Abnormal nodes'}</span><strong>{nodes.filter(node => computeNodeState(node) === 'abnormal').length}</strong></div>

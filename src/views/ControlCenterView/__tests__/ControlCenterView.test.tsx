@@ -1131,13 +1131,13 @@ describe('ControlCenterView', () => {
 
         expect(screen.queryByRole('button', {name: '刷新机器状态'})).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '图谱'}));
-        const graphPanel = screen.getByRole('region', {name: '主节点、边缘设备与摄像头拓扑'});
+        const graphPanel = screen.getByRole('region', {name: '计算节点、边缘设备与摄像头拓扑'});
         expect(graphPanel.querySelector('.ComputeGraphViewport')).toHaveClass('fit-window');
         const graphStats = graphPanel.querySelector('.ComputeKnowledgeStats');
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > span') || []).map(item => item.textContent))
-            .toEqual(['设备总数', '计算节点', '摄像头']);
+            .toEqual(['设备总数', '计算节点', '边缘计算设备', '摄像头']);
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > strong') || []).map(item => item.textContent))
-            .toEqual(['2', '1', '1']);
+            .toEqual(['5', '3', '1', '1']);
         expect(within(graphPanel).getByText('2/2 正常节点')).toBeInTheDocument();
         expect(within(graphPanel).getByText('0/1 正常节点')).toBeInTheDocument();
         expect(within(graphPanel).getByRole('button', {name: '查看 日照节点 节点信息'})).toHaveClass('node-offline');
@@ -1164,13 +1164,13 @@ describe('ControlCenterView', () => {
         expect(screen.getByText('边缘集群图谱', {selector: 'strong'})).toBeInTheDocument();
         fireEvent.click(within(graphPanel).getByRole('button', {name: /资源监视器/}));
         const graphMonitor = await screen.findByRole('dialog', {name: '在线节点 资源监视器'});
-        expect(screen.getByRole('region', {name: '主节点、边缘设备与摄像头拓扑'})).toBeInTheDocument();
+        expect(screen.getByRole('region', {name: '计算节点、边缘设备与摄像头拓扑'})).toBeInTheDocument();
         expect(overview).toHaveAttribute('aria-pressed', 'true');
         expect(machine).toHaveAttribute('aria-pressed', 'false');
         fireEvent.mouseDown(graphMonitor.parentElement as HTMLElement);
         await waitFor(() => expect(screen.queryByRole('dialog', {name: '在线节点 资源监视器'}))
             .not.toBeInTheDocument());
-        expect(screen.getByRole('region', {name: '主节点、边缘设备与摄像头拓扑'})).toBeInTheDocument();
+        expect(screen.getByRole('region', {name: '计算节点、边缘设备与摄像头拓扑'})).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '地图'}));
         expect(screen.getByRole('region', {name: '计算群地理地图'})).toBeInTheDocument();
         expect(nodesRequest).toHaveBeenCalledTimes(1);
@@ -1238,7 +1238,7 @@ describe('ControlCenterView', () => {
         expect(within(screen.getByRole('combobox', {name: '设备类型'})).getAllByRole('option')
             .map(option => option.textContent)).toEqual([
                 '全部类型',
-                '主节点',
+                '计算节点',
                 '边缘计算设备',
                 '传感器',
             ]);
@@ -1755,7 +1755,7 @@ describe('ControlCenterView', () => {
         expect(within(within(localMembers).getByRole('region', {name: 'Main'})).queryByText('现场节点')).not.toBeInTheDocument();
         expect(within(within(localMembers).getByRole('region', {name: 'Node'})).getByText('现场节点')).toBeInTheDocument();
         fireEvent.click(await within(localMembers).findByRole('button', {name: '在图谱中查看'}));
-        const fieldGraphPanel = await screen.findByRole('region', {name: '主节点、边缘设备与摄像头拓扑'});
+        const fieldGraphPanel = await screen.findByRole('region', {name: '计算节点、边缘设备与摄像头拓扑'});
         expect(within(fieldGraphPanel).getByRole('button', {name: '查看 现场节点 节点信息'})).toBeInTheDocument();
         expect(screen.getByText('factory-a', {selector: '.ControlToolbarGroup strong'})).toBeInTheDocument();
         expect(ComputeClusterService.group).toHaveBeenNthCalledWith(1, 'central-group', expect.any(AbortSignal));

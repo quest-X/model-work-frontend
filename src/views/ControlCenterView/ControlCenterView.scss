@@ -755,6 +755,7 @@ button.ComputeFileName:focus-visible { color: white; }
 
 .ControlNodeContent:has(> .ComputeKnowledgePanel) {
   display: flex;
+  min-width: 0;
   height: 100%;
   flex-direction: column;
   padding: 24px;
