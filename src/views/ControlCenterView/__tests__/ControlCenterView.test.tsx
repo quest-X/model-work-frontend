@@ -1237,10 +1237,10 @@ describe('ControlCenterView', () => {
             .map(option => option.textContent)).toEqual(['所有状态', '仅正常', '仅故障', '仅异常']);
         expect(within(screen.getByRole('combobox', {name: '设备类型'})).getAllByRole('option')
             .map(option => option.textContent)).toEqual([
-                '全部设备类型',
+                '全部类型',
                 '主节点',
                 '边缘计算设备',
-                '传感器（摄像头等）',
+                '传感器',
             ]);
         expect(screen.getByRole('combobox', {name: '节点分组'})).toHaveValue('region');
         expect(list.querySelector('.ControlMachineGroupHeading strong')?.textContent).toBe('上海市');

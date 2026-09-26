@@ -1187,10 +1187,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                 value={deviceVisibility}
                 onChange={event => setDeviceVisibility(event.target.value as DeviceVisibility)}
             >
-                <option value='all'>{zh ? '全部设备类型' : 'All device types'}</option>
+                <option value='all'>{zh ? '全部类型' : 'All device types'}</option>
                 <option value='main'>{zh ? '主节点' : 'Main nodes'}</option>
                 <option value='edge'>{zh ? '边缘计算设备' : 'Edge devices'}</option>
-                <option value='sensor'>{zh ? '传感器（摄像头等）' : 'Sensors (cameras, etc.)'}</option>
+                <option value='sensor'>{zh ? '传感器' : 'Sensors (cameras, etc.)'}</option>
             </select>
             <select
                 aria-label={zh ? '节点状态' : 'Node status'}
