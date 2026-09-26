@@ -1127,6 +1127,11 @@ describe('ControlCenterView', () => {
         const graphNode = within(graphPanel).getByRole('button', {name: '查看 在线节点 节点信息'});
         expect(graphNode).toHaveClass('node-online');
         expect(within(graphPanel).getByRole('button', {name: '查看 日照节点 节点信息'})).toHaveClass('node-offline');
+        fireEvent.change(screen.getByRole('combobox', {name: '节点状态'}), {target: {value: 'normal'}});
+        expect(within(graphPanel).getByRole('button', {name: '查看 在线节点 节点信息'})).toBeInTheDocument();
+        expect(within(graphPanel).getByRole('button', {name: '查看 上海备用节点 节点信息'})).toBeInTheDocument();
+        expect(within(graphPanel).queryByRole('button', {name: '查看 日照节点 节点信息'})).not.toBeInTheDocument();
+        expect(within(graphPanel).queryByText('0/1 正常节点')).not.toBeInTheDocument();
         fireEvent.mouseEnter(graphNode);
         expect(within(graphPanel).getByText('正常 · 心跳 刚刚')).toHaveClass('online');
         expect(screen.getByText('边缘集群图谱', {selector: 'strong'})).toBeInTheDocument();

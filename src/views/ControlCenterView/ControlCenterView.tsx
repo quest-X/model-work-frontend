@@ -322,6 +322,39 @@ const communicationTone = (state: 'normal' | 'fault' | 'abnormal'): Tone =>
     state === 'normal' ? 'healthy' : state === 'abnormal' ? 'offline' : 'warning';
 const machineTone = (node: ComputeClusterNode): Tone => communicationTone(computeNodeState(node));
 
+const filterResourceGraph = (
+    graph: ComputeResourceGraph | null,
+    visibleNodes: ComputeClusterNode[],
+): ComputeResourceGraph | null => {
+    if (!graph) return null;
+    const nodeIds = new Set(visibleNodes.map(node => node.node_id));
+    const entityIds = new Set(graph.entities
+        .filter(entity => entity.node_id && nodeIds.has(entity.node_id))
+        .map(entity => entity.entity_id));
+    let changed = true;
+    while (changed) {
+        changed = false;
+        graph.relations.forEach(relation => {
+            if (!entityIds.has(relation.source_id)
+                || !['manages', 'can_execute', 'depends_on'].includes(relation.kind)
+                || entityIds.has(relation.target_id)) return;
+            entityIds.add(relation.target_id);
+            changed = true;
+        });
+    }
+    graph.relations.forEach(relation => {
+        if (relation.kind === 'contains' && entityIds.has(relation.target_id)) {
+            entityIds.add(relation.source_id);
+        }
+    });
+    return {
+        ...graph,
+        entities: graph.entities.filter(entity => entityIds.has(entity.entity_id)),
+        relations: graph.relations.filter(relation =>
+            entityIds.has(relation.source_id) && entityIds.has(relation.target_id)),
+    };
+};
+
 const cameraTone = (status: ComputeManagedDevice['status']): Tone =>
     status === 'registered' || status === 'online' ? 'healthy' : 'offline';
 
@@ -808,6 +841,14 @@ export const ControlCenterView: React.FC<IProps> = ({
     );
     const overviewResourceGraph = activeGroupResources?.resource_graph || resourceGraph;
     const overviewNodes = activeGroupResources?.nodes || nodes;
+    const visibleOverviewNodes = useMemo(() => nodeVisibility === 'all'
+        ? overviewNodes
+        : overviewNodes.filter(node => computeNodeState(node) === nodeVisibility),
+    [nodeVisibility, overviewNodes]);
+    const visibleOverviewResourceGraph = useMemo(() => nodeVisibility === 'all'
+        ? overviewResourceGraph
+        : filterResourceGraph(overviewResourceGraph, visibleOverviewNodes),
+    [nodeVisibility, overviewResourceGraph, visibleOverviewNodes]);
     const currentGroup = overviewResourceGraph?.entities.find(entity => entity.kind === 'compute_group') || null;
     const visibleGroups = groupMemberships;
     const currentGroupTone: Tone = currentGroup?.state === 'available' ? 'healthy' : 'offline';
@@ -2219,12 +2260,12 @@ export const ControlCenterView: React.FC<IProps> = ({
                     </div>}
                     {overviewView === 'map'
                         ? <React.Suspense fallback={<div className='ControlCenterMessage'>{zh ? '正在载入地图…' : 'Loading map…'}</div>}>
-                            <ClusterGeographicMap graph={overviewResourceGraph} nodes={overviewNodes} zh={zh}/>
+                            <ClusterGeographicMap graph={visibleOverviewResourceGraph} nodes={visibleOverviewNodes} zh={zh}/>
                         </React.Suspense>
-                        : overviewResourceGraph
+                        : visibleOverviewResourceGraph
                             ? <ResourceKnowledgeGraph
-                                graph={overviewResourceGraph}
-                                nodes={overviewNodes}
+                                graph={visibleOverviewResourceGraph}
+                                nodes={visibleOverviewNodes}
                                 tasks={computeTasks}
                                 zh={zh}
                                 fitWindow
