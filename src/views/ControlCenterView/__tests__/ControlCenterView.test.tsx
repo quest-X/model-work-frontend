@@ -459,7 +459,8 @@ describe('ControlCenterView', () => {
 
         const platformMachine = await screen.findByRole('button', {name: /baosight-01/});
         const machineList = screen.getByRole('complementary', {name: '机器列表'});
-        expect(within(platformMachine).getByRole('img', {name: '有子平台入口'})).toBeInTheDocument();
+        const marker = within(platformMachine).getByRole('img', {name: '有子平台入口'});
+        expect(marker.closest('strong')).toHaveTextContent('baosight-01');
         expect(within(within(machineList).getByRole('button', {name: /普通节点/}))
             .queryByRole('img', {name: '有子平台入口'})).not.toBeInTheDocument();
     });

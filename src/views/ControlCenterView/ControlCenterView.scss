@@ -221,10 +221,21 @@ span.ControlMachineIcon {
 
 .ControlMachineRemotePlatform {
   display: inline-flex;
-  flex: 0 0 18px;
+  flex: 0 0 14px;
   align-items: center;
   justify-content: center;
   color: #9ba9b4;
+}
+
+.ControlMachineName {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+
+  > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .ControlMachineEmpty {

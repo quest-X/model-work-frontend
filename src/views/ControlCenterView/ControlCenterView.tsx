@@ -1213,17 +1213,19 @@ export const ControlCenterView: React.FC<IProps> = ({
                     >
                         <MachinePlatformIcon node={node}/>
                         <span className='ControlMachineIdentity'>
-                            <strong>{node.name}</strong>
+                            <strong className='ControlMachineName'>
+                                <span>{node.name}</span>
+                                {hasRemotePlatformEntry(node) && <span
+                                    className='ControlMachineRemotePlatform'
+                                    role='img'
+                                    aria-label={zh ? '有子平台入口' : 'Sub-platform available'}
+                                    title={zh ? '有子平台入口' : 'Sub-platform available'}
+                                >
+                                    <ExternalLink size={14} aria-hidden='true'/>
+                                </span>}
+                            </strong>
                             <small>{zh ? '活跃于 ' : 'Active '}{lastSeen(node.heartbeat_age_seconds, zh)}</small>
                         </span>
-                        {hasRemotePlatformEntry(node) && <span
-                            className='ControlMachineRemotePlatform'
-                            role='img'
-                            aria-label={zh ? '有子平台入口' : 'Sub-platform available'}
-                            title={zh ? '有子平台入口' : 'Sub-platform available'}
-                        >
-                            <ExternalLink size={14} aria-hidden='true'/>
-                        </span>}
                         <span className={`ControlMachineState ${tone}`}>
                             {computeNodeLabel(node, zh)}
                         </span>
