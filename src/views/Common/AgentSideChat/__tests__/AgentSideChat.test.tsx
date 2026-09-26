@@ -697,6 +697,9 @@ describe('AgentSideChat', () => {
             expect.stringContaining('| 节点 | 服务状态 | CPU | MEM | GPU | DISK | NETWORK | 结果 |'),
             undefined,
         );
+        expect(recordTurn.mock.calls[0][1]).toContain('故障计数（确定性汇总）');
+        expect(recordTurn.mock.calls[0][1]).toContain('网络 2/3');
+        expect(recordTurn.mock.calls[0][1]).toContain('推理服务 2/3');
     });
 
     it('runs fixed device commands and sends arbitrary device conversation to the LLM', async () => {

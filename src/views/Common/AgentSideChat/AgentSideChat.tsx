@@ -256,6 +256,7 @@ type QuickScanRow = {
     network: string;
     status: string;
     healthy: boolean;
+    issues: string[];
 };
 
 const QUICK_SCAN_LIMITS = {
@@ -361,6 +362,7 @@ const runAllDevicesQuickScan = async (zh: boolean): Promise<string> => {
             network: '—',
             status: zh ? '故障：未收到节点心跳' : 'Fault: node heartbeat missing',
             healthy: false,
+            issues: [zh ? '未收到节点心跳' : 'Node heartbeat missing'],
         };
         const {problems, ...resources} = quickScanResources(node, zh);
         let services = '—';
@@ -373,6 +375,7 @@ const runAllDevicesQuickScan = async (zh: boolean): Promise<string> => {
                     ...resources,
                     status: `${zh ? '故障：' : 'Fault: '}${problems.join(zh ? '、' : ', ')}`,
                     healthy: false,
+                    issues: [...problems],
                 };
             }
             const snapshot = await ComputeClusterService.runtime(node.node_id);
@@ -396,15 +399,25 @@ const runAllDevicesQuickScan = async (zh: boolean): Promise<string> => {
                 ? `${zh ? '故障：' : 'Fault: '}${problems.join(zh ? '、' : ', ')}`
                 : (zh ? '正常' : 'Normal'),
             healthy: problems.length === 0,
+            issues: [...problems],
         };
     }))).sort((left, right) => left.node.localeCompare(right.node));
     const healthy = rows.filter(row => row.healthy).length;
+    const issueCounts = rows.flatMap(row => row.issues).reduce((counts, issue) => {
+        counts.set(issue, (counts.get(issue) || 0) + 1);
+        return counts;
+    }, new Map<string, number>());
+    const issueSummary = [...issueCounts]
+        .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+        .map(([issue, count]) => `${issue} ${count}/${rows.length}`)
+        .join(zh ? '；' : '; ');
     const header = zh
         ? '| 节点 | 服务状态 | CPU | MEM | GPU | DISK | NETWORK | 结果 |'
         : '| Node | Service status | CPU | MEM | GPU | DISK | NETWORK | Result |';
     return `${zh
         ? `快速扫描完成：${healthy}/${rows.length} 个节点的服务与基础资源正常。`
         : `Quick scan complete: services and basic resources are normal on ${healthy}/${rows.length} nodes.`}
+${zh ? '故障计数（确定性汇总）' : 'Issue counts (deterministic summary)'}：${issueSummary || (zh ? '无' : 'None')}。
 ${header}
 | --- | --- | --- | --- | --- | --- | --- | --- |
 ${rows.map(row => `| ${quickScanCell(row.node)} | ${row.services} | ${row.cpu} | ${row.memory} | ${row.gpu} | ${row.disk} | ${row.network} | ${quickScanCell(row.status)} |`).join('\n')}`;
