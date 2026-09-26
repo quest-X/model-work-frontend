@@ -281,7 +281,7 @@ describe('ComputeClusterPopup', () => {
         expect(nodeCard.querySelector('.ComputeNodeResourceGrid')).toHaveTextContent('16');
         const summary = Array.from(document.querySelectorAll('.ComputeClusterSummary > div'));
         expect(summary.map(item => item.querySelector('span')?.textContent))
-            .toEqual(['地域', '节点总数', '主节点', '正常节点', '故障节点', '异常节点']);
+            .toEqual(['地域', '节点总数', '计算节点', '正常节点', '故障节点', '异常节点']);
         expect(summary.map(item => item.querySelector('strong')?.textContent))
             .toEqual(['0', '1', '1', '1', '0', '0']);
         expect(summary[3].querySelector('strong')).toHaveClass('online');
@@ -543,7 +543,7 @@ describe('ComputeClusterPopup', () => {
         expect(screen.getByTestId('resource-graph-unavailable-marker')).toBeInTheDocument();
         const graphLegend = graphPanel?.querySelector('.ComputeKnowledgeLegend');
         expect(graphLegend).toHaveTextContent('地域');
-        expect(graphLegend).toHaveTextContent('主节点');
+        expect(graphLegend).toHaveTextContent('计算节点');
         expect(graphLegend).toHaveTextContent('边缘计算设备');
         expect(graphLegend).toHaveTextContent('摄像头');
         expect(graphLegend).toHaveTextContent('计算群成员');
@@ -562,9 +562,9 @@ describe('ComputeClusterPopup', () => {
         expect(graphPanel?.querySelector('[data-entity-kind="work_agent"]')).not.toBeInTheDocument();
         const graphStats = graphPanel?.querySelector('.ComputeKnowledgeStats');
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > span') || []).map(item => item.textContent))
-            .toEqual(['设备总数', '计算节点', '摄像头']);
+            .toEqual(['设备总数', '计算节点', '边缘计算设备', '摄像头']);
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > strong') || []).map(item => item.textContent))
-            .toEqual(['2', '1', '1']);
+            .toEqual(['4', '2', '1', '1']);
         expect(screen.getByText('节点总数').closest('div')?.querySelector('strong')).toHaveTextContent('3');
         const offlineNode = screen.getByRole('button', {name: '查看 edge-offline 节点信息'});
         expect(offlineNode).toHaveClass('node-offline');
@@ -652,7 +652,7 @@ describe('ComputeClusterPopup', () => {
         await user.unhover(onlineNode);
         expect(screen.getByRole('status', {name: 'edge-01 运维信息'})).toBeInTheDocument();
 
-        await user.click(screen.getByRole('figure', {name: '主节点、边缘设备与摄像头关系图'}));
+        await user.click(screen.getByRole('figure', {name: '计算节点、边缘设备与摄像头关系图'}));
         expect(onlineNode).toHaveAttribute('aria-pressed', 'false');
         expect(screen.queryByRole('status', {name: 'edge-01 运维信息'})).not.toBeInTheDocument();
 
@@ -810,7 +810,7 @@ describe('ComputeClusterPopup', () => {
             onSelectWorkAgent={jest.fn()}
         />);
 
-        const scene = screen.getByRole('figure', {name: '主节点、边缘设备与摄像头关系图'});
+        const scene = screen.getByRole('figure', {name: '计算节点、边缘设备与摄像头关系图'});
         const width = parseFloat(scene.style.minWidth);
         const height = parseFloat(scene.style.minHeight);
         expect(width).toBeGreaterThan(720);
@@ -854,9 +854,114 @@ describe('ComputeClusterPopup', () => {
         rerender(<ComputeClusterPopup language={Language.ENGLISH}/>);
 
         expect(Array.from(document.querySelectorAll('.ComputeClusterSummary span')).map(item => item.textContent))
-            .toEqual(['Regions', 'Total nodes', 'Main nodes', 'Normal nodes', 'Fault nodes', 'Abnormal nodes']);
+            .toEqual(['Regions', 'Total nodes', 'Compute nodes', 'Normal nodes', 'Fault nodes', 'Abnormal nodes']);
         expect(await screen.findByText('shanghai')).toBeInTheDocument();
         expect(screen.queryByText('上海')).not.toBeInTheDocument();
+    });
+
+    it('reflows filtered rings and fixed-size cards when the viewport changes', async () => {
+        const base = await service.resourceGraph();
+        const node = (await service.nodes())[0];
+        const main = base.entities.find(entity => entity.kind === 'compute_node');
+        const region = base.entities.find(entity => entity.kind === 'compute_region');
+        const camera = base.entities.find(entity => entity.device_kind === 'camera');
+        const regions = ['上海', '山东'].map((name, index) => ({
+            ...region, entity_id: `region:${index}`, region_id: String(index), region_name: name, label: name,
+        }));
+        const mains = Array.from({length: 7}, (_, index) => ({
+            ...main, entity_id: `node:${index}`, node_id: String(index), label: `node-${index}`,
+            region_id: index < 5 ? '0' : '1',
+        }));
+        const devices = Array.from({length: 47}, (_, index) => ({
+            ...camera, entity_id: `device:${index}`, node_id: '6', label: `device-${index}`,
+            device_kind: index < 18 ? 'edge_compute' : 'camera',
+        }));
+        const graph = {
+            ...base,
+            entities: [...regions, ...mains, ...devices],
+            relations: [
+                ...mains.map(entity => ({
+                    relation_id: `contains:${entity.entity_id}`, kind: 'contains' as const,
+                    source_id: `region:${entity.region_id}`, target_id: entity.entity_id,
+                    active: true, reason: 'available' as const,
+                })),
+                ...devices.map(entity => ({
+                    relation_id: `manages:${entity.entity_id}`, kind: 'manages' as const,
+                    source_id: 'node:6', target_id: entity.entity_id,
+                    active: true, reason: 'available' as const,
+                })),
+            ],
+        };
+        const nodes = mains.map((entity, index) => ({
+            ...node, node_id: entity.node_id, online: index === 6,
+        }));
+        const previousObserver = window.ResizeObserver;
+        let resize: ResizeObserverCallback;
+        const disconnect = jest.fn();
+        window.ResizeObserver = jest.fn(callback => {
+            resize = callback;
+            return {observe: jest.fn(), unobserve: jest.fn(), disconnect};
+        });
+        const props = {graph, nodes, zh: true, fitWindow: true, onSelectWorkAgent: jest.fn()};
+        const rendered = render(<ResourceKnowledgeGraph {...props} deviceType='main'/>);
+        const checkLayout = (count: number) => {
+            const scene = screen.getByRole('figure', {name: '计算节点、边缘设备与摄像头关系图'});
+            expect(scene).toHaveAttribute('data-layout', 'radial');
+            const width = parseFloat(scene.style.minWidth);
+            const height = parseFloat(scene.style.minHeight);
+            const cards = screen.getAllByTestId('resource-graph-node').map(card => ({
+                x: parseFloat(card.style.left) * width / 100,
+                y: parseFloat(card.style.top) * height / 100,
+                width: card.dataset.entityKind === 'compute_node' ? 92 : 136,
+                height: card.dataset.entityKind === 'compute_node' ? 92 : 58,
+            }));
+            expect(cards).toHaveLength(count);
+            cards.forEach((card, index) => {
+                expect(card.x - card.width / 2).toBeGreaterThanOrEqual(0);
+                expect(card.x + card.width / 2).toBeLessThanOrEqual(width);
+                expect(card.y - card.height / 2 - 10).toBeGreaterThanOrEqual(48);
+                expect(card.y + card.height / 2).toBeLessThanOrEqual(height);
+                expect(cards.slice(0, index).filter(other =>
+                    Math.abs(card.x - other.x) < (card.width + other.width) / 2
+                    && Math.abs(card.y - other.y) < (card.height + other.height) / 2 + 10)).toEqual([]);
+            });
+            return cards;
+        };
+        try {
+            act(() => resize([{contentRect: {width: 1000, height: 600}}] as ResizeObserverEntry[], null));
+            const ring = checkLayout(7).slice(0, 5);
+            const centerX = ring.reduce((sum, card) => sum + card.x, 0) / ring.length;
+            const centerY = ring.reduce((sum, card) => sum + card.y, 0) / ring.length;
+            const radiusX = (ring[1].x - centerX) / Math.sin(Math.PI * 2 / ring.length);
+            const radiusY = centerY - ring[0].y;
+            ring.forEach(card => expect(((card.x - centerX) / radiusX) ** 2
+                + ((card.y - centerY) / radiusY) ** 2).toBeCloseTo(1));
+            const mainRegions = screen.getAllByTestId('resource-graph-region');
+            expect(parseFloat(mainRegions[0].style.flexGrow)).toBeGreaterThan(parseFloat(mainRegions[1].style.flexGrow));
+            expect(within(mainRegions[1]).getByText('1/2 正常节点')).toBeInTheDocument();
+            const stats = document.querySelector('.graph-summary');
+            expect([...stats.querySelectorAll('strong')].map(item => item.textContent)).toEqual(['7', '7', '0', '0']);
+
+            rendered.rerender(<ResourceKnowledgeGraph {...props} deviceType='edge'/>);
+            checkLayout(18);
+            expect(screen.getAllByTestId('resource-graph-region')).toHaveLength(1);
+            expect(screen.getByTestId('resource-graph-region')).toHaveTextContent('山东');
+            expect(screen.getByTestId('resource-graph-region')).toHaveTextContent('1/2 正常节点');
+            rendered.rerender(<ResourceKnowledgeGraph {...props} deviceType='sensor'/>);
+            checkLayout(29);
+
+            act(() => resize([{contentRect: {width: 360, height: 400}}] as ResizeObserverEntry[], null));
+            checkLayout(29);
+            rendered.rerender(<ResourceKnowledgeGraph {...props} deviceType='main'/>);
+            checkLayout(7);
+            rendered.rerender(<ResourceKnowledgeGraph {...props} graph={{...graph, entities: [...regions, ...mains]}} deviceType='edge'/>);
+            expect(screen.queryByTestId('resource-graph-node')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('resource-graph-region')).not.toBeInTheDocument();
+        } finally {
+            rendered.unmount();
+            expect(disconnect).toHaveBeenCalled();
+            window.ResizeObserver = previousObserver;
+        }
     });
 
     it('shows task dispatch, durable progress, and controls when enabled', async () => {

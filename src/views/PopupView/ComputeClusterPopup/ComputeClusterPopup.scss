@@ -259,6 +259,7 @@
 
 .ComputeKnowledgeHeading {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
@@ -282,7 +283,7 @@
 
 .ComputeKnowledgeStats.graph-summary {
   display: grid;
-  grid-template-columns: repeat(3, max-content);
+  grid-template-columns: repeat(4, max-content);
 }
 
 .ComputeKnowledgeStats.map-summary {
@@ -344,7 +345,7 @@
 .ComputeGraphFit { width: 100%; }
 
 .ComputeGraphViewport.fit-window {
-  overflow: hidden;
+  overflow: auto;
 
   .ComputeGraphFit {
     display: flex;
