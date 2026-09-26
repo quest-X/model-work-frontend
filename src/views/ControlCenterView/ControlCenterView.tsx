@@ -1769,6 +1769,18 @@ export const ControlCenterView: React.FC<IProps> = ({
         const customWorkArea = geographicTags.has(regionDisplayName(storedWorkArea, zh)) ? '' : storedWorkArea;
         const workAreaTag = customWorkArea || node.labels?.site_name?.trim() || '';
         return <>
+            {error && dismissedRefreshWarningKey !== refreshWarningKey && <div
+                className='ControlRefreshWarning ControlNodeRefreshWarning'
+                role='status'
+            >
+                <span>{zh ? '本次刷新失败，正在显示上一次数据：' : 'Refresh failed; showing the last snapshot: '}{error}</span>
+                <button
+                    type='button'
+                    aria-label={zh ? '关闭刷新失败提示' : 'Dismiss refresh warning'}
+                    title={zh ? '关闭提示' : 'Dismiss warning'}
+                    onClick={() => setDismissedRefreshWarningKey(refreshWarningKey)}
+                >×</button>
+            </div>}
             <header className='ControlNodeHeader'>
                 <div>
                     <h1>{node.name}</h1>
@@ -1809,18 +1821,6 @@ export const ControlCenterView: React.FC<IProps> = ({
                         </form>}
                     </div>
                 </div>
-                {error && dismissedRefreshWarningKey !== refreshWarningKey && <div
-                    className='ControlRefreshWarning ControlNodeRefreshWarning'
-                    role='status'
-                >
-                    <span>{zh ? '本次刷新失败，正在显示上一次数据：' : 'Refresh failed; showing the last snapshot: '}{error}</span>
-                    <button
-                        type='button'
-                        aria-label={zh ? '关闭刷新失败提示' : 'Dismiss refresh warning'}
-                        title={zh ? '关闭提示' : 'Dismiss warning'}
-                        onClick={() => setDismissedRefreshWarningKey(refreshWarningKey)}
-                    >×</button>
-                </div>}
             </header>
 
             <section className='ControlSection ControlSectionFirst'>
