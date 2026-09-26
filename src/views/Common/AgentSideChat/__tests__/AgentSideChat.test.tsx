@@ -2,7 +2,7 @@ import React from 'react';
 import {TextEncoder as NodeTextEncoder} from 'util';
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {Language} from '../../../../data/LanguageConfig';
-import {AgentChatService} from '../../../../services/AgentChatService';
+import {AgentChatEvent, AgentChatResponse, AgentChatService} from '../../../../services/AgentChatService';
 import * as ApprovalIdentity from '../../../../services/ApprovalIdentityService';
 
 jest.mock('../../../../services/ApprovalIdentityService', () => ({
@@ -136,6 +136,57 @@ describe('AgentSideChat', () => {
 
     afterEach(() => jest.restoreAllMocks());
 
+    it('renders streamed text before completion and saves only the final reply', async () => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([]);
+        jest.spyOn(AgentChatService, 'status').mockResolvedValue({
+            status: 'ready', auth_configured: true, llm_configured: true, primary_model: 'local',
+        });
+        let emit: (event: AgentChatEvent) => void;
+        let finish: (response: AgentChatResponse) => void;
+        jest.spyOn(AgentChatService, 'send').mockImplementation((message, conversation, task, onEvent) => {
+            emit = onEvent;
+            return new Promise(resolve => { finish = resolve; });
+        });
+        render(<AgentSideChat language={Language.CHINESE}/>);
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
+        const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
+        fireEvent.change(composer, {target: {value: '汇报任务'}});
+        fireEvent.click(screen.getByRole('button', {name: '发送'}));
+        await waitFor(() => expect(AgentChatService.send).toHaveBeenCalled());
+        act(() => { emit({type: 'status', phase: 'model'}); });
+        expect(screen.getByText('模型正在处理输入…')).toBeInTheDocument();
+        act(() => { emit({type: 'delta', content: '正在逐段回复'}); });
+        expect(screen.getByText('正在逐段回复')).toBeInTheDocument();
+        expect(AgentChatService.finishTrace).not.toHaveBeenCalled();
+        await act(async () => { finish({
+            conversation_id: 'c1', message: '完整回复', model: 'local', degraded: false,
+        }); });
+        expect(screen.queryByText('正在逐段回复')).not.toBeInTheDocument();
+        expect(screen.getAllByText('完整回复')).toHaveLength(1);
+        expect(AgentChatService.finishTrace).toHaveBeenCalledWith(
+            expect.anything(), 'succeeded', {conversation_id: 'c1', response: '完整回复'},
+        );
+    });
+
+    it('answers executor diagnostics from runtime evidence without invoking the model', async () => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            {node_id: 'n1', name: 'AIPACK-01', online: false},
+        ] as ComputeClusterNode[]);
+        jest.spyOn(AgentChatService, 'status').mockResolvedValue({
+            status: 'ready', auth_configured: true, llm_configured: true, primary_model: 'local',
+        });
+        const send = jest.spyOn(AgentChatService, 'send');
+        jest.spyOn(AgentChatService, 'recordTurn').mockResolvedValue('diagnostic');
+        render(<AgentSideChat language={Language.CHINESE}/>);
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
+        const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
+        fireEvent.change(composer, {target: {value: '@全部节点 Task Executor 故障的原因是什么?'}});
+        fireEvent.click(screen.getByRole('button', {name: '发送'}));
+        expect(await screen.findByRole('table')).toHaveTextContent('未收到节点心跳，未检查');
+        expect(send).not.toHaveBeenCalled();
+        expect(AgentChatService.recordTurn).toHaveBeenCalled();
+    });
+
     it('opens from the global trigger and keeps one backend conversation', async () => {
         const embeddedHost = document.createElement('main');
         embeddedHost.className = 'ControlCenterWorkspace';
@@ -200,7 +251,7 @@ describe('AgentSideChat', () => {
         expect(screen.getByText('任务编号：trace-1')).toHaveClass('AgentSideChatTaskId');
         expect(screen.getByText('状态').tagName).toBe('STRONG');
         expect(screen.getByText('状态').closest('.AgentSideChatMessage')).toHaveTextContent('•状态: running');
-        expect(send).toHaveBeenCalledWith('汇报任务', undefined, 'trace-1');
+        expect(send).toHaveBeenCalledWith('汇报任务', undefined, 'trace-1', expect.any(Function));
         await waitFor(() => expect(screen.queryByText('正在思考…')).not.toBeInTheDocument());
 
         send.mockResolvedValueOnce({
@@ -215,7 +266,7 @@ describe('AgentSideChat', () => {
         fireEvent.click(screen.getByRole('button', {name: '发送'}));
         expect(await screen.findByText(/已继续同一个对话。/)).not.toHaveTextContent('任务编号：trace-2');
         expect(screen.getByText('任务编号：trace-2').previousElementSibling).toHaveClass('AgentSideChatMessage');
-        expect(send).toHaveBeenLastCalledWith('继续', 'conversation-1', 'trace-2');
+        expect(send).toHaveBeenLastCalledWith('继续', 'conversation-1', 'trace-2', expect.any(Function));
 
         send.mockRejectedValueOnce(new Error('LLM unavailable'));
         fireEvent.change(screen.getByRole('textbox', {name: '发送给 Agent'}), {
@@ -319,7 +370,7 @@ describe('AgentSideChat', () => {
         }));
         expect(await screen.findByText(/第一条完成/)).toBeInTheDocument();
         await waitFor(() => expect(sendRequest).toHaveBeenCalledTimes(2));
-        expect(sendRequest).toHaveBeenLastCalledWith('第三条', 'conversation-1', 'trace-2');
+        expect(sendRequest).toHaveBeenLastCalledWith('第三条', 'conversation-1', 'trace-2', expect.any(Function));
         expect(await screen.findByText(/第三条完成/)).toBeInTheDocument();
         expect(screen.queryByRole('region', {name: '排队任务'})).not.toBeInTheDocument();
         expect(screen.getByRole('button', {name: '发送'})).toBeDisabled();
@@ -412,7 +463,7 @@ describe('AgentSideChat', () => {
             target: {value: '继续检查'},
         });
         fireEvent.click(screen.getByRole('button', {name: '发送'}));
-        await waitFor(() => expect(send).toHaveBeenCalledWith('继续检查', 'conversation-old', 'trace-1'));
+        await waitFor(() => expect(send).toHaveBeenCalledWith('继续检查', 'conversation-old', 'trace-1', expect.any(Function)));
         await screen.findByText(/继续检查完成/);
 
         fireEvent.click(screen.getByRole('button', {name: '新对话'}));
@@ -512,7 +563,7 @@ describe('AgentSideChat', () => {
         );
     });
 
-    it('pins an all-devices mention and sends every device snapshot to the LLM', async () => {
+    it('sends compact node summaries and includes camera details only when requested', async () => {
         const nodes = [
             {
                 node_id: 'node-166', name: 'baoxin-166-windows', online: true,
@@ -554,23 +605,25 @@ describe('AgentSideChat', () => {
         fireEvent.click(screen.getByRole('button', {name: '发送'}));
 
         await screen.findByText(/已汇总全部设备。/);
-        expect(send.mock.calls[0][0]).toContain('"node_id":"node-166"');
-        expect(send.mock.calls[0][0]).toContain('"node_id":"node-151"');
-        expect(send.mock.calls[0][0]).toContain('"device_count":29');
-        expect(send.mock.calls[0][0]).toContain('"name":"Camera 7"');
-        const inventory = JSON.parse(send.mock.calls[0][0].split('\n')[1])[0].device_inventory;
-        expect(inventory.devices.map(device => device.name)).toEqual(nodes[0].device_inventory.devices.map(device => device.name));
-        expect(inventory.devices.map(device => device.ip_address)).toEqual(
-            nodes[0].device_inventory.devices.map(device => device.ip_address ?? null),
-        );
-        expect(inventory.truncated).toBe(false);
+        expect(send.mock.calls[0][0]).toContain('"node-166"');
+        expect(send.mock.calls[0][0]).toContain('"node-151"');
+        expect(send.mock.calls[0][0]).not.toContain('"name":"Camera 7"');
+        const summary = JSON.parse(send.mock.calls[0][0].split('\n')[1]);
+        expect(summary.rows[0][summary.columns.indexOf('devices')]).toBe(29);
+        expect(summary.rows[1][summary.columns.indexOf('online')]).toBe(false);
+        expect(summary.device_details_included).toBe(false);
         expect(send.mock.calls[0][0]).not.toContain('camera.stream.v1');
         expect(send.mock.calls[0][0]).toContain('用户消息：@全部节点 汇总状态');
 
         fireEvent.change(composer, {target: {value: '@baoxin-166-windows 输出完整的相关设备表格'}});
         fireEvent.click(screen.getByRole('button', {name: '发送'}));
         await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
-        expect(JSON.parse(send.mock.calls[1][0].split('\n')[1]).device_inventory).toEqual(inventory);
+        const details = JSON.parse(send.mock.calls[1][0].split('\n')[1]).device_inventory;
+        expect(details.devices.map(device => device.name)).toEqual(nodes[0].device_inventory.devices.map(device => device.name));
+        expect(details.devices.map(device => device.ip_address)).toEqual(
+            nodes[0].device_inventory.devices.map(device => device.ip_address ?? null),
+        );
+        expect(details.truncated).toBe(false);
     });
 
     it('quick scans services and basic resources for every device', async () => {
@@ -905,6 +958,7 @@ describe('AgentSideChat', () => {
             expect.stringContaining('@baoxin-166-windows 帮我瞅瞅桌面上都有啥'),
             undefined,
             'trace-1',
+            expect.any(Function),
         );
         expect(create).toHaveBeenCalledWith('node-166', expect.objectContaining({
             operation: 'filesystem.list',
