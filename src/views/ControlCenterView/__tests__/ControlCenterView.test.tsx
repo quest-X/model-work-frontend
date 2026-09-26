@@ -444,6 +444,26 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText('图形处理器')).not.toBeInTheDocument();
     });
 
+    it('marks machines that provide a sub-platform entry', async () => {
+        const platformNode = {
+            ...node('baosight-01', true),
+            role: 'main',
+            capabilities: ['system.health.v1', 'platform.host.v1'],
+        } as ComputeClusterNode;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            platformNode,
+            node('普通节点', true),
+        ]);
+
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        const platformMachine = await screen.findByRole('button', {name: /baosight-01/});
+        const machineList = screen.getByRole('complementary', {name: '机器列表'});
+        expect(within(platformMachine).getByRole('img', {name: '有子平台入口'})).toBeInTheDocument();
+        expect(within(within(machineList).getByRole('button', {name: /普通节点/}))
+            .queryByRole('img', {name: '有子平台入口'})).not.toBeInTheDocument();
+    });
+
     it('keeps the machine healthy when one optional control path fails', async () => {
         const remoteNode = node('山东节点', true, false, null, 'Windows', 'tailscale');
         remoteNode.network.lan_ssh_available = false;

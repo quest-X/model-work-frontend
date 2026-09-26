@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {connect} from 'react-redux';
 import {Button, Dialog, DialogActions, DialogTitle, DialogContent} from '@mui/material';
+import {ExternalLink} from 'lucide-react';
 import {Language} from '../../data/LanguageConfig';
 import {Direction} from '../../data/enums/Direction';
 import {PopupWindowType} from '../../data/enums/PopupWindowType';
@@ -48,7 +49,7 @@ import {DuplicateAnalysisPanel} from './DuplicateAnalysisPanel';
 import {StartupItemsPanel} from './StartupItemsPanel';
 import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
 import {ProgramRunnerPanel} from './ProgramRunnerPanel';
-import {RemotePlatformButton} from './RemotePlatformButton';
+import {hasRemotePlatformEntry, RemotePlatformButton} from './RemotePlatformButton';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import {version as appVersion} from '../../../package.json';
 import '../EditorView/EditorContainer/EditorContainer.scss';
@@ -1215,6 +1216,14 @@ export const ControlCenterView: React.FC<IProps> = ({
                             <strong>{node.name}</strong>
                             <small>{zh ? '活跃于 ' : 'Active '}{lastSeen(node.heartbeat_age_seconds, zh)}</small>
                         </span>
+                        {hasRemotePlatformEntry(node) && <span
+                            className='ControlMachineRemotePlatform'
+                            role='img'
+                            aria-label={zh ? '有子平台入口' : 'Sub-platform available'}
+                            title={zh ? '有子平台入口' : 'Sub-platform available'}
+                        >
+                            <ExternalLink size={14} aria-hidden='true'/>
+                        </span>}
                         <span className={`ControlMachineState ${tone}`}>
                             {computeNodeLabel(node, zh)}
                         </span>

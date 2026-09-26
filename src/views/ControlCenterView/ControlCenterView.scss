@@ -219,6 +219,14 @@ span.ControlMachineIcon {
   &.offline { color: #ef8b8b; }
 }
 
+.ControlMachineRemotePlatform {
+  display: inline-flex;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  color: #9ba9b4;
+}
+
 .ControlMachineEmpty {
   margin: 0;
   padding: 24px 14px;
