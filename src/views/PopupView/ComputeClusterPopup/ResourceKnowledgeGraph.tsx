@@ -28,6 +28,7 @@ interface ResourceKnowledgeGraphProps {
         node: ComputeClusterNode,
         tool: 'terminal' | 'monitor' | 'runner',
     ) => void;
+    programStatus?: (node: ComputeClusterNode) => {tone: string; label: string} | null;
 }
 
 interface GraphPoint {
@@ -329,6 +330,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__
     ),
     onOpenNodeTool,
+    programStatus,
 }) => {
     const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
     const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
@@ -603,6 +605,8 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     if (!point) return null;
                     const node = entity.node_id ? nodeIndex.get(entity.node_id) : undefined;
                     const isNode = entity.kind === 'compute_node';
+                    const hasMountedProgram = isNode && Boolean(node && programStatus?.(node));
+                    const programBadgeLabel = hasMountedProgram ? (zh ? '已挂载程序' : 'Programs mounted') : undefined;
                     const nodeRole = isNode ? nodeRoles.get(entity.entity_id) || 'node' : undefined;
                     const classification = entity.kind === 'managed_device' ? deviceClass(entity) : '';
                     const isHovered = hoveredEntityId === entity.entity_id;
@@ -631,13 +635,16 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         aria-label={isNode
                             ? `${zh ? '查看' : 'Inspect'} ${entity.label} ${zh ? '节点信息' : 'node details'}`
                             : `${zh ? '查看' : 'Inspect'} ${entity.label} ${zh ? '设备信息' : 'device details'}`}
+                        aria-description={programBadgeLabel}
                         data-testid='resource-graph-node'
                         data-entity-kind={entity.kind}
                         data-entity-role={nodeRole}
                         data-entity-shape={nodeRole === 'main' ? 'circle' : 'rounded-rectangle'}
                         data-entity-state={entity.state}
                     >
-                        <i>{codes.get(entity.entity_id)}</i>
+                        <i className={hasMountedProgram ? 'has-program' : undefined} title={programBadgeLabel}>
+                            {codes.get(entity.entity_id)}
+                        </i>
                         <span>{isNode
                             ? nodeRole === 'main'
                                 ? (zh ? '主节点' : 'Main node')
@@ -702,9 +709,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         const publicAvailable = dependencyFor(inspectedEntity, 'public_http');
                         const tailscaleAvailable = dependencyFor(inspectedEntity, 'tailscale');
                         const terminalAvailable = sshAvailable || tailscaleAvailable;
-                        const runnerAvailable = Boolean(
-                            node?.online && node.capabilities.includes('runtime.read.v1'),
-                        );
+                        const runner = node ? programStatus?.(node) : null;
                         return <>
                             <span>{zh
                                 ? `${nodeRole === 'main' ? '主节点' : '计算节点'} ${codes.get(inspectedEntity.entity_id)} · 运维信息${pinnedEntityId === inspectedEntity.entity_id ? ' · 已固定（双击节点或点击空白取消）' : ''}`
@@ -737,19 +742,17 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                                     <strong>{zh ? '资源监视器' : 'Resource monitor'}</strong>
                                     <small>{zh ? '处理器 · 内存 · 显卡 · 磁盘 · 网络' : 'CPU · MEM · GPU · DISK · NETWORK'}</small>
                                 </button>
-                                <button
+                                {runner && <button
                                     type='button'
                                     onClick={event => {
                                         event.stopPropagation();
                                         onOpenNodeTool(node, 'runner');
                                     }}
                                 >
-                                    <span>{runnerAvailable
-                                        ? (zh ? '正常' : 'Normal')
-                                        : node.online ? (zh ? '待升级' : 'Upgrade required') : computeNodeLabel(node, zh)}</span>
+                                    <span className={runner.tone}>{runner.label}</span>
                                     <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
                                     <small>{zh ? '程序 · 环境 · 接口 · 状态 · 结果 · 日志' : 'Programs · environments · APIs · status · results · logs'}</small>
-                                </button>
+                                </button>}
                             </div> : <div className='ComputeGraphHoverRoutes'>
                                 <div className={sshAvailable ? 'available' : 'unavailable'}>
                                     <span>{zh ? 'SSH 通路' : 'SSH route'}</span><strong>{routeAvailabilityLabel(sshAvailable, zh)}</strong>

@@ -483,6 +483,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [graphError, setGraphError] = useState('');
     const [runtimeInventory, setRuntimeInventory] = useState<ComputeRuntimeInventory | null>(null);
     const [programTones, setProgramTones] = useState<Record<string, ProgramIndicatorTone>>({});
+    const [mountedProgramNodes, setMountedProgramNodes] = useState<Set<string>>(new Set());
     const [runtimeInventoryError, setRuntimeInventoryError] = useState('');
     const [dismissedRefreshWarningKey, setDismissedRefreshWarningKey] = useState('');
     const [inspectedServiceId, setInspectedServiceId] = useState('');
@@ -533,6 +534,9 @@ export const ControlCenterView: React.FC<IProps> = ({
     const runtimeInventoryPendingNode = useRef('');
     const runtimeInventoryAbort = useRef<AbortController | null>(null);
     const conversationRequest = useRef(0);
+    const programPollingNodes = useRef(nodes);
+    programPollingNodes.current = nodes;
+    const hasProgramPollingNodes = nodes.length > 0;
     useEscapeToClose(() => {
         setInspectedServiceId('');
         if (toolOpenedFromOverview) {
@@ -678,31 +682,44 @@ export const ControlCenterView: React.FC<IProps> = ({
 
     useEffect(() => {
         // The runner polls its own node; fleet snapshots must not compete with its live stream.
-        if (!pageVisible || programRunnerOpen) return undefined;
-        const targets = nodes;
-        if (targets.length === 0) return undefined;
+        if (!pageVisible || programRunnerOpen || !hasProgramPollingNodes) return undefined;
         const controller = new AbortController();
         let inFlight = false;
         const load = async () => {
             if (inFlight) return;
             inFlight = true;
-            const entries = await Promise.all(targets.map(async node => {
-                if (!node.online) return [node.node_id, null] as const;
-                if (!node.capabilities.includes('runtime.programs.read.v1')) {
-                    return [node.node_id, null] as const;
+            const targets = [...programPollingNodes.current];
+            const poll = async () => {
+                while (targets.length && !controller.signal.aborted) {
+                    const selected = targets.findIndex(node => node.node_id === selectedNodeIdRef.current);
+                    const [node] = targets.splice(Math.max(0, selected), 1);
+                    let tone: ProgramIndicatorTone | null | undefined;
+                    if (node.online && node.capabilities.includes('runtime.programs.read.v1')) {
+                        try {
+                            tone = programTone(await ComputeClusterService.programs(node.node_id, controller.signal));
+                        } catch {
+                            // A failed query cannot prove that a mounted program was removed.
+                        }
+                    }
+                    if (controller.signal.aborted) return;
+                    setProgramTones(current => {
+                        const next = {...current};
+                        if (tone) next[node.node_id] = tone;
+                        else delete next[node.node_id];
+                        return next;
+                    });
+                    if (tone !== undefined) {
+                        setMountedProgramNodes(current => {
+                            const next = new Set(current);
+                            if (tone === null) next.delete(node.node_id);
+                            else next.add(node.node_id);
+                            return next;
+                        });
+                    }
                 }
-                try {
-                    const snapshot = await ComputeClusterService.programs(node.node_id, controller.signal);
-                    return [node.node_id, programTone(snapshot)] as const;
-                } catch {
-                    return [node.node_id, null] as const;
-                }
-            }));
-            if (!controller.signal.aborted) {
-                setProgramTones(Object.fromEntries(entries.filter(
-                    (entry): entry is readonly [string, ProgramIndicatorTone] => entry[1] !== null,
-                )));
-            }
+            };
+            // Keep browser connections available for the selected machine's interactive reads.
+            await Promise.all([poll(), poll(), poll()]);
             inFlight = false;
         };
         void load();
@@ -711,7 +728,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [nodes, pageVisible, programRunnerOpen]);
+    }, [hasProgramPollingNodes, pageVisible, programRunnerOpen]);
 
     useEffect(() => {
         if (workspace !== 'groups') return undefined;
@@ -992,10 +1009,18 @@ export const ControlCenterView: React.FC<IProps> = ({
             setRuntimeInventory(null);
             setRuntimeInventoryError('');
         }
-        if (runtimeInventoryCapable) {
-            void loadRuntimeInventory(selectedNodeId);
-        }
-    }, [loadRuntimeInventory, selectedNode, selectedNodeId]);
+    }, [runtimeInventoryCapable, selectedNodeId]);
+
+    useEffect(() => {
+        if (!inspectedServiceId || !pageVisible || !runtimeInventoryCapable) return undefined;
+        void loadRuntimeInventory(selectedNodeId);
+        return () => {
+            runtimeInventoryAbort.current?.abort();
+            runtimeInventoryAbort.current = null;
+            runtimeInventoryPendingNode.current = '';
+            runtimeInventoryRequest.current += 1;
+        };
+    }, [inspectedServiceId, loadRuntimeInventory, pageVisible, runtimeInventoryCapable, selectedNodeId]);
 
     useEffect(() => {
         if (!pendingOverviewTool || !selectedNode) return;
@@ -1019,7 +1044,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [inspectedServiceId]);
 
     useEffect(() => {
-        if (!inspectedServiceId || !selectedNodeId) return undefined;
+        if (!inspectedServiceId || !selectedNodeId || !pageVisible) return undefined;
         const timer = window.setInterval(() => {
             if (runtimeInventoryCapable) void loadRuntimeInventory(selectedNodeId);
             void refresh();
@@ -1035,6 +1060,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [
         inspectedServiceId,
         loadRuntimeInventory,
+        pageVisible,
         refresh,
         runtimeInventoryCapable,
         selectedNodeId,
@@ -1694,23 +1720,24 @@ export const ControlCenterView: React.FC<IProps> = ({
         </button>;
     };
 
+    const mountedProgramStatus = (node: ComputeClusterNode | undefined) => {
+        if (!node || !mountedProgramNodes.has(node.node_id)) return null;
+        const tone = node.online ? programTones[node.node_id] || 'unknown' : 'offline';
+        return {tone, label: programLabel(tone, zh)};
+    };
+
     const renderProgramRunnerCard = () => {
-        const capable = Boolean(
-            selectedNode?.online && selectedNode.capabilities.includes('runtime.read.v1'),
-        );
-        const tone: Tone = selectedNode?.online ? (capable ? 'healthy' : 'warning') : 'offline';
-        const status = selectedNode?.online
-            ? capable ? (zh ? '正常' : 'Normal') : (zh ? '待升级' : 'Upgrade required')
-            : (zh ? '故障' : 'Fault');
+        const status = mountedProgramStatus(selectedNode);
+        if (!status) return null;
         return <button
             type='button'
             className='ControlServiceCard ControlRuntimeService'
             aria-label={zh ? '打开程序运行器' : 'Open program runner'}
             onClick={() => setProgramRunnerOpen(true)}
         >
-            <span className={`ControlStatusDot ${tone}`} aria-hidden='true'/>
+            <span className={`ControlStatusDot ${status.tone}`} aria-hidden='true'/>
             <span className='ControlRuntimeIdentity'>
-                <span>{status}</span>
+                <span>{status.label}</span>
                 <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
                 <small>{zh ? '程序 · 环境 · 接口 · 状态 · 日志' : 'Programs · environments · endpoints · status · logs'}</small>
             </span>
@@ -1903,7 +1930,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </div>
                 <div className='ControlServiceGrid'>
                     {renderResourceMonitorCard()}
-                    {aipackNode && renderProgramRunnerCard()}
+                    {renderProgramRunnerCard()}
                 </div>
             </section>
 
@@ -2555,7 +2582,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 zh={zh}
                                 fitWindow
                                 onSelectWorkAgent={() => undefined}
+                                programStatus={mountedProgramStatus}
                                 onOpenNodeTool={(node, tool) => {
+                                    if (tool === 'runner' && !mountedProgramStatus(node)) return;
                                     overviewSelected.current = false;
                                     setSelectedNodeId(node.node_id);
                                     if (tool === 'terminal') {

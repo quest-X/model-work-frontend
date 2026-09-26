@@ -4,6 +4,7 @@ import {CustomCursorStyle} from '../../data/enums/CustomCursorStyle';
 import {ViewPointSettings} from '../../settings/ViewPointSettings';
 import {ProjectType} from '../../data/enums/ProjectType';
 import {Language} from '../../data/LanguageConfig';
+import {isPopupAvailable} from '../../utils/PopupAvailability';
 
 const initialState: GeneralState = {
     windowSize: null,
@@ -85,6 +86,7 @@ export function generalReducer(
             }
         }
         case Action.UPDATE_ACTIVE_POPUP_TYPE: {
+            if (!isPopupAvailable(action.payload.activePopupType)) return state;
             if (
                 state.activePopupType === action.payload.activePopupType
                 && state.activePopupNodeId === action.payload.activePopupNodeId

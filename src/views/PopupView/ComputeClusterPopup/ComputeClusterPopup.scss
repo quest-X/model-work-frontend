@@ -550,6 +550,10 @@
     letter-spacing: -.02em;
     transform: translateX(-50%);
   }
+  > i.has-program {
+    box-shadow: 0 0 0 1px currentColor, 0 0 3px currentColor;
+    animation: compute-program-badge-pulse 2s ease-in-out infinite;
+  }
   > span { color: rgba(213, 183, 249, 0.64); font-size: 7px; letter-spacing: .06em; text-transform: uppercase; }
   > strong { overflow: hidden; width: 100%; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
   > small { overflow: hidden; width: 100%; color: rgba(255, 255, 255, 0.42); font-size: 7px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
@@ -1690,6 +1694,9 @@
 }
 
 @keyframes compute-spin { to { transform: rotate(360deg); } }
+@keyframes compute-program-badge-pulse {
+  50% { box-shadow: 0 0 0 2px currentColor, 0 0 12px currentColor; filter: brightness(1.45); }
+}
 @keyframes compute-status-pulse {
   50% { box-shadow: 0 0 0 6px transparent; opacity: 0.72; }
 }
@@ -1699,6 +1706,7 @@
   .ComputeClusterPopup { transition: none; }
   .ComputeClusterServiceState.syncing i,
   .ComputeClusterServiceState.error i { animation: none; }
+  .ComputeGraphNode > i.has-program { animation: none; }
 }
 
 @media (max-width: 720px) {

@@ -710,23 +710,42 @@ describe('ComputeClusterPopup', () => {
         await waitFor(() => expect(service.resourceGraph).toHaveBeenCalledTimes(1));
     });
 
-    it('opens the three classic node tools from a pinned graph card', async () => {
+    it('shows the graph program runner only for mounted programs alongside the other node tools', async () => {
         const user = userEvent.setup();
         const graph = await service.resourceGraph();
         const nodes = await service.nodes();
         const onOpenNodeTool = jest.fn();
-        render(<ResourceKnowledgeGraph
+        const {rerender} = render(<ResourceKnowledgeGraph
             graph={graph}
             nodes={nodes}
             zh={true}
             onSelectWorkAgent={jest.fn()}
             onOpenNodeTool={onOpenNodeTool}
+            programStatus={() => null}
         />);
 
-        await user.dblClick(screen.getByRole('button', {name: '查看 edge-01 节点信息'}));
+        const graphNode = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
+        expect(graphNode.querySelector('i')).not.toHaveClass('has-program');
+        await user.dblClick(graphNode);
         const card = screen.getByRole('status', {name: 'edge-01 运维信息'});
+        expect(within(card).queryByRole('button', {name: /程序运行器/})).not.toBeInTheDocument();
         await user.click(within(card).getByRole('button', {name: /SSH \/ Tailscale/}));
         await user.click(within(card).getByRole('button', {name: /资源监视器/}));
+        rerender(<ResourceKnowledgeGraph
+            graph={graph}
+            nodes={nodes}
+            zh={true}
+            onSelectWorkAgent={jest.fn()}
+            onOpenNodeTool={onOpenNodeTool}
+            programStatus={() => ({tone: 'offline', label: '程序已停止或不可用'})}
+        />);
+        expect(within(card).getByRole('button', {name: /程序运行器/}))
+            .toHaveTextContent('程序已停止或不可用');
+        expect(graphNode.querySelector('i')).toHaveClass('has-program');
+        expect(graphNode.querySelector('i')).toHaveAttribute('title', '已挂载程序');
+        expect(graphNode).toHaveAttribute('aria-description', '已挂载程序');
+        expect(screen.getByRole('button', {name: '查看 IP CAMERA 设备信息'}).querySelector('i'))
+            .not.toHaveClass('has-program');
         await user.click(within(card).getByRole('button', {name: /程序运行器/}));
         expect(onOpenNodeTool.mock.calls.map(([, tool]) => tool))
             .toEqual(['terminal', 'monitor', 'runner']);
@@ -737,6 +756,16 @@ describe('ComputeClusterPopup', () => {
         expect((sent.mock.calls[0][0] as CustomEvent<string>).detail)
             .toBe('@edge-01 执行 等待诊断（system.wait） 服务，并将执行结果按表格输出');
         window.removeEventListener(AGENT_CHAT_SEND_EVENT, sent);
+
+        rerender(<ResourceKnowledgeGraph
+            graph={graph}
+            nodes={nodes}
+            zh={true}
+            onSelectWorkAgent={jest.fn()}
+            programStatus={() => null}
+        />);
+        expect(graphNode.querySelector('i')).not.toHaveClass('has-program');
+        expect(graphNode).not.toHaveAttribute('aria-description');
     });
 
     it('centers a direct camera owner and keeps peer main nodes outside the ring', async () => {

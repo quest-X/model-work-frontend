@@ -415,38 +415,45 @@ describe('ControlCenterView', () => {
         expect(container.querySelector('.ControlRelatedDeviceGrid')).toHaveClass('camera-only');
     });
 
-    it('opens a node-scoped program runner for every AIPACK and closes it on selection changes', async () => {
+    it('opens a node-scoped program runner only for mounted programs and closes it on selection changes', async () => {
         const fleet = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 18, 19, 20, 21]
             .map(number => runtimeNode(`AIPACK-${String(number).padStart(2, '0')}`));
+        fleet.push(runtimeNode('vision-ocr-01'));
+        for (const machine of fleet) machine.capabilities.push('runtime.programs.read.v1');
         fleet[1].capabilities = [];
         fleet[2].online = false;
+        const mountedNames = new Set(['AIPACK-05', 'AIPACK-06', 'AIPACK-07', 'vision-ocr-01']);
         const main = node('baosight-02', true);
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([...fleet, main]);
+        jest.spyOn(ComputeClusterService, 'programs').mockImplementation(nodeId => Promise.resolve({
+            ...programSnapshot('healthy', 'running'),
+            programs: fleet.some(machine => machine.node_id === nodeId && mountedNames.has(machine.name))
+                ? programSnapshot('healthy', 'running').programs
+                : [],
+        }));
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         const machines = screen.getByRole('complementary', {name: '机器列表'});
-        await within(machines).findByRole('button', {name: /AIPACK-01/});
+        await selectMachine('AIPACK-05');
+        await screen.findByRole('button', {name: '打开程序运行器'});
         for (const machine of fleet) {
             fireEvent.click(within(machines).getByRole('button', {name: new RegExp(machine.name)}));
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
             expect(screen.getByRole('heading', {name: '资源管理'})).toBeInTheDocument();
             expect(screen.queryByRole('heading', {name: '程序运行'})).not.toBeInTheDocument();
+            if (!mountedNames.has(machine.name)) {
+                expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+                expect(screen.getByRole('button', {name: '打开资源监视器'})).toBeInTheDocument();
+                continue;
+            }
             const launcher = screen.getByRole('button', {name: '打开程序运行器'});
-            expect(launcher).toHaveTextContent(!machine.online
-                ? '故障'
-                : machine.capabilities.length ? '正常' : '待升级');
+            expect(launcher).toHaveTextContent('程序运行正常');
             fireEvent.click(launcher);
             expect(screen.getByRole('dialog', {name: `${machine.name} 程序运行器`}))
                 .toBeInTheDocument();
-            if (!machine.online || !machine.capabilities.length) {
-                expect(ComputeClusterService.runtime).not.toHaveBeenCalledWith(
-                    machine.node_id, expect.any(AbortSignal),
-                );
-            } else {
-                expect(ComputeClusterService.runtime).toHaveBeenLastCalledWith(
-                    machine.node_id, expect.any(AbortSignal),
-                );
-            }
+            expect(ComputeClusterService.runtime).toHaveBeenLastCalledWith(
+                machine.node_id, expect.any(AbortSignal),
+            );
         }
         fireEvent.keyDown(document, {key: 'Escape'});
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -455,6 +462,43 @@ describe('ControlCenterView', () => {
         }
         fireEvent.click(within(machines).getByRole('button', {name: /baosight-02/}));
         expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+    });
+
+    it('keeps a mounted program runner through query failures and disconnects until removal is confirmed', async () => {
+        jest.useFakeTimers();
+        const machine = runtimeNode('AIPACK-05');
+        machine.capabilities.push('runtime.programs.read.v1');
+        const nodesRequest = jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        let resolvePrograms!: (snapshot: ComputeProgramSnapshot) => void;
+        const programs = jest.spyOn(ComputeClusterService, 'programs').mockImplementation(() =>
+            new Promise(resolve => { resolvePrograms = resolve; })
+        );
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await selectMachine(machine.name);
+        expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+
+        await act(async () => resolvePrograms(programSnapshot('unavailable', 'stopped')));
+        expect(screen.getByRole('button', {name: '打开程序运行器'}))
+            .toHaveTextContent('程序已停止或不可用');
+
+        programs.mockRejectedValue(new Error('snapshot unavailable'));
+        nodesRequest.mockResolvedValue([{...machine}]);
+        fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
+        await act(async () => { jest.advanceTimersByTime(15000); });
+        await waitFor(() => expect(screen.getByRole('button', {name: '打开程序运行器'}))
+            .toHaveTextContent('程序状态未知'));
+
+        nodesRequest.mockResolvedValue([{...machine, online: false}]);
+        fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
+        await waitFor(() => expect(screen.getByRole('button', {name: '打开程序运行器'}))
+            .toHaveTextContent('程序已停止或不可用'));
+
+        programs.mockResolvedValue({...programSnapshot('healthy', 'running'), programs: []});
+        nodesRequest.mockResolvedValue([{...machine}]);
+        await act(async () => { fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'})); });
+        await act(async () => { jest.advanceTimersByTime(15000); });
+        await waitFor(() => expect(screen.queryByRole('button', {name: '打开程序运行器'}))
+            .not.toBeInTheDocument());
     });
 
     it('shows Program Runner status lights only for nodes with mounted programs', async () => {
@@ -528,8 +572,44 @@ describe('ControlCenterView', () => {
         expect(ComputeClusterService.programs).toHaveBeenCalledTimes(6);
         fireEvent.click(warning);
         expect(document.querySelector('.ControlToolbarGroup > .ControlStatusDot')).toHaveClass('warning');
+        expect(screen.getByRole('button', {name: '打开程序运行器'})).toHaveTextContent('程序运行异常');
         fireEvent.click(noProgram);
         expect(document.querySelector('.ControlToolbarGroup > .ControlStatusDot')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+        fireEvent.click(failedProgram);
+        expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+    });
+
+    it('bounds fleet reads and publishes each result without restarting on directory refresh', async () => {
+        jest.useFakeTimers();
+        const machines = Array.from({length: 5}, (_, index) => {
+            const machine = runtimeNode(`AIPACK-${index}`);
+            machine.capabilities.push('runtime.programs.read.v1');
+            return machine;
+        });
+        const directory = jest.spyOn(ComputeClusterService, 'nodes')
+            .mockImplementation(async () => machines.map(machine => ({...machine})));
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(machines[0]));
+        let resolveFirst!: (value: ReturnType<typeof programSnapshot>) => void;
+        const programs = jest.spyOn(ComputeClusterService, 'programs').mockImplementation(id =>
+            new Promise(resolve => {
+                if (id === machines[0].node_id) resolveFirst = resolve;
+            })
+        );
+        const {unmount} = render(<ControlCenterView language={Language.CHINESE}/>);
+        await waitFor(() => expect(programs).toHaveBeenCalledTimes(3));
+        const firstSignal = programs.mock.calls[0][1];
+        await selectMachine(machines[0].name);
+        await act(async () => { resolveFirst(programSnapshot('healthy', 'running')); });
+        expect(screen.getByRole('button', {name: '打开程序运行器'})).toBeInTheDocument();
+        expect(programs).toHaveBeenCalledTimes(4);
+        const directoryCalls = directory.mock.calls.length;
+        await act(async () => { jest.advanceTimersByTime(15000); });
+        expect(directory.mock.calls.length).toBeGreaterThan(directoryCalls);
+        expect(programs).toHaveBeenCalledTimes(4);
+        expect(firstSignal.aborted).toBe(false);
+        unmount();
+        expect(firstSignal.aborted).toBe(true);
     });
 
     it('releases fleet polling while the runner is open or the page is hidden', async () => {
@@ -552,6 +632,7 @@ describe('ControlCenterView', () => {
         await act(async () => { jest.advanceTimersByTime(30000); });
         expect(otherCalls()).toHaveLength(1);
         expect(programs).toHaveBeenCalledWith(selected.node_id, expect.any(AbortSignal));
+        expect(ComputeClusterService.runtimeInventory).not.toHaveBeenCalled();
 
         fireEvent.keyDown(document, {key: 'Escape'});
         await waitFor(() => expect(otherCalls()).toHaveLength(2));
@@ -846,10 +927,12 @@ describe('ControlCenterView', () => {
         expect(screen.queryByLabelText('最近异常')).not.toBeInTheDocument();
         expect(ComputeClusterService.runtime).not.toHaveBeenCalled();
         expect(ComputeClusterService.runtimeEvents).not.toHaveBeenCalled();
+        expect(runtimeInventory).not.toHaveBeenCalled();
         expect(screen.queryByText('Node Agent')).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', {name: '打开资源监视器'}));
         const monitor = await screen.findByRole('dialog', {name: '节点甲 资源监视器'});
+        await waitFor(() => expect(runtimeInventory).toHaveBeenCalledWith('节点甲-id', expect.anything()));
         const maximizeMonitor = within(monitor).getByRole('button', {name: '放大资源监视器窗口'});
         expect(maximizeMonitor).toHaveAttribute('aria-pressed', 'false');
         fireEvent.click(maximizeMonitor);
@@ -1100,6 +1183,8 @@ describe('ControlCenterView', () => {
         const districtFetch = jest.fn();
         Object.defineProperty(global, 'fetch', {configurable: true, writable: true, value: districtFetch});
         const onlineNode = node('在线节点', true);
+        onlineNode.capabilities.push('runtime.programs.read.v1');
+        jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue(programSnapshot('healthy', 'running'));
         onlineNode.labels = {
             region: '310000',
             region_name: '上海市',

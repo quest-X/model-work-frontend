@@ -1,4 +1,6 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
+import Popover from '@mui/material/Popover';
+import Tooltip from '@mui/material/Tooltip';
 import {CalendarDays, ChevronLeft, ChevronRight, RefreshCw} from 'lucide-react';
 import {
     ComputeClusterNode,
@@ -16,6 +18,9 @@ import {
     MachineHistoryStatus,
 } from '../../services/MachineHistoryService';
 import {ProgramLivePreview} from './ProgramLivePreview';
+import {ProgramStatisticsExport} from './ProgramStatisticsExport';
+import {statisticsHasRecords} from './statisticsExport';
+import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 
 type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs' | 'statistics' | 'history';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
@@ -203,7 +208,7 @@ const taskStateLabel = (state: string, zh: boolean): string => ({
     cancelled: zh ? '已取消' : 'Cancelled',
 })[state] || state;
 
-// The four views share one polling boundary so closing the runner cancels every request together.
+// Each source refreshes independently; closing the runner cancels all requests.
 // eslint-disable-next-line complexity
 export const ProgramRunnerPanel: React.FC<IProps> = ({
     node,
@@ -224,9 +229,11 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [prettyTelegramLogs, setPrettyTelegramLogs] = useState(true);
     const [statisticsDate, setStatisticsDate] = useState(todayDateKey);
     const [statisticsCalendarOpen, setStatisticsCalendarOpen] = useState(false);
+    const statisticsDateButton = useRef<HTMLButtonElement>(null);
     const [statisticsMonth, setStatisticsMonth] = useState(() => todayDateKey().slice(0, 7));
-    const [statisticsMonthCounts, setStatisticsMonthCounts] = useState<Record<string, number | null>>({});
+    const [statisticsMonthCounts, setStatisticsMonthCounts] = useState<Record<string, {count: number; hasRecords: boolean} | null>>({});
     const [statisticsMonthLoading, setStatisticsMonthLoading] = useState(false);
+    const [statisticsMonthRetry, setStatisticsMonthRetry] = useState(0);
     const [overflowStatistics, setOverflowStatistics] = useState<ComputeProgramOverflowStatistics | null>(null);
     const [statisticsError, setStatisticsError] = useState('');
     const [statisticsLoading, setStatisticsLoading] = useState(false);
@@ -253,6 +260,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [refreshProgress, setRefreshProgress] = useState(0);
+    useEscapeToClose(() => setStatisticsCalendarOpen(false), statisticsCalendarOpen, 22);
     const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
     const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
     const historyCapable = node.online && node.capabilities.includes('machine.history.read.v1');
@@ -260,12 +268,18 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const programsVisible = programsCapable || programs !== null;
     const logsVisible = runtimeVisible || programsVisible || events.length > 0;
     const showingCache = !node.online && (snapshot !== null || programs !== null || events.length > 0);
-    const pollingPaused = view === 'artifacts' && programs !== null;
+    // Keep heavy scans off report/preview reads after the initial directory arrives.
+    const programsRequested = programsCapable && (programs === null
+        || view !== 'history' && view !== 'artifacts' && view !== 'statistics');
     const eventsRequested = view === 'telegrams' || view === 'logs';
     const connectionLabel = node.online
-        ? pollingPaused
-            ? (zh ? '在线 · 结果预览期间暂停状态刷新' : 'Online · status refresh paused during result preview')
-            : (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
+        ? runtimeCapable
+            ? runtimeError
+                ? (zh ? '在线 · 状态刷新失败，正在重试' : 'Online · status refresh failed; retrying')
+                : (zh ? '在线 · 基础状态每 5 秒刷新' : 'Online · basic status refreshes every 5 seconds')
+            : programsRequested
+                ? (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
+                : (zh ? '在线' : 'Online')
         : showingCache
             ? (zh ? '离线 · 显示最后缓存' : 'Offline · showing last cached data')
             : (zh ? '离线' : 'Offline');
@@ -283,6 +297,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setLogServiceId('');
         setPrettyTelegramLogs(true);
         setStatisticsDate(todayDateKey());
+        setStatisticsCalendarOpen(false);
+        setStatisticsMonth(todayDateKey().slice(0, 7));
         setOverflowStatistics(null);
         setStatisticsError('');
         setStatisticsLoading(false);
@@ -309,25 +325,28 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     }, [node.node_id]);
 
     useEffect(() => {
-        if (pollingPaused || !runtimeCapable && !programsCapable) return undefined;
+        if (!runtimeCapable && !programsRequested) return undefined;
         const controller = new AbortController();
-        let inFlight = false;
-        // eslint-disable-next-line complexity
-        const load = async () => {
-            if (inFlight) return;
-            inFlight = true;
+        const inFlight = new Set<keyof ProgramRunnerCache>();
+        const completed = new Set<keyof ProgramRunnerCache>();
+        const requestCount = Number(runtimeCapable)
+            + Number(programsRequested)
+            + Number(runtimeCapable && eventsRequested);
+        setRefreshProgress(0);
+        const track = <T,>(key: keyof ProgramRunnerCache, request: Promise<T>): Promise<T> => {
+            inFlight.add(key);
             setRefreshing(true);
-            setRefreshProgress(0);
-            const requestCount = Number(runtimeCapable)
-                + Number(programsCapable)
-                + Number(runtimeCapable && eventsRequested);
-            let completedRequests = 0;
-            const track = <T,>(request: Promise<T>): Promise<T> => request.finally(() => {
-                completedRequests += 1;
+            return request.finally(() => {
+                inFlight.delete(key);
+                completed.add(key);
                 if (!controller.signal.aborted) {
-                    setRefreshProgress(Math.round(completedRequests / requestCount * 100));
+                    setRefreshProgress(Math.round(completed.size / requestCount * 100));
+                    setRefreshing(inFlight.size > 0);
                 }
             });
+        };
+        // eslint-disable-next-line complexity
+        const load = () => {
             const updateCache = (patch: Partial<ProgramRunnerCache>) => {
                 const current = programRunnerCache.get(node.node_id);
                 programRunnerCache.set(node.node_id, {
@@ -337,9 +356,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     ...patch,
                 });
             };
-            const requests: Promise<void>[] = [];
-            if (runtimeCapable) {
-                requests.push(track(ComputeClusterService.runtime(node.node_id, controller.signal)).then(
+            if (runtimeCapable && !inFlight.has('snapshot')) {
+                void track('snapshot', ComputeClusterService.runtime(node.node_id, controller.signal)).then(
                     value => {
                         if (controller.signal.aborted) return;
                         updateCache({snapshot: value});
@@ -350,10 +368,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         if (controller.signal.aborted) return;
                         setRuntimeError(reason instanceof Error ? reason.message : String(reason));
                     },
-                ));
+                );
             }
-            if (programsCapable) {
-                requests.push(track(ComputeClusterService.programs(node.node_id, controller.signal)).then(
+            if (programsRequested && !inFlight.has('programs')) {
+                void track('programs', ComputeClusterService.programs(node.node_id, controller.signal)).then(
                     value => {
                         if (controller.signal.aborted) return;
                         updateCache({programs: value});
@@ -364,10 +382,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         if (controller.signal.aborted) return;
                         setProgramsError(reason instanceof Error ? reason.message : String(reason));
                     },
-                ));
+                );
             }
-            if (runtimeCapable && eventsRequested) {
-                requests.push(track(ComputeClusterService.runtimeEvents(
+            if (runtimeCapable && eventsRequested && !inFlight.has('events')) {
+                void track('events', ComputeClusterService.runtimeEvents(
                     node.node_id,
                     0,
                     100,
@@ -383,30 +401,20 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         if (controller.signal.aborted) return;
                         setEventsError(reason instanceof Error ? reason.message : String(reason));
                     },
-                ));
+                );
             }
-            await Promise.all(requests);
-            if (!controller.signal.aborted) {
-                if (!runtimeCapable) {
-                    setRuntimeError('');
-                }
-                if (!programsCapable) {
-                    setProgramsError('');
-                }
-                if (!eventsRequested) {
-                    setEventsError('');
-                }
-                setRefreshing(false);
-            }
-            inFlight = false;
         };
-        void load();
-        const timer = window.setInterval(() => void load(), 5000);
+        if (!runtimeCapable) setRuntimeError('');
+        if (!programsCapable) setProgramsError('');
+        if (!eventsRequested) setEventsError('');
+        load();
+        const timer = window.setInterval(load, 5000);
         return () => {
             controller.abort();
             window.clearInterval(timer);
+            setRefreshing(false);
         };
-    }, [eventsRequested, node.node_id, pollingPaused, programsCapable, runtimeCapable]);
+    }, [eventsRequested, node.node_id, programsCapable, programsRequested, runtimeCapable]);
 
     useEffect(() => {
         if (view !== 'history' || !historyCapable) return undefined;
@@ -414,21 +422,24 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setHistoryLoading(true);
         setHistoryError('');
         void Promise.all([
-            MachineHistoryService.status(node.node_id, controller.signal),
-            MachineHistoryService.objects(node.node_id, controller.signal),
-        ]).then(async ([status, listing]) => {
-            if (controller.signal.aborted) return;
-            setHistoryStatus(status);
-            setHistoryObjects(listing.objects);
-            const first = listing.objects[0];
-            setHistoryDocument(first
-                ? await MachineHistoryService.object(
-                    node.node_id,
-                    first.namespace,
-                    first.object_key,
-                    controller.signal,
-                )
-                : null);
+            MachineHistoryService.status(node.node_id, controller.signal).then(status => {
+                if (!controller.signal.aborted) setHistoryStatus(status);
+            }),
+            MachineHistoryService.objects(node.node_id, controller.signal).then(async listing => {
+                if (controller.signal.aborted) return;
+                setHistoryObjects(listing.objects);
+                const first = listing.objects[0];
+                const document = first
+                    ? await MachineHistoryService.object(
+                        node.node_id,
+                        first.namespace,
+                        first.object_key,
+                        controller.signal,
+                    )
+                    : null;
+                if (!controller.signal.aborted) setHistoryDocument(document);
+            }),
+        ]).then(() => {
             if (!controller.signal.aborted) setHistoryLoading(false);
         }).catch(error => {
             if (controller.signal.aborted) return;
@@ -480,6 +491,14 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         /dlk|overflow|溢渣/i.test(`${program.program_id} ${program.name}`)
         || program.events.some(event => event.event_type === 'frame')
     ) || null;
+    const statisticsDayKey = (date: string) => `${node.node_id}:${overflowProgram?.program_id}:${date}`;
+    const updateStatisticsDay = (date: string, value: ComputeProgramOverflowStatistics | null) => {
+        const key = statisticsDayKey(date);
+        setStatisticsMonthCounts(current => ({...current, [key]: value ? {
+            count: Object.values(value.episodes).reduce((sum, count) => sum + count, 0),
+            hasRecords: statisticsHasRecords(value),
+        } : null}));
+    };
     const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
         view === 'telegrams'
             ? isTelegramLog(event.message)
@@ -586,7 +605,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setResultPreview('');
         setResultPreviewError('');
         setResultPreviewLoading(false);
-        if (!selectedArtifact || selectedArtifact.kind !== 'data' || !selectedArtifactUrl) {
+        if (view !== 'artifacts' || !selectedArtifact || selectedArtifact.kind !== 'data' || !selectedArtifactUrl) {
             return undefined;
         }
         const controller = new AbortController();
@@ -614,6 +633,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         });
         return () => controller.abort();
     }, [
+        view,
         resultPreviewTruncated,
         selectedArtifact?.content_type,
         selectedArtifact?.selection_id,
@@ -623,33 +643,50 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     useEffect(() => {
         if (view !== 'statistics' || !node.online || !overflowProgram) return undefined;
         const controller = new AbortController();
-        setStatisticsLoading(true);
+        let inFlight = false;
         setStatisticsError('');
-        setOverflowStatistics(null);
-        void ComputeClusterService.programOverflowStatistics(
-            node.node_id,
-            overflowProgram.program_id,
-            statisticsDate,
-            -new Date(`${statisticsDate}T12:00:00`).getTimezoneOffset(),
-            controller.signal,
-        ).then(value => {
-            if (!controller.signal.aborted) {
-                setOverflowStatistics(value);
-                setStatisticsLoading(false);
+        setOverflowStatistics(current => current?.date === statisticsDate
+            && current.program_id === overflowProgram.program_id
+            && current.timezone_offset_minutes === -new Date(`${statisticsDate}T12:00:00`).getTimezoneOffset()
+            ? current : null);
+        const load = async () => {
+            if (inFlight) return;
+            inFlight = true;
+            setStatisticsLoading(true);
+            try {
+                const value = await ComputeClusterService.programOverflowStatistics(
+                    node.node_id,
+                    overflowProgram.program_id,
+                    statisticsDate,
+                    -new Date(`${statisticsDate}T12:00:00`).getTimezoneOffset(),
+                    controller.signal,
+                );
+                if (!controller.signal.aborted) {
+                    setOverflowStatistics(value);
+                    updateStatisticsDay(statisticsDate, value);
+                    setStatisticsError('');
+                }
+            } catch (error) {
+                if (!controller.signal.aborted) {
+                    setStatisticsError(error instanceof Error ? error.message : String(error));
+                    updateStatisticsDay(statisticsDate, null);
+                }
+            } finally {
+                inFlight = false;
+                if (!controller.signal.aborted) setStatisticsLoading(false);
             }
-        }).catch(error => {
-            if (!controller.signal.aborted) {
-                setStatisticsError(error instanceof Error ? error.message : String(error));
-                setStatisticsLoading(false);
-            }
-        });
-        return () => controller.abort();
-    }, [node.node_id, node.online, overflowProgram?.program_id, statisticsDate, view]);
+        };
+        void load();
+        const timer = window.setInterval(() => void load(), 5000);
+        return () => {
+            controller.abort();
+            window.clearInterval(timer);
+        };
+    }, [node.node_id, node.online, overflowProgram?.program_id, statisticsDate, statisticsMonthRetry, view]);
 
     useEffect(() => {
         if (
             view !== 'statistics'
-            || !statisticsCalendarOpen
             || !node.online
             || !overflowProgram
         ) return undefined;
@@ -658,10 +695,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             .filter(date =>
                 date <= todayDateKey()
                 && date !== statisticsDate
-                && statisticsMonthCounts[date] === undefined
-            );
+                && !statisticsMonthCounts[statisticsDayKey(date)]
+            ).reverse();
         let nextDate = 0;
-        setStatisticsMonthLoading(true);
+        setStatisticsMonthLoading(dates.length > 0);
         const load = async () => {
             while (!controller.signal.aborted && nextDate < dates.length) {
                 const date = dates[nextDate];
@@ -675,14 +712,11 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         controller.signal,
                     );
                     if (!controller.signal.aborted) {
-                        setStatisticsMonthCounts(current => ({
-                            ...current,
-                            [date]: Object.values(value.episodes).reduce((sum, count) => sum + count, 0),
-                        }));
+                        updateStatisticsDay(date, value);
                     }
                 } catch {
                     if (!controller.signal.aborted) {
-                        setStatisticsMonthCounts(current => ({...current, [date]: null}));
+                        updateStatisticsDay(date, null);
                     }
                 }
             }
@@ -695,19 +729,11 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         node.node_id,
         node.online,
         overflowProgram?.program_id,
-        statisticsCalendarOpen,
         statisticsMonth,
+        statisticsDate,
+        statisticsMonthRetry,
         view,
     ]);
-
-    useEffect(() => {
-        if (!overflowStatistics) return;
-        setStatisticsMonthCounts(current => ({
-            ...current,
-            [overflowStatistics.date]: Object.values(overflowStatistics.episodes)
-                .reduce((sum, count) => sum + count, 0),
-        }));
-    }, [overflowStatistics]);
 
     const capturedAt = snapshot?.captured_at
         || programs?.captured_at
@@ -718,9 +744,13 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const statisticsDates = monthDateKeys(statisticsMonth);
     const statisticsMonthStart = new Date(`${statisticsMonth}-01T12:00:00`);
     const statisticsCalendarOffset = (statisticsMonthStart.getDay() + 6) % 7;
+    const statisticsPastDates = statisticsDates.filter(date => date <= todayDateKey());
+    const statisticsLoadedDays = statisticsPastDates.filter(date => statisticsMonthCounts[statisticsDayKey(date)] !== undefined).length;
+    const statisticsFailedDays = statisticsPastDates.filter(date => statisticsMonthCounts[statisticsDayKey(date)] === null).length;
+    const statisticsPendingDays = statisticsPastDates.length - statisticsLoadedDays;
     const statisticsMonthMaximum = Math.max(
         0,
-        ...statisticsDates.map(date => statisticsMonthCounts[date] || 0),
+        ...statisticsDates.map(date => statisticsMonthCounts[statisticsDayKey(date)]?.count || 0),
     );
 
     const unavailable = (title: string, detail = '') => <div className='ControlMonitorUnavailable'>
@@ -1363,23 +1393,41 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     <h3>{zh ? '每日溢渣统计' : 'Daily overflow statistics'}</h3>
                                     <p>{zh ? '连续溢渣帧合并为一次，并按最高等级统计' : 'Consecutive overflow frames are merged and counted by peak level'}</p>
                                 </div>
-                                <button
-                                    type='button'
-                                    className='ControlProgramStatisticsDateButton'
-                                    aria-expanded={statisticsCalendarOpen}
-                                    aria-label={`${zh ? '选择统计日期' : 'Choose statistics date'} ${statisticsDate}`}
-                                    onClick={() => {
-                                        setStatisticsMonth(statisticsDate.slice(0, 7));
-                                        setStatisticsCalendarOpen(open => !open);
-                                    }}
-                                >
-                                    <span>{statisticsDate}</span>
-                                    <CalendarDays aria-hidden='true'/>
-                                </button>
+                                <div className='ControlProgramStatisticsActions'>
+                                    <button
+                                        type='button'
+                                        ref={statisticsDateButton}
+                                        className='ControlProgramStatisticsDateButton'
+                                        aria-expanded={statisticsCalendarOpen}
+                                        aria-label={`${zh ? '选择统计日期' : 'Choose statistics date'} ${statisticsDate}`}
+                                        onClick={() => {
+                                            setStatisticsMonth(statisticsDate.slice(0, 7));
+                                            setStatisticsCalendarOpen(open => !open);
+                                        }}
+                                    >
+                                        <span>{statisticsDate}</span>
+                                        <CalendarDays aria-hidden='true'/>
+                                    </button>
+                                    <ProgramStatisticsExport
+                                        key={`${node.node_id}:${overflowProgram.program_id}:${statisticsDate}`}
+                                        nodeId={node.node_id} nodeName={node.name} programId={overflowProgram.program_id}
+                                        date={statisticsDate} today={todayDateKey()} zh={zh}
+                                        onOpen={() => setStatisticsCalendarOpen(false)}
+                                    />
+                                </div>
                             </header>
-                            {statisticsCalendarOpen && <section
-                                className='ControlProgramStatisticsCalendar'
-                                aria-label={zh ? '统计日历' : 'Statistics calendar'}
+                            {statisticsCalendarOpen && <Popover
+                                open
+                                anchorEl={statisticsDateButton.current}
+                                anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
+                                transformOrigin={{vertical: 'top', horizontal: 'right'}}
+                                marginThreshold={12}
+                                onClose={() => setStatisticsCalendarOpen(false)}
+                                PaperProps={{
+                                    component: 'section',
+                                    className: 'ControlProgramStatisticsCalendar',
+                                    'aria-label': zh ? '统计日历' : 'Statistics calendar',
+                                }}
                             >
                                 <header>
                                     <button
@@ -1413,17 +1461,25 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         <span key={`empty-${index}`}/>
                                     )}
                                     {statisticsDates.map(date => {
-                                        const count = statisticsMonthCounts[date];
+                                        const day = statisticsMonthCounts[statisticsDayKey(date)];
+                                        const count = day?.count;
                                         const level = count && statisticsMonthMaximum
                                             ? Math.max(1, Math.ceil(count / statisticsMonthMaximum * 4))
                                             : 0;
-                                        const label = count === null || count === undefined
-                                            ? `${zh ? '统计日期' : 'Statistics date'} ${date}`
-                                            : `${zh ? '统计日期' : 'Statistics date'} ${date}，${count} ${zh ? '次溢渣' : 'episodes'}`;
+                                        const state = date > todayDateKey() ? 'future' : day === undefined ? 'pending'
+                                            : day === null ? 'failed' : day.hasRecords ? 'recorded' : 'empty';
+                                        const stateLabel = {
+                                            future: zh ? '未来日期' : 'Future date',
+                                            pending: zh ? '待读取' : 'Not read yet',
+                                            failed: zh ? '读取失败' : 'Read failed',
+                                            empty: zh ? '无统计记录' : 'No statistics records',
+                                            recorded: `${count} ${zh ? '次溢渣' : 'episodes'}`,
+                                        }[state];
+                                        const label = `${zh ? '统计日期' : 'Statistics date'} ${date}，${stateLabel}`;
                                         return <button
                                             type='button'
                                             key={date}
-                                            className={`level-${level}`}
+                                            className={`level-${level} ${state}`}
                                             aria-label={label}
                                             aria-pressed={date === statisticsDate}
                                             title={label}
@@ -1434,13 +1490,25 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                             }}
                                         >
                                             {Number(date.slice(-2))}
+                                            <small aria-hidden='true'>{({failed: '!', empty: '-'})[state]}</small>
                                         </button>;
                                     })}
                                 </div>
+                                <div className='load-status' role='status'>
+                                    <span>{statisticsPendingDays === 0 && statisticsFailedDays === 0
+                                        ? (zh ? '当月已读取完成' : 'Month loaded')
+                                        : `${zh ? '当月读取' : 'Month'} ${statisticsLoadedDays} / ${statisticsPastDates.length}`}
+                                        {statisticsFailedDays > 0 && ` · ${statisticsFailedDays} ${zh ? '天失败' : 'failed'}`}</span>
+                                    {statisticsFailedDays > 0 && <button type='button'
+                                        aria-label={zh ? '重试失败日期' : 'Retry failed days'}
+                                        title={zh ? '重试失败日期' : 'Retry failed days'}
+                                        disabled={statisticsMonthLoading}
+                                        onClick={() => setStatisticsMonthRetry(value => value + 1)}>
+                                        <RefreshCw aria-hidden='true'/>
+                                    </button>}
+                                </div>
                                 <footer>
-                                    <span>{statisticsMonthLoading
-                                        ? (zh ? '正在读取当月统计…' : 'Loading month…')
-                                        : (zh ? '少' : 'Less')}</span>
+                                    <span>{zh ? '少' : 'Less'}</span>
                                     <i className='level-0'/>
                                     <i className='level-1'/>
                                     <i className='level-2'/>
@@ -1448,8 +1516,12 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     <i className='level-4'/>
                                     <span>{zh ? '多' : 'More'}</span>
                                 </footer>
-                            </section>}
-                            {statisticsError
+                            </Popover>}
+                            {statisticsError && overflowStatistics && <p className='ControlRefreshWarning' role='status'>
+                                {zh ? '刷新失败，显示上次统计，正在重试：' : 'Refresh failed; showing previous statistics and retrying: '}
+                                {statisticsError}
+                            </p>}
+                            {statisticsError && !overflowStatistics
                                 ? unavailable(zh ? '每日统计暂不可用' : 'Daily statistics are unavailable', statisticsError)
                                 : statisticsLoading && !overflowStatistics
                                     ? unavailable(zh ? '正在读取缓存统计…' : 'Loading cached statistics…')
@@ -1488,13 +1560,20 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                             <div className='ControlProgramHourlyStatistics'>
                                                 <strong>{zh ? '时段分布' : 'Hourly distribution'}</strong>
                                                 <div>
-                                                    {overflowStatistics.hourly.map((count, hour) => <span
+                                                    {overflowStatistics.hourly.map((count, hour) => <Tooltip
                                                         key={hour}
-                                                        title={`${`${hour}`.padStart(2, '0')}:00 · ${count}`}
+                                                        title={`${`${hour}`.padStart(2, '0')}:00 - ${`${hour + 1}`.padStart(2, '0')}:00 · ${
+                                                            zh ? `溢渣 ${count} 次` : `${count} overflow events`
+                                                        }`}
+                                                        placement='top'
+                                                        enterDelay={0}
+                                                        arrow
                                                     >
-                                                        <i style={{height: `${Math.max(2, count / Math.max(...overflowStatistics.hourly, 1) * 100)}%`}}/>
-                                                        <small>{hour % 3 === 0 ? `${`${hour}`.padStart(2, '0')}` : ''}</small>
-                                                    </span>)}
+                                                        <span role='img' tabIndex={0}>
+                                                            <i style={{height: `${Math.max(2, count / Math.max(...overflowStatistics.hourly, 1) * 100)}%`}}/>
+                                                            <small>{hour % 3 === 0 ? `${`${hour}`.padStart(2, '0')}` : ''}</small>
+                                                        </span>
+                                                    </Tooltip>)}
                                                 </div>
                                             </div>
                                             <section className='ControlProgramHeatReports'>

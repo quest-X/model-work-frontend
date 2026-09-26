@@ -2190,7 +2190,8 @@ button.ControlServiceCard {
   }
 }
 
-.ControlProgramStatisticsDateButton {
+.ControlProgramStatisticsDateButton,
+.ControlProgramStatisticsExportButton {
   display: flex;
   height: 30px;
   align-items: center;
@@ -2209,12 +2210,41 @@ button.ControlServiceCard {
   &[aria-expanded='true'] { border-color: rgba(105, 198, 255, 0.72); outline: 0; }
 }
 
-.ControlProgramStatisticsCalendar {
-  position: absolute;
-  z-index: 5;
-  top: 56px;
-  right: 20px;
+.ControlProgramStatisticsActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ControlStatisticsExportDialog {
+  width: 400px;
+  max-width: calc(100% - 32px);
+  .MuiDialogTitle-root { font-size: 16px; overflow-wrap: anywhere; }
+  .date-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  label { min-width: 0; font-size: 12px; }
+  input {
+    box-sizing: border-box; width: 100%; min-width: 0; margin-top: 6px;
+    border: 1px solid #555; border-radius: 2px; padding: 8px 4px;
+    background: #191b1d; color: #eee; color-scheme: dark; font-size: 12px;
+  }
+  p, [role='status'] { font-size: 12px; color: #bfc5c9; overflow-wrap: anywhere; }
+  [role='status'] { min-height: 36px; }
+  footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  button, a {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 32px;
+    border: 1px solid #555; border-radius: 2px; padding: 4px 10px;
+    background: #20272b; color: #eee; cursor: pointer; font-size: 12px; text-decoration: none; box-sizing: border-box;
+    &:disabled { opacity: 0.45; cursor: default; }
+    svg { width: 14px; height: 14px; }
+  }
+  button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid #69c6ff; outline-offset: 2px; }
+}
+
+.ControlProgramStatisticsCalendar.MuiPopover-paper {
   width: 250px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
   box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 4px;
@@ -2264,11 +2294,23 @@ button.ControlServiceCard {
     text-align: center;
   }
   .days button {
+    position: relative;
     width: 28px;
     height: 28px;
     background: rgba(255, 255, 255, 0.055);
     font-size: 9px;
   }
+  .days small { position: absolute; right: 2px; bottom: 0; font-size: 7px; line-height: 8px; }
+  .days .empty { color: rgba(255, 255, 255, 0.32); }
+  .days .failed { border: 1px solid #b99153; color: #dcb579; }
+  .days .recorded.level-0 { box-shadow: inset 0 0 0 1px rgba(121, 216, 158, 0.4); }
+  .load-status {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 6px; margin-top: 8px; color: rgba(255, 255, 255, 0.56); font-size: 9px;
+  }
+  .load-status { min-height: 24px; }
+  .load-status button { display: grid; place-items: center; width: 24px; height: 24px; background: transparent; }
+  .load-status svg { width: 12px; height: 12px; }
   .days button[aria-pressed='true'] {
     outline: 1px solid #69c6ff;
     color: white;
@@ -2338,7 +2380,19 @@ button.ControlServiceCard {
     gap: 3px;
     margin-top: 12px;
   }
-  span { display: grid; height: 100%; grid-template-rows: minmax(0, 1fr) 14px; align-items: end; }
+  span {
+    display: grid;
+    height: 100%;
+    grid-template-rows: minmax(0, 1fr) 14px;
+    align-items: end;
+    cursor: crosshair;
+
+    &:hover,
+    &:focus-visible { background: rgba(105, 198, 255, 0.1); }
+    &:focus-visible { outline: 1px solid #69c6ff; outline-offset: 1px; }
+    &:hover i,
+    &:focus-visible i { background: #a6ddff; }
+  }
   i { display: block; min-height: 2px; background: #69c6ff; }
   small { color: rgba(255, 255, 255, 0.28); font-size: 7px; font-style: normal; text-align: center; }
 }
