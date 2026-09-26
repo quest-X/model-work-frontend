@@ -669,6 +669,53 @@ describe('AgentSideChat', () => {
         );
     });
 
+    it.each([
+        ['AIPACK-07', true, false, 'normal', true],
+        ['AIPACK-07', false, true, 'normal', false],
+        ['AIPACK-07', true, false, 'fault', false],
+        ['baosight-02', true, false, 'normal', false],
+        ['baosight-02', true, true, 'normal', true],
+    ])('uses the sidebar network policy when scanning %s (LAN=%s, Tailscale=%s, state=%s)', async (
+        name, lan, tailscale, communicationState, healthy,
+    ) => {
+        const node = {
+            node_id: 'scan-node', name, online: true,
+            communication_state: communicationState,
+            capabilities: ['runtime.read.v1'],
+            network: {online: tailscale, lan_ssh_available: lan, tailscale_ssh_available: tailscale},
+            network_dependencies: [],
+            resources: {
+                cpu_percent: 10, cpu_logical: 8, gpus: [],
+                memory_total_bytes: 1000, memory_available_bytes: 800,
+                disk_total_bytes: 1000, disk_free_bytes: 800,
+            },
+        } as ComputeClusterNode;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([node]);
+        jest.spyOn(ComputeClusterService, 'runtime').mockResolvedValue({
+            schema_version: 'runtime.snapshot.v1', captured_at: 1,
+            summary: {total: 1, healthy: 1, degraded: 0, unavailable: 0, task_counts: {}},
+            services: [{
+                service_id: 'node-agent', name: 'Node Service', kind: 'service', state: 'healthy',
+                version: '1', uptime_seconds: 60, restart_count: 0,
+                health: {state: 'healthy', checked_at: 1, status_code: 200, latency_ms: 1},
+                process: {pid: 1, state: 'running'},
+            }],
+        });
+        jest.spyOn(AgentChatService, 'recordTurn').mockResolvedValue('scan-history');
+        jest.spyOn(AgentChatService, 'status').mockResolvedValue({
+            status: 'ready', auth_configured: true, llm_configured: true, primary_model: 'Qwen3-Coder',
+        });
+        render(<AgentSideChat language={Language.CHINESE}/>);
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
+        const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
+        fireEvent.change(composer, {target: {value: '@全部节点 快速扫描'}});
+        fireEvent.click(screen.getByRole('button', {name: '发送'}));
+        const table = await screen.findByRole('table');
+        expect(table).toHaveTextContent(`LAN ${lan ? '正常' : '未连接'} · Tailscale ${tailscale ? '正常' : '未连接'}`);
+        expect(within(table).getAllByRole('cell').at(-1)).toHaveTextContent(healthy ? '正常' : '故障：网络');
+        expect(screen.getByText(new RegExp(`快速扫描完成：${healthy ? 1 : 0}/1`))).toBeInTheDocument();
+    });
+
     it('runs fixed device commands and sends arbitrary device conversation to the LLM', async () => {
         const node = {
             node_id: 'node-151',

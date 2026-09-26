@@ -16,6 +16,7 @@ import {
     ComputeFilesystemResult,
     ComputePeerProbeResult,
     ComputeTask,
+    computeNodeNormal,
     computeSshAvailability,
 } from '../../../services/ComputeClusterService';
 import {AppState} from '../../../store';
@@ -314,7 +315,7 @@ const quickScanResources = (node: ComputeClusterNode, zh: boolean): Omit<QuickSc
         .filter((value): value is number => Number.isFinite(value));
     const gpuTemperature = temperatures.length ? Math.max(...temperatures) : null;
     const ssh = computeSshAvailability(node);
-    const networkFault = !ssh.lan || !ssh.tailscale;
+    const networkFault = !computeNodeNormal(node);
 
     if (cpu === null) problems.push(zh ? 'CPU 未上报' : 'CPU not reported');
     else if (cpu >= QUICK_SCAN_LIMITS.cpuPercent) problems.push(`CPU ${cpu}%`);
@@ -333,7 +334,8 @@ const quickScanResources = (node: ComputeClusterNode, zh: boolean): Omit<QuickSc
     const gpu = node.resources.gpus.length
         ? `${gpuUsage}% · ${gpuTemperature === null ? (zh ? '温度未上报' : 'temperature not reported') : `${gpuTemperature}°C`} · ${zh ? '显存' : 'memory'} ${gpuMemory === null ? '—' : `${gpuMemory}%`}`
         : (zh ? '无 GPU' : 'No GPU');
-    const network = `${networkFault ? (zh ? '故障' : 'Fault') : (zh ? '正常' : 'Normal')} · ↓${bytesPerSecond(node.resources.network_receive_bytes_per_second, zh)} · ↑${bytesPerSecond(node.resources.network_send_bytes_per_second, zh)}`;
+    const linkState = (available: boolean) => available ? (zh ? '正常' : 'Ready') : (zh ? '未连接' : 'Disconnected');
+    const network = `${networkFault ? (zh ? '故障' : 'Fault') : (zh ? '正常' : 'Normal')} · LAN ${linkState(ssh.lan)} · Tailscale ${linkState(ssh.tailscale)} · ↓${bytesPerSecond(node.resources.network_receive_bytes_per_second, zh)} · ↑${bytesPerSecond(node.resources.network_send_bytes_per_second, zh)}`;
     return {
         cpu: cpu === null ? (zh ? '未上报' : 'Not reported') : `${cpu}%`,
         memory: memory === null ? (zh ? '未上报' : 'Not reported') : `${memory}%`,
