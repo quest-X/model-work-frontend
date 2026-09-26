@@ -604,6 +604,34 @@ describe('AgentSideChat', () => {
                 },
             },
             {
+                node_id: 'node-jetson',
+                name: 'AIPACK-07',
+                online: true,
+                capabilities: ['runtime.read.v1'],
+                network: {online: false, ssh_available: true},
+                network_dependencies: [],
+                resources: {
+                    cpu_logical: 8,
+                    cpu_percent: 21,
+                    load_average_1m: null,
+                    memory_total_bytes: 30 * 1024 ** 3,
+                    memory_available_bytes: 24 * 1024 ** 3,
+                    disk_total_bytes: 54 * 1024 ** 3,
+                    disk_free_bytes: 23 * 1024 ** 3,
+                    network_receive_bytes_per_second: 857 * 1024,
+                    network_send_bytes_per_second: 319 * 1024,
+                    gpus: [{
+                        index: 0,
+                        uuid: 'JETSON-INTEGRATED-GPU-0',
+                        name: 'Jetson AGX Orin Developer Kit Integrated GPU',
+                        memory_total_mb: 0,
+                        memory_used_mb: 0,
+                        utilization_percent: 48,
+                        temperature_celsius: 46,
+                    }],
+                },
+            },
+            {
                 node_id: 'node-151',
                 name: 'shanghai-151-linux',
                 online: false,
@@ -658,9 +686,11 @@ describe('AgentSideChat', () => {
         const table = await screen.findByRole('table');
         expect(table).toHaveTextContent('节点服务状态CPUMEMGPUDISKNETWORK结果');
         expect(table).toHaveTextContent('baoxin-166-windows1/295%90%20% · 90°C · 显存 96%95% · 50.0 GB 可用故障');
+        expect(table).toHaveTextContent('AIPACK-071/221%20%48% · 46°C · 显存 共享系统内存57% · 23.0 GB 可用故障');
         expect(table).toHaveTextContent('CPU 95%、内存 90%、GPU 温度 90°C、GPU 显存 96%、磁盘 95%、网络、推理服务');
         expect(table).toHaveTextContent('shanghai-151-linux——————故障：未收到节点心跳');
         expect(runtime).toHaveBeenCalledWith('node-166');
+        expect(runtime).toHaveBeenCalledWith('node-jetson');
         expect(send).not.toHaveBeenCalled();
         expect(recordTurn).toHaveBeenCalledWith(
             '@全部节点 快速扫描',

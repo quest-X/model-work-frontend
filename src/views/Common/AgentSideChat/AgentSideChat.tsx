@@ -331,7 +331,7 @@ const quickScanResources = (node: ComputeClusterNode, zh: boolean): Omit<QuickSc
     if (networkFault) problems.push(zh ? '网络' : 'Network');
 
     const gpu = node.resources.gpus.length
-        ? `${gpuUsage}% · ${gpuTemperature === null ? (zh ? '温度未上报' : 'temperature not reported') : `${gpuTemperature}°C`} · ${zh ? '显存' : 'memory'} ${gpuMemory === null ? '—' : `${gpuMemory}%`}`
+        ? `${gpuUsage}% · ${gpuTemperature === null ? (zh ? '温度未上报' : 'temperature not reported') : `${gpuTemperature}°C`} · ${zh ? '显存' : 'memory'} ${gpuMemory === null ? (zh ? '共享系统内存' : 'shared system memory') : `${gpuMemory}%`}`
         : (zh ? '无 GPU' : 'No GPU');
     const network = `${networkFault ? (zh ? '故障' : 'Fault') : (zh ? '正常' : 'Normal')} · ↓${bytesPerSecond(node.resources.network_receive_bytes_per_second, zh)} · ↑${bytesPerSecond(node.resources.network_send_bytes_per_second, zh)}`;
     return {
