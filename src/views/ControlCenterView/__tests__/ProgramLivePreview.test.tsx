@@ -52,7 +52,11 @@ it('switches actual HLS modes, releases readers, and never labels external playb
     const hls = (Hls as unknown as jest.Mock).mock.results[0].value;
     expect(hls.loadSource).toHaveBeenLastCalledWith(expect.stringContaining('/media/hls/index.m3u8'));
     expect(screen.getByText('连接中')).toBeTruthy();
-    fireEvent.playing(container.querySelector('video'));
+    const hlsVideo = container.querySelector('video');
+    Object.defineProperties(hlsVideo, {
+        videoWidth: {value: 1920}, videoHeight: {value: 1080},
+    });
+    fireEvent.playing(hlsVideo);
     expect(screen.getByText('LIVE')).toBeTruthy();
     fireEvent.change(select, {target: {value: 'llhls'}});
     expect(hls.destroy).toHaveBeenCalled();
@@ -220,8 +224,11 @@ it('allows a slow LL-HLS first frame, then detects an established stream stall',
     fireEvent.change(await screen.findByRole('combobox'), {target: {value: 'llhls'}});
     const hls = (Hls as unknown as jest.Mock).mock.results[0].value;
     let frames = 0;
-    Object.defineProperty(container.querySelector('video'), 'getVideoPlaybackQuality', {
-        value: () => ({totalVideoFrames: frames}),
+    const video = container.querySelector('video');
+    Object.defineProperties(video, {
+        videoWidth: {value: 1920},
+        videoHeight: {value: 1080},
+        getVideoPlaybackQuality: {value: () => ({totalVideoFrames: frames})},
     });
     act(() => { jest.advanceTimersByTime(25000); });
     expect(screen.getByText('连接中')).toBeTruthy();
@@ -249,6 +256,30 @@ it('bounds LL-HLS first-frame loading at 30 seconds', async () => {
     act(() => { jest.advanceTimersByTime(1000); });
     expect(screen.getByText('实时画面首帧加载超时')).toBeTruthy();
     expect(hls.destroy).toHaveBeenCalledTimes(1);
+});
+
+it('rejects the 2x2 WebRTC placeholder as a live frame', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(0);
+    global.fetch = jest.fn().mockResolvedValue({
+        ok: true, json: async () => ({
+            schema_version: 'program.media.trial.v1', protocols: ['mjpeg', 'webrtc'],
+        }),
+    });
+    window.MediaMTXWebRTCReader = jest.fn(() => ({close: jest.fn()}));
+    const {container} = render(<ProgramLivePreview
+        nodeId='node04' programId='dlk' name='DLK' path='/stream.mjpeg' zh
+    />);
+    fireEvent.change(await screen.findByRole('combobox'), {target: {value: 'webrtc'}});
+    const video = container.querySelector('video');
+    Object.defineProperties(video, {
+        videoWidth: {value: 2}, videoHeight: {value: 2}, currentTime: {value: 1},
+    });
+    fireEvent.playing(video);
+    expect(screen.getByText('连接中')).toBeTruthy();
+    act(() => { jest.advanceTimersByTime(31000); });
+    expect(screen.getByText('实时画面首帧加载超时')).toBeTruthy();
+    expect(screen.getByRole('option', {name: 'WebRTC (不可用)'})).toBeTruthy();
 });
 
 it('shows first-frame latency and protocol availability in the selector', async () => {
@@ -279,7 +310,11 @@ it('shows first-frame latency and protocol availability in the selector', async 
     expect(screen.getByRole('option', {name: 'HLS (检测中)'})).toBeTruthy();
     act(() => {
         jest.advanceTimersByTime(1500);
-        fireEvent.playing(document.querySelector('video'));
+        const video = document.querySelector('video');
+        Object.defineProperties(video, {
+            videoWidth: {value: 1920}, videoHeight: {value: 1080},
+        });
+        fireEvent.playing(video);
     });
     expect(screen.getByRole('option', {name: 'HLS (1.5 s)'})).toBeTruthy();
     fireEvent.change(select, {target: {value: 'llhls'}});

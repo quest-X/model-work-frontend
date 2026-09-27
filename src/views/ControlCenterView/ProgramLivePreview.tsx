@@ -27,6 +27,8 @@ const labels: Record<Protocol, string> = {
 const browserProtocols: Protocol[] = ['mjpeg', 'hls', 'llhls', 'webrtc'];
 const formatLatency = (milliseconds: number): string =>
     milliseconds < 1000 ? `${milliseconds} ms` : `${(milliseconds / 1000).toFixed(1)} s`;
+const hasRenderableVideoFrame = (video: HTMLVideoElement | null): boolean =>
+    Boolean(video && video.videoWidth > 2 && video.videoHeight > 2);
 
 interface Props {
     nodeId: string;
@@ -126,9 +128,12 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
             const decoded = video?.getVideoPlaybackQuality?.().totalVideoFrames ?? video?.currentTime ?? 0;
             if (decoded > frames) {
                 frames = decoded;
-                lastFrameAt = Date.now();
-                markPlaying();
-            } else if (lastFrameAt !== undefined && Date.now() - lastFrameAt > 20000) {
+                if (hasRenderableVideoFrame(video)) {
+                    lastFrameAt = Date.now();
+                    markPlaying();
+                }
+            }
+            if (lastFrameAt !== undefined && Date.now() - lastFrameAt > 20000) {
                 fail(zh ? '20 秒内未收到新视频帧' : 'No new video frame for 20 seconds');
             } else if (lastFrameAt === undefined && Date.now() - startedAt > 30000) {
                 fail(zh ? '实时画面首帧加载超时' : 'Timed out loading the first video frame');
@@ -252,7 +257,9 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
                             draggable={false}
                         /> : <video key={`${protocol}-${nonce}`} ref={videoRef} autoPlay muted playsInline
                             aria-label={zh ? `${name} 现场实时画面` : `${name} live site preview`}
-                            onPlaying={markPlaying}
+                            onPlaying={() => {
+                                if (hasRenderableVideoFrame(videoRef.current)) markPlaying();
+                            }}
                             onError={() => {
                                 setError(videoRef.current?.error?.message || 'Video decode error');
                                 setMetrics(current => ({...current, [protocol]: 'error'}));
