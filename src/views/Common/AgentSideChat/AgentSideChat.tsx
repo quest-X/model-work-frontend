@@ -548,6 +548,13 @@ const runConnectivityProbe = async (node: ComputeClusterNode, zh: boolean): Prom
 const filesystemFailure = (reason: unknown, zh: boolean, phase: 'create' | 'decide' = 'decide') => {
     const raw = reason instanceof Error ? reason.message : String(reason);
     const normalized = raw.toLowerCase();
+    if (normalized.includes('desktop_not_configured')) return {
+        state: 'failed' as const,
+        code: 'desktop_not_configured',
+        message: zh
+            ? '节点未配置桌面目录，请由管理员配置后重试。'
+            : 'The node desktop directory is not configured. Ask an administrator to configure it, then retry.',
+    };
     if (normalized.includes('path_not_found')) return {
         state: 'failed' as const,
         code: 'path_not_found',

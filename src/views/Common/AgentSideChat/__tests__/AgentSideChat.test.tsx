@@ -1170,6 +1170,36 @@ describe('AgentSideChat', () => {
         ));
     });
 
+    it('explains an unconfigured desktop before showing an authorization card', async () => {
+        mockFilesystemCrypto();
+        const node = {
+            node_id: 'node-15', installation_id: 'installation-15',
+            name: 'AIPACK-15', online: true, capabilities: ['filesystem.list.v1'],
+        } as ComputeClusterNode;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([node]);
+        jest.spyOn(AgentChatService, 'status').mockResolvedValue({
+            status: 'ready', auth_configured: true, llm_configured: true, primary_model: 'Qwen3-Coder',
+        });
+        jest.spyOn(ComputeClusterService, 'createFilesystemAuthorization')
+            .mockRejectedValue(new Error('desktop_not_configured: node desktop directory is not configured'));
+        render(<AgentSideChat language={Language.CHINESE}/>);
+
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
+        const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
+        fireEvent.change(composer, {target: {value: '@AIPACK-15 查看桌面有什么'}});
+        fireEvent.click(screen.getByRole('button', {name: '发送'}));
+
+        expect(await screen.findByText(
+            /节点未配置桌面目录，请由管理员配置后重试。 \[desktop_not_configured\]/,
+        )).toBeInTheDocument();
+        expect(screen.queryByRole('region', {name: '节点操作授权'})).not.toBeInTheDocument();
+        await waitFor(() => expect(AgentChatService.finishTrace).toHaveBeenCalledWith(
+            expect.objectContaining({id: 'trace-1'}),
+            'failed',
+            expect.objectContaining({error_code: 'desktop_not_configured'}),
+        ));
+    });
+
     it('recognizes the equivalent English public-desktop command', async () => {
         mockFilesystemCrypto();
         const node = {
