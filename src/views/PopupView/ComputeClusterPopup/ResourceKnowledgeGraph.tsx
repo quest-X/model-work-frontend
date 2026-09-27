@@ -179,13 +179,14 @@ const operationsTopology = (
         const weight = filteredRegions.reduce((total, region) => total + Math.sqrt(members.get(region.entityId).length), 0);
         const usableWidth = Math.max(0, viewport.width - 16 * (filteredRegions.length + 1));
         let minWidth = 16;
-        let minHeight = Math.max(280, viewport.height);
+        const minHeight = Math.max(280, viewport.height);
         const layouts = filteredRegions.map(region => {
             const items = members.get(region.entityId);
             const cardWidth = items[0].kind === 'compute_node' ? 92 : 136;
             const cardHeight = items[0].kind === 'compute_node' ? 92 : 58;
-            const radiusX = Math.max(cardWidth / 2, (usableWidth * Math.sqrt(items.length) / weight - cardWidth - 48) / 2);
-            const radiusY = Math.max(cardHeight / 2, (viewport.height - cardHeight - 88) / 2);
+            const width = usableWidth * Math.sqrt(items.length) / weight;
+            const radiusX = Math.max(0, (width - cardWidth - 48) / 2);
+            const radiusY = Math.max(0, (minHeight - cardHeight - 88) / 2);
             const ringCount = items.length <= 8 ? 1 : Math.ceil(Math.sqrt(items.length / 6));
             const positions: GraphPoint[] = [];
             let remaining = items.length;
@@ -198,26 +199,16 @@ const operationsTopology = (
                             -Math.PI / 2 + Math.PI * 2 * (index + (ring % 2 ? 0 : .5)) / count));
                 }
             }
-            let scale = 1;
-            // ponytail: pairwise spacing suits inventory-sized graphs; use spatial indexing for thousands of cards.
-            positions.forEach((point, index) => positions.slice(0, index).forEach(other => {
-                scale = Math.max(scale, Math.min(
-                    (cardWidth + 16) / Math.abs(point.x - other.x),
-                    (cardHeight + 26) / Math.abs(point.y - other.y),
-                ));
-            }));
-            const width = radiusX * 2 * scale + cardWidth + 48;
             const left = minWidth;
             minWidth += width + 16;
-            minHeight = Math.max(minHeight, radiusY * 2 * scale + cardHeight + 88);
-            return {region, items, positions, scale, left, width};
+            return {region, items, positions, left, width};
         });
         minWidth = Math.max(viewport.width, minWidth);
-        layouts.forEach(({items, positions, scale, left, width}) => {
+        layouts.forEach(({items, positions, left, width}) => {
             items.forEach((entity, index) => {
                 points.set(entity.entity_id, {
-                    x: (left + width / 2 + positions[index].x * scale) / minWidth * 100,
-                    y: (64 + (minHeight - 80) / 2 + positions[index].y * scale) / minHeight * 100,
+                    x: (left + width / 2 + positions[index].x) / minWidth * 100,
+                    y: (64 + (minHeight - 80) / 2 + positions[index].y) / minHeight * 100,
                 });
             });
         });

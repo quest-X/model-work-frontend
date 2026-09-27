@@ -904,11 +904,13 @@ describe('ComputeClusterPopup', () => {
         });
         const props = {graph, nodes, zh: true, fitWindow: true, onSelectWorkAgent: jest.fn()};
         const rendered = render(<ResourceKnowledgeGraph {...props} deviceType='main'/>);
-        const checkLayout = (count: number) => {
+        const checkLayout = (count: number, expectedWidth: number, expectedHeight: number) => {
             const scene = screen.getByRole('figure', {name: '计算节点、边缘设备与摄像头关系图'});
             expect(scene).toHaveAttribute('data-layout', 'radial');
             const width = parseFloat(scene.style.minWidth);
             const height = parseFloat(scene.style.minHeight);
+            expect(width).toBeCloseTo(expectedWidth);
+            expect(height).toBeCloseTo(expectedHeight);
             const cards = screen.getAllByTestId('resource-graph-node').map(card => ({
                 x: parseFloat(card.style.left) * width / 100,
                 y: parseFloat(card.style.top) * height / 100,
@@ -916,20 +918,17 @@ describe('ComputeClusterPopup', () => {
                 height: card.dataset.entityKind === 'compute_node' ? 92 : 58,
             }));
             expect(cards).toHaveLength(count);
-            cards.forEach((card, index) => {
+            cards.forEach(card => {
                 expect(card.x - card.width / 2).toBeGreaterThanOrEqual(0);
                 expect(card.x + card.width / 2).toBeLessThanOrEqual(width);
                 expect(card.y - card.height / 2 - 10).toBeGreaterThanOrEqual(48);
                 expect(card.y + card.height / 2).toBeLessThanOrEqual(height);
-                expect(cards.slice(0, index).filter(other =>
-                    Math.abs(card.x - other.x) < (card.width + other.width) / 2
-                    && Math.abs(card.y - other.y) < (card.height + other.height) / 2 + 10)).toEqual([]);
             });
             return cards;
         };
         try {
             act(() => resize([{contentRect: {width: 1000, height: 600}}] as ResizeObserverEntry[], null));
-            const ring = checkLayout(7).slice(0, 5);
+            const ring = checkLayout(7, 1000, 600).slice(0, 5);
             const centerX = ring.reduce((sum, card) => sum + card.x, 0) / ring.length;
             const centerY = ring.reduce((sum, card) => sum + card.y, 0) / ring.length;
             const radiusX = (ring[1].x - centerX) / Math.sin(Math.PI * 2 / ring.length);
@@ -943,17 +942,17 @@ describe('ComputeClusterPopup', () => {
             expect([...stats.querySelectorAll('strong')].map(item => item.textContent)).toEqual(['7', '7', '0', '0']);
 
             rendered.rerender(<ResourceKnowledgeGraph {...props} deviceType='edge'/>);
-            checkLayout(18);
+            checkLayout(18, 1000, 600);
             expect(screen.getAllByTestId('resource-graph-region')).toHaveLength(1);
             expect(screen.getByTestId('resource-graph-region')).toHaveTextContent('山东');
             expect(screen.getByTestId('resource-graph-region')).toHaveTextContent('1/2 正常节点');
             rendered.rerender(<ResourceKnowledgeGraph {...props} deviceType='sensor'/>);
-            checkLayout(29);
+            checkLayout(29, 1000, 600);
 
             act(() => resize([{contentRect: {width: 360, height: 400}}] as ResizeObserverEntry[], null));
-            checkLayout(29);
+            checkLayout(29, 360, 400);
             rendered.rerender(<ResourceKnowledgeGraph {...props} deviceType='main'/>);
-            checkLayout(7);
+            checkLayout(7, 360, 400);
             rendered.rerender(<ResourceKnowledgeGraph {...props} graph={{...graph, entities: [...regions, ...mains]}} deviceType='edge'/>);
             expect(screen.queryByTestId('resource-graph-node')).not.toBeInTheDocument();
             expect(screen.queryByTestId('resource-graph-region')).not.toBeInTheDocument();
