@@ -2,7 +2,7 @@ import React from 'react';
 import {TextEncoder as NodeTextEncoder} from 'util';
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {Language} from '../../../../data/LanguageConfig';
-import {AgentChatService} from '../../../../services/AgentChatService';
+import {AgentChatEvent, AgentChatResponse, AgentChatService} from '../../../../services/AgentChatService';
 import * as ApprovalIdentity from '../../../../services/ApprovalIdentityService';
 
 jest.mock('../../../../services/ApprovalIdentityService', () => ({
@@ -136,6 +136,57 @@ describe('AgentSideChat', () => {
 
     afterEach(() => jest.restoreAllMocks());
 
+    it('renders streamed text before completion and saves only the final reply', async () => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([]);
+        jest.spyOn(AgentChatService, 'status').mockResolvedValue({
+            status: 'ready', auth_configured: true, llm_configured: true, primary_model: 'local',
+        });
+        let emit: (event: AgentChatEvent) => void;
+        let finish: (response: AgentChatResponse) => void;
+        jest.spyOn(AgentChatService, 'send').mockImplementation((message, conversation, task, onEvent) => {
+            emit = onEvent;
+            return new Promise(resolve => { finish = resolve; });
+        });
+        render(<AgentSideChat language={Language.CHINESE}/>);
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
+        const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
+        fireEvent.change(composer, {target: {value: '汇报任务'}});
+        fireEvent.click(screen.getByRole('button', {name: '发送'}));
+        await waitFor(() => expect(AgentChatService.send).toHaveBeenCalled());
+        act(() => { emit({type: 'status', phase: 'model'}); });
+        expect(screen.getByText('模型正在处理输入…')).toBeInTheDocument();
+        act(() => { emit({type: 'delta', content: '正在逐段回复'}); });
+        expect(screen.getByText('正在逐段回复')).toBeInTheDocument();
+        expect(AgentChatService.finishTrace).not.toHaveBeenCalled();
+        await act(async () => { finish({
+            conversation_id: 'c1', message: '完整回复', model: 'local', degraded: false,
+        }); });
+        expect(screen.queryByText('正在逐段回复')).not.toBeInTheDocument();
+        expect(screen.getAllByText('完整回复')).toHaveLength(1);
+        expect(AgentChatService.finishTrace).toHaveBeenCalledWith(
+            expect.anything(), 'succeeded', {conversation_id: 'c1', response: '完整回复'},
+        );
+    });
+
+    it('answers executor diagnostics from runtime evidence without invoking the model', async () => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            {node_id: 'n1', name: 'AIPACK-01', online: false},
+        ] as ComputeClusterNode[]);
+        jest.spyOn(AgentChatService, 'status').mockResolvedValue({
+            status: 'ready', auth_configured: true, llm_configured: true, primary_model: 'local',
+        });
+        const send = jest.spyOn(AgentChatService, 'send');
+        jest.spyOn(AgentChatService, 'recordTurn').mockResolvedValue('diagnostic');
+        render(<AgentSideChat language={Language.CHINESE}/>);
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
+        const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
+        fireEvent.change(composer, {target: {value: '@全部节点 Task Executor 故障的原因是什么?'}});
+        fireEvent.click(screen.getByRole('button', {name: '发送'}));
+        expect(await screen.findByRole('table')).toHaveTextContent('未收到节点心跳，未检查');
+        expect(send).not.toHaveBeenCalled();
+        expect(AgentChatService.recordTurn).toHaveBeenCalled();
+    });
+
     it('opens from the global trigger and keeps one backend conversation', async () => {
         const embeddedHost = document.createElement('main');
         embeddedHost.className = 'ControlCenterWorkspace';
@@ -200,7 +251,7 @@ describe('AgentSideChat', () => {
         expect(screen.getByText('任务编号：trace-1')).toHaveClass('AgentSideChatTaskId');
         expect(screen.getByText('状态').tagName).toBe('STRONG');
         expect(screen.getByText('状态').closest('.AgentSideChatMessage')).toHaveTextContent('•状态: running');
-        expect(send).toHaveBeenCalledWith('汇报任务', undefined, 'trace-1');
+        expect(send).toHaveBeenCalledWith('汇报任务', undefined, 'trace-1', expect.any(Function));
         await waitFor(() => expect(screen.queryByText('正在思考…')).not.toBeInTheDocument());
 
         send.mockResolvedValueOnce({
@@ -215,7 +266,7 @@ describe('AgentSideChat', () => {
         fireEvent.click(screen.getByRole('button', {name: '发送'}));
         expect(await screen.findByText(/已继续同一个对话。/)).not.toHaveTextContent('任务编号：trace-2');
         expect(screen.getByText('任务编号：trace-2').previousElementSibling).toHaveClass('AgentSideChatMessage');
-        expect(send).toHaveBeenLastCalledWith('继续', 'conversation-1', 'trace-2');
+        expect(send).toHaveBeenLastCalledWith('继续', 'conversation-1', 'trace-2', expect.any(Function));
 
         send.mockRejectedValueOnce(new Error('LLM unavailable'));
         fireEvent.change(screen.getByRole('textbox', {name: '发送给 Agent'}), {
@@ -319,7 +370,7 @@ describe('AgentSideChat', () => {
         }));
         expect(await screen.findByText(/第一条完成/)).toBeInTheDocument();
         await waitFor(() => expect(sendRequest).toHaveBeenCalledTimes(2));
-        expect(sendRequest).toHaveBeenLastCalledWith('第三条', 'conversation-1', 'trace-2');
+        expect(sendRequest).toHaveBeenLastCalledWith('第三条', 'conversation-1', 'trace-2', expect.any(Function));
         expect(await screen.findByText(/第三条完成/)).toBeInTheDocument();
         expect(screen.queryByRole('region', {name: '排队任务'})).not.toBeInTheDocument();
         expect(screen.getByRole('button', {name: '发送'})).toBeDisabled();
@@ -412,7 +463,7 @@ describe('AgentSideChat', () => {
             target: {value: '继续检查'},
         });
         fireEvent.click(screen.getByRole('button', {name: '发送'}));
-        await waitFor(() => expect(send).toHaveBeenCalledWith('继续检查', 'conversation-old', 'trace-1'));
+        await waitFor(() => expect(send).toHaveBeenCalledWith('继续检查', 'conversation-old', 'trace-1', expect.any(Function)));
         await screen.findByText(/继续检查完成/);
 
         fireEvent.click(screen.getByRole('button', {name: '新对话'}));
@@ -512,7 +563,7 @@ describe('AgentSideChat', () => {
         );
     });
 
-    it('pins an all-devices mention and sends every device snapshot to the LLM', async () => {
+    it('sends compact node summaries and includes camera details only when requested', async () => {
         const nodes = [
             {
                 node_id: 'node-166', name: 'baoxin-166-windows', online: true,
@@ -554,23 +605,25 @@ describe('AgentSideChat', () => {
         fireEvent.click(screen.getByRole('button', {name: '发送'}));
 
         await screen.findByText(/已汇总全部设备。/);
-        expect(send.mock.calls[0][0]).toContain('"node_id":"node-166"');
-        expect(send.mock.calls[0][0]).toContain('"node_id":"node-151"');
-        expect(send.mock.calls[0][0]).toContain('"device_count":29');
-        expect(send.mock.calls[0][0]).toContain('"name":"Camera 7"');
-        const inventory = JSON.parse(send.mock.calls[0][0].split('\n')[1])[0].device_inventory;
-        expect(inventory.devices.map(device => device.name)).toEqual(nodes[0].device_inventory.devices.map(device => device.name));
-        expect(inventory.devices.map(device => device.ip_address)).toEqual(
-            nodes[0].device_inventory.devices.map(device => device.ip_address ?? null),
-        );
-        expect(inventory.truncated).toBe(false);
+        expect(send.mock.calls[0][0]).toContain('"node-166"');
+        expect(send.mock.calls[0][0]).toContain('"node-151"');
+        expect(send.mock.calls[0][0]).not.toContain('"name":"Camera 7"');
+        const summary = JSON.parse(send.mock.calls[0][0].split('\n')[1]);
+        expect(summary.rows[0][summary.columns.indexOf('devices')]).toBe(29);
+        expect(summary.rows[1][summary.columns.indexOf('online')]).toBe(false);
+        expect(summary.device_details_included).toBe(false);
         expect(send.mock.calls[0][0]).not.toContain('camera.stream.v1');
         expect(send.mock.calls[0][0]).toContain('用户消息：@全部节点 汇总状态');
 
         fireEvent.change(composer, {target: {value: '@baoxin-166-windows 输出完整的相关设备表格'}});
         fireEvent.click(screen.getByRole('button', {name: '发送'}));
         await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
-        expect(JSON.parse(send.mock.calls[1][0].split('\n')[1]).device_inventory).toEqual(inventory);
+        const details = JSON.parse(send.mock.calls[1][0].split('\n')[1]).device_inventory;
+        expect(details.devices.map(device => device.name)).toEqual(nodes[0].device_inventory.devices.map(device => device.name));
+        expect(details.devices.map(device => device.ip_address)).toEqual(
+            nodes[0].device_inventory.devices.map(device => device.ip_address ?? null),
+        );
+        expect(details.truncated).toBe(false);
     });
 
     it('quick scans services and basic resources for every device', async () => {
@@ -600,6 +653,34 @@ describe('AgentSideChat', () => {
                         memory_used_mb: 23_000,
                         utilization_percent: 20,
                         temperature_celsius: 90,
+                    }],
+                },
+            },
+            {
+                node_id: 'node-jetson',
+                name: 'AIPACK-07',
+                online: true,
+                capabilities: ['runtime.read.v1'],
+                network: {online: false, ssh_available: true},
+                network_dependencies: [],
+                resources: {
+                    cpu_logical: 8,
+                    cpu_percent: 21,
+                    load_average_1m: null,
+                    memory_total_bytes: 30 * 1024 ** 3,
+                    memory_available_bytes: 24 * 1024 ** 3,
+                    disk_total_bytes: 54 * 1024 ** 3,
+                    disk_free_bytes: 23 * 1024 ** 3,
+                    network_receive_bytes_per_second: 857 * 1024,
+                    network_send_bytes_per_second: 319 * 1024,
+                    gpus: [{
+                        index: 0,
+                        uuid: 'JETSON-INTEGRATED-GPU-0',
+                        name: 'Jetson AGX Orin Developer Kit Integrated GPU',
+                        memory_total_mb: 0,
+                        memory_used_mb: 0,
+                        utilization_percent: 48,
+                        temperature_celsius: 46,
                     }],
                 },
             },
@@ -658,15 +739,69 @@ describe('AgentSideChat', () => {
         const table = await screen.findByRole('table');
         expect(table).toHaveTextContent('节点服务状态CPUMEMGPUDISKNETWORK结果');
         expect(table).toHaveTextContent('baoxin-166-windows1/295%90%20% · 90°C · 显存 96%95% · 50.0 GB 可用故障');
+        expect(table).toHaveTextContent('AIPACK-071/221%20%48% · 46°C · 共享系统内存 6.0 GB / 30.0 GB（整机）57% · 23.0 GB 可用故障');
         expect(table).toHaveTextContent('CPU 95%、内存 90%、GPU 温度 90°C、GPU 显存 96%、磁盘 95%、网络、推理服务');
         expect(table).toHaveTextContent('shanghai-151-linux——————故障：未收到节点心跳');
         expect(runtime).toHaveBeenCalledWith('node-166');
+        expect(runtime).toHaveBeenCalledWith('node-jetson');
         expect(send).not.toHaveBeenCalled();
         expect(recordTurn).toHaveBeenCalledWith(
             '@全部节点 快速扫描',
             expect.stringContaining('| 节点 | 服务状态 | CPU | MEM | GPU | DISK | NETWORK | 结果 |'),
             undefined,
         );
+        expect(recordTurn.mock.calls[0][1]).toContain('故障计数（确定性汇总）');
+        expect(recordTurn.mock.calls[0][1]).toContain('网络 2/3');
+        expect(recordTurn.mock.calls[0][1]).toContain('推理服务 2/3');
+    });
+
+    it.each([
+        ['AIPACK-07', true, false, 'normal', true],
+        ['AIPACK-07', false, true, 'normal', false],
+        ['AIPACK-07', true, false, 'fault', false],
+        ['baosight-02', true, false, 'normal', true],
+        ['baosight-02', false, true, 'normal', true],
+        ['baosight-02', false, false, 'normal', false],
+        ['baosight-02', true, true, 'normal', true],
+    ])('uses the sidebar network policy when scanning %s (LAN=%s, Tailscale=%s, state=%s)', async (
+        name, lan, tailscale, communicationState, healthy,
+    ) => {
+        const node = {
+            node_id: 'scan-node', name, online: true,
+            communication_state: communicationState,
+            capabilities: ['runtime.read.v1'],
+            network: {online: tailscale, lan_ssh_available: lan, tailscale_ssh_available: tailscale},
+            network_dependencies: [],
+            resources: {
+                cpu_percent: 10, cpu_logical: 8, gpus: [],
+                memory_total_bytes: 1000, memory_available_bytes: 800,
+                disk_total_bytes: 1000, disk_free_bytes: 800,
+            },
+        } as ComputeClusterNode;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([node]);
+        jest.spyOn(ComputeClusterService, 'runtime').mockResolvedValue({
+            schema_version: 'runtime.snapshot.v1', captured_at: 1,
+            summary: {total: 1, healthy: 1, degraded: 0, unavailable: 0, task_counts: {}},
+            services: [{
+                service_id: 'node-agent', name: 'Node Service', kind: 'service', state: 'healthy',
+                version: '1', uptime_seconds: 60, restart_count: 0,
+                health: {state: 'healthy', checked_at: 1, status_code: 200, latency_ms: 1},
+                process: {pid: 1, state: 'running'},
+            }],
+        });
+        jest.spyOn(AgentChatService, 'recordTurn').mockResolvedValue('scan-history');
+        jest.spyOn(AgentChatService, 'status').mockResolvedValue({
+            status: 'ready', auth_configured: true, llm_configured: true, primary_model: 'Qwen3-Coder',
+        });
+        render(<AgentSideChat language={Language.CHINESE}/>);
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
+        const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
+        fireEvent.change(composer, {target: {value: '@全部节点 快速扫描'}});
+        fireEvent.click(screen.getByRole('button', {name: '发送'}));
+        const table = await screen.findByRole('table');
+        expect(table).toHaveTextContent(`LAN ${lan ? '正常' : '未连接'} · Tailscale ${tailscale ? '正常' : '未连接'}`);
+        expect(within(table).getAllByRole('cell').at(-1)).toHaveTextContent(healthy ? '正常' : '故障：网络');
+        expect(screen.getByText(new RegExp(`快速扫描完成：${healthy ? 1 : 0}/1`))).toBeInTheDocument();
     });
 
     it('runs fixed device commands and sends arbitrary device conversation to the LLM', async () => {
@@ -905,6 +1040,7 @@ describe('AgentSideChat', () => {
             expect.stringContaining('@baoxin-166-windows 帮我瞅瞅桌面上都有啥'),
             undefined,
             'trace-1',
+            expect.any(Function),
         );
         expect(create).toHaveBeenCalledWith('node-166', expect.objectContaining({
             operation: 'filesystem.list',
@@ -1033,6 +1169,36 @@ describe('AgentSideChat', () => {
             expect.objectContaining({id: 'trace-1'}),
             'failed',
             expect.objectContaining({error_code: 'path_not_found'}),
+        ));
+    });
+
+    it('explains an unconfigured desktop before showing an authorization card', async () => {
+        mockFilesystemCrypto();
+        const node = {
+            node_id: 'node-15', installation_id: 'installation-15',
+            name: 'AIPACK-15', online: true, capabilities: ['filesystem.list.v1'],
+        } as ComputeClusterNode;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([node]);
+        jest.spyOn(AgentChatService, 'status').mockResolvedValue({
+            status: 'ready', auth_configured: true, llm_configured: true, primary_model: 'Qwen3-Coder',
+        });
+        jest.spyOn(ComputeClusterService, 'createFilesystemAuthorization')
+            .mockRejectedValue(new Error('desktop_not_configured: node desktop directory is not configured'));
+        render(<AgentSideChat language={Language.CHINESE}/>);
+
+        act(() => { window.dispatchEvent(new Event(AGENT_CHAT_TOGGLE_EVENT)); });
+        const composer = await screen.findByRole('textbox', {name: '发送给 Agent'});
+        fireEvent.change(composer, {target: {value: '@AIPACK-15 查看桌面有什么'}});
+        fireEvent.click(screen.getByRole('button', {name: '发送'}));
+
+        expect(await screen.findByText(
+            /节点未配置桌面目录，请由管理员配置后重试。 \[desktop_not_configured\]/,
+        )).toBeInTheDocument();
+        expect(screen.queryByRole('region', {name: '节点操作授权'})).not.toBeInTheDocument();
+        await waitFor(() => expect(AgentChatService.finishTrace).toHaveBeenCalledWith(
+            expect.objectContaining({id: 'trace-1'}),
+            'failed',
+            expect.objectContaining({error_code: 'desktop_not_configured'}),
         ));
     });
 

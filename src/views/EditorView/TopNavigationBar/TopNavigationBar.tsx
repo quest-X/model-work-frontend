@@ -19,6 +19,7 @@ import {
 import {AccountCenter} from '../../AccountCenter/AccountCenter';
 import {useEscapeToClose} from '../../../hooks/useEscapeToClose';
 import {version as appVersion} from '../../../../package.json';
+import {isPopupAvailable} from '../../../utils/PopupAvailability';
 
 declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
 
@@ -51,6 +52,14 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
     );
     const productionSwitchDisabled = commercialRestricted && controlMode;
     const unavailableTitle = props.language === Language.CHINESE ? '暂未开放' : 'Not available yet';
+    const serviceButtonProps = (popup: PopupWindowType, divider = false) => {
+        const disabled = !isPopupAvailable(popup, commercialRestricted);
+        return {
+            className: `DropDownMenuContentOption ${disabled ? 'disabled' : 'active'}${divider ? ' divider' : ''}`,
+            disabled,
+            title: disabled ? unavailableTitle : undefined,
+        };
+    };
     const projectName = commercialRestricted ? '山东钢铁-宝信自动化视觉组' : props.projectData.name;
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
@@ -342,11 +351,7 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             {activeServicesDropdown === 'core' && (
                                 <div className='DropDownMenuContent ServicesDropdown'>
                                     <button type='button'
-                                        className={commercialRestricted
-                                            ? 'DropDownMenuContentOption disabled'
-                                            : 'DropDownMenuContentOption active'}
-                                        disabled={commercialRestricted}
-                                        title={commercialRestricted ? unavailableTitle : undefined}
+                                        {...serviceButtonProps(PopupWindowType.DATA_CENTER)}
                                         onClick={openDataCenter}>
                                         <div className='Marker'/>
                                         <img src='ico/api.png' alt='data-center'/>
@@ -365,33 +370,21 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                                         )}
                                     </button>
                                     <button type='button'
-                                        className={commercialRestricted
-                                            ? 'DropDownMenuContentOption disabled'
-                                            : 'DropDownMenuContentOption active'}
-                                        disabled={commercialRestricted}
-                                        title={commercialRestricted ? unavailableTitle : undefined}
+                                        {...serviceButtonProps(PopupWindowType.CALL_MODEL)}
                                         onClick={openLocalModelManager}>
                                         <div className='Marker'/>
                                         <img src='ico/ai.png' alt='local-models'/>
                                         {currentTexts.modelManagement.callModels}
                                     </button>
                                     <button type='button'
-                                        className={commercialRestricted
-                                            ? 'DropDownMenuContentOption disabled'
-                                            : 'DropDownMenuContentOption active'}
-                                        disabled={commercialRestricted}
-                                        title={commercialRestricted ? unavailableTitle : undefined}
+                                        {...serviceButtonProps(PopupWindowType.TRAINING_TASK)}
                                         onClick={openTrainingTask}>
                                         <div className='Marker'/>
                                         <img src='ico/ai.png' alt='training-task'/>
                                         {currentTexts.modelManagement.trainingTask}
                                     </button>
                                     <button type='button'
-                                        className={commercialRestricted
-                                            ? 'DropDownMenuContentOption disabled'
-                                            : 'DropDownMenuContentOption active'}
-                                        disabled={commercialRestricted}
-                                        title={commercialRestricted ? unavailableTitle : undefined}
+                                        {...serviceButtonProps(PopupWindowType.TASK_CENTER)}
                                         onClick={openTaskCenter}>
                                         <div className='Marker'/>
                                         <img src='ico/tasks.png' alt='task-center'/>
@@ -411,31 +404,21 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             {activeServicesDropdown === 'extension' && (
                                 <div className='DropDownMenuContent ServicesDropdown'>
                                     <button type='button'
-                                        className={commercialRestricted
-                                            ? 'DropDownMenuContentOption disabled'
-                                            : 'DropDownMenuContentOption active'}
-                                        disabled={commercialRestricted}
-                                        title={commercialRestricted ? unavailableTitle : undefined}
+                                        {...serviceButtonProps(PopupWindowType.VECTOR_DB)}
                                         onClick={openVectorDb}>
                                         <div className='Marker'/>
                                         <img src='ico/api.png' alt='vector-db'/>
                                         {currentTexts.modelManagement.vectorDb}
                                     </button>
                                     <button type='button'
-                                        className={commercialRestricted
-                                            ? 'DropDownMenuContentOption disabled'
-                                            : 'DropDownMenuContentOption active'}
-                                        disabled={commercialRestricted}
-                                        title={commercialRestricted ? unavailableTitle : undefined}
+                                        {...serviceButtonProps(PopupWindowType.L2G_RETRIEVAL)}
                                         onClick={openL2gRetrieval}>
                                         <div className='Marker'/>
                                         <img src='ico/ai.png' alt='l2g-retrieval'/>
                                         {currentTexts.modelManagement.l2gRetrieval}
                                     </button>
                                     <button type='button'
-                                        className={`DropDownMenuContentOption ${commercialRestricted ? 'disabled' : 'active'}${cameraConnectAvailable || computeClusterAvailable ? ' divider' : ''}`}
-                                        disabled={commercialRestricted}
-                                        title={commercialRestricted ? unavailableTitle : undefined}
+                                        {...serviceButtonProps(PopupWindowType.MODEL_INSPECTOR, cameraConnectAvailable || computeClusterAvailable)}
                                         onClick={openModelInspector}>
                                         <div className='Marker'/>
                                         <img src='ico/eye.png' alt='model-inspector'/>

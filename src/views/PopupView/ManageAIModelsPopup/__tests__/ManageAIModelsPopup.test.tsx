@@ -26,7 +26,7 @@ const createEngine = (modelType: AIModel['modelType']): AIModel => ({
     isActive: true,
 });
 
-const renderPopup = (engine: AIModel) => {
+const renderPopup = (engine: AIModel, commercialRestricted?: boolean) => {
     const updateActivePopupTypeAction = jest.fn();
     render(
         <ManageAIModelsPopup
@@ -37,12 +37,40 @@ const renderPopup = (engine: AIModel) => {
             aiModels={[engine]}
             activeModelId={engine.id}
             language={Language.CHINESE}
+            commercialRestricted={commercialRestricted}
         />
     );
     return updateActivePopupTypeAction;
 };
 
 describe('ManageAIModelsPopup provided services', () => {
+    it.each([
+        ['core', '资源中心'],
+        ['core', '推理系统'],
+        ['core', '训练系统'],
+        ['core', '任务中心'],
+        ['extension', '向量数据库'],
+        ['extension', '视觉检索'],
+        ['extension', '透视'],
+    ] as const)('blocks the restricted %s service %s', (type, name) => {
+        const updatePopup = renderPopup(createEngine(type), true);
+        const button = screen.getByRole('button', {name, exact: true});
+        expect(button).toBeDisabled();
+        expect(button).toHaveAttribute('title', '暂未开放');
+        fireEvent.click(button);
+        expect(updatePopup).not.toHaveBeenCalled();
+    });
+
+    it('keeps engine setup and released extension services available', () => {
+        const updatePopup = renderPopup(createEngine('extension'), true);
+        fireEvent.click(screen.getByRole('button', {name: 'add', exact: true}));
+        expect(updatePopup).toHaveBeenLastCalledWith(PopupWindowType.MODEL_ENGINE);
+        fireEvent.click(screen.getByRole('button', {name: '连接相机', exact: true}));
+        expect(updatePopup).toHaveBeenLastCalledWith(PopupWindowType.CAMERA_CONNECT);
+        fireEvent.click(screen.getByRole('button', {name: '计算群', exact: true}));
+        expect(updatePopup).toHaveBeenLastCalledWith(PopupWindowType.COMPUTE_CLUSTER);
+    });
+
     it('shows concrete core service names and opens their actual popups', () => {
         const updatePopup = renderPopup(createEngine('core'));
 

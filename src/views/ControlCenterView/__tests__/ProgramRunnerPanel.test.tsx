@@ -1,8 +1,10 @@
 import React from 'react';
-import {fireEvent, render, screen, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {
     ComputeClusterNode,
     ComputeClusterService,
+    ComputeProgramOverflowStatistics,
 } from '../../../services/ComputeClusterService';
 import {MachineHistoryService} from '../../../services/MachineHistoryService';
 import {ProgramRunnerPanel} from '../ProgramRunnerPanel';
@@ -68,6 +70,7 @@ describe('ProgramRunnerPanel', () => {
     });
 
     afterEach(() => {
+        jest.useRealTimers();
         global.fetch = originalFetch;
         jest.restoreAllMocks();
     });
@@ -249,7 +252,7 @@ describe('ProgramRunnerPanel', () => {
                     kind: 'data',
                     content_type: 'application/json; charset=utf-8',
                     size_bytes: 34,
-                    modified_at: today - 2,
+                    modified_at: today + 1,
                 }, {
                     artifact_id: 'd'.repeat(32),
                     name: 'ixcom.jsonl',
@@ -359,7 +362,7 @@ describe('ProgramRunnerPanel', () => {
         });
         const toggleMaximized = jest.fn();
 
-        const {unmount} = render(<ProgramRunnerPanel
+        const {unmount, rerender} = render(<ProgramRunnerPanel
             node={node}
             zh
             maximized={false}
@@ -428,10 +431,14 @@ describe('ProgramRunnerPanel', () => {
         expect(endpoints).not.toHaveTextContent('节点服务');
         expect(endpoints).not.toHaveTextContent('任务执行器');
         expect(inventory).not.toHaveBeenCalled();
+        expect(jest.mocked(global.fetch).mock.calls.some(([url]) =>
+            String(url).includes('/artifacts/')
+        )).toBe(false);
 
         fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
         expect(within(dialog).getByLabelText('筛选结果日期')).toHaveValue(todayValue);
         const artifacts = await within(dialog).findByLabelText('程序结果');
+        fireEvent.click(within(artifacts).getByRole('button', {name: /017.mp4/}));
         const resultFolder = within(artifacts).getByLabelText('结果文件夹 017');
         expect(resultFolder.parentElement).toHaveAttribute('open');
         expect(resultFolder.parentElement).toHaveTextContent('5 个文件');
@@ -440,7 +447,7 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(resultFolder);
         expect(resultFolder.parentElement).toHaveAttribute('open');
         expect(artifacts).toHaveTextContent('017.mp4');
-        expect(within(dialog).getByRole('status', {name: '在线 · 结果预览期间暂停状态刷新'}))
+        expect(within(dialog).getByRole('status', {name: '在线 · 基础状态每 5 秒刷新'}))
             .toBeInTheDocument();
         expect(jest.mocked(ComputeClusterService.runtime).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.programs).mock.calls[0][1]?.aborted).toBe(true);
@@ -505,7 +512,12 @@ describe('ProgramRunnerPanel', () => {
 
         expect(within(dialog).queryByRole('button', {name: '刷新程序运行器'})).not.toBeInTheDocument();
 
-        fireEvent.click(within(dialog).getByRole('button', {name: '电文'}));
+        const previewFetches = jest.mocked(global.fetch).mock.calls.length;
+        const previewSignal = jest.mocked(global.fetch).mock.calls[previewFetches - 1][1]?.signal;
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', {name: '电文'}));
+        });
+        expect(previewSignal?.aborted).toBe(true);
         const telegrams = await within(dialog).findByLabelText('程序电文');
         expect(telegrams).not.toHaveTextContent('Task execution started');
         expect(telegrams).not.toHaveTextContent('Program started');
@@ -529,11 +541,42 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(dialog).getByRole('button', {name: '统计'}));
         const statisticsView = await within(dialog).findByLabelText('大炉口溢渣统计');
         expect(await within(statisticsView).findAllByText('溢渣次数')).toHaveLength(2);
+        const user = userEvent.setup();
+        const peakHour = within(statisticsView).getByRole('img', {name: '09:00 - 10:00 · 溢渣 2 次'});
+        const emptyHour = within(statisticsView).getByRole('img', {name: '00:00 - 01:00 · 溢渣 0 次'});
+        expect(within(statisticsView).getAllByRole('img')).toHaveLength(24);
+        expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+        await user.hover(peakHour);
+        expect(await screen.findByRole('tooltip')).toHaveTextContent('09:00 - 10:00 · 溢渣 2 次');
+        await user.unhover(peakHour);
+        await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+        await user.hover(emptyHour);
+        expect(await screen.findByRole('tooltip')).toHaveTextContent('00:00 - 01:00 · 溢渣 0 次');
+        await user.unhover(emptyHour);
+        await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+
+        act(() => within(statisticsView).getByRole('img', {name: '22:00 - 23:00 · 溢渣 0 次'}).focus());
+        await user.tab();
+        const lastHour = within(statisticsView).getByRole('img', {name: '23:00 - 24:00 · 溢渣 0 次'});
+        expect(lastHour).toHaveFocus();
+        expect(await screen.findByRole('tooltip', {name: '23:00 - 24:00 · 溢渣 0 次'})).toBeVisible();
+        await user.keyboard('{Escape}');
+        await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+        act(() => lastHour.blur());
+
+        rerender(<ProgramRunnerPanel node={node} zh={false} maximized={false} onToggleMaximized={toggleMaximized}/>);
+        await user.hover(screen.getByRole('img', {name: '09:00 - 10:00 · 2 overflow events'}));
+        expect(await screen.findByRole('tooltip')).toHaveTextContent('09:00 - 10:00 · 2 overflow events');
+        await user.unhover(screen.getByRole('img', {name: '09:00 - 10:00 · 2 overflow events'}));
+        await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+        rerender(<ProgramRunnerPanel node={node} zh maximized={false} onToggleMaximized={toggleMaximized}/>);
+
         expect(within(statisticsView).queryByLabelText('统计日历')).not.toBeInTheDocument();
         fireEvent.click(within(statisticsView).getByRole('button', {
             name: `选择统计日期 ${todayValue}`,
         }));
-        const calendar = await within(statisticsView).findByLabelText('统计日历');
+        const calendar = await screen.findByLabelText('统计日历');
+        expect(statisticsView).not.toContainElement(calendar);
         const selectedDate = await within(calendar).findByRole('button', {
             name: new RegExp(`统计日期 ${todayValue}，4 次溢渣`),
         });
@@ -558,6 +601,13 @@ describe('ProgramRunnerPanel', () => {
             -new Date().getTimezoneOffset(),
             expect.any(AbortSignal),
         );
+        fireEvent.click(within(statisticsView).getByRole('button', {name: '导出统计'}));
+        expect(screen.getByLabelText('开始日期')).toHaveValue(todayValue);
+        expect(screen.getByLabelText('结束日期')).toHaveValue(todayValue);
+        fireEvent.click(screen.getByRole('button', {name: '取消'}));
+        await within(dialog).findByRole('button', {name: '历史'});
+        const programCalls = jest.mocked(ComputeClusterService.programs).mock.calls.length;
+        const runtimeCalls = jest.mocked(ComputeClusterService.runtime).mock.calls.length;
 
         fireEvent.click(within(dialog).getByRole('button', {name: '历史'}));
         const history = await within(dialog).findByLabelText('机器历史');
@@ -568,6 +618,24 @@ describe('ProgramRunnerPanel', () => {
             node.node_id,
             expect.any(AbortSignal),
         );
+        expect(global.fetch).toHaveBeenCalledTimes(previewFetches);
+        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(programCalls);
+        expect(ComputeClusterService.runtime).toHaveBeenCalledTimes(runtimeCalls);
+
+        statistics.mockImplementation(() => new Promise(() => undefined));
+        fireEvent.click(within(dialog).getByRole('button', {name: '统计'}));
+        expect(within(dialog).getByLabelText('大炉口溢渣统计')).toHaveTextContent('12 / 100');
+        expect(within(dialog).queryByText('正在读取缓存统计…')).not.toBeInTheDocument();
+        fireEvent.click(within(dialog).getByRole('button', {name: `选择统计日期 ${todayValue}`}));
+        const previousMonth = within(screen.getByLabelText('统计日历')).getByRole('button', {name: '上个月'});
+        fireEvent.click(previousMonth);
+        const anotherDate = within(screen.getByLabelText('统计日历')).getAllByRole('button', {name: /^统计日期 /})[0];
+        fireEvent.click(anotherDate);
+        expect(within(dialog).getByText('正在读取缓存统计…')).toBeInTheDocument();
+        expect(within(dialog).getByLabelText('大炉口溢渣统计')).not.toHaveTextContent('12 / 100');
+        fireEvent.click(within(dialog).getByRole('button', {name: '程序', exact: true}));
+        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(programCalls + 1);
+        expect(ComputeClusterService.runtime).toHaveBeenCalledTimes(runtimeCalls + 1);
 
         fireEvent.click(within(dialog).getByRole('button', {name: '放大程序运行器窗口'}));
         expect(toggleMaximized).toHaveBeenCalledTimes(1);
@@ -576,6 +644,137 @@ describe('ProgramRunnerPanel', () => {
         expect(jest.mocked(ComputeClusterService.runtime).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.programs).mock.calls[0][1]?.aborted).toBe(true);
         expect(jest.mocked(ComputeClusterService.runtimeEvents).mock.calls[0][3]?.aborted).toBe(true);
+    });
+
+    it('preloads recent calendar days before opening and retains results when collapsed', async () => {
+        jest.spyOn(Date, 'now').mockReturnValue(new Date(2026, 8, 25, 12).getTime());
+        jest.spyOn(ComputeClusterService, 'runtime').mockResolvedValue({
+            schema_version: 'runtime.snapshot.v1', captured_at: 101,
+            summary: {total: 0, healthy: 0, degraded: 0, unavailable: 0, task_counts: {}}, services: [],
+        });
+        jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
+            schema_version: 'runtime.programs.v1', captured_at: 101, invalid_manifests: 0,
+            programs: [{
+                program_id: 'dlk-overflow', name: 'DLK', version: '1', root: '/dlk', environment: '/dlk',
+                mode: 'production', encryption: 'plain', state: 'healthy',
+                service: {name: 'dlk', state: 'running', pid: 1, uptime_seconds: 1},
+                health: {state: 'healthy', checked_at: 101, status_code: 200, latency_ms: 1},
+                interfaces: [], events: [], artifacts: [],
+            }],
+        });
+        const day = (date: string, offset: number): ComputeProgramOverflowStatistics => ({
+            schema_version: 'runtime.program-overflow-statistics.v1', captured_at: 101,
+            program_id: 'dlk-overflow', date, timezone_offset_minutes: offset,
+            total_frames: date.endsWith('-24') ? 0 : 100, overflow_frames: 0,
+            episodes: {small: 0, medium: 0, large: 0, unknown: 0},
+            hourly: Array(24).fill(0), latest_overflow_at: null, heats: [],
+        });
+        let resolveRecent: () => void;
+        let rejectOlder: () => void;
+        let olderAttempts = 0;
+        let active = 0;
+        let maxActive = 0;
+        const statistics = jest.spyOn(ComputeClusterService, 'programOverflowStatistics')
+            .mockImplementation((nodeId, _, date, offset) => {
+                if (nodeId === 'calendar-other-node') return new Promise(() => undefined);
+                if (date === '2026-09-25') return Promise.resolve(day(date, offset));
+                active += 1;
+                maxActive = Math.max(active, maxActive);
+                const result = date === '2026-09-24'
+                    ? new Promise<ComputeProgramOverflowStatistics>(resolve => {
+                        resolveRecent = () => resolve(day(date, offset));
+                    })
+                    : date === '2026-09-23' && olderAttempts++ === 0
+                        ? new Promise<ComputeProgramOverflowStatistics>((resolve, reject) => {
+                            rejectOlder = () => reject(new Error('HTTP 503'));
+                        })
+                        : Promise.resolve(day(date, offset));
+                return result.finally(() => { active -= 1; });
+            });
+        const calendarNode = {...node, node_id: 'calendar-preload'};
+        const props = {node: calendarNode, zh: true, maximized: false, onToggleMaximized: jest.fn()};
+        const panel = render(<ProgramRunnerPanel {...props}/>);
+        await screen.findByText('暂无程序状态');
+        fireEvent.click(screen.getByRole('button', {name: '统计'}));
+        await waitFor(() => expect(statistics).toHaveBeenCalledTimes(3));
+        expect(statistics.mock.calls.map(call => call[2])).toEqual(['2026-09-25', '2026-09-24', '2026-09-23']);
+        expect(screen.queryByLabelText('统计日历')).not.toBeInTheDocument();
+
+        const calendarButton = screen.getByRole('button', {name: '选择统计日期 2026-09-25'});
+        await userEvent.click(calendarButton);
+        let calendar = screen.getByLabelText('统计日历');
+        expect(panel.container).not.toContainElement(calendar);
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-24，待读取'})).toHaveClass('pending');
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-24，待读取'})).toHaveTextContent(/^24$/);
+        expect(within(calendar).queryByText('... 待读取')).not.toBeInTheDocument();
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-26，未来日期'})).toBeDisabled();
+        fireEvent.keyDown(window, {key: 'Escape'});
+        expect(screen.queryByLabelText('统计日历')).not.toBeInTheDocument();
+        expect(screen.getByRole('dialog', {name: 'AIPACK-13 程序运行器'})).toBeInTheDocument();
+        expect(calendarButton).toHaveFocus();
+        expect(statistics.mock.calls[1][4].aborted).toBe(false);
+        expect(statistics.mock.calls[2][4].aborted).toBe(false);
+        await act(async () => resolveRecent());
+        await waitFor(() => expect(statistics).toHaveBeenCalledTimes(25));
+        expect(maxActive).toBe(2);
+
+        fireEvent.click(calendarButton);
+        calendar = screen.getByLabelText('统计日历');
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-24，无统计记录'})).toHaveClass('empty');
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-22，0 次溢渣'})).toHaveClass('recorded');
+        expect(within(calendar).getByRole('status')).toHaveTextContent('当月读取 24 / 25');
+        expect(within(calendar).queryByText('... 待读取')).not.toBeInTheDocument();
+        expect(within(calendar).queryByText('当月已读取完成')).not.toBeInTheDocument();
+        await act(async () => rejectOlder());
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-23，读取失败'})).toHaveClass('failed');
+        expect(within(calendar).getByRole('status')).toHaveTextContent('25 / 25 · 1 天失败');
+        expect(within(calendar).queryByText('... 待读取')).not.toBeInTheDocument();
+        expect(within(calendar).queryByText('当月已读取完成')).not.toBeInTheDocument();
+        fireEvent.click(within(calendar).getByRole('button', {name: '重试失败日期'}));
+        await within(calendar).findByRole('button', {name: '统计日期 2026-09-23，0 次溢渣'});
+        expect(statistics.mock.calls.filter(call => call[2] === '2026-09-24')).toHaveLength(1);
+        expect(within(calendar).queryByRole('button', {name: '重试失败日期'})).not.toBeInTheDocument();
+        expect(within(calendar).getByRole('status')).toHaveTextContent('当月已读取完成');
+        expect(within(calendar).queryByText('... 待读取')).not.toBeInTheDocument();
+        expect(within(calendar).queryByText('- 无统计记录')).not.toBeInTheDocument();
+
+        panel.rerender(<ProgramRunnerPanel {...props} zh={false}/>);
+        calendar = screen.getByLabelText('Statistics calendar');
+        expect(within(calendar).getByRole('status')).toHaveTextContent('Month loaded');
+        expect(within(calendar).queryByText('... Not read')).not.toBeInTheDocument();
+        expect(within(calendar).queryByText('- No statistics records')).not.toBeInTheDocument();
+
+        panel.rerender(<ProgramRunnerPanel {...props} node={{...calendarNode, node_id: 'calendar-other-node'}}/>);
+        fireEvent.click(screen.getByRole('button', {name: '统计'}));
+        fireEvent.click(await screen.findByRole('button', {name: '选择统计日期 2026-09-25'}));
+        calendar = screen.getByLabelText('统计日历');
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-09-24，待读取'})).toHaveClass('pending');
+        expect(within(calendar).queryByText('... 待读取')).not.toBeInTheDocument();
+        fireEvent.click(within(calendar).getByRole('button', {name: '上个月'}));
+        expect(within(calendar).getByRole('status')).toHaveTextContent('当月读取 0 / 31');
+        expect(within(calendar).getByRole('button', {name: '统计日期 2026-08-31，待读取'})).toHaveTextContent(/^31$/);
+        expect(within(calendar).queryByText('... 待读取')).not.toBeInTheDocument();
+        panel.unmount();
+        expect(statistics.mock.calls.filter(call => call[0] === 'calendar-other-node')
+            .every(call => call[4].aborted)).toBe(true);
+    });
+
+    it('renders history status without waiting for the object list', async () => {
+        jest.spyOn(MachineHistoryService, 'status').mockResolvedValue({
+            schema_version: 'machine-history.status.v1',
+            encrypted: true, objects: 2, versions: 4, plaintext_bytes: 2048,
+        });
+        jest.spyOn(MachineHistoryService, 'objects').mockImplementation(() => new Promise(() => undefined));
+        render(<ProgramRunnerPanel
+            node={{...node, node_id: 'history-pending-list', capabilities: ['machine.history.read.v1']}}
+            zh
+            maximized={false}
+            onToggleMaximized={jest.fn()}
+        />);
+        fireEvent.click(screen.getByRole('button', {name: '历史'}));
+        expect(await screen.findByText('已加密')).toBeInTheDocument();
+        expect(screen.queryByText('正在读取机器历史…')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '刷新机器历史'})).toBeDisabled();
     });
 
     it('shows the last node snapshot immediately when reopened', async () => {
@@ -636,6 +835,7 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(reopenedDialog).getByRole('button', {name: '结果'}));
         expect(within(reopenedDialog).getByText('暂无录像、图片或数据文件')).toBeInTheDocument();
         expect(within(reopenedDialog).queryByText(/正在读取程序结果/)).not.toBeInTheDocument();
+        expect(runtime).toHaveBeenCalledTimes(3);
         reopened.unmount();
 
         render(<ProgramRunnerPanel
@@ -651,10 +851,11 @@ describe('ProgramRunnerPanel', () => {
         expect(within(offlineDialog).getAllByText('Cached Service').length).toBeGreaterThan(0);
         fireEvent.click(within(offlineDialog).getByRole('button', {name: '日志'}));
         expect(within(offlineDialog).getByLabelText('程序日志')).toBeInTheDocument();
-        expect(runtime).toHaveBeenCalledTimes(2);
+        expect(runtime).toHaveBeenCalledTimes(3);
     });
 
     it('shows request completion progress while results are loading', async () => {
+        jest.useFakeTimers();
         let resolveRuntime!: (value: Awaited<ReturnType<typeof ComputeClusterService.runtime>>) => void;
         let resolvePrograms!: (value: Awaited<ReturnType<typeof ComputeClusterService.programs>>) => void;
         jest.spyOn(ComputeClusterService, 'runtime').mockImplementation(() =>
@@ -698,6 +899,13 @@ describe('ProgramRunnerPanel', () => {
         expect(within(dialog).getByText('正在读取受控程序目录… 50%')).toBeInTheDocument();
         expect(runtimeEvents).not.toHaveBeenCalled();
 
+        await act(async () => { jest.advanceTimersByTime(5000); });
+        expect(ComputeClusterService.runtime).toHaveBeenCalledTimes(2);
+        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(1);
+        await act(async () => { jest.advanceTimersByTime(10000); });
+        expect(ComputeClusterService.runtime).toHaveBeenCalledTimes(2);
+        expect(ComputeClusterService.programs).toHaveBeenCalledTimes(1);
+
         fireEvent.click(within(dialog).getByRole('button', {name: '结果'}));
         expect(await within(dialog).findByText('正在读取程序结果… 50%')).toBeInTheDocument();
 
@@ -709,5 +917,115 @@ describe('ProgramRunnerPanel', () => {
         });
         expect(await within(dialog).findByText('暂无录像、图片或数据文件')).toBeInTheDocument();
         expect(runtimeEvents).not.toHaveBeenCalled();
+    });
+
+    it('refreshes basic status and statistics independently without rescanning programs or clearing reports', async () => {
+        jest.useFakeTimers();
+        jest.setSystemTime(new Date(2026, 8, 25, 12));
+        const date = '2026-09-25';
+        let capturedAt = Math.floor(Date.now() / 1000);
+        const runtime = jest.spyOn(ComputeClusterService, 'runtime').mockImplementation(async () => ({
+            schema_version: 'runtime.snapshot.v1', captured_at: ++capturedAt,
+            summary: {total: 0, healthy: 0, degraded: 0, unavailable: 0, task_counts: {}}, services: [],
+        }));
+        const programs = jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
+            schema_version: 'runtime.programs.v1', captured_at: capturedAt, invalid_manifests: 0,
+            programs: [{
+                program_id: 'dlk-overflow', name: 'DLK', version: '1', root: '/dlk', environment: '/dlk',
+                mode: 'production', encryption: 'plain', state: 'healthy',
+                service: {name: 'dlk', state: 'running', pid: 1, uptime_seconds: 1},
+                health: {state: 'healthy', checked_at: capturedAt, status_code: 200, latency_ms: 1},
+                interfaces: [], events: [], artifacts: [],
+            }],
+        });
+        const runtimeEvents = jest.spyOn(ComputeClusterService, 'runtimeEvents');
+        const day = (requestedDate: string, offset: number): ComputeProgramOverflowStatistics => ({
+            schema_version: 'runtime.program-overflow-statistics.v1', captured_at: capturedAt,
+            program_id: 'dlk-overflow', date: requestedDate, timezone_offset_minutes: offset,
+            total_frames: 100, overflow_frames: 12,
+            episodes: {small: 1, medium: 0, large: 0, unknown: 0},
+            hourly: Array(24).fill(0), latest_overflow_at: null, heats: [],
+        });
+        let resolveStatistics!: (value: ComputeProgramOverflowStatistics) => void;
+        let rejectStatistics!: (reason: Error) => void;
+        const statistics = jest.spyOn(ComputeClusterService, 'programOverflowStatistics')
+            .mockImplementation((_, __, requestedDate, offset) => requestedDate !== date
+                ? Promise.resolve(day(requestedDate, offset))
+                : new Promise((resolve, reject) => {
+                    resolveStatistics = resolve;
+                    rejectStatistics = reject;
+                }));
+        const currentReads = () => statistics.mock.calls.filter(call => call[2] === date);
+        const props = {
+            node: {...node, node_id: 'aipack-live-statistics'}, zh: true,
+            maximized: false, onToggleMaximized: jest.fn(),
+        };
+        const panel = render(<ProgramRunnerPanel {...props}/>);
+        await act(async () => undefined);
+        fireEvent.click(screen.getByRole('button', {name: '统计'}));
+        await act(async () => undefined);
+        expect(screen.getByText('正在读取缓存统计…')).toBeInTheDocument();
+        const report = screen.getByLabelText('大炉口溢渣统计');
+        const initialRuntimeCalls = runtime.mock.calls.length;
+
+        await act(async () => { jest.advanceTimersByTime(5000); });
+        expect(runtime).toHaveBeenCalledTimes(initialRuntimeCalls + 1);
+        expect(currentReads()).toHaveLength(1);
+        expect(programs).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('status', {name: '在线 · 基础状态每 5 秒刷新'}).parentElement)
+            .toHaveTextContent(new Date(capturedAt * 1000).toLocaleString('zh-CN'));
+
+        const first = day(date, -new Date(`${date}T12:00:00`).getTimezoneOffset());
+        await act(async () => resolveStatistics(first));
+        expect(report).toHaveTextContent('12 / 100');
+        await act(async () => { jest.advanceTimersByTime(5000); });
+        expect(currentReads()).toHaveLength(2);
+        expect(report).toHaveTextContent('12 / 100');
+        await act(async () => rejectStatistics(new Error('HTTP 503')));
+        expect(report).toHaveTextContent('12 / 100');
+        expect(within(report).getByRole('status')).toHaveTextContent('显示上次统计，正在重试');
+
+        await act(async () => { jest.advanceTimersByTime(5000); });
+        expect(currentReads()).toHaveLength(3);
+        await act(async () => resolveStatistics({...first, total_frames: 200, overflow_frames: 24}));
+        expect(report).toHaveTextContent('24 / 200');
+        expect(within(report).queryByText(/刷新失败/)).not.toBeInTheDocument();
+        expect(screen.queryByText('正在读取缓存统计…')).not.toBeInTheDocument();
+        expect(programs).toHaveBeenCalledTimes(1);
+        expect(runtimeEvents).not.toHaveBeenCalled();
+
+        runtime.mockRejectedValueOnce(new Error('status timeout'));
+        await act(async () => { jest.advanceTimersByTime(5000); });
+        expect(screen.getByRole('status', {name: '在线 · 状态刷新失败，正在重试'})).toBeInTheDocument();
+        expect(report).toHaveTextContent('24 / 200');
+        const pendingRead = currentReads()[currentReads().length - 1];
+        const resolvePreviousDate = resolveStatistics;
+        fireEvent.click(screen.getByRole('button', {name: `选择统计日期 ${date}`}));
+        fireEvent.click(screen.getByRole('button', {name: '统计日期 2026-09-24，1 次溢渣'}));
+        await act(async () => undefined);
+        expect(pendingRead[4].aborted).toBe(true);
+        expect(report).toHaveTextContent('12 / 100');
+        await act(async () => resolvePreviousDate({...first, total_frames: 999}));
+        expect(report).toHaveTextContent('12 / 100');
+        expect(report).not.toHaveTextContent('999');
+        panel.rerender(<ProgramRunnerPanel {...props} node={{...props.node, online: false}}/>);
+        expect(report).toHaveTextContent('12 / 100');
+        const stoppedRuntimeCalls = runtime.mock.calls.length;
+        const stoppedStatisticsCalls = statistics.mock.calls.length;
+        await act(async () => { jest.advanceTimersByTime(15000); });
+        expect(runtime).toHaveBeenCalledTimes(stoppedRuntimeCalls);
+        expect(statistics).toHaveBeenCalledTimes(stoppedStatisticsCalls);
+
+        panel.rerender(<ProgramRunnerPanel {...props}/>);
+        await act(async () => undefined);
+        expect(screen.getByRole('status', {name: '在线 · 基础状态每 5 秒刷新'})).toBeInTheDocument();
+        panel.unmount();
+        expect(runtime.mock.calls.every(call => call[1].aborted)).toBe(true);
+        expect(statistics.mock.calls.every(call => call[4].aborted)).toBe(true);
+        const closedRuntimeCalls = runtime.mock.calls.length;
+        const closedStatisticsCalls = statistics.mock.calls.length;
+        await act(async () => { jest.advanceTimersByTime(15000); });
+        expect(runtime).toHaveBeenCalledTimes(closedRuntimeCalls);
+        expect(statistics).toHaveBeenCalledTimes(closedStatisticsCalls);
     });
 });

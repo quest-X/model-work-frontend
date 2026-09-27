@@ -218,6 +218,8 @@ const bytesPerSecond = (value: number | null, zh: boolean): string => value === 
     ? (zh ? '未上报' : 'Not reported')
     : `${bytes(value, zh)}/s`;
 
+// The branching only formats dedicated, shared, or missing GPU telemetry.
+// eslint-disable-next-line complexity
 const gpuMetricDetail = (
     node: ComputeClusterNode | undefined,
     memoryUsedMb: number,
@@ -231,15 +233,20 @@ const gpuMetricDetail = (
         }
         return zh ? '未检测到 GPU' : 'No GPU detected';
     }
+    const sharedMemory = node.resources.memory_total_bytes && node.resources.memory_available_bytes !== null
+        ? `${bytes(node.resources.memory_total_bytes - node.resources.memory_available_bytes, zh)} / ${bytes(node.resources.memory_total_bytes, zh)}`
+        : null;
     const memory = memoryTotalMb > 0
-        ? `${bytes(memoryUsedMb * 1024 ** 2, zh)} / ${bytes(memoryTotalMb * 1024 ** 2, zh)}`
-        : (zh ? '共享系统内存' : 'shared system memory');
+        ? `${zh ? '显存' : 'Memory'} ${bytes(memoryUsedMb * 1024 ** 2, zh)} / ${bytes(memoryTotalMb * 1024 ** 2, zh)}`
+        : zh
+            ? `无独立显存 · 共享系统内存${sharedMemory ? ` ${sharedMemory}（整机）` : ''}`
+            : `No dedicated memory · Shared system memory${sharedMemory ? ` ${sharedMemory} (whole system)` : ''}`;
     const hottest = Number.isFinite(temperature)
         ? `${temperature}°C`
         : (zh ? '未上报' : 'not reported');
     return zh
-        ? `${node.resources.gpus.length} GPU · 显存 ${memory} · 最高温度 ${hottest}`
-        : `${node.resources.gpus.length} GPU · Memory ${memory} · Hottest ${hottest}`;
+        ? `${node.resources.gpus.length} GPU · ${memory} · 最高温度 ${hottest}`
+        : `${node.resources.gpus.length} GPU · ${memory} · Hottest ${hottest}`;
 };
 
 const percentUsed = (total: number | null, available: number | null): string => {
@@ -483,6 +490,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [graphError, setGraphError] = useState('');
     const [runtimeInventory, setRuntimeInventory] = useState<ComputeRuntimeInventory | null>(null);
     const [programTones, setProgramTones] = useState<Record<string, ProgramIndicatorTone>>({});
+    const [mountedProgramNodes, setMountedProgramNodes] = useState<Set<string>>(new Set());
     const [runtimeInventoryError, setRuntimeInventoryError] = useState('');
     const [dismissedRefreshWarningKey, setDismissedRefreshWarningKey] = useState('');
     const [inspectedServiceId, setInspectedServiceId] = useState('');
@@ -533,6 +541,9 @@ export const ControlCenterView: React.FC<IProps> = ({
     const runtimeInventoryPendingNode = useRef('');
     const runtimeInventoryAbort = useRef<AbortController | null>(null);
     const conversationRequest = useRef(0);
+    const programPollingNodes = useRef(nodes);
+    programPollingNodes.current = nodes;
+    const hasProgramPollingNodes = nodes.length > 0;
     useEscapeToClose(() => {
         setInspectedServiceId('');
         if (toolOpenedFromOverview) {
@@ -678,31 +689,44 @@ export const ControlCenterView: React.FC<IProps> = ({
 
     useEffect(() => {
         // The runner polls its own node; fleet snapshots must not compete with its live stream.
-        if (!pageVisible || programRunnerOpen) return undefined;
-        const targets = nodes;
-        if (targets.length === 0) return undefined;
+        if (!pageVisible || programRunnerOpen || !hasProgramPollingNodes) return undefined;
         const controller = new AbortController();
         let inFlight = false;
         const load = async () => {
             if (inFlight) return;
             inFlight = true;
-            const entries = await Promise.all(targets.map(async node => {
-                if (!node.online) return [node.node_id, null] as const;
-                if (!node.capabilities.includes('runtime.programs.read.v1')) {
-                    return [node.node_id, null] as const;
+            const targets = [...programPollingNodes.current];
+            const poll = async () => {
+                while (targets.length && !controller.signal.aborted) {
+                    const selected = targets.findIndex(node => node.node_id === selectedNodeIdRef.current);
+                    const [node] = targets.splice(Math.max(0, selected), 1);
+                    let tone: ProgramIndicatorTone | null | undefined;
+                    if (node.online && node.capabilities.includes('runtime.programs.read.v1')) {
+                        try {
+                            tone = programTone(await ComputeClusterService.programs(node.node_id, controller.signal));
+                        } catch {
+                            // A failed query cannot prove that a mounted program was removed.
+                        }
+                    }
+                    if (controller.signal.aborted) return;
+                    setProgramTones(current => {
+                        const next = {...current};
+                        if (tone) next[node.node_id] = tone;
+                        else delete next[node.node_id];
+                        return next;
+                    });
+                    if (tone !== undefined) {
+                        setMountedProgramNodes(current => {
+                            const next = new Set(current);
+                            if (tone === null) next.delete(node.node_id);
+                            else next.add(node.node_id);
+                            return next;
+                        });
+                    }
                 }
-                try {
-                    const snapshot = await ComputeClusterService.programs(node.node_id, controller.signal);
-                    return [node.node_id, programTone(snapshot)] as const;
-                } catch {
-                    return [node.node_id, null] as const;
-                }
-            }));
-            if (!controller.signal.aborted) {
-                setProgramTones(Object.fromEntries(entries.filter(
-                    (entry): entry is readonly [string, ProgramIndicatorTone] => entry[1] !== null,
-                )));
-            }
+            };
+            // Keep browser connections available for the selected machine's interactive reads.
+            await Promise.all([poll(), poll(), poll()]);
             inFlight = false;
         };
         void load();
@@ -711,7 +735,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [nodes, pageVisible, programRunnerOpen]);
+    }, [hasProgramPollingNodes, pageVisible, programRunnerOpen]);
 
     useEffect(() => {
         if (workspace !== 'groups') return undefined;
@@ -992,10 +1016,18 @@ export const ControlCenterView: React.FC<IProps> = ({
             setRuntimeInventory(null);
             setRuntimeInventoryError('');
         }
-        if (runtimeInventoryCapable) {
-            void loadRuntimeInventory(selectedNodeId);
-        }
-    }, [loadRuntimeInventory, selectedNode, selectedNodeId]);
+    }, [runtimeInventoryCapable, selectedNodeId]);
+
+    useEffect(() => {
+        if (!inspectedServiceId || !pageVisible || !runtimeInventoryCapable) return undefined;
+        void loadRuntimeInventory(selectedNodeId);
+        return () => {
+            runtimeInventoryAbort.current?.abort();
+            runtimeInventoryAbort.current = null;
+            runtimeInventoryPendingNode.current = '';
+            runtimeInventoryRequest.current += 1;
+        };
+    }, [inspectedServiceId, loadRuntimeInventory, pageVisible, runtimeInventoryCapable, selectedNodeId]);
 
     useEffect(() => {
         if (!pendingOverviewTool || !selectedNode) return;
@@ -1019,7 +1051,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [inspectedServiceId]);
 
     useEffect(() => {
-        if (!inspectedServiceId || !selectedNodeId) return undefined;
+        if (!inspectedServiceId || !selectedNodeId || !pageVisible) return undefined;
         const timer = window.setInterval(() => {
             if (runtimeInventoryCapable) void loadRuntimeInventory(selectedNodeId);
             void refresh();
@@ -1035,6 +1067,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [
         inspectedServiceId,
         loadRuntimeInventory,
+        pageVisible,
         refresh,
         runtimeInventoryCapable,
         selectedNodeId,
@@ -1259,16 +1292,45 @@ export const ControlCenterView: React.FC<IProps> = ({
             || [device.display_name, device.hostname].some(name =>
                 name?.trim().toLowerCase() === candidate.name.trim().toLowerCase()))
     );
+    const activeNodeIds = new Set(nodes.map(node => node.node_id));
     const cameraParentAssetId = (node: ComputeClusterNode, camera: ComputeManagedDevice) =>
         lanAssets.find(asset =>
-            asset.node_id === node.node_id
-            && asset.device_kind === 'camera'
+            asset.device_kind === 'camera'
             && asset.display_name === camera.name
+            && (!camera.ip_address || asset.address === camera.ip_address)
+            && (asset.node_id === node.node_id || !activeNodeIds.has(asset.node_id))
         )?.parent_asset_id || '';
     const edgeCameras = (node: ComputeClusterNode, device: ComputeLanAsset) =>
         node.device_inventory.devices.filter(camera =>
             camera.kind === 'camera' && cameraParentAssetId(node, camera) === device.asset_id
         );
+    const discoveredEdgeCameras = (node: ComputeClusterNode, device: ComputeLanAsset) => {
+        const registered = edgeCameras(node, device);
+        return lanAssets
+            .filter(asset =>
+                asset.device_kind === 'camera'
+                && asset.parent_asset_id === device.asset_id
+                && !registered.some(camera =>
+                    camera.name === asset.display_name
+                    && (!camera.ip_address || camera.ip_address === asset.address)
+                )
+            )
+            .map<ComputeManagedDevice>(asset => ({
+                ip_address: asset.address,
+                device_id: asset.asset_id,
+                kind: 'camera',
+                provider: 'camera-connect',
+                name: asset.display_name || asset.hostname || asset.address,
+                model: zh ? '已发现，未注册' : 'Discovered, not registered',
+                status: asset.online ? 'online' : 'offline',
+                channels: 0,
+                capabilities: [],
+            }));
+    };
+    const edgeInventoryNode = (device: ComputeLanAsset) =>
+        nodes.find(candidate => candidate.node_id === device.node_id)
+        || nodes.find(candidate => edgeCameras(candidate, device).length > 0)
+        || installedSidebarNode(device);
     const installedSidebarNodeIds = new Set(lanAssets
         .map(device => installedSidebarNode(device)?.node_id)
         .filter((nodeId): nodeId is string => Boolean(nodeId)));
@@ -1299,7 +1361,10 @@ export const ControlCenterView: React.FC<IProps> = ({
             stateTone = machineTone(installedNode);
             stateLabel = computeNodeLabel(installedNode, zh);
         }
-        const cameras = edgeCameras(node, device);
+        const cameras = [
+            ...edgeCameras(node, device),
+            ...discoveredEdgeCameras(node, device),
+        ];
         return <React.Fragment key={device.asset_id}>
             <button
                 type='button'
@@ -1474,8 +1539,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                 return devices.length > 0 && <React.Fragment key={area.id}>
                     {renderMachineGroupHeading(groupId, zh ? area.zh : area.en, devices.length)}
                     {!collapsedMachineGroups.has(groupId) && devices.map(device => {
-                        const node = nodes.find(item => item.node_id === device.node_id);
-                        return node && renderSidebarEdge(node, device, 0, installedSidebarNode(device));
+                        const installedNode = installedSidebarNode(device);
+                        const inventoryNode = edgeInventoryNode(device);
+                        return inventoryNode && renderSidebarEdge(inventoryNode, device, 0, installedNode);
                     })}
                 </React.Fragment>;
             })}
@@ -1661,23 +1727,24 @@ export const ControlCenterView: React.FC<IProps> = ({
         </button>;
     };
 
+    const mountedProgramStatus = (node: ComputeClusterNode | undefined) => {
+        if (!node || !mountedProgramNodes.has(node.node_id)) return null;
+        const tone = node.online ? programTones[node.node_id] || 'unknown' : 'offline';
+        return {tone, label: programLabel(tone, zh)};
+    };
+
     const renderProgramRunnerCard = () => {
-        const capable = Boolean(
-            selectedNode?.online && selectedNode.capabilities.includes('runtime.read.v1'),
-        );
-        const tone: Tone = selectedNode?.online ? (capable ? 'healthy' : 'warning') : 'offline';
-        const status = selectedNode?.online
-            ? capable ? (zh ? '正常' : 'Normal') : (zh ? '待升级' : 'Upgrade required')
-            : (zh ? '故障' : 'Fault');
+        const status = mountedProgramStatus(selectedNode);
+        if (!status) return null;
         return <button
             type='button'
             className='ControlServiceCard ControlRuntimeService'
             aria-label={zh ? '打开程序运行器' : 'Open program runner'}
             onClick={() => setProgramRunnerOpen(true)}
         >
-            <span className={`ControlStatusDot ${tone}`} aria-hidden='true'/>
+            <span className={`ControlStatusDot ${status.tone}`} aria-hidden='true'/>
             <span className='ControlRuntimeIdentity'>
-                <span>{status}</span>
+                <span>{status.label}</span>
                 <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
                 <small>{zh ? '程序 · 环境 · 接口 · 状态 · 日志' : 'Programs · environments · endpoints · status · logs'}</small>
             </span>
@@ -1702,7 +1769,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             )
             : undefined;
         const cameraInventoryNode = installedEdgeDevice
-            ? nodes.find(candidate => candidate.node_id === installedEdgeDevice.node_id) || node
+            ? edgeInventoryNode(installedEdgeDevice) || node
             : node;
         const cameras = installedEdgeDevice
             ? edgeCameras(cameraInventoryNode, installedEdgeDevice)
@@ -1736,6 +1803,18 @@ export const ControlCenterView: React.FC<IProps> = ({
         const customWorkArea = geographicTags.has(regionDisplayName(storedWorkArea, zh)) ? '' : storedWorkArea;
         const workAreaTag = customWorkArea || node.labels?.site_name?.trim() || '';
         return <>
+            {error && dismissedRefreshWarningKey !== refreshWarningKey && <div
+                className='ControlRefreshWarning ControlNodeRefreshWarning'
+                role='status'
+            >
+                <span>{zh ? '本次刷新失败，正在显示上一次数据：' : 'Refresh failed; showing the last snapshot: '}{error}</span>
+                <button
+                    type='button'
+                    aria-label={zh ? '关闭刷新失败提示' : 'Dismiss refresh warning'}
+                    title={zh ? '关闭提示' : 'Dismiss warning'}
+                    onClick={() => setDismissedRefreshWarningKey(refreshWarningKey)}
+                >×</button>
+            </div>}
             <header className='ControlNodeHeader'>
                 <div>
                     <h1>{node.name}</h1>
@@ -1776,18 +1855,6 @@ export const ControlCenterView: React.FC<IProps> = ({
                         </form>}
                     </div>
                 </div>
-                {error && dismissedRefreshWarningKey !== refreshWarningKey && <div
-                    className='ControlRefreshWarning ControlNodeRefreshWarning'
-                    role='status'
-                >
-                    <span>{zh ? '本次刷新失败，正在显示上一次数据：' : 'Refresh failed; showing the last snapshot: '}{error}</span>
-                    <button
-                        type='button'
-                        aria-label={zh ? '关闭刷新失败提示' : 'Dismiss refresh warning'}
-                        title={zh ? '关闭提示' : 'Dismiss warning'}
-                        onClick={() => setDismissedRefreshWarningKey(refreshWarningKey)}
-                    >×</button>
-                </div>}
             </header>
 
             <section className='ControlSection ControlSectionFirst'>
@@ -1870,7 +1937,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </div>
                 <div className='ControlServiceGrid'>
                     {renderResourceMonitorCard()}
-                    {aipackNode && renderProgramRunnerCard()}
+                    {renderProgramRunnerCard()}
                 </div>
             </section>
 
@@ -2522,7 +2589,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 zh={zh}
                                 fitWindow
                                 onSelectWorkAgent={() => undefined}
+                                programStatus={mountedProgramStatus}
                                 onOpenNodeTool={(node, tool) => {
+                                    if (tool === 'runner' && !mountedProgramStatus(node)) return;
                                     overviewSelected.current = false;
                                     setSelectedNodeId(node.node_id);
                                     if (tool === 'terminal') {
