@@ -14,6 +14,16 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.7',
+        date: '2026-09-27',
+        changes: [
+            { zh: '【图谱】支持按设备类型和节点状态筛选，并让过滤后的关系环自适应视口', en: '[Graph] Added device-type and node-status filters with viewport fitting for filtered relationship rings' },
+            { zh: '【布局】保留固定卡片尺寸并允许适度重叠，提高密集拓扑的空间利用率', en: '[Layout] Preserved fixed card sizes while allowing limited overlap for denser topology layouts' },
+            { zh: '【平台】新增远程 Main 平台入口，并按主机能力控制可用状态', en: '[Platform] Added remote Main platform access gated by host capability' },
+            { zh: '【版本】左下角统一显示 v版本号(角色)', en: '[Version] Standardized the lower-left watermark as vVersion(Role)' },
+        ],
+    },
+    {
         version: '2.9.6',
         date: '2026-09-24',
         changes: [

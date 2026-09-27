@@ -353,7 +353,7 @@ const EditorContainer: React.FC<IProps> = (
                 style={{top: '167px'}}
             />
             <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>
-                v{appVersion} {appEdition}
+                v{appVersion}({appEdition})
             </div>
             <div
                 className='SaveButtonBottom'
