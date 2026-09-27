@@ -218,6 +218,8 @@ const bytesPerSecond = (value: number | null, zh: boolean): string => value === 
     ? (zh ? '未上报' : 'Not reported')
     : `${bytes(value, zh)}/s`;
 
+// The branching only formats dedicated, shared, or missing GPU telemetry.
+// eslint-disable-next-line complexity
 const gpuMetricDetail = (
     node: ComputeClusterNode | undefined,
     memoryUsedMb: number,
@@ -231,15 +233,20 @@ const gpuMetricDetail = (
         }
         return zh ? '未检测到 GPU' : 'No GPU detected';
     }
+    const sharedMemory = node.resources.memory_total_bytes && node.resources.memory_available_bytes !== null
+        ? `${bytes(node.resources.memory_total_bytes - node.resources.memory_available_bytes, zh)} / ${bytes(node.resources.memory_total_bytes, zh)}`
+        : null;
     const memory = memoryTotalMb > 0
-        ? `${bytes(memoryUsedMb * 1024 ** 2, zh)} / ${bytes(memoryTotalMb * 1024 ** 2, zh)}`
-        : (zh ? '共享系统内存' : 'shared system memory');
+        ? `${zh ? '显存' : 'Memory'} ${bytes(memoryUsedMb * 1024 ** 2, zh)} / ${bytes(memoryTotalMb * 1024 ** 2, zh)}`
+        : zh
+            ? `无独立显存 · 共享系统内存${sharedMemory ? ` ${sharedMemory}（整机）` : ''}`
+            : `No dedicated memory · Shared system memory${sharedMemory ? ` ${sharedMemory} (whole system)` : ''}`;
     const hottest = Number.isFinite(temperature)
         ? `${temperature}°C`
         : (zh ? '未上报' : 'not reported');
     return zh
-        ? `${node.resources.gpus.length} GPU · 显存 ${memory} · 最高温度 ${hottest}`
-        : `${node.resources.gpus.length} GPU · Memory ${memory} · Hottest ${hottest}`;
+        ? `${node.resources.gpus.length} GPU · ${memory} · 最高温度 ${hottest}`
+        : `${node.resources.gpus.length} GPU · ${memory} · Hottest ${hottest}`;
 };
 
 const percentUsed = (total: number | null, available: number | null): string => {

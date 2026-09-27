@@ -1396,7 +1396,7 @@ describe('ControlCenterView', () => {
         await screen.findByRole('heading', {name: 'Integrated GPU'});
         fireEvent.click(screen.getByRole('button', {name: '打开资源监视器'}));
         expect(screen.getByRole('dialog', {name: 'Integrated GPU 资源监视器'}))
-            .toHaveTextContent('显存 共享系统内存');
+            .toHaveTextContent('无独立显存 · 共享系统内存 16.0 GB / 32.0 GB（整机）');
         expect(screen.getByRole('img', {name: 'Windows'}).querySelector('image')).toHaveAttribute('href', '/ico/system-windows.svg');
         expect(screen.getByRole('img', {name: 'Linux'}).querySelector('image')).toHaveAttribute('href', '/ico/system-linux.svg');
         expect(screen.getByRole('img', {name: 'macOS'}).querySelector('image')).toHaveAttribute('href', '/ico/system-macos.svg');

@@ -739,7 +739,7 @@ describe('AgentSideChat', () => {
         const table = await screen.findByRole('table');
         expect(table).toHaveTextContent('节点服务状态CPUMEMGPUDISKNETWORK结果');
         expect(table).toHaveTextContent('baoxin-166-windows1/295%90%20% · 90°C · 显存 96%95% · 50.0 GB 可用故障');
-        expect(table).toHaveTextContent('AIPACK-071/221%20%48% · 46°C · 显存 共享系统内存57% · 23.0 GB 可用故障');
+        expect(table).toHaveTextContent('AIPACK-071/221%20%48% · 46°C · 共享系统内存 6.0 GB / 30.0 GB（整机）57% · 23.0 GB 可用故障');
         expect(table).toHaveTextContent('CPU 95%、内存 90%、GPU 温度 90°C、GPU 显存 96%、磁盘 95%、网络、推理服务');
         expect(table).toHaveTextContent('shanghai-151-linux——————故障：未收到节点心跳');
         expect(runtime).toHaveBeenCalledWith('node-166');

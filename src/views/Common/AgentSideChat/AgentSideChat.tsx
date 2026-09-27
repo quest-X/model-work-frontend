@@ -372,8 +372,16 @@ const quickScanResources = (node: ComputeClusterNode, zh: boolean): Omit<QuickSc
     else if (disk >= QUICK_SCAN_LIMITS.diskPercent) problems.push(`${zh ? '磁盘' : 'Disk'} ${disk}%`);
     if (networkFault) problems.push(zh ? '网络' : 'Network');
 
+    const sharedMemory = node.resources.memory_total_bytes && node.resources.memory_available_bytes !== null
+        ? `${quickScanBytes(node.resources.memory_total_bytes - node.resources.memory_available_bytes)} / ${quickScanBytes(node.resources.memory_total_bytes)}`
+        : null;
+    const gpuMemoryText = gpuMemory === null
+        ? zh
+            ? `共享系统内存${sharedMemory ? ` ${sharedMemory}（整机）` : ''}`
+            : `shared system memory${sharedMemory ? ` ${sharedMemory} (whole system)` : ''}`
+        : `${zh ? '显存' : 'memory'} ${gpuMemory}%`;
     const gpu = node.resources.gpus.length
-        ? `${gpuUsage}% · ${gpuTemperature === null ? (zh ? '温度未上报' : 'temperature not reported') : `${gpuTemperature}°C`} · ${zh ? '显存' : 'memory'} ${gpuMemory === null ? (zh ? '共享系统内存' : 'shared system memory') : `${gpuMemory}%`}`
+        ? `${gpuUsage}% · ${gpuTemperature === null ? (zh ? '温度未上报' : 'temperature not reported') : `${gpuTemperature}°C`} · ${gpuMemoryText}`
         : (zh ? '无 GPU' : 'No GPU');
     const linkState = (available: boolean) => available ? (zh ? '正常' : 'Ready') : (zh ? '未连接' : 'Disconnected');
     const network = `${networkFault ? (zh ? '故障' : 'Fault') : (zh ? '正常' : 'Normal')} · LAN ${linkState(ssh.lan)} · Tailscale ${linkState(ssh.tailscale)} · ↓${bytesPerSecond(node.resources.network_receive_bytes_per_second, zh)} · ↑${bytesPerSecond(node.resources.network_send_bytes_per_second, zh)}`;
