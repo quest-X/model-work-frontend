@@ -127,7 +127,7 @@ it.each(['reconnect', 'unmount'])('ignores an old protocol directory after %s', 
     const signal = fetchDirectory.mock.calls[0][1].signal as AbortSignal;
     if (action === 'reconnect') {
         fireEvent.click(screen.getByRole('button', {name: '重新连接'}));
-        await screen.findByRole('option', {name: 'LL-HLS'});
+        await screen.findByRole('option', {name: /^LL-HLS/});
     } else {
         unmount();
     }
@@ -141,8 +141,8 @@ it.each(['reconnect', 'unmount'])('ignores an old protocol directory after %s', 
     });
     expect(readOldProtocols).not.toHaveBeenCalled();
     if (action === 'reconnect') {
-        expect(screen.queryByRole('option', {name: 'SRT'})).toBeNull();
-        expect(screen.getByRole('option', {name: 'LL-HLS'})).toBeTruthy();
+        expect(screen.queryByRole('option', {name: /^SRT/})).toBeNull();
+        expect(screen.getByRole('option', {name: /^LL-HLS/})).toBeTruthy();
         unmount();
         expect(fetchDirectory.mock.calls[1][1].signal.aborted).toBe(true);
     }
@@ -249,4 +249,42 @@ it('bounds LL-HLS first-frame loading at 30 seconds', async () => {
     act(() => { jest.advanceTimersByTime(1000); });
     expect(screen.getByText('实时画面首帧加载超时')).toBeTruthy();
     expect(hls.destroy).toHaveBeenCalledTimes(1);
+});
+
+it('shows first-frame latency and protocol availability in the selector', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(0);
+    let resolveDirectory: (value: unknown) => void;
+    global.fetch = jest.fn(() => new Promise(resolve => { resolveDirectory = resolve; }));
+    render(<ProgramLivePreview nodeId='node04' programId='dlk' name='DLK' path='/stream.mjpeg' zh/>);
+    await act(async () => {
+        resolveDirectory({
+            ok: true, json: async () => ({
+            schema_version: 'program.media.trial.v1',
+            protocols: ['mjpeg', 'hls', 'llhls', 'webrtc', 'rtsp', 'srt'],
+            }),
+        });
+        await Promise.resolve();
+    });
+    const select = screen.getByRole('combobox', {name: '播放协议'});
+    jest.setSystemTime(1000);
+    fireEvent.click(screen.getByRole('button', {name: '重新连接'}));
+    expect(screen.getByRole('option', {name: 'MJPEG (检测中)'})).toBeTruthy();
+    act(() => {
+        jest.advanceTimersByTime(240);
+        fireEvent.load(screen.getByRole('img'));
+    });
+    expect(screen.getByRole('option', {name: 'MJPEG (240 ms)'})).toBeTruthy();
+    fireEvent.change(select, {target: {value: 'hls'}});
+    expect(screen.getByRole('option', {name: 'HLS (检测中)'})).toBeTruthy();
+    act(() => {
+        jest.advanceTimersByTime(1500);
+        fireEvent.playing(document.querySelector('video'));
+    });
+    expect(screen.getByRole('option', {name: 'HLS (1.5 s)'})).toBeTruthy();
+    fireEvent.change(select, {target: {value: 'llhls'}});
+    act(() => { jest.advanceTimersByTime(31000); });
+    expect(screen.getByRole('option', {name: 'LL-HLS (不可用)'})).toBeTruthy();
+    expect(screen.getByRole('option', {name: 'RTSP (外部)'})).toBeTruthy();
+    expect(screen.getByRole('option', {name: 'SRT (外部)'})).toBeTruthy();
 });

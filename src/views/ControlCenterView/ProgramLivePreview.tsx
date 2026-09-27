@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import Hls from 'hls.js';
 import {Copy, RefreshCw} from 'lucide-react';
 import {Language} from '../../data/LanguageConfig';
@@ -9,6 +9,7 @@ import '../EditorView/CameraPlayer/CameraPlayer.scss';
 import './ProgramLivePreview.scss';
 
 type Protocol = 'mjpeg' | 'hls' | 'llhls' | 'webrtc' | 'rtsp' | 'srt';
+type ProtocolMetric = 'loading' | 'error' | number;
 type Reader = {close: () => void};
 declare global {
     interface Window {
@@ -23,6 +24,9 @@ declare global {
 const labels: Record<Protocol, string> = {
     mjpeg: 'MJPEG', hls: 'HLS', llhls: 'LL-HLS', webrtc: 'WebRTC', rtsp: 'RTSP', srt: 'SRT',
 };
+const browserProtocols: Protocol[] = ['mjpeg', 'hls', 'llhls', 'webrtc'];
+const formatLatency = (milliseconds: number): string =>
+    milliseconds < 1000 ? `${milliseconds} ms` : `${(milliseconds / 1000).toFixed(1)} s`;
 
 interface Props {
     nodeId: string;
@@ -38,17 +42,33 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
     const [protocols, setProtocols] = useState<Protocol[]>(['mjpeg']);
     const [nonce, setNonce] = useState(0);
     const [state, setState] = useState<'loading' | 'playing' | 'error'>('loading');
+    const [metrics, setMetrics] = useState<Partial<Record<Protocol, ProtocolMetric>>>({});
     const [error, setError] = useState('');
     const [externalUrl, setExternalUrl] = useState('');
     const [now, setNow] = useState(() => new Date());
     const [visible, setVisible] = useState(() => !document.hidden);
     const videoRef = useRef<HTMLVideoElement>(null);
     const imageRef = useRef<HTMLImageElement>(null);
+    const connectionStartedAt = useRef(Date.now());
     const accessController = useRef<AbortController | null>(null);
     const base = ComputeClusterService.programMediaUrl(nodeId, programId);
     const imageUrl = `${ComputeClusterService.programInterfaceStreamUrl(nodeId, programId, path)}&v=${nonce}`;
     const external = protocol === 'rtsp' || protocol === 'srt';
     const reconnect = () => setNonce(value => value + 1);
+    const markPlaying = useCallback(() => {
+        setState('playing');
+        setMetrics(current => typeof current[protocol] === 'number'
+            ? current
+            : {...current, [protocol]: Math.max(0, Date.now() - connectionStartedAt.current)});
+    }, [protocol]);
+    const protocolLabel = (id: Protocol): string => {
+        if (!browserProtocols.includes(id)) return `${labels[id]} (${zh ? '外部' : 'external'})`;
+        const metric = metrics[id];
+        if (typeof metric === 'number') return `${labels[id]} (${formatLatency(metric)})`;
+        if (metric === 'loading') return `${labels[id]} (${zh ? '检测中' : 'testing'})`;
+        if (metric === 'error') return `${labels[id]} (${zh ? '不可用' : 'unavailable'})`;
+        return `${labels[id]} (${zh ? '未测' : 'untested'})`;
+    };
 
     useEffect(() => {
         const updateVisibility = () => setVisible(!document.hidden);
@@ -78,6 +98,8 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
         setExternalUrl('');
         accessController.current?.abort();
         if (external || !visible) return () => accessController.current?.abort();
+        connectionStartedAt.current = Date.now();
+        setMetrics(current => ({...current, [protocol]: 'loading'}));
         let disposed = false;
         let failed = false;
         const startedAt = Date.now();
@@ -95,6 +117,7 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
             window.clearInterval(timer);
             setError(message);
             setState('error');
+            setMetrics(current => ({...current, [protocol]: 'error'}));
             hls?.destroy();
             reader?.close();
         };
@@ -104,7 +127,7 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
             if (decoded > frames) {
                 frames = decoded;
                 lastFrameAt = Date.now();
-                setState('playing');
+                markPlaying();
             } else if (lastFrameAt !== undefined && Date.now() - lastFrameAt > 20000) {
                 fail(zh ? '20 秒内未收到新视频帧' : 'No new video frame for 20 seconds');
             } else if (lastFrameAt === undefined && Date.now() - startedAt > 30000) {
@@ -148,7 +171,7 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
                 video.load();
             }
         };
-    }, [base, external, imageUrl, nonce, protocol, visible, zh]);
+    }, [base, external, imageUrl, markPlaying, nonce, protocol, visible, zh]);
 
     const loadExternalUrl = async () => {
         setError('');
@@ -181,9 +204,10 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
                 <div className='CameraPlayerMeta'>
                     {protocols.length > 1 ? <select
                         aria-label={zh ? '播放协议' : 'Playback protocol'}
+                        title={zh ? '括号内为本次连接到浏览器首帧的耗时' : 'Time to the first browser frame'}
                         value={protocol}
                         onChange={event => setProtocol(event.target.value as Protocol)}
-                    >{protocols.map(id => <option key={id} value={id}>{labels[id]}</option>)}</select>
+                    >{protocols.map(id => <option key={id} value={id}>{protocolLabel(id)}</option>)}</select>
                         : <span>{path}</span>}
                     <button type='button' onClick={reconnect} title={zh ? '重新连接' : 'Reconnect'}
                         aria-label={zh ? '重新连接' : 'Reconnect'}><RefreshCw size={16}/></button>
@@ -220,14 +244,18 @@ export const ProgramLivePreview: React.FC<Props> = ({nodeId, programId, name, pa
                             key={nonce}
                             alt={zh ? `${name} 现场实时画面` : `${name} live site preview`}
                             style={{visibility: state === 'error' ? 'hidden' : 'visible'}}
-                            onLoad={() => setState('playing')}
-                            onError={() => setState('error')}
+                            onLoad={markPlaying}
+                            onError={() => {
+                                setMetrics(current => ({...current, [protocol]: 'error'}));
+                                setState('error');
+                            }}
                             draggable={false}
                         /> : <video key={`${protocol}-${nonce}`} ref={videoRef} autoPlay muted playsInline
                             aria-label={zh ? `${name} 现场实时画面` : `${name} live site preview`}
-                            onPlaying={() => setState('playing')}
+                            onPlaying={markPlaying}
                             onError={() => {
                                 setError(videoRef.current?.error?.message || 'Video decode error');
+                                setMetrics(current => ({...current, [protocol]: 'error'}));
                                 setState('error');
                             }}/>)}
                     </>}
