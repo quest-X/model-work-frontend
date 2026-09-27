@@ -220,6 +220,7 @@ describe('ControlCenterView', () => {
     });
 
     afterEach(() => {
+        jest.useRealTimers();
         jest.restoreAllMocks();
         Object.defineProperty(global, 'fetch', {configurable: true, writable: true, value: originalFetch});
         window.localStorage.clear();
@@ -530,6 +531,44 @@ describe('ControlCenterView', () => {
         expect(document.querySelector('.ControlToolbarGroup > .ControlStatusDot')).toHaveClass('warning');
         fireEvent.click(noProgram);
         expect(document.querySelector('.ControlToolbarGroup > .ControlStatusDot')).not.toBeInTheDocument();
+    });
+
+    it('releases fleet polling while the runner is open or the page is hidden', async () => {
+        jest.useFakeTimers();
+        const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+        const selected = runtimeNode('AIPACK-07');
+        const other = runtimeNode('AIPACK-08');
+        for (const machine of [selected, other]) machine.capabilities.push('runtime.programs.read.v1');
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([selected, other]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(selected));
+        const programs = jest.spyOn(ComputeClusterService, 'programs')
+            .mockResolvedValue(programSnapshot('healthy', 'running'));
+        const otherCalls = () => programs.mock.calls.filter(([id]) => id === other.node_id);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await waitFor(() => expect(otherCalls()).toHaveLength(1));
+        const firstSignal = otherCalls()[0][1];
+        await selectMachine(selected.name);
+        fireEvent.click(screen.getByRole('button', {name: '打开程序运行器'}));
+        expect(firstSignal.aborted).toBe(true);
+        await act(async () => { jest.advanceTimersByTime(30000); });
+        expect(otherCalls()).toHaveLength(1);
+        expect(programs).toHaveBeenCalledWith(selected.node_id, expect.any(AbortSignal));
+
+        fireEvent.keyDown(document, {key: 'Escape'});
+        await waitFor(() => expect(otherCalls()).toHaveLength(2));
+        const resumedSignal = otherCalls()[1][1];
+        hidden.mockReturnValue(true);
+        fireEvent(document, new Event('visibilitychange'));
+        expect(resumedSignal.aborted).toBe(true);
+        const nodeCalls = jest.mocked(ComputeClusterService.nodes).mock.calls.length;
+        await act(async () => { jest.advanceTimersByTime(30000); });
+        expect(otherCalls()).toHaveLength(2);
+        expect(ComputeClusterService.nodes).toHaveBeenCalledTimes(nodeCalls);
+
+        hidden.mockReturnValue(false);
+        fireEvent(document, new Event('visibilitychange'));
+        await waitFor(() => expect(otherCalls()).toHaveLength(3));
+        expect(otherCalls()[2][1].aborted).toBe(false);
     });
 
     it('uses the worst state when one explicit control path fails', async () => {
