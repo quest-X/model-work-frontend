@@ -625,13 +625,13 @@ describe('ProgramRunnerPanel', () => {
         statistics.mockImplementation(() => new Promise(() => undefined));
         fireEvent.click(within(dialog).getByRole('button', {name: '统计'}));
         expect(within(dialog).getByLabelText('大炉口溢渣统计')).toHaveTextContent('12 / 100');
-        expect(within(dialog).queryByText('正在读取缓存统计…')).not.toBeInTheDocument();
+        expect(within(dialog).queryByText('正在加载统计日志… 2 / 2')).not.toBeInTheDocument();
         fireEvent.click(within(dialog).getByRole('button', {name: `选择统计日期 ${todayValue}`}));
         const previousMonth = within(screen.getByLabelText('统计日历')).getByRole('button', {name: '上个月'});
         fireEvent.click(previousMonth);
         const anotherDate = within(screen.getByLabelText('统计日历')).getAllByRole('button', {name: /^统计日期 /})[0];
         fireEvent.click(anotherDate);
-        expect(within(dialog).getByText('正在读取缓存统计…')).toBeInTheDocument();
+        expect(within(dialog).getByText('正在加载统计日志… 2 / 2')).toBeInTheDocument();
         expect(within(dialog).getByLabelText('大炉口溢渣统计')).not.toHaveTextContent('12 / 100');
         fireEvent.click(within(dialog).getByRole('button', {name: '程序', exact: true}));
         expect(ComputeClusterService.programs).toHaveBeenCalledTimes(programCalls + 1);
@@ -919,6 +919,66 @@ describe('ProgramRunnerPanel', () => {
         expect(runtimeEvents).not.toHaveBeenCalled();
     });
 
+    it('shows statistics loading progress before deciding a DLK program is missing', async () => {
+        jest.spyOn(Date, 'now').mockReturnValue(new Date(2026, 8, 27, 12).getTime());
+        jest.spyOn(ComputeClusterService, 'runtime').mockResolvedValue({
+            schema_version: 'runtime.snapshot.v1', captured_at: 101,
+            summary: {total: 0, healthy: 0, degraded: 0, unavailable: 0, task_counts: {}}, services: [],
+        });
+        let resolvePrograms!: (value: Awaited<ReturnType<typeof ComputeClusterService.programs>>) => void;
+        jest.spyOn(ComputeClusterService, 'programs').mockImplementation(() =>
+            new Promise(resolve => { resolvePrograms = resolve; })
+        );
+        const day = (date: string, offset: number): ComputeProgramOverflowStatistics => ({
+            schema_version: 'runtime.program-overflow-statistics.v1', captured_at: 101,
+            program_id: 'dlk-overflow', date, timezone_offset_minutes: offset,
+            total_frames: 100, overflow_frames: 10,
+            episodes: {small: 1, medium: 0, large: 0, unknown: 0},
+            hourly: Array(24).fill(0), latest_overflow_at: null, heats: [],
+        });
+        let resolveToday!: (value: ComputeProgramOverflowStatistics) => void;
+        const statistics = jest.spyOn(ComputeClusterService, 'programOverflowStatistics')
+            .mockImplementation((_, __, date, offset) => date === '2026-09-27'
+                ? new Promise(resolve => { resolveToday = resolve; })
+                : Promise.resolve(day(date, offset)));
+
+        render(<ProgramRunnerPanel
+            node={{...node, node_id: 'aipack-statistics-loading'}}
+            zh
+            maximized={false}
+            onToggleMaximized={jest.fn()}
+        />);
+        fireEvent.click(screen.getByRole('button', {name: '统计'}));
+        expect(screen.getByText('正在定位统计程序… 1 / 2')).toBeInTheDocument();
+        expect(screen.queryByText('未找到大炉口溢渣程序')).not.toBeInTheDocument();
+
+        await act(async () => resolvePrograms({
+            schema_version: 'runtime.programs.v1', captured_at: 101, invalid_manifests: 0,
+            programs: [{
+                program_id: 'dlk-overflow', name: 'DLK', version: '1', root: '/dlk', environment: '/dlk',
+                mode: 'production', encryption: 'plain', state: 'healthy',
+                service: {name: 'dlk', state: 'running', pid: 1, uptime_seconds: 1},
+                health: {state: 'healthy', checked_at: 101, status_code: 200, latency_ms: 1},
+                interfaces: [], events: [], artifacts: [],
+            }],
+        }));
+        expect(await screen.findByText('正在加载统计日志… 2 / 2')).toBeInTheDocument();
+        expect(screen.queryByText('未找到大炉口溢渣程序')).not.toBeInTheDocument();
+        await waitFor(() => expect(statistics).toHaveBeenCalledWith(
+            'aipack-statistics-loading',
+            'dlk-overflow',
+            '2026-09-27',
+            -new Date('2026-09-27T12:00:00').getTimezoneOffset(),
+            expect.any(AbortSignal),
+        ));
+
+        await act(async () => resolveToday(day(
+            '2026-09-27',
+            -new Date('2026-09-27T12:00:00').getTimezoneOffset(),
+        )));
+        expect(await screen.findByLabelText('大炉口溢渣统计')).toHaveTextContent('10 / 100');
+    });
+
     it('refreshes basic status and statistics independently without rescanning programs or clearing reports', async () => {
         jest.useFakeTimers();
         jest.setSystemTime(new Date(2026, 8, 25, 12));
@@ -964,7 +1024,7 @@ describe('ProgramRunnerPanel', () => {
         await act(async () => undefined);
         fireEvent.click(screen.getByRole('button', {name: '统计'}));
         await act(async () => undefined);
-        expect(screen.getByText('正在读取缓存统计…')).toBeInTheDocument();
+        expect(screen.getByText('正在加载统计日志… 2 / 2')).toBeInTheDocument();
         const report = screen.getByLabelText('大炉口溢渣统计');
         const initialRuntimeCalls = runtime.mock.calls.length;
 
@@ -990,7 +1050,7 @@ describe('ProgramRunnerPanel', () => {
         await act(async () => resolveStatistics({...first, total_frames: 200, overflow_frames: 24}));
         expect(report).toHaveTextContent('24 / 200');
         expect(within(report).queryByText(/刷新失败/)).not.toBeInTheDocument();
-        expect(screen.queryByText('正在读取缓存统计…')).not.toBeInTheDocument();
+        expect(screen.queryByText('正在加载统计日志… 2 / 2')).not.toBeInTheDocument();
         expect(programs).toHaveBeenCalledTimes(1);
         expect(runtimeEvents).not.toHaveBeenCalled();
 

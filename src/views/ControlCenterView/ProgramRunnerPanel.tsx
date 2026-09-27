@@ -236,7 +236,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [statisticsMonthRetry, setStatisticsMonthRetry] = useState(0);
     const [overflowStatistics, setOverflowStatistics] = useState<ComputeProgramOverflowStatistics | null>(null);
     const [statisticsError, setStatisticsError] = useState('');
-    const [statisticsLoading, setStatisticsLoading] = useState(false);
     const [selectedHeatId, setSelectedHeatId] = useState('');
     const [historyStatus, setHistoryStatus] = useState<MachineHistoryStatus | null>(null);
     const [historyObjects, setHistoryObjects] = useState<MachineHistoryObjectSummary[]>([]);
@@ -301,7 +300,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setStatisticsMonth(todayDateKey().slice(0, 7));
         setOverflowStatistics(null);
         setStatisticsError('');
-        setStatisticsLoading(false);
         setHistoryStatus(null);
         setHistoryObjects([]);
         setHistoryDocument(null);
@@ -652,7 +650,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         const load = async () => {
             if (inFlight) return;
             inFlight = true;
-            setStatisticsLoading(true);
             try {
                 const value = await ComputeClusterService.programOverflowStatistics(
                     node.node_id,
@@ -673,7 +670,6 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                 }
             } finally {
                 inFlight = false;
-                if (!controller.signal.aborted) setStatisticsLoading(false);
             }
         };
         void load();
@@ -1382,6 +1378,13 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             ? (zh ? '升级节点程序后可读取每日溢渣统计。' : 'Upgrade the node software to read daily overflow statistics.')
                             : (zh ? '节点恢复在线后才能读取每日统计。' : 'The node must return online before daily statistics can be read.'),
                     )
+                    : programs === null
+                        ? unavailable(
+                            programsError
+                                ? (zh ? '统计程序目录暂不可用' : 'Statistics program directory is unavailable')
+                                : (zh ? '正在定位统计程序… 1 / 2' : 'Locating the statistics program… 1 / 2'),
+                            programsError,
+                        )
                     : !overflowProgram
                         ? unavailable(
                             zh ? '未找到大炉口溢渣程序' : 'Overflow program not found',
@@ -1523,8 +1526,14 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                             </p>}
                             {statisticsError && !overflowStatistics
                                 ? unavailable(zh ? '每日统计暂不可用' : 'Daily statistics are unavailable', statisticsError)
-                                : statisticsLoading && !overflowStatistics
-                                    ? unavailable(zh ? '正在读取缓存统计…' : 'Loading cached statistics…')
+                                : !node.online && !overflowStatistics
+                                    ? unavailable(
+                                        zh ? '节点离线，无法加载统计日志' : 'The node is offline; statistics logs cannot be loaded',
+                                    )
+                                    : !overflowStatistics
+                                        ? unavailable(
+                                            zh ? '正在加载统计日志… 2 / 2' : 'Loading statistics logs… 2 / 2',
+                                        )
                                     : overflowStatistics
                                         ? <>
                                             <div className='ControlProgramStatisticCards'>
