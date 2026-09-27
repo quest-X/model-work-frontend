@@ -786,6 +786,72 @@ describe('ComputeClusterPopup', () => {
         expect(Number.parseFloat(peer.style.left)).toBeLessThan(Number.parseFloat(owner.style.left));
     });
 
+    it('keeps fixed-size cards inside their regional frame when the graph fits its window', async () => {
+        const rect = jest.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+            const scene = this.classList.contains('ComputeGraphScene');
+            const region = this.classList.contains('ComputeGraphRegion');
+            const width = scene ? 800 : region ? 776 : 0;
+            const height = scene ? 440 : region ? 416 : 0;
+            const left = region ? 12 : 0;
+            const top = region ? 12 : 0;
+            return {
+                x: left, y: top, top, right: left + width, bottom: top + height, left, width, height,
+                toJSON: () => ({}),
+            } as DOMRect;
+        });
+        const base = await service.resourceGraph();
+        const main = base.entities.find(entity => entity.kind === 'compute_node');
+        const region = base.entities.find(entity => entity.kind === 'compute_region');
+        if (!main || !region) throw new Error('regional bounds fixture needs one main node and one region');
+        const peers = ['peer-1', 'peer-2', 'peer-3'].map(nodeId => ({
+            ...main,
+            entity_id: `node:${nodeId}`,
+            node_id: nodeId,
+            label: nodeId,
+        }));
+
+        try {
+            render(<ResourceKnowledgeGraph
+                graph={{
+                    ...base,
+                    entities: [region, ...peers, ...base.entities.filter(entity => entity !== region)],
+                    relations: [
+                        ...base.relations,
+                        ...peers.map(node => ({
+                            relation_id: `contains:${node.node_id}`,
+                            kind: 'contains' as const,
+                            source_id: region.entity_id,
+                            target_id: node.entity_id,
+                            active: true,
+                            reason: 'available' as const,
+                        })),
+                    ],
+                }}
+                nodes={await service.nodes()}
+                zh={true}
+                fitWindow
+                onSelectWorkAgent={jest.fn()}
+            />);
+
+            const peer = screen.getByRole('button', {name: '查看 peer-1 节点信息'});
+            await waitFor(() => expect(Number.parseFloat(peer.style.left)).toBeGreaterThan(10));
+            screen.getAllByTestId('resource-graph-node').forEach(card => {
+                const mainCard = card.dataset.entityRole === 'main';
+                const x = Number.parseFloat(card.style.left) * 8;
+                const y = Number.parseFloat(card.style.top) * 4.4;
+                const halfWidth = mainCard ? 46 : 68;
+                const topExtent = mainCard ? 46 : 40;
+                const bottomExtent = mainCard ? 46 : 31;
+                expect(x - halfWidth).toBeGreaterThanOrEqual(12);
+                expect(x + halfWidth).toBeLessThanOrEqual(788);
+                expect(y - topExtent).toBeGreaterThanOrEqual(12);
+                expect(y + bottomExtent).toBeLessThanOrEqual(428);
+            });
+        } finally {
+            rect.mockRestore();
+        }
+    });
+
     it('hides region and packet legend entries in the restricted commercial build', async () => {
         render(<ResourceKnowledgeGraph
             graph={await service.resourceGraph()}

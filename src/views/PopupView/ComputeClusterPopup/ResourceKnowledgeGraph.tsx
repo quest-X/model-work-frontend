@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {
     ComputeClusterNode,
     ComputeResourceGraph,
@@ -33,6 +33,7 @@ interface ResourceKnowledgeGraphProps {
 interface GraphPoint {
     x: number;
     y: number;
+    regionEntityId?: string;
 }
 
 interface GraphRegion {
@@ -50,6 +51,13 @@ interface OperationsTopology {
     regions: GraphRegion[];
     minWidth: number;
     minHeight: number;
+}
+
+interface GraphBounds {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
 }
 
 type GraphNodeRole = 'main' | 'node';
@@ -73,6 +81,9 @@ const radialPoint = (
     x: centerX + Math.cos(angle) * radiusX,
     y: centerY + Math.sin(angle) * radiusY,
 });
+
+const clamp = (value: number, min: number, max: number): number =>
+    min > max ? (min + max) / 2 : Math.min(max, Math.max(min, value));
 
 const visibleEntity = (entity: ComputeResourceGraphEntity): boolean =>
     entity.kind === 'compute_node' || entity.kind === 'managed_device';
@@ -269,6 +280,7 @@ const operationsTopology = (
         regionalPoints.forEach((point, id) => points.set(id, {
             x: region.left + point.x * region.width / 100,
             y: point.y,
+            regionEntityId: region.entityId,
         }));
         minWidth += region.width + 16;
     });
@@ -334,6 +346,12 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
     const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
     const [pinnedEntityId, setPinnedEntityId] = useState<string | null>(null);
+    const sceneRef = useRef<HTMLDivElement>(null);
+    const [sceneMetrics, setSceneMetrics] = useState<{
+        width: number;
+        height: number;
+        regions: Record<string, GraphBounds>;
+    }>({width: 0, height: 0, regions: {}});
     const index = useMemo(
         () => new Map(graph.entities.map(entity => [entity.entity_id, entity])),
         [graph.entities],
@@ -375,7 +393,73 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         () => operationsTopology(operationalGraph.entities, operationalGraph.relations, nodeRoles),
         [nodeRoles, operationalGraph.entities, operationalGraph.relations],
     );
-    const points = topology.points;
+    useLayoutEffect(() => {
+        const scene = sceneRef.current;
+        if (!scene) return undefined;
+        const measure = () => {
+            const sceneRect = scene.getBoundingClientRect();
+            const regions = Object.fromEntries([...scene.querySelectorAll<HTMLElement>('.ComputeGraphRegion[data-region-id]')]
+                .flatMap(element => {
+                    const regionId = element.dataset.regionId;
+                    if (!regionId) return [];
+                    const rect = element.getBoundingClientRect();
+                    return [[regionId, {
+                        left: rect.left - sceneRect.left,
+                        right: rect.right - sceneRect.left,
+                        top: rect.top - sceneRect.top,
+                        bottom: rect.bottom - sceneRect.top,
+                    }] as const];
+                }));
+            setSceneMetrics(current => {
+                const unchanged = current.width === sceneRect.width
+                    && current.height === sceneRect.height
+                    && Object.keys(regions).length === Object.keys(current.regions).length
+                    && Object.entries(regions).every(([id, bounds]) =>
+                        Object.entries(bounds).every(([key, value]) =>
+                            current.regions[id]?.[key as keyof GraphBounds] === value));
+                return unchanged ? current : {
+                    width: sceneRect.width,
+                    height: sceneRect.height,
+                    regions,
+                };
+            });
+        };
+        measure();
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', measure);
+            return () => window.removeEventListener('resize', measure);
+        }
+        const observer = new ResizeObserver(measure);
+        observer.observe(scene);
+        return () => observer.disconnect();
+    }, [fitWindow, topology]);
+    const points = useMemo(() => {
+        if (!sceneMetrics.width || !sceneMetrics.height) return topology.points;
+        const regions = new Map(topology.regions.map(region => [region.entityId, region]));
+        return new Map([...topology.points].map(([id, point]) => {
+            const region = point.regionEntityId ? regions.get(point.regionEntityId) : undefined;
+            const measuredRegion = point.regionEntityId ? sceneMetrics.regions[point.regionEntityId] : undefined;
+            const entity = index.get(id);
+            if (!region || !entity) return [id, point] as const;
+            const main = entity.kind === 'compute_node' && nodeRoles.get(id) === 'main';
+            const horizontalExtent = (main ? 46 : 68) + 2;
+            const topExtent = (main ? 46 : 40) + 2;
+            const bottomExtent = (main ? 46 : 31) + 2;
+            const minX = measuredRegion
+                ? (measuredRegion.left + horizontalExtent) / sceneMetrics.width * 100
+                : region.left + (horizontalExtent + 10) / sceneMetrics.width * 100;
+            const maxX = measuredRegion
+                ? (measuredRegion.right - horizontalExtent) / sceneMetrics.width * 100
+                : region.left + region.width - (horizontalExtent + 10) / sceneMetrics.width * 100;
+            const minY = (measuredRegion?.top ?? 10) + topExtent;
+            const maxY = (measuredRegion?.bottom ?? sceneMetrics.height - 10) - bottomExtent;
+            return [id, {
+                ...point,
+                x: clamp(point.x, minX, maxX),
+                y: clamp(point.y, minY / sceneMetrics.height * 100, maxY / sceneMetrics.height * 100),
+            }] as const;
+        }));
+    }, [index, nodeRoles, sceneMetrics, topology]);
     const codes = useMemo(
         () => displayCodes(operationalGraph.entities, nodeRoles),
         [nodeRoles, operationalGraph.entities],
@@ -477,6 +561,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         <div className={`ComputeGraphViewport${fitWindow ? ' fit-window' : ''}`}>
             <div className='ComputeGraphFit'>
             <div
+                ref={sceneRef}
                 className={`ComputeGraphScene operations-only${hoveredRelation || hoveredTaskFlow ? ' has-relation-focus' : ''}`}
                 data-layout='radial'
                 style={{
@@ -498,6 +583,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         ))}`}
                         style={{flexGrow: region.width}}
                         data-testid='resource-graph-region'
+                        data-region-id={region.entityId}
                     >
                         <span>{zh ? '地域' : 'Region'}</span>
                         <strong>{zh ? region.regionName : region.regionId}</strong>
@@ -634,6 +720,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         data-testid='resource-graph-node'
                         data-entity-kind={entity.kind}
                         data-entity-role={nodeRole}
+                        data-region-id={point.regionEntityId}
                         data-entity-shape={nodeRole === 'main' ? 'circle' : 'rounded-rectangle'}
                         data-entity-state={entity.state}
                     >
