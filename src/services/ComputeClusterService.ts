@@ -164,10 +164,10 @@ export const computeLinkStates = (node?: ComputeClusterNode): {lan: ComputeCommu
 export const computeNodeState = (node?: ComputeClusterNode): ComputeCommunicationState => {
     if (!node) return 'fault';
     const links = computeLinkStates(node);
+    const controlLinks = /^AIPACK-/i.test(node.name?.trim() || '') ? [links.lan] : Object.values(links);
     return aggregateCommunicationStates([
         node.online && !node.network.error ? node.communication_state ?? 'normal' : 'fault',
-        links.lan,
-        ...(/^AIPACK-/i.test(node.name?.trim() || '') ? [] : [links.tailscale]),
+        controlLinks.includes('normal') ? 'normal' : aggregateCommunicationStates(controlLinks),
     ]);
 };
 

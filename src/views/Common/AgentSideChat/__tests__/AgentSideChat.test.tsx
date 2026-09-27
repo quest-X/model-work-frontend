@@ -759,7 +759,9 @@ describe('AgentSideChat', () => {
         ['AIPACK-07', true, false, 'normal', true],
         ['AIPACK-07', false, true, 'normal', false],
         ['AIPACK-07', true, false, 'fault', false],
-        ['baosight-02', true, false, 'normal', false],
+        ['baosight-02', true, false, 'normal', true],
+        ['baosight-02', false, true, 'normal', true],
+        ['baosight-02', false, false, 'normal', false],
         ['baosight-02', true, true, 'normal', true],
     ])('uses the sidebar network policy when scanning %s (LAN=%s, Tailscale=%s, state=%s)', async (
         name, lan, tailscale, communicationState, healthy,

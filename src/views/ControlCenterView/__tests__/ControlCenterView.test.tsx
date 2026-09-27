@@ -651,7 +651,7 @@ describe('ControlCenterView', () => {
         expect(otherCalls()[2][1].aborted).toBe(false);
     });
 
-    it('uses the worst state when one explicit control path fails', async () => {
+    it('keeps the node normal when a fallback control path is healthy', async () => {
         const remoteNode = node('山东节点', true, false, null, 'Windows', 'tailscale');
         remoteNode.network.lan_ssh_available = false;
         remoteNode.network.tailscale_ssh_available = true;
@@ -667,10 +667,10 @@ describe('ControlCenterView', () => {
         expect(remote.querySelector('.ControlStatusDot')).toHaveClass('healthy');
         const machineState = screen.getByRole('button', {name: /山东节点/})
             .querySelector('.ControlMachineState');
-        expect(machineState).toHaveTextContent('故障');
-        expect(machineState).toHaveClass('warning');
+        expect(machineState).toHaveTextContent('正常');
+        expect(machineState).toHaveClass('healthy');
         expect(screen.getByRole('button', {name: /总览/}).querySelector('.ControlMachineState'))
-            .toHaveClass('warning');
+            .toHaveClass('healthy');
         expect(within(screen.getByRole('button', {name: '打开资源监视器'})).getByText('正常'))
             .toBeInTheDocument();
     });

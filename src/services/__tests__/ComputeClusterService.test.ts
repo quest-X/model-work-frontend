@@ -307,11 +307,11 @@ describe('node communication state', () => {
         device_inventory: {state: 'unavailable', devices: [{status: 'offline'}]},
     } as ComputeClusterNode);
     it.each([
-        [true, false, 'normal', 'fault', 'fault'],
-        [false, true, 'fault', 'normal', 'fault'],
+        [true, false, 'normal', 'fault', 'normal'],
+        [false, true, 'fault', 'normal', 'normal'],
         [false, false, 'fault', 'fault', 'fault'],
         [true, true, 'normal', 'normal', 'normal'],
-    ] as const)('maps LAN %s and Tailscale %s to binary health', (lan, tailscale, lanState, tailscaleState, state) => {
+    ] as const)('accepts either LAN %s or Tailscale %s control path', (lan, tailscale, lanState, tailscaleState, state) => {
         const current = {...node(), network: {...node().network, lan_ssh_available: lan, tailscale_ssh_available: tailscale}};
         expect(computeNodeState(current)).toBe(state);
         expect(computeLinkStates(current)).toEqual({lan: lanState, tailscale: tailscaleState});
