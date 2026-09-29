@@ -52,8 +52,9 @@ const normalizedRegion = (value: string | null | undefined): string => (value ||
     .toLocaleLowerCase()
     .replace(/(壮族自治区|回族自治区|维吾尔自治区|自治区|特别行政区|省|市)$/u, '');
 
+const isChinaMapFeature = (name: string): boolean => name === 'China' || name === 'Taiwan';
 const displayCountryName = (name: string, zh: boolean): string =>
-    zh && name === 'China' ? '中国' : name;
+    isChinaMapFeature(name) ? (zh ? '中国' : 'China') : name;
 
 const regionForNode = (
     graph: ComputeResourceGraph | null,
@@ -227,7 +228,7 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph
             suppressClick.current = false;
             return;
         }
-        if (level === 'world' && name === 'China') changeLevel('china');
+        if (level === 'world' && isChinaMapFeature(name)) changeLevel('china');
         else if (level === 'china') openProvince(selected);
         else zoomTo(selected);
     };

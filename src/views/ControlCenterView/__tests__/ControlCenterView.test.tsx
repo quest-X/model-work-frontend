@@ -1081,17 +1081,22 @@ describe('ControlCenterView', () => {
         expect(screen.queryByRole('heading', {name: '在线节点'})).not.toBeInTheDocument();
 
         const china = container.querySelector('[data-map-feature="China"]');
+        const taiwan = container.querySelector('[data-map-feature="Taiwan"]');
         expect(china).toBeInTheDocument();
+        expect(taiwan).toBeInTheDocument();
         const map = container.querySelector('svg[aria-label="可交互全球节点地图"]') as SVGSVGElement;
         const setPointerCapture = jest.fn();
         Object.defineProperty(map, 'setPointerCapture', {value: setPointerCapture});
         fireEvent.mouseEnter(china as Element);
         expect(screen.getByText('中国', {selector: '.ControlGeoMapInspector strong'})).toBeInTheDocument();
+        expect(china).toHaveClass('hovered');
+        expect(taiwan).toHaveClass('hovered');
         fireEvent.pointerDown(china as Element, {button: 0, pointerId: 1, clientX: 100, clientY: 100});
         fireEvent.pointerUp(china as Element, {button: 0, pointerId: 1, clientX: 100, clientY: 100});
         expect(setPointerCapture).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', {name: '进入中国下一级地图'}));
+        fireEvent.click(taiwan as Element);
         expect(screen.getByText('中国节点地图')).toBeInTheDocument();
+        expect(container.querySelector('[data-map-feature="台湾省"]')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '放大地图'}));
         fireEvent.click(screen.getByRole('button', {name: '缩小地图'}));
         expect(screen.getByText('中国节点地图')).toBeInTheDocument();
