@@ -190,8 +190,8 @@ const isTelegramLog = (message: string): boolean => {
     }
 };
 
-const bufferedPercent = (media: HTMLMediaElement): number => {
-    if (!Number.isFinite(media.duration) || media.duration <= 0) return 0;
+const bufferedPercent = (media: HTMLMediaElement): number | null => {
+    if (!Number.isFinite(media.duration) || media.duration <= 0) return null;
     let bufferedSeconds = 0;
     for (let index = 0; index < media.buffered.length; index += 1) {
         bufferedSeconds += Math.max(0, media.buffered.end(index) - media.buffered.start(index));
@@ -250,7 +250,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [expandedArtifactFolders, setExpandedArtifactFolders] = useState<string[]>([]);
     const [loadedVideoId, setLoadedVideoId] = useState('');
     const [readyVideoId, setReadyVideoId] = useState('');
-    const [videoPreviewProgress, setVideoPreviewProgress] = useState(0);
+    const [videoPreviewProgress, setVideoPreviewProgress] = useState<number | null>(null);
+    const [videoPreviewSlow, setVideoPreviewSlow] = useState(false);
     const [videoPreviewError, setVideoPreviewError] = useState('');
     const [loadedImageId, setLoadedImageId] = useState('');
     const [imagePreviewError, setImagePreviewError] = useState('');
@@ -312,7 +313,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setArtifactQuery('');
         setLoadedVideoId('');
         setReadyVideoId('');
-        setVideoPreviewProgress(0);
+        setVideoPreviewProgress(null);
         setVideoPreviewError('');
         setLoadedImageId('');
         setImagePreviewError('');
@@ -593,11 +594,20 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     useEffect(() => {
         setLoadedVideoId('');
         setReadyVideoId('');
-        setVideoPreviewProgress(0);
+        setVideoPreviewProgress(null);
         setVideoPreviewError('');
         setLoadedImageId('');
         setImagePreviewError('');
     }, [selectedArtifact?.selection_id]);
+
+    useEffect(() => {
+        setVideoPreviewSlow(false);
+        if (view !== 'artifacts' || !loadedVideoId
+            || loadedVideoId !== selectedArtifact?.selection_id
+            || readyVideoId === loadedVideoId || videoPreviewError) return undefined;
+        const timer = window.setTimeout(() => setVideoPreviewSlow(true), 30000);
+        return () => window.clearTimeout(timer);
+    }, [loadedVideoId, readyVideoId, selectedArtifact?.selection_id, videoPreviewError, view]);
 
     useEffect(() => {
         setResultPreview('');
@@ -1164,17 +1174,24 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                                         setLoadedVideoId('');
                                                                         setVideoPreviewError('');
                                                                         setReadyVideoId('');
-                                                                        setVideoPreviewProgress(0);
+                                                                        setVideoPreviewProgress(null);
                                                                     }}
                                                             >{zh ? '重新加载视频' : 'Reload video'}</button>
                                                         </div>
                                                         : readyVideoId !== selectedArtifact.selection_id && <div className='ControlProgramPreviewPlaceholder'>
-                                                            <strong>{zh
-                                                                ? `正在加载视频预览 ${videoPreviewProgress}%`
-                                                                : `Loading video preview ${videoPreviewProgress}%`}</strong>
-                                                            <span>{zh ? '正在读取视频文件' : 'Reading the video file'}</span>
+                                                            <strong>{videoPreviewProgress === null
+                                                                ? (zh ? '正在读取视频元数据…' : 'Reading video metadata…')
+                                                                : (zh
+                                                                    ? `正在加载视频预览 ${videoPreviewProgress}%`
+                                                                    : `Loading video preview ${videoPreviewProgress}%`)}</strong>
+                                                            <span>{videoPreviewSlow
+                                                                ? (zh
+                                                                    ? '读取较慢，仍在继续加载；可稍候或下载文件后播放。'
+                                                                    : 'Loading is taking longer; you can keep waiting or download the file to play it.')
+                                                                : (zh ? '正在读取视频文件' : 'Reading the video file')}</span>
                                                         </div>}
                                                     {readyVideoId === selectedArtifact.selection_id
+                                                        && videoPreviewProgress !== null
                                                         && videoPreviewProgress < 100
                                                         && <span className='ControlProgramPreviewProgress'>
                                                             {zh
@@ -1194,7 +1211,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                             setVideoPreviewProgress(bufferedPercent(event.currentTarget));
                                                             setReadyVideoId(selectedArtifact.selection_id);
                                                         }}
-                                                        onCanPlayThrough={() => setVideoPreviewProgress(100)}
+                                                        onCanPlayThrough={event =>
+                                                            setVideoPreviewProgress(bufferedPercent(event.currentTarget))}
                                                         onError={() => setVideoPreviewError(zh ? '无法读取视频文件' : 'Unable to read the video file')}
                                                     />
                                                 </div>
@@ -1206,7 +1224,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                         onClick={() => {
                                                             setLoadedVideoId(selectedArtifact.selection_id);
                                                             setReadyVideoId('');
-                                                            setVideoPreviewProgress(0);
+                                                            setVideoPreviewProgress(null);
                                                             setVideoPreviewError('');
                                                         }}
                                                     >{zh ? '加载视频预览' : 'Load video preview'}</button>

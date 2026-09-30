@@ -75,6 +75,66 @@ describe('ProgramRunnerPanel', () => {
         jest.restoreAllMocks();
     });
 
+    it('keeps native video loading during slow metadata reads and resets preview state when switching files', async () => {
+        jest.useFakeTimers();
+        jest.setSystemTime(new Date(2026, 8, 28, 12));
+        const now = Date.now() / 1000;
+        jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
+            schema_version: 'runtime.programs.v1', captured_at: now, invalid_manifests: 0,
+            programs: [{
+                program_id: 'dlk-overflow', name: 'DLK', version: '1', root: '/dlk', environment: '/dlk',
+                mode: 'production', encryption: 'plain', state: 'healthy',
+                service: {name: 'dlk', state: 'running', pid: 1, uptime_seconds: 1},
+                health: {state: 'healthy', checked_at: now, status_code: 200, latency_ms: 1},
+                interfaces: [], events: [],
+                artifacts: ['a', 'b'].map((id, index) => ({
+                    artifact_id: id.repeat(32), name: `clip-${id}.mp4`, relative_path: `runs/clip-${id}.mp4`,
+                    kind: 'video', content_type: 'video/mp4', size_bytes: 124785701, modified_at: now - index,
+                })),
+            }],
+        });
+        render(<ProgramRunnerPanel
+            node={{...node, node_id: 'aipack-video-metadata', capabilities: ['runtime.programs.read.v1']}}
+            zh={true} maximized={false} onToggleMaximized={jest.fn()}
+        />);
+        await act(async () => undefined);
+        fireEvent.click(screen.getByRole('button', {name: '结果'}));
+        const artifacts = screen.getByLabelText('程序结果');
+        fireEvent.click(within(artifacts).getByRole('button', {name: /clip-a.mp4/}));
+        fireEvent.click(within(artifacts).getByRole('button', {name: '加载视频预览'}));
+        const video = artifacts.querySelector('video') as HTMLVideoElement;
+        const source = video.getAttribute('src');
+        fireEvent.progress(video);
+        expect(within(artifacts).getByText('正在读取视频元数据…')).toBeInTheDocument();
+        expect(artifacts).not.toHaveTextContent('0%');
+
+        await act(async () => { jest.advanceTimersByTime(30000); });
+        expect(artifacts).toHaveTextContent('读取较慢，仍在继续加载');
+        expect(artifacts.querySelector('video')).toBe(video);
+        expect(video).toHaveAttribute('src', source);
+        expect(within(artifacts).queryByText('视频预览加载失败')).not.toBeInTheDocument();
+
+        Object.defineProperties(video, {
+            duration: {configurable: true, value: 100},
+            buffered: {configurable: true, value: {length: 1, start: () => 0, end: () => 25}},
+        });
+        fireEvent.durationChange(video);
+        expect(within(artifacts).getByText('正在加载视频预览 25%')).toBeInTheDocument();
+        fireEvent.loadedData(video);
+        fireEvent.canPlayThrough(video);
+        expect(within(artifacts).getByText('视频加载 25%')).toBeInTheDocument();
+        expect(artifacts).not.toHaveTextContent('读取较慢');
+
+        fireEvent.click(within(artifacts).getByRole('button', {name: /clip-b.mp4/}));
+        expect(artifacts.querySelector('video')).not.toBeInTheDocument();
+        fireEvent.click(within(artifacts).getByRole('button', {name: '加载视频预览'}));
+        expect(artifacts.querySelector('video')).not.toBe(video);
+        expect(within(artifacts).getByText('正在读取视频元数据…')).toBeInTheDocument();
+        expect(artifacts).not.toHaveTextContent('25%');
+        await act(async () => { jest.advanceTimersByTime(29999); });
+        expect(artifacts).not.toHaveTextContent('读取较慢');
+    });
+
     it('shows programs, endpoint status, previewable results, and structured logs', async () => {
         const today = Math.floor(Date.now() / 1000);
         const todayDate = new Date(today * 1000);
@@ -457,7 +517,7 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.click(within(artifacts).getByRole('button', {name: '加载视频预览'}));
         const video = artifacts.querySelector('video');
         expect(video?.getAttribute('src')).toContain('/runtime/programs/vision-ocr/artifacts/');
-        expect(within(artifacts).getByText('正在加载视频预览 0%')).toBeInTheDocument();
+        expect(within(artifacts).getByText('正在读取视频元数据…')).toBeInTheDocument();
         Object.defineProperties(video, {
             duration: {configurable: true, value: 100},
             buffered: {
@@ -474,7 +534,7 @@ describe('ProgramRunnerPanel', () => {
         fireEvent.loadedData(video as HTMLVideoElement);
         expect(within(artifacts).getByText('视频加载 25%')).toBeInTheDocument();
         fireEvent.canPlayThrough(video as HTMLVideoElement);
-        expect(within(artifacts).queryByText('视频加载 25%')).not.toBeInTheDocument();
+        expect(within(artifacts).getByText('视频加载 25%')).toBeInTheDocument();
         fireEvent.change(within(artifacts).getByRole('combobox', {name: '筛选结果类型'}), {
             target: {value: 'image'},
         });
