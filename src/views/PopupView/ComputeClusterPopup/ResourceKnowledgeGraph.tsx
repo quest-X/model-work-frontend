@@ -358,7 +358,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     const viewportRef = useRef<HTMLDivElement>(null);
     const [viewportSize, setViewportSize] = useState({width: 720, height: 440});
     useEffect(() => {
-        if (!fitWindow || !viewportRef.current || typeof ResizeObserver === 'undefined') return;
+        if (!fitWindow || !viewportRef.current || typeof ResizeObserver === 'undefined') return undefined;
         const observer = new ResizeObserver(([entry]) => {
             const width = Math.round(entry.contentRect.width);
             const height = Math.round(entry.contentRect.height);
