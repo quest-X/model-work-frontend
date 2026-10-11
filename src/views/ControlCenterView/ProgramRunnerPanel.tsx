@@ -19,6 +19,7 @@ import {
 } from '../../services/MachineHistoryService';
 import {ProgramLivePreview} from './ProgramLivePreview';
 import {ProgramStatisticsExport} from './ProgramStatisticsExport';
+import {ProgramTelegramHistory} from './ProgramTelegramHistory';
 import {statisticsHasRecords} from './statisticsExport';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 
@@ -268,10 +269,14 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const programsVisible = programsCapable || programs !== null;
     const logsVisible = runtimeVisible || programsVisible || events.length > 0;
     const showingCache = !node.online && (snapshot !== null || programs !== null || events.length > 0);
+    const hasTelegramFiles = Boolean(programs?.programs.some(program =>
+        program.artifacts.some(artifact => artifactCategory(artifact) === 'telegram')
+    ));
     // Keep heavy scans off report/preview reads after the initial directory arrives.
     const programsRequested = programsCapable && (programs === null
-        || view !== 'history' && view !== 'artifacts' && view !== 'statistics');
-    const eventsRequested = view === 'telegrams' || view === 'logs';
+        || view !== 'history' && view !== 'artifacts' && view !== 'statistics'
+        && (view !== 'telegrams' || !hasTelegramFiles));
+    const eventsRequested = view === 'logs' || view === 'telegrams' && !hasTelegramFiles;
     const connectionLabel = node.online
         ? runtimeCapable
             ? runtimeError
@@ -1318,7 +1323,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     ? (zh ? '电文' : 'Telegrams')
                                     : (zh ? '结构化日志' : 'Structured logs')}</h3>
                                 <p>{view === 'telegrams'
-                                    ? (zh ? '程序收发电文' : 'Program telegram traffic')
+                                    ? (hasTelegramFiles
+                                        ? (zh ? '原始电文文件历史' : 'Original telegram file history')
+                                        : (zh ? '最近事件摘要 · 非完整历史，字段以原文件为准' : 'Recent event summary · incomplete history; original file is authoritative'))
                                     : (zh ? '任务与程序运行事件' : 'Task and program runtime events')}</p>
                             </div>
                             <div className='ControlProgramLogTools'>
@@ -1358,7 +1365,14 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         {(eventsError || programsError) && <p className='ControlProgramError' role='status'>
                             {[eventsError, programsError].filter(Boolean).join(' · ')}
                         </p>}
-                        {logRows.length > 0 ? <ol>
+                        {view === 'telegrams' && hasTelegramFiles ? <ProgramTelegramHistory
+                            key={node.node_id}
+                            nodeId={node.node_id}
+                            artifacts={programArtifacts.filter(artifact => artifactCategory(artifact) === 'telegram')}
+                            online={node.online}
+                            zh={zh}
+                            pretty={prettyTelegramLogs}
+                        /> : logRows.length > 0 ? <ol>
                             {logRows.map(event => <li className={event.level} key={event.key}>
                                 <span className='ControlProgramLogTime'>{dateTime(event.created_at, zh)}</span>
                                 <span className='ControlProgramLogProgram'>

@@ -1,6 +1,7 @@
 import React from 'react';
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {TextDecoder} from 'util';
 import {
     ComputeClusterNode,
     ComputeClusterService,
@@ -53,6 +54,10 @@ const node: ComputeClusterNode = {
 };
 
 const originalFetch = global.fetch;
+const originalTextDecoder = global.TextDecoder;
+
+beforeAll(() => {global.TextDecoder = TextDecoder as typeof global.TextDecoder;});
+afterAll(() => {global.TextDecoder = originalTextDecoder;});
 
 describe('ProgramRunnerPanel', () => {
     beforeEach(() => {
@@ -73,6 +78,36 @@ describe('ProgramRunnerPanel', () => {
         jest.useRealTimers();
         global.fetch = originalFetch;
         jest.restoreAllMocks();
+    });
+
+    it('keeps polling recent telegram summaries when no original file is listed', async () => {
+        jest.useFakeTimers();
+        const programs = jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
+            schema_version: 'runtime.programs.v1', captured_at: 101, invalid_manifests: 0,
+            programs: [{
+                program_id: 'dlk', name: 'DLK', version: '1', root: '/dlk', environment: '/dlk',
+                mode: 'production', encryption: 'plain', state: 'healthy',
+                service: {name: 'dlk', state: 'running', pid: 1, uptime_seconds: 1},
+                health: {state: 'healthy', checked_at: 101, status_code: 200, latency_ms: 1},
+                interfaces: [], artifacts: [], events: [{
+                    created_at: 101, level: 'info', event_type: 'frame',
+                    message: '{"src":"ixcom","frame_idx":1}',
+                }],
+            }],
+        });
+        render(<ProgramRunnerPanel node={{...node, node_id: 'summary-only', capabilities: ['runtime.programs.read.v1']}}
+            zh={true} maximized={false} onToggleMaximized={jest.fn()} />);
+        await act(async () => undefined);
+        await act(async () => {fireEvent.click(screen.getByRole('button', {name: '电文'}));});
+        expect(screen.getByText(/最近事件摘要 · 非完整历史/)).toBeInTheDocument();
+        const calls = programs.mock.calls.length;
+        const next = await programs.mock.results[0].value;
+        programs.mockResolvedValue({...next, programs: next.programs.map(program => ({...program, events: [{
+            ...program.events[0], message: '{"src":"ixcom","frame_idx":2}',
+        }]}))});
+        await act(async () => {jest.advanceTimersByTime(5000);});
+        expect(programs).toHaveBeenCalledTimes(calls + 1);
+        expect(screen.getByLabelText('电文内容')).toHaveTextContent('"frame_idx": 2');
     });
 
     it('keeps native video loading during slow metadata reads and resets preview state when switching files', async () => {
@@ -143,7 +178,14 @@ describe('ProgramRunnerPanel', () => {
             `${todayDate.getMonth() + 1}`.padStart(2, '0'),
             `${todayDate.getDate()}`.padStart(2, '0'),
         ].join('-');
-        global.fetch = jest.fn().mockResolvedValue({
+        const telegramRaw = '{"src":"ixcom","dir":"out","payload":"LK2","t":101.25,"frame_idx":42,"unknown":{"keep":true}}';
+        const telegramBytes = Uint8Array.from(Buffer.from(telegramRaw + '\n'));
+        global.fetch = jest.fn().mockImplementation(async (url: string) => url.includes('d'.repeat(32)) ? {
+            ok: true,
+            status: 206,
+            headers: new Headers({'Content-Range': `bytes 0-${telegramBytes.length - 1}/${telegramBytes.length}`}),
+            arrayBuffer: async () => telegramBytes.buffer,
+        } : {
             ok: true,
             status: 206,
             text: async () => '{"overflow_n":3,"label":"倾炉"}',
@@ -582,12 +624,15 @@ describe('ProgramRunnerPanel', () => {
         expect(telegrams).not.toHaveTextContent('Task execution started');
         expect(telegrams).not.toHaveTextContent('Program started');
         expect(within(telegrams).getByRole('button', {name: '美化格式'})).toHaveAttribute('aria-pressed', 'true');
+        expect(telegrams).toHaveTextContent('已读取至文件开头');
+        expect(telegrams).toHaveTextContent('frame_idx: 42 → 42');
+        expect(telegrams).toHaveTextContent('时间: 101.25 → 101.25');
         expect(within(telegrams).getByLabelText('电文内容').textContent)
-            .toBe('{\n  "src": "ixcom",\n  "dir": "out",\n  "payload": "LK2"\n}');
+            .toBe(JSON.stringify(JSON.parse(telegramRaw), null, 2));
         fireEvent.click(within(telegrams).getByRole('button', {name: '原始格式'}));
         expect(within(telegrams).getByRole('button', {name: '原始格式'})).toHaveAttribute('aria-pressed', 'true');
         expect(within(telegrams).getByLabelText('电文内容').textContent)
-            .toBe('{"src":"ixcom","dir":"out","payload":"LK2"}');
+            .toBe(telegramRaw);
 
         fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
         const logs = await within(dialog).findByLabelText('程序日志');
@@ -678,7 +723,7 @@ describe('ProgramRunnerPanel', () => {
             node.node_id,
             expect.any(AbortSignal),
         );
-        expect(global.fetch).toHaveBeenCalledTimes(previewFetches);
+        expect(global.fetch).toHaveBeenCalledTimes(previewFetches + 1);
         expect(ComputeClusterService.programs).toHaveBeenCalledTimes(programCalls);
         expect(ComputeClusterService.runtime).toHaveBeenCalledTimes(runtimeCalls);
 
