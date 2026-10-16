@@ -40,15 +40,32 @@ async function readDay(nodeId: string, programId: string, day: string, signal: A
     }
 }
 
+const packagingStatus = (format: 'csv' | 'pdf', zh: boolean) => format === 'pdf'
+    ? (zh ? '正在生成 PDF 报告' : 'Preparing PDF report') : (zh ? '正在打包' : 'Packaging');
+
+async function exportBlob(format: 'csv' | 'pdf', nodeName: string, programId: string, days: StatisticsExportDay[], signal: AbortSignal, zh: boolean) {
+    if (format === 'pdf') {
+        const {statisticsPdf} = await import('./statisticsPdf');
+        return statisticsPdf(nodeName, programId, days, signal);
+    }
+    const zip = new JSZip();
+    Object.entries(statisticsExportFiles(nodeName, programId, days, zh)).forEach(([name, contents]) => zip.file(name, contents));
+    return zip.generateAsync({type: 'blob', compression: 'DEFLATE'});
+}
+
 export const ProgramStatisticsExport: React.FC<Props> = ({nodeId, nodeName, programId, date, today, zh, onOpen}) => {
     const [open, setOpen] = useState(false);
     const [start, setStart] = useState(date);
     const [end, setEnd] = useState(date);
+    const [format, setFormat] = useState<'csv' | 'pdf'>('csv');
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState('');
     const [message, setMessage] = useState('');
     const [file, setFile] = useState<{url: string; name: string} | null>(null);
     const controller = useRef<AbortController | null>(null);
+    const formatText = zh
+        ? {label: '导出格式', pdf: 'PDF 报告', hint: '中英双语日报，按日期分页。'}
+        : {label: 'Export format', pdf: 'PDF report', hint: 'Bilingual daily reports, paginated by date.'};
     const close = () => {
         controller.current?.abort();
         setFile(null);
@@ -80,13 +97,11 @@ export const ProgramStatisticsExport: React.FC<Props> = ({nodeId, nodeName, prog
                 days.push(await readDay(nodeId, programId, day, job.signal, zh));
             }
             if (job.signal.aborted) return;
-            setProgress(`${dates.length} / ${dates.length} · ${zh ? '正在打包' : 'Packaging'}`);
-            const zip = new JSZip();
-            Object.entries(statisticsExportFiles(nodeName, programId, days, zh)).forEach(([name, contents]) => zip.file(name, contents));
-            const blob = await zip.generateAsync({type: 'blob', compression: 'DEFLATE'});
+            setProgress(`${dates.length} / ${dates.length} · ${packagingStatus(format, zh)}`);
+            const blob = await exportBlob(format, nodeName, programId, days, job.signal, zh);
             if (job.signal.aborted) return;
             const safeName = nodeName.replace(/[<>:"/\\|?*\p{Cc}]/gu, '_');
-            setFile({url: URL.createObjectURL(blob), name: `${safeName}_overflow_${start}_${end}.zip`});
+            setFile({url: URL.createObjectURL(blob), name: `${safeName}_overflow_${start}_${end}.${format === 'pdf' ? 'pdf' : 'zip'}`});
             const failed = days.filter(day => !day.statistics).length;
             const empty = days.filter(day => day.statistics && !statisticsHasRecords(day.statistics)).length;
             setMessage(zh
@@ -119,7 +134,15 @@ export const ProgramStatisticsExport: React.FC<Props> = ({nodeId, nodeName, prog
                         <label>{zh ? '结束日期' : 'End date'}<input type='date' required value={end} min={start} max={today}
                             disabled={busy} onChange={event => { setEnd(event.target.value); setFile(null); setMessage(''); }}/></label>
                     </div>
-                    <p>CSV · ZIP</p>
+                    <label className='format-field'>{formatText.label}
+                        <select value={format} disabled={busy} onChange={event => {
+                            setFormat(event.target.value as 'csv' | 'pdf'); setFile(null); setMessage('');
+                        }}>
+                            <option value='csv'>CSV · ZIP</option>
+                            <option value='pdf'>{formatText.pdf}</option>
+                        </select>
+                    </label>
+                    {format === 'pdf' && <p>{formatText.hint}</p>}
                     <div role='status' aria-live='polite'>{busy ? progress : message}</div>
                     <footer>
                         <button type='button' onClick={close}><X aria-hidden='true'/>{zh ? '取消' : 'Cancel'}</button>

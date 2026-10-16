@@ -4,6 +4,10 @@ import JSZip from 'jszip';
 import {ComputeClusterService, ComputeProgramOverflowStatistics} from '../../../services/ComputeClusterService';
 import {ProgramStatisticsExport} from '../ProgramStatisticsExport';
 import {statisticsExportDates, statisticsExportFiles} from '../statisticsExport';
+import {statisticsPdf} from '../statisticsPdf';
+
+jest.mock('../statisticsPdf', () => ({statisticsPdf: jest.fn()}));
+beforeEach(() => jest.mocked(statisticsPdf).mockResolvedValue(new Blob(['%PDF-1.7'], {type: 'application/pdf'})));
 
 const createObjectURL = jest.fn<string, [Blob]>(() => 'blob:statistics-export');
 const revokeObjectURL = jest.fn();
@@ -169,4 +173,53 @@ it('marks mismatched responses as failed instead of exporting a different day', 
     const zip = await JSZip.loadAsync(createObjectURL.mock.calls[0][0]);
     const overview = await zip.file('导出概览.csv').async('string');
     expect(overview).toContain('"0","0","1","","","","","","",""');
+});
+
+it.each([true, false])('downloads the bilingual PDF and clears it when the format changes (zh=%s)', async zh => {
+    const request = jest.spyOn(ComputeClusterService, 'programOverflowStatistics')
+        .mockImplementation((_, __, date, offset) => Promise.resolve({...statistics, date, timezone_offset_minutes: offset}));
+    render(<ProgramStatisticsExport {...props} zh={zh}/>);
+    fireEvent.click(screen.getByRole('button', {name: zh ? '导出统计' : 'Export statistics'}));
+    const format = screen.getByLabelText(zh ? '导出格式' : 'Export format');
+    expect(format).toHaveValue('csv');
+    fireEvent.change(format, {target: {value: 'pdf'}});
+    fireEvent.click(screen.getByRole('button', {name: zh ? '导出' : 'Export', exact: true}));
+    expect(format).toBeDisabled();
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(statisticsPdf).toHaveBeenCalledWith(props.nodeName, props.programId,
+        [expect.objectContaining({date: props.date, statistics: expect.objectContaining({program_id: props.programId})})],
+        expect.any(AbortSignal));
+    expect(createObjectURL.mock.calls[0][0].type).toBe('application/pdf');
+    expect(screen.getByRole('link')).toHaveAttribute('download', 'AIPACK-07_overflow_2026-09-24_2026-09-24.pdf');
+    fireEvent.change(format, {target: {value: 'csv'}});
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:statistics-export');
+});
+
+it('reports PDF generation errors and allows a retry', async () => {
+    jest.spyOn(ComputeClusterService, 'programOverflowStatistics')
+        .mockImplementation((_, __, date, offset) => Promise.resolve({...statistics, date, timezone_offset_minutes: offset}));
+    jest.mocked(statisticsPdf).mockRejectedValueOnce(new Error('PDF font unavailable'));
+    open();
+    fireEvent.change(screen.getByLabelText('导出格式'), {target: {value: 'pdf'}});
+    fireEvent.click(screen.getByRole('button', {name: '导出', exact: true}));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('PDF font unavailable'));
+    expect(createObjectURL).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', {name: '导出', exact: true}));
+    await waitFor(() => expect(screen.getByRole('link')).toHaveAttribute('download', expect.stringMatching(/\.pdf$/)));
+});
+
+it('suppresses a PDF result when cancelled during generation', async () => {
+    jest.spyOn(ComputeClusterService, 'programOverflowStatistics')
+        .mockImplementation((_, __, date, offset) => Promise.resolve({...statistics, date, timezone_offset_minutes: offset}));
+    let complete: (blob: Blob) => void;
+    jest.mocked(statisticsPdf).mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+    open();
+    fireEvent.change(screen.getByLabelText('导出格式'), {target: {value: 'pdf'}});
+    fireEvent.click(screen.getByRole('button', {name: '导出', exact: true}));
+    await waitFor(() => expect(complete).toBeDefined());
+    fireEvent.click(screen.getByRole('button', {name: '取消'}));
+    await act(async () => complete(new Blob(['%PDF'], {type: 'application/pdf'})));
+    expect(createObjectURL).not.toHaveBeenCalled();
 });
