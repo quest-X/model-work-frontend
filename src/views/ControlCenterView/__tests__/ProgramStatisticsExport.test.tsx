@@ -3,7 +3,7 @@ import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import JSZip from 'jszip';
 import {ComputeClusterService, ComputeProgramOverflowStatistics} from '../../../services/ComputeClusterService';
 import {ProgramStatisticsExport} from '../ProgramStatisticsExport';
-import {statisticsExportDates, statisticsExportFiles} from '../statisticsExport';
+import {statisticsExportDates, statisticsExportTables} from '../statisticsExport';
 import {statisticsPdf} from '../statisticsPdf';
 
 jest.mock('../statisticsPdf', () => ({statisticsPdf: jest.fn()}));
@@ -41,6 +41,11 @@ const open = () => {
     return rendered;
 };
 
+const sheet = async (blob: Blob, index: number) => {
+    const zip = await JSZip.loadAsync(blob);
+    return new DOMParser().parseFromString(await zip.file(`xl/worksheets/sheet${index}.xml`).async('string'), 'text/xml');
+};
+
 afterEach(() => { jest.restoreAllMocks(); jest.clearAllMocks(); jest.useRealTimers(); });
 
 it.each([true, false])('opens the date range from a text-only export button (zh=%s)', zh => {
@@ -63,26 +68,25 @@ it('validates inclusive calendar dates, leap days, future dates and bounded rang
     }
 });
 
-it('writes timezone-correct CSV, escapes formulas and keeps unavailable dates blank', () => {
-    const files = statisticsExportFiles('=unsafe,"node"', 'dlk-overflow', [
+it('keeps typed values, timezone-correct dates and unavailable dates blank', () => {
+    const tables = statisticsExportTables('=unsafe,"node"', 'dlk-overflow', [
         {date: props.date, statistics},
         {date: '2026-09-23', statistics: {...statistics, total_frames: 0, heats: [], episodes: {small: 0, medium: 0, large: 0, unknown: 0}}},
         {date: '2026-09-22', error: '+bad\nerror'},
     ], true);
-    expect(Object.keys(files)).toHaveLength(5);
-    expect(files['每日汇总.csv']).toMatch(/^\uFEFF/);
-    expect(files['每日汇总.csv']).toContain(`"'=unsafe,""node"""`);
-    expect(files['每日汇总.csv']).toContain(`"'+bad\nerror"`);
-    expect(files['每日汇总.csv'].split('\r\n')[2]).toContain('"无有效记录"');
-    expect(files['每日汇总.csv'].split('\r\n')[2]).toMatch(/(?:,""){9}$/);
+    expect(Object.keys(tables)).toEqual(['导出概览', '每日汇总', '时段分布', '炉次明细', '溢渣明细']);
+    expect(tables['每日汇总'][1][0]).toBe('=unsafe,"node"');
+    expect(tables['每日汇总'][3][4]).toBe('+bad\nerror');
+    expect(tables['每日汇总'][2][3]).toBe('无有效记录');
+    expect(tables['每日汇总'][2].slice(-9)).toEqual(Array(9).fill(null));
     const localTime = new Date((statistics.captured_at + 480 * 60) * 1000).toISOString().slice(0, 23).replace('T', ' ');
-    expect(files['炉次明细.csv']).toContain(localTime);
-    expect(files['炉次明细.csv']).toContain('"runs/day,""one"""');
-    expect(files['溢渣明细.csv']).toContain('"0.5","small","0.2","0.1"');
-    const zeroDay = statisticsExportFiles('node', 'dlk-overflow', [{date: props.date,
+    expect(tables['炉次明细'][1]).toContain(localTime);
+    expect(tables['炉次明细'][1]).toContain('runs/day,"one"');
+    expect(tables['溢渣明细'][1].slice(-4)).toEqual([0.5, 'small', 0.2, 0.1]);
+    const zeroDay = statisticsExportTables('node', 'dlk-overflow', [{date: props.date,
         statistics: {...statistics, heats: [], episodes: {small: 0, medium: 0, large: 0, unknown: 0}}}], false);
-    expect(zeroDay['daily.csv']).toContain('"Read"');
-    expect(zeroDay['daily.csv']).not.toContain('No records');
+    expect(zeroDay['Daily'][1]).toContain('Read');
+    expect(zeroDay['Daily'][1]).not.toContain('No records');
 });
 
 it('defaults to the selected day and exports a range sequentially with failure and empty markers', async () => {
@@ -106,11 +110,9 @@ it('defaults to the selected day and exports a range sequentially with failure a
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
     expect(request.mock.calls.map(call => call[2])).toEqual(['2026-09-22', '2026-09-23', '2026-09-24']);
     expect(screen.getByRole('status')).toHaveTextContent('已生成 3 天；无记录 1 天，读取失败 1 天');
-    expect(screen.getByRole('link', {name: '下载文件'})).toHaveAttribute('download', 'AIPACK-07_overflow_2026-09-22_2026-09-24.zip');
-    const zip = await JSZip.loadAsync(createObjectURL.mock.calls[0][0]);
-    expect(Object.keys(zip.files)).toHaveLength(5);
-    expect(await zip.file('每日汇总.csv').async('string')).toContain('"读取失败","HTTP 503"');
-    expect(await zip.file('炉次明细.csv').async('string')).toContain('"001"');
+    expect(screen.getByRole('link', {name: '下载文件'})).toHaveAttribute('download', 'AIPACK-07_overflow_2026-09-22_2026-09-24.xlsx');
+    expect((await sheet(createObjectURL.mock.calls[0][0], 2)).documentElement.textContent).toContain('读取失败HTTP 503');
+    expect((await sheet(createObjectURL.mock.calls[0][0], 4)).querySelector('c[r="D2"] t').textContent).toBe('001');
     fireEvent.change(screen.getByLabelText('开始日期'), {target: {value: props.date}});
     expect(screen.queryByRole('link', {name: '下载文件'})).not.toBeInTheDocument();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:statistics-export');
@@ -124,7 +126,7 @@ it('exports the selected day without additional date requests', async () => {
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
     expect(request).toHaveBeenCalledTimes(1);
     expect(request.mock.calls[0][2]).toBe(props.date);
-    expect(screen.getByRole('link', {name: '下载文件'})).toHaveAttribute('download', 'AIPACK-07_overflow_2026-09-24_2026-09-24.zip');
+    expect(screen.getByRole('link', {name: '下载文件'})).toHaveAttribute('download', 'AIPACK-07_overflow_2026-09-24_2026-09-24.xlsx');
     expect(screen.getByRole('status')).toHaveTextContent('已生成 1 天；无记录 0 天，读取失败 0 天');
     fireEvent.click(screen.getByRole('button', {name: '取消'}));
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:statistics-export');
@@ -143,8 +145,7 @@ it('marks a timed-out day and continues to the next day', async () => {
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
     jest.useRealTimers();
     expect(request.mock.calls.map(call => call[2])).toEqual(['2026-09-23', '2026-09-24']);
-    const zip = await JSZip.loadAsync(createObjectURL.mock.calls[0][0]);
-    expect(await zip.file('每日汇总.csv').async('string')).toContain('"读取失败","读取超时"');
+    expect((await sheet(createObjectURL.mock.calls[0][0], 2)).documentElement.textContent).toContain('读取失败读取超时');
 });
 
 it.each(['cancel', 'unmount'])('aborts requests and suppresses download on %s', async action => {
@@ -170,9 +171,9 @@ it('marks mismatched responses as failed instead of exporting a different day', 
     fireEvent.click(screen.getByRole('button', {name: '导出', exact: true}));
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
     expect(screen.getByRole('status')).toHaveTextContent('读取失败 1 天');
-    const zip = await JSZip.loadAsync(createObjectURL.mock.calls[0][0]);
-    const overview = await zip.file('导出概览.csv').async('string');
-    expect(overview).toContain('"0","0","1","","","","","","",""');
+    const overview = await sheet(createObjectURL.mock.calls[0][0], 1);
+    expect(overview.querySelector('c[r="G2"] v').textContent).toBe('1');
+    expect(overview.querySelector('c[r="H2"]').textContent).toBe('');
 });
 
 it.each([true, false])('downloads the bilingual PDF and clears it when the format changes (zh=%s)', async zh => {
@@ -182,6 +183,8 @@ it.each([true, false])('downloads the bilingual PDF and clears it when the forma
     fireEvent.click(screen.getByRole('button', {name: zh ? '导出统计' : 'Export statistics'}));
     const format = screen.getByLabelText(zh ? '导出格式' : 'Export format');
     expect(format).toHaveValue('csv');
+    expect(screen.getByRole('option', {name: zh ? 'CSV 数据' : 'CSV data'})).toBeInTheDocument();
+    expect(screen.queryByText('CSV · ZIP')).not.toBeInTheDocument();
     fireEvent.change(format, {target: {value: 'pdf'}});
     fireEvent.click(screen.getByRole('button', {name: zh ? '导出' : 'Export', exact: true}));
     expect(format).toBeDisabled();

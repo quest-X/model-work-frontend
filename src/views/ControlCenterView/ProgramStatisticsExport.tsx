@@ -1,10 +1,10 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {Dialog, DialogContent, DialogTitle} from '@mui/material';
 import {Download, X} from 'lucide-react';
-import JSZip from 'jszip';
 import {ComputeClusterService} from '../../services/ComputeClusterService';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
-import {StatisticsExportDay, statisticsExportDates, statisticsExportFiles, statisticsHasRecords} from './statisticsExport';
+import {StatisticsExportDay, statisticsExportDates, statisticsExportTables, statisticsHasRecords} from './statisticsExport';
+import {statisticsDataExport} from './statisticsDataExport';
 
 interface Props {
     nodeId: string;
@@ -41,16 +41,14 @@ async function readDay(nodeId: string, programId: string, day: string, signal: A
 }
 
 const packagingStatus = (format: 'csv' | 'pdf', zh: boolean) => format === 'pdf'
-    ? (zh ? '正在生成 PDF 报告' : 'Preparing PDF report') : (zh ? '正在打包' : 'Packaging');
+    ? (zh ? '正在生成 PDF 报告' : 'Preparing PDF report') : (zh ? '正在生成数据文件' : 'Preparing data file');
 
 async function exportBlob(format: 'csv' | 'pdf', nodeName: string, programId: string, days: StatisticsExportDay[], signal: AbortSignal, zh: boolean) {
     if (format === 'pdf') {
         const {statisticsPdf} = await import('./statisticsPdf');
-        return statisticsPdf(nodeName, programId, days, signal);
+        return {blob: await statisticsPdf(nodeName, programId, days, signal), extension: 'pdf'};
     }
-    const zip = new JSZip();
-    Object.entries(statisticsExportFiles(nodeName, programId, days, zh)).forEach(([name, contents]) => zip.file(name, contents));
-    return zip.generateAsync({type: 'blob', compression: 'DEFLATE'});
+    return statisticsDataExport(statisticsExportTables(nodeName, programId, days, zh), signal);
 }
 
 export const ProgramStatisticsExport: React.FC<Props> = ({nodeId, nodeName, programId, date, today, zh, onOpen}) => {
@@ -64,8 +62,8 @@ export const ProgramStatisticsExport: React.FC<Props> = ({nodeId, nodeName, prog
     const [file, setFile] = useState<{url: string; name: string} | null>(null);
     const controller = useRef<AbortController | null>(null);
     const formatText = zh
-        ? {label: '导出格式', pdf: 'PDF 报告', hint: '中英双语日报，按日期分页。'}
-        : {label: 'Export format', pdf: 'PDF report', hint: 'Bilingual daily reports, paginated by date.'};
+        ? {label: '导出格式', csv: 'CSV 数据', pdf: 'PDF 报告', hint: '中英双语日报，按日期分页。', dataHint: '单表导出 CSV；多表合并为 Excel，不同表格存放在不同 Sheet。'}
+        : {label: 'Export format', csv: 'CSV data', pdf: 'PDF report', hint: 'Bilingual daily reports, paginated by date.', dataHint: 'One table: CSV. Multiple tables: one Excel workbook with separate sheets.'};
     const close = () => {
         controller.current?.abort();
         setFile(null);
@@ -98,10 +96,10 @@ export const ProgramStatisticsExport: React.FC<Props> = ({nodeId, nodeName, prog
             }
             if (job.signal.aborted) return;
             setProgress(`${dates.length} / ${dates.length} · ${packagingStatus(format, zh)}`);
-            const blob = await exportBlob(format, nodeName, programId, days, job.signal, zh);
+            const {blob, extension} = await exportBlob(format, nodeName, programId, days, job.signal, zh);
             if (job.signal.aborted) return;
             const safeName = nodeName.replace(/[<>:"/\\|?*\p{Cc}]/gu, '_');
-            setFile({url: URL.createObjectURL(blob), name: `${safeName}_overflow_${start}_${end}.${format === 'pdf' ? 'pdf' : 'zip'}`});
+            setFile({url: URL.createObjectURL(blob), name: `${safeName}_overflow_${start}_${end}.${extension}`});
             const failed = days.filter(day => !day.statistics).length;
             const empty = days.filter(day => day.statistics && !statisticsHasRecords(day.statistics)).length;
             setMessage(zh
@@ -138,11 +136,11 @@ export const ProgramStatisticsExport: React.FC<Props> = ({nodeId, nodeName, prog
                         <select value={format} disabled={busy} onChange={event => {
                             setFormat(event.target.value as 'csv' | 'pdf'); setFile(null); setMessage('');
                         }}>
-                            <option value='csv'>CSV · ZIP</option>
+                            <option value='csv'>{formatText.csv}</option>
                             <option value='pdf'>{formatText.pdf}</option>
                         </select>
                     </label>
-                    {format === 'pdf' && <p>{formatText.hint}</p>}
+                    <p>{format === 'pdf' ? formatText.hint : formatText.dataHint}</p>
                     <div role='status' aria-live='polite'>{busy ? progress : message}</div>
                     <footer>
                         <button type='button' onClick={close}><X aria-hidden='true'/>{zh ? '取消' : 'Cancel'}</button>
