@@ -22,19 +22,14 @@ export const statisticsExportDates = (start: string, end: string, today: string,
 export const statisticsHasRecords = (value: ComputeProgramOverflowStatistics): boolean =>
     value.total_frames > 0 || value.heats.length > 0 || Object.values(value.episodes).some(count => count > 0);
 
-const csv = (rows: (string | number | null)[][]): string => '\uFEFF' + rows.map(row => row.map(value => {
-    let text = value === null ? '' : String(value);
-    // Keep names and error messages from being interpreted as spreadsheet formulas.
-    if (typeof value === 'string' && /^[\s]*[=+\-@]/.test(text)) text = `'${text}`;
-    return `"${text.replace(/"/g, '""')}"`;
-}).join(',')).join('\r\n') + '\r\n';
+export type StatisticsExportTables = Record<string, (string | number | null)[][]>;
 
 const timestamp = (seconds: number | null, offset: number): string => seconds === null
     ? '' : new Date((seconds + offset * 60) * 1000).toISOString().slice(0, 23).replace('T', ' ');
 
-export const statisticsExportFiles = (
+export const statisticsExportTables = (
     nodeName: string, programId: string, days: StatisticsExportDay[], zh: boolean,
-): Record<string, string> => {
+): StatisticsExportTables => {
     const t = (cn: string, en: string) => zh ? cn : en;
     const valid = days.filter(day => day.statistics && statisticsHasRecords(day.statistics));
     const missing = days.filter(day => day.statistics && !statisticsHasRecords(day.statistics)).length;
@@ -94,10 +89,10 @@ export const statisticsExportFiles = (
         }
     }
     return {
-        [t('导出概览.csv', 'overview.csv')]: csv(overview),
-        [t('每日汇总.csv', 'daily.csv')]: csv(daily),
-        [t('时段分布.csv', 'hourly.csv')]: csv(hourly),
-        [t('炉次明细.csv', 'heats.csv')]: csv(heats),
-        [t('溢渣明细.csv', 'events.csv')]: csv(events),
+        [t('导出概览', 'Overview')]: overview,
+        [t('每日汇总', 'Daily')]: daily,
+        [t('时段分布', 'Hourly')]: hourly,
+        [t('炉次明细', 'Heats')]: heats,
+        [t('溢渣明细', 'Events')]: events,
     };
 };

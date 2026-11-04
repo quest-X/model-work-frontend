@@ -2242,7 +2242,8 @@ button.ControlServiceCard {
   .MuiDialogTitle-root { font-size: 16px; overflow-wrap: anywhere; }
   .date-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   label { min-width: 0; font-size: 12px; }
-  input {
+  .format-field { display: block; margin-top: 16px; }
+  input, select {
     box-sizing: border-box; width: 100%; min-width: 0; margin-top: 6px;
     border: 1px solid #555; border-radius: 2px; padding: 8px 4px;
     background: #191b1d; color: #eee; color-scheme: dark; font-size: 12px;
@@ -2257,7 +2258,7 @@ button.ControlServiceCard {
     &:disabled { opacity: 0.45; cursor: default; }
     svg { width: 14px; height: 14px; }
   }
-  button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid #69c6ff; outline-offset: 2px; }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #69c6ff; outline-offset: 2px; }
 }
 
 .ControlProgramStatisticsCalendar.MuiPopover-paper {
