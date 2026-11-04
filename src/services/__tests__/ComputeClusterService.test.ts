@@ -321,6 +321,33 @@ describe('node communication state', () => {
         expect(computeNodeState(node(false))).toBe('fault');
         expect(computeNodeState({...node(), network: {...node().network, error: 'refresh failed'}})).toBe('fault');
     });
+    const tailcatNode = (): ComputeClusterNode => ({
+        ...node(), control_transport: 'tailcat',
+        network: {...node().network, lan_ssh_available: false, tailscale_ssh_available: false},
+    });
+    it.each(['remote-node', 'AIPACK-13'])('accepts confirmed Tailcat control for %s without marking other routes healthy', name => {
+        const current = {...tailcatNode(), name};
+        expect(computeNodeState(current)).toBe('normal');
+        expect(computeLinkStates(current)).toEqual({lan: 'fault', tailscale: 'fault'});
+    });
+    it.each(['unknown', 'unavailable', 'degraded'] as const)('requires healthy control evidence for Tailcat (%s)', state => {
+        const current = tailcatNode();
+        current.network_dependencies[0].state = state;
+        expect(computeNodeState(current)).toBe('fault');
+    });
+    it('preserves offline, refresh errors and explicit failure states on Tailcat', () => {
+        const current = tailcatNode();
+        expect(computeNodeState({...current, online: false})).toBe('fault');
+        expect(computeNodeState({...current, network: {...current.network, error: 'resource refresh failed'}})).toBe('fault');
+        expect(computeNodeState({...current, communication_state: 'fault'})).toBe('fault');
+        expect(computeNodeState({...current, communication_state: 'abnormal'})).toBe('abnormal');
+        expect(computeNodeState({...current, network_dependencies: []})).toBe('fault');
+    });
+    it('keeps explicit LAN/Tailscale SSH gates for upgrade actions', () => {
+        const current = {...tailcatNode(), enabled: true, capabilities: ['control.node.upgrade.v1']};
+        expect(computeSshAvailability(current)).toEqual({lan: false, tailscale: false});
+        expect(computeNodeUpgradeReady(current)).toBe(false);
+    });
     it('ignores the hidden Tailscale path for AIPACK nodes', () => {
         const current = {...node(), name: 'AIPACK-13'};
         expect(computeNodeState(current)).toBe('normal');

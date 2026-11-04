@@ -74,7 +74,7 @@ export type ComputeClusterNode = {
     role?: 'main' | 'node';
     agent_version: string;
     capabilities: string[];
-    control_transport?: 'lan' | 'tailscale' | null;
+    control_transport?: 'lan' | 'tailscale' | 'tailcat' | null;
     communication_state?: 'normal' | 'fault' | 'abnormal' | null;
     network: {
         provider: 'tailscale';
@@ -164,7 +164,10 @@ export const computeLinkStates = (node?: ComputeClusterNode): {lan: ComputeCommu
 export const computeNodeState = (node?: ComputeClusterNode): ComputeCommunicationState => {
     if (!node) return 'fault';
     const links = computeLinkStates(node);
-    const controlLinks = /^AIPACK-/i.test(node.name?.trim() || '') ? [links.lan] : Object.values(links);
+    const tailcatHealthy = node.online && node.control_transport === 'tailcat'
+        && node.network_dependencies.some(item => item.dependency_id === 'control_ssh' && item.state === 'healthy');
+    const controlLinks = tailcatHealthy ? ['normal' as const]
+        : /^AIPACK-/i.test(node.name?.trim() || '') ? [links.lan] : Object.values(links);
     return aggregateCommunicationStates([
         node.online && !node.network.error ? node.communication_state ?? 'normal' : 'fault',
         controlLinks.includes('normal') ? 'normal' : aggregateCommunicationStates(controlLinks),

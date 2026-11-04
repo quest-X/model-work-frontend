@@ -1858,7 +1858,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         const jetsonConnectCapable = Boolean(
             node.online && node.capabilities?.includes('control.jetson.connect.v1'),
         );
-        const remoteLan = node.control_transport === 'tailscale';
+        const remoteLan = node.control_transport === 'tailscale' || node.control_transport === 'tailcat';
         const hardwareModel = node.resources.hardware_model?.trim();
         const locationTag = (nodeRegions.get(node.node_id) || '').split(' / ')[0];
         const storedWorkArea = nodeTags[0] || '';
@@ -1958,6 +1958,8 @@ export const ControlCenterView: React.FC<IProps> = ({
                 <div className='ControlSectionHeading'>
                     <div>
                         <h2>{zh ? '网络情况' : 'Network status'}</h2>
+                        {node.online && node.control_transport === 'tailcat' && <small>{zh
+                            ? '当前控制通道：Tailcat v2（试验）' : 'Control route: Tailcat v2 (experimental)'}</small>}
                     </div>
                 </div>
                 <div className='ControlServiceGrid'>

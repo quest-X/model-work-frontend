@@ -179,8 +179,8 @@ const graph = (clusterNode: ComputeClusterNode): ComputeResourceGraph => ({
     }],
 });
 
-const selectMachine = async (name: string): Promise<HTMLElement> => {
-    const machines = screen.getByRole('complementary', {name: '机器列表'});
+const selectMachine = async (name: string, language = Language.CHINESE): Promise<HTMLElement> => {
+    const machines = screen.getByRole('complementary', {name: language === Language.CHINESE ? '机器列表' : 'Machine list'});
     fireEvent.click(await within(machines).findByRole('button', {name: new RegExp(name)}));
     return screen.findByRole('heading', {name});
 };
@@ -418,6 +418,33 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText('图形处理器')).not.toBeInTheDocument();
     });
 
+    it.each([Language.CHINESE, Language.ENGLISH])('shows the actual experimental Tailcat route and independent link states (%s)', async language => {
+        const current = node('Tailcat node', true, false, null, 'Windows', 'tailcat');
+        current.network.lan_ssh_available = false;
+        current.network.tailscale_ssh_available = false;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([current]);
+        render(<ControlCenterView language={language}/>);
+        await selectMachine('Tailcat node', language);
+        const zh = language === Language.CHINESE;
+        expect(screen.getByText(zh ? '当前控制通道：Tailcat v2（试验）' : 'Control route: Tailcat v2 (experimental)'))
+            .toBeInTheDocument();
+        const machine = screen.getByRole('complementary', {name: zh ? '机器列表' : 'Machine list'});
+        expect(within(machine).getByRole('button', {name: /Tailcat node/}).querySelector('.ControlMachineState'))
+            .toHaveClass('healthy');
+        expect(screen.getByRole('button', {name: zh ? /SSH 局域网/ : /LAN SSH/}))
+            .toHaveTextContent(zh ? '故障' : 'Fault');
+        expect(screen.getByRole('button', {name: zh ? /Tailscale 远程/ : /Remote Tailscale/}))
+            .toHaveTextContent(zh ? '故障' : 'Fault');
+        expect(screen.queryByRole('button', {name: /Tailcat v2/})).not.toBeInTheDocument();
+    });
+    it('does not show an active Tailcat route for a stale offline snapshot', async () => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            node('Offline Tailcat', false, false, null, 'Windows', 'tailcat'),
+        ]);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await selectMachine('Offline Tailcat');
+        expect(screen.queryByText(/当前控制通道：Tailcat/)).not.toBeInTheDocument();
+    });
     it('shows only camera connections below an AIPACK node', async () => {
         const aipack = node('AIPACK-05', true, true, 'NVIDIA Jetson AGX Orin');
         aipack.network.tailscale_ssh_available = false;
@@ -2150,9 +2177,9 @@ describe('ControlCenterView', () => {
         expect(screen.getByText('计算群资产台账')).toBeInTheDocument();
     });
 
-    it('opens Jetson discovery from the edge-device add button', async () => {
+    it.each(['tailscale', 'tailcat'] as const)('opens remote Jetson discovery over %s', async transport => {
         const remoteNode = node('远程节点', true);
-        remoteNode.control_transport = 'tailscale';
+        remoteNode.control_transport = transport;
         remoteNode.capabilities.push('control.jetson.connect.v1');
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([remoteNode]);
         const updateActivePopupTypeAction = jest.fn();
