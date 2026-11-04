@@ -52,7 +52,7 @@ git -C "$repo" worktree add --detach "$build_dir" "$candidate"
 ln -s "$repo/node_modules" "$build_dir/node_modules"
 (
   cd "$build_dir"
-  npm run build
+  VITE_OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL=1 npm run build
 )
 [[ -z "$(git -C "$build_dir" status --porcelain --untracked-files=no)" ]] \
   || fail "build worktree changed tracked source files"

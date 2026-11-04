@@ -2,7 +2,7 @@ import React from 'react';
 import {act, render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Language} from '../../../../data/LanguageConfig';
-import {ComputeClusterService} from '../../../../services/ComputeClusterService';
+import {ComputeClusterService, ComputeUpgradeBatch} from '../../../../services/ComputeClusterService';
 import {ComputeClusterPopup} from '../ComputeClusterPopup';
 import {ResourceKnowledgeGraph} from '../ResourceKnowledgeGraph';
 import {AGENT_CHAT_SEND_EVENT} from '../../../Common/AgentSideChat/AgentSideChat';
@@ -13,6 +13,12 @@ jest.mock('../../../../logic/actions/PopupActions', () => ({
 jest.mock('../../../../services/ComputeClusterService', () => ({
     ...jest.requireActual('../../../../services/ComputeClusterService'),
     ComputeClusterService: {
+        createMainUpgradeBatch: jest.fn(),
+        createUpgradeBatch: jest.fn(),
+        upgradeBatch: jest.fn(),
+        refreshUpgradeBatch: jest.fn(),
+        approveUpgradeBatch: jest.fn(),
+        rejectUpgradeBatch: jest.fn(),
         status: jest.fn(), nodes: jest.fn(), tasks: jest.fn(), scheduler: jest.fn(),
         resourceGraph: jest.fn(), lanScanTargets: jest.fn(), lanAssets: jest.fn(),
         connectJetson: jest.fn(),
@@ -25,11 +31,19 @@ jest.mock('../../../../services/ComputeClusterService', () => ({
 }));
 
 const service = ComputeClusterService as jest.Mocked<typeof ComputeClusterService>;
+const openNodeUpgrade = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole('button', {name: /节点管理 \d+/}));
+    const expand = screen.queryByRole('button', {name: '批量升级'});
+    if (expand) await user.click(expand);
+};
 
 describe('ComputeClusterPopup', () => {
+    afterEach(() => { delete (globalThis as typeof globalThis & {__OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__?: boolean}).__OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__; });
     beforeEach(() => {
+        (globalThis as typeof globalThis & {__OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__?: boolean}).__OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ = false;
         jest.clearAllMocks();
         localStorage.clear();
+
         service.upgradeReleases.mockResolvedValue({source: 'main', releases: []});
         service.status.mockResolvedValue({
             state: 'ready', version: '9.9.9', protocol_version: 1,
@@ -258,6 +272,7 @@ describe('ComputeClusterPopup', () => {
     });
 
     it('shows node, aggregate resources, and the phase-six boundary', async () => {
+        (globalThis as typeof globalThis & {__OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__?: boolean}).__OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ = true;
         const user = userEvent.setup();
         const {container} = render(<ComputeClusterPopup language={Language.CHINESE}/>);
 
@@ -300,10 +315,10 @@ describe('ComputeClusterPopup', () => {
         expect(screen.getByText('统一查看资源关系、工作调度、网络资产、节点状态与终端连接。')).toBeInTheDocument();
         const summary = Array.from(document.querySelectorAll('.ComputeClusterSummary > div'));
         expect(summary.map(item => item.querySelector('span')?.textContent))
-            .toEqual(['地域', '设备总数(包含摄像头等)', '正常节点', '故障节点', '异常节点']);
+            .toEqual(['地域', '设备总数(包含摄像头等)', '节点总数', '计算节点', '正常节点', '故障节点', '异常节点']);
         expect(summary.map(item => item.querySelector('strong')?.textContent))
-            .toEqual(['0', '2', '1', '0', '0']);
-        expect(summary[2].querySelector('strong')).toHaveClass('online');
+            .toEqual(['0', '2', '1', '1', '1', '0', '0']);
+        expect(summary[4].querySelector('strong')).toHaveClass('online');
         expect(screen.queryByRole('button', {name: '刷新'})).not.toBeInTheDocument();
         expect(screen.getByRole('status', {name: '正常 · v0.1.0'})).toBeInTheDocument();
         await waitFor(() => expect(service.status).toHaveBeenCalledTimes(1));
@@ -402,7 +417,9 @@ describe('ComputeClusterPopup', () => {
         expect(manage.closest('details')).not.toHaveAttribute('open');
 
         await user.click(manage);
+        await user.click(screen.getByRole('button', {name: '管理'}));
         await user.click(screen.getByRole('menuitemradio', {name: '正常 2'}));
+        await user.click(screen.getByRole('button', {name: '管理'}));
         expect(Array.from(container.querySelectorAll('.ComputeNodeCard h3')).map(element => element.textContent))
             .toEqual(['shandong-a', 'shanghai-a']);
     });
@@ -816,7 +833,7 @@ describe('ComputeClusterPopup', () => {
     });
 
     it('keeps fixed-size cards inside their regional frame when the graph fits its window', async () => {
-        const rect = jest.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+        const rect = jest.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
             const scene = this.classList.contains('ComputeGraphScene');
             const region = this.classList.contains('ComputeGraphRegion');
             const width = scene ? 800 : region ? 776 : 0;
@@ -1074,7 +1091,7 @@ describe('ComputeClusterPopup', () => {
         rerender(<ComputeClusterPopup language={Language.ENGLISH}/>);
 
         expect(Array.from(document.querySelectorAll('.ComputeClusterSummary span')).map(item => item.textContent))
-            .toEqual(['Regions', 'Total devices (incl. cameras)', 'Normal nodes', 'Fault nodes', 'Abnormal nodes']);
+            .toEqual(['Regions', 'Total devices (incl. cameras)', 'Total nodes', 'Compute nodes', 'Normal nodes', 'Fault nodes', 'Abnormal nodes']);
         expect(await screen.findByText('shanghai')).toBeInTheDocument();
         expect(screen.queryByText('上海')).not.toBeInTheDocument();
     });
@@ -1496,4 +1513,415 @@ describe('ComputeClusterPopup', () => {
         expect(screen.getByText('model-work-node cluster join --control-url <OpenSight Platform URL> --enrollment-token-file <secret file>')).toBeInTheDocument();
     });
 
+
+    // Retained regression coverage from the former Master branch, using the generic build.
+    describe('generic platform controls', () => {
+        beforeEach(() => { (globalThis as typeof globalThis & {__OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__?: boolean}).__OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ = false; });
+        afterEach(() => { delete (globalThis as typeof globalThis & {__OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__?: boolean}).__OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__; });
+    it('sorts faults first and filters the compact node list', async () => {
+        const user = userEvent.setup();
+        const [baseNode] = await service.nodes();
+        service.nodes.mockResolvedValue([
+            {...baseNode, node_id: 'shanghai-offline', name: 'shanghai-z', online: false},
+            {...baseNode, node_id: 'shanghai-online', name: 'shanghai-a', online: true},
+            {...baseNode, node_id: 'shandong-online', name: 'shandong-a', online: true},
+        ]);
+        const graph = await service.resourceGraph();
+        service.resourceGraph.mockResolvedValue({
+            ...graph,
+            entities: [
+                ...graph.entities,
+                {
+                    entity_id: 'node:shanghai-offline', kind: 'compute_node', label: 'shanghai-z',
+                    state: 'unavailable', callable: false, node_id: 'shanghai-offline', modes: [],
+                    region_id: 'shanghai', region_name: '上海', region_source: 'region_label',
+                },
+                {
+                    entity_id: 'node:shanghai-online', kind: 'compute_node', label: 'shanghai-a',
+                    state: 'available', callable: true, node_id: 'shanghai-online', modes: [],
+                    region_id: 'shanghai', region_name: '上海', region_source: 'region_label',
+                },
+                {
+                    entity_id: 'node:shandong-online', kind: 'compute_node', label: 'shandong-a',
+                    state: 'available', callable: true, node_id: 'shandong-online', modes: [],
+                    region_id: 'shandong', region_name: '山东', region_source: 'region_label',
+                },
+            ],
+        });
+
+        const {container} = render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await user.click(await screen.findByRole('button', {name: '节点管理 3'}));
+
+        const nodeNames = Array.from(container.querySelectorAll('.ComputeNodeCard h3'))
+            .map(element => element.textContent);
+        expect(nodeNames).toEqual(['shanghai-z', 'shandong-a', 'shanghai-a']);
+        expect(container.querySelectorAll('.ComputeNodeCard[open]')).toHaveLength(0);
+
+        await user.click(screen.getByRole('button', {name: '管理'}));
+        await user.click(screen.getByRole('menuitemradio', {name: '故障 1'}));
+        expect(Array.from(container.querySelectorAll('.ComputeNodeCard h3')).map(element => element.textContent))
+            .toEqual(['shanghai-z']);
+        await user.click(screen.getByRole('menuitemradio', {name: '正常 2'}));
+        expect(Array.from(container.querySelectorAll('.ComputeNodeCard h3')).map(element => element.textContent))
+            .toEqual(['shandong-a', 'shanghai-a']);
+        expect(screen.getByRole('menuitemradio', {name: '可升级 0'})).toBeInTheDocument();
+    });
+
+    it('opens the three classic node tools from a pinned graph card', async () => {
+        const user = userEvent.setup();
+        const graph = await service.resourceGraph();
+        const nodes = await service.nodes();
+        const onOpenNodeTool = jest.fn();
+        const rendered = render(<ResourceKnowledgeGraph
+            graph={graph}
+            nodes={nodes}
+            zh={true}
+            onSelectWorkAgent={jest.fn()}
+            onOpenNodeTool={onOpenNodeTool}
+            programStatus={() => ({tone: 'warning', label: '程序运行异常'})}
+        />);
+
+        const nodeButton = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
+        await user.dblClick(nodeButton);
+        const card = screen.getByRole('status', {name: 'edge-01 运维信息'});
+        expect(card).toHaveClass('pinned');
+
+        await user.click(within(card).getByRole('button', {name: /SSH \/ Tailscale/}));
+        await user.click(within(card).getByRole('button', {name: /资源监视器/}));
+        await user.click(within(card).getByRole('button', {name: /程序运行器/}));
+
+        expect(onOpenNodeTool.mock.calls.map(([, tool]) => tool))
+            .toEqual(['terminal', 'monitor', 'runner']);
+        expect(within(card).getByRole('button', {name: /程序运行器/})).toHaveTextContent('程序运行异常');
+
+        const sent = jest.fn();
+        window.addEventListener(AGENT_CHAT_SEND_EVENT, sent);
+        await user.click(within(card).getByRole('button', {name: /通过 OpenSight Agent 执行 等待诊断/}));
+        expect((sent.mock.calls[0][0] as CustomEvent<string>).detail)
+            .toBe('@edge-01 执行 等待诊断（system.wait） 服务，并将执行结果按表格输出');
+        window.removeEventListener(AGENT_CHAT_SEND_EVENT, sent);
+
+        rendered.rerender(<ResourceKnowledgeGraph
+            graph={graph}
+            nodes={nodes.map(node => ({...node, communication_state: 'fault'}))}
+            zh={true}
+            onSelectWorkAgent={jest.fn()}
+            onOpenNodeTool={onOpenNodeTool}
+        />);
+        expect(screen.getByRole('status', {name: 'edge-01 运维信息'})).toHaveClass('tone-warning');
+        expect(within(card).queryByRole('button', {name: /程序运行器/})).not.toBeInTheDocument();
+        expect(within(card).getByRole('button', {name: /资源监视器/})).toBeInTheDocument();
+    });
+    // The newer ownership hierarchy is covered by the camera-owner and authoritative-chain tests above.
+
+
+    it('reflows filtered rings and fixed-size cards when the viewport changes', async () => {
+        const base = await service.resourceGraph();
+        const node = (await service.nodes())[0];
+        const main = base.entities.find(entity => entity.kind === 'compute_node');
+        const region = base.entities.find(entity => entity.kind === 'compute_region');
+        const camera = base.entities.find(entity => entity.device_kind === 'camera');
+        const regions = ['上海', '山东'].map((name, index) => ({
+            ...region, entity_id: `region:${index}`, region_id: String(index), region_name: name, label: name,
+        }));
+        const mains = Array.from({length: 7}, (_, index) => ({
+            ...main, entity_id: `node:${index}`, node_id: String(index), label: `node-${index}`,
+            region_id: index < 5 ? '0' : '1',
+        }));
+        const devices = Array.from({length: 47}, (_, index) => ({
+            ...camera, entity_id: `device:${index}`, node_id: '6', label: `device-${index}`,
+            device_kind: index < 18 ? 'edge_compute' : 'camera',
+        }));
+        const graph = {
+            ...base,
+            entities: [...regions, ...mains, ...devices],
+            relations: [
+                ...mains.map(entity => ({
+                    relation_id: `contains:${entity.entity_id}`, kind: 'contains' as const,
+                    source_id: `region:${entity.region_id}`, target_id: entity.entity_id,
+                    active: true, reason: 'available' as const,
+                })),
+                ...devices.map(entity => ({
+                    relation_id: `manages:${entity.entity_id}`, kind: 'manages' as const,
+                    source_id: 'node:6', target_id: entity.entity_id,
+                    active: true, reason: 'available' as const,
+                })),
+            ],
+        };
+        const nodes = mains.map((entity, index) => ({
+            ...node, node_id: entity.node_id, online: index === 6,
+        }));
+        const previousObserver = window.ResizeObserver;
+        const resizeCallbacks = new Map<Element, ResizeObserverCallback>();
+        const resize = (entries: ResizeObserverEntry[], observer: ResizeObserver) => {
+            resizeCallbacks.get(document.querySelector('.ComputeGraphViewport'))(entries, observer);
+        };
+        const disconnect = jest.fn();
+        window.ResizeObserver = jest.fn(callback => {
+            return {observe: (element: Element) => resizeCallbacks.set(element, callback), unobserve: jest.fn(), disconnect};
+        });
+        const props = {graph, nodes, zh: true, fitWindow: true, onSelectWorkAgent: jest.fn()};
+        const rendered = render(<ResourceKnowledgeGraph {...props} deviceType='main'/>);
+        const checkLayout = (count: number, expectedWidth: number, expectedHeight: number) => {
+            const scene = screen.getByRole('figure', {name: '主节点、计算节点与摄像头关系图'});
+            expect(scene).toHaveAttribute('data-layout', 'radial');
+            const width = parseFloat(scene.style.minWidth);
+            const height = parseFloat(scene.style.minHeight);
+            expect(width).toBeCloseTo(expectedWidth);
+            expect(height).toBeCloseTo(expectedHeight);
+            const cards = screen.getAllByTestId('resource-graph-node').map(card => ({
+                x: parseFloat(card.style.left) * width / 100,
+                y: parseFloat(card.style.top) * height / 100,
+                width: card.dataset.entityKind === 'compute_node' ? 92 : 136,
+                height: card.dataset.entityKind === 'compute_node' ? 92 : 58,
+            }));
+            expect(cards).toHaveLength(count);
+            cards.forEach(card => {
+                expect(card.x - card.width / 2).toBeGreaterThanOrEqual(0);
+                expect(card.x + card.width / 2).toBeLessThanOrEqual(width);
+                expect(card.y - card.height / 2 - 10).toBeGreaterThanOrEqual(48);
+                expect(card.y + card.height / 2).toBeLessThanOrEqual(height);
+            });
+            return cards;
+        };
+        try {
+            act(() => resize([{contentRect: {width: 1000, height: 600}}] as ResizeObserverEntry[], null));
+            const ring = checkLayout(7, 1000, 600).slice(0, 5);
+            const centerX = ring.reduce((sum, card) => sum + card.x, 0) / ring.length;
+            const centerY = ring.reduce((sum, card) => sum + card.y, 0) / ring.length;
+            const radiusX = (ring[1].x - centerX) / Math.sin(Math.PI * 2 / ring.length);
+            const radiusY = centerY - ring[0].y;
+            ring.forEach(card => expect(((card.x - centerX) / radiusX) ** 2
+                + ((card.y - centerY) / radiusY) ** 2).toBeCloseTo(1));
+            const mainRegions = screen.getAllByTestId('resource-graph-region');
+            expect(parseFloat(mainRegions[0].style.flexGrow)).toBeGreaterThan(parseFloat(mainRegions[1].style.flexGrow));
+            expect(within(mainRegions[1]).getByText('1/2 正常节点')).toBeInTheDocument();
+            const stats = document.querySelector('.graph-summary');
+            expect([...stats.querySelectorAll('strong')].map(item => item.textContent)).toEqual(['0', '0', '0']);
+
+            rendered.rerender(<ResourceKnowledgeGraph {...props} deviceType='edge'/>);
+            checkLayout(18, 1000, 600);
+            expect(screen.getAllByTestId('resource-graph-region')).toHaveLength(1);
+            expect(screen.getByTestId('resource-graph-region')).toHaveTextContent('山东');
+            expect(screen.getByTestId('resource-graph-region')).toHaveTextContent('1/2 正常节点');
+            rendered.rerender(<ResourceKnowledgeGraph {...props} deviceType='sensor'/>);
+            checkLayout(29, 1000, 600);
+
+            act(() => resize([{contentRect: {width: 360, height: 400}}] as ResizeObserverEntry[], null));
+            checkLayout(29, 360, 400);
+            rendered.rerender(<ResourceKnowledgeGraph {...props} deviceType='main'/>);
+            checkLayout(7, 360, 400);
+            rendered.rerender(<ResourceKnowledgeGraph {...props} graph={{...graph, entities: [...regions, ...mains]}} deviceType='edge'/>);
+            expect(screen.queryByTestId('resource-graph-node')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('resource-graph-region')).not.toBeInTheDocument();
+        } finally {
+            rendered.unmount();
+            expect(disconnect).toHaveBeenCalled();
+            window.ResizeObserver = previousObserver;
+        }
+    });
+
+    it('shows the durable OTA phase history and the legacy controller fallback', async () => {
+        const user = userEvent.setup();
+        const manifest = {
+            version: 1 as const,
+            purpose: 'model-work-node.ota-release.v1' as const,
+            release_version: '1.0.7', minimum_node_version: '1.0.4', source_revision: 'b'.repeat(40),
+            platform: 'windows' as const, architecture: 'x86_64' as const,
+            artifact_url: 'https://releases.example/model-work-node-1.0.7-windows-x86_64.zip',
+            sha256: 'c'.repeat(64), size_bytes: 4096, signature: `${'A'.repeat(86)}==`,
+        };
+        localStorage.setItem('opensight.compute-upgrade-batch.v1', 'batch-log');
+        const loggedBatch: ComputeUpgradeBatch = {
+            batch_id: 'batch-log', release_version: '1.0.7', state: 'failed', current_index: 1,
+            created_at: 1000, updated_at: 1006, delivery_started_at: 1005,
+            error_code: 'upgrade_delivery_unconfirmed', drain_timeout_seconds: 300,
+            ttl_seconds: 14400, expires_at: 20000,
+            user: {user_id: 'user-1', user_name: 'law', user_public_key: 'A'.repeat(43) + '='},
+            nodes: [{
+                node_id: 'node-complete', job_id: 'job-complete', manifest,
+                authorization_id: 'authorization-complete', authorization: null,
+                state: 'succeeded', error_code: null,
+                result: {
+                    job_id: 'job-complete', state: 'succeeded', created_at: 1002, updated_at: 1004,
+                    drain_deadline: 1302, error_code: null, health_task_id: null,
+                    release_version: '1.0.7', events: [
+                        {event_id: 1, state: 'queued', created_at: 1002, error_code: null},
+                        {event_id: 2, state: 'downloading', created_at: 1003, error_code: null},
+                        {event_id: 3, state: 'succeeded', created_at: 1004, error_code: null},
+                    ],
+                },
+            }, {
+                node_id: 'node-12345678', job_id: 'job-legacy', manifest,
+                authorization_id: 'authorization-legacy', authorization: null,
+                state: 'failed', error_code: 'upgrade_delivery_unconfirmed', result: null,
+            }],
+        };
+        service.upgradeBatch.mockResolvedValue(loggedBatch);
+
+        const view = render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await openNodeUpgrade(user);
+        const summaries = await screen.findAllByText(/升级过程日志/);
+        const firstLog = summaries[0].closest('details') as HTMLElement;
+        const secondLog = summaries[1].closest('details') as HTMLElement;
+        expect(within(firstLog).getAllByRole('listitem').map(item => item.textContent)).toEqual([
+            expect.stringContaining('等待批次确认'),
+            expect.stringContaining('已排队'),
+            expect.stringContaining('下载中'),
+            expect.stringContaining('成功'),
+        ]);
+        expect(within(firstLog).getAllByRole('listitem')[1].querySelector('time')).toHaveAttribute(
+            'datetime', new Date(1002 * 1000).toISOString(),
+        );
+        expect(within(secondLog).getAllByRole('listitem').map(item => item.textContent)).toEqual([
+            expect.stringContaining('等待批次确认'),
+            expect.stringContaining('正在提交授权'),
+            expect.stringContaining('失败'),
+        ]);
+        expect(within(secondLog).getByText('upgrade_delivery_unconfirmed')).toBeInTheDocument();
+        expect(within(secondLog).getByText('未收到节点阶段记录；以上为主控已确认的过程。')).toBeInTheDocument();
+
+        view.unmount();
+        service.upgradeBatch.mockResolvedValue({
+            ...loggedBatch,
+            error_code: 'authorization_expired',
+            nodes: [loggedBatch.nodes[0], {
+                ...loggedBatch.nodes[1], error_code: 'authorization_expired',
+            }],
+        });
+        const staleView = render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await openNodeUpgrade(user);
+        const staleLog = (await screen.findAllByText(/升级过程日志/))[1].closest('details') as HTMLElement;
+        expect(within(staleLog).getByText('正在提交授权')).toBeInTheDocument();
+
+        staleView.unmount();
+        service.upgradeBatch.mockResolvedValue({
+            ...loggedBatch,
+            state: 'approval_submitting',
+            error_code: 'upgrade_delivery_uncertain',
+            nodes: [loggedBatch.nodes[0], {
+                ...loggedBatch.nodes[1], state: 'approval_submitting', error_code: 'upgrade_delivery_uncertain',
+            }],
+        });
+        const uncertainView = render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await openNodeUpgrade(user);
+        const uncertainLog = (await screen.findAllByText(/升级过程日志/))[1].closest('details') as HTMLElement;
+        expect(within(uncertainLog).getByText('等待节点确认')).toBeInTheDocument();
+        expect(within(uncertainLog).getByText(/尚未确认节点是否已收到升级任务/)).toBeInTheDocument();
+        expect(within(uncertainLog).getByText('upgrade_delivery_uncertain')).toBeInTheDocument();
+
+        uncertainView.unmount();
+        service.upgradeBatch.mockResolvedValue({
+            ...loggedBatch,
+            error_code: 'authorization_user_unknown',
+            nodes: [loggedBatch.nodes[0], {
+                ...loggedBatch.nodes[1], error_code: 'authorization_user_unknown',
+            }],
+        });
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await openNodeUpgrade(user);
+        const rejectedLog = (await screen.findAllByText(/升级过程日志/))[1].closest('details') as HTMLElement;
+        expect(within(rejectedLog).getByText(/审批身份未登记到目标节点/)).toBeInTheDocument();
+        expect(within(rejectedLog).getByText('authorization_user_unknown')).toBeInTheDocument();
+    });
+
+    it('shows an empty Main catalog and can retry a catalog failure', async () => {
+        const user = userEvent.setup();
+        service.upgradeReleases.mockRejectedValueOnce(new Error('Main unavailable'));
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await openNodeUpgrade(user);
+        expect(await screen.findByText('Main unavailable')).toHaveAttribute('role', 'alert');
+        expect(screen.getByRole('button', {name: '创建升级批次'})).toBeDisabled();
+        await user.click(screen.getByRole('button', {name: '刷新版本'}));
+        expect(await screen.findByText('当前控制端尚未发布可用安装包。请先发布目标版本，再刷新列表。')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '创建升级批次'})).toBeDisabled();
+    });
+
+    it('does not advertise a node already on the published target version', async () => {
+        const user = userEvent.setup();
+        const manifest = {
+            version: 1 as const,
+            purpose: 'model-work-node.ota-release.v1' as const,
+            release_version: '1.1.1', minimum_node_version: '1.0.0', source_revision: 'b'.repeat(40),
+            platform: 'windows' as const, architecture: 'x86_64' as const,
+            artifact_url: 'https://releases.example/model-work-node-1.1.1-windows-x86_64.zip',
+            sha256: 'c'.repeat(64), size_bytes: 4096, signature: `${'A'.repeat(86)}==`,
+        };
+        const nodes = await service.nodes();
+        service.nodes.mockResolvedValue(nodes.map(node => ({
+            ...node,
+            agent_version: '1.1.1',
+            resources: {...node.resources, platform: 'windows', architecture: 'amd64'},
+        })));
+        service.upgradeReleases.mockResolvedValue({source: 'main', releases: [manifest]});
+
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await user.click(await screen.findByRole('button', {name: '节点管理 1'}));
+        await waitFor(() => expect(service.upgradeReleases).toHaveBeenCalledTimes(1));
+        await user.click(screen.getByRole('button', {name: '管理'}));
+        expect(screen.getByRole('menuitemradio', {name: '可升级 0'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toBeDisabled();
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toHaveTextContent('暂无可用升级');
+
+        await user.click(screen.getByRole('button', {name: '批量升级'}));
+        await user.selectOptions(screen.getByLabelText('当前控制端的升级版本'), '1.1.1');
+        expect(screen.getByText('已是目标版本，无需升级')).toBeInTheDocument();
+    });
+
+    it('creates an OTA batch from a Main version without uploading a manifest', async () => {
+        const user = userEvent.setup();
+        const manifest = {
+            version: 1 as const,
+            purpose: 'model-work-node.ota-release.v1' as const,
+            release_version: '1.0.5', minimum_node_version: '0.1.0', source_revision: 'b'.repeat(40),
+            platform: 'windows' as const, architecture: 'x86_64' as const,
+            artifact_url: 'https://releases.example/model-work-node-1.0.5-windows-x86_64.zip',
+            sha256: 'c'.repeat(64), size_bytes: 4096, signature: `${'A'.repeat(86)}==`,
+        };
+        const nodes = await service.nodes();
+        service.nodes.mockResolvedValue(nodes.map(node => ({
+            ...node,
+            online: false,
+            communication_state: 'fault',
+            network: {...node.network, lan_ssh_available: false, tailscale_ssh_available: true},
+            resources: {...node.resources, platform: 'windows', architecture: 'amd64'},
+        })));
+        service.upgradeReleases.mockResolvedValue({source: 'main', releases: [manifest]});
+        service.createMainUpgradeBatch.mockResolvedValue({
+            batch_id: 'batch-1', release_version: '1.0.5', state: 'awaiting_authorization',
+            current_index: 0, created_at: 1, updated_at: 1, error_code: null,
+            drain_timeout_seconds: 300, ttl_seconds: 14400, expires_at: Date.now() / 1000 + 14400,
+            user: {user_id: 'user-1', user_name: 'law', user_public_key: 'A'.repeat(43) + '='},
+            nodes: [{
+                node_id: 'node-12345678', job_id: 'job-1', manifest,
+                authorization_id: 'authorization-1', authorization: null,
+                state: 'awaiting_authorization', error_code: null, result: null,
+            }],
+        });
+
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await openNodeUpgrade(user);
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toBeEnabled();
+        await screen.findByRole('option', {name: 'v1.0.5'});
+        expect(screen.getByText('当前版本 v0.1.0')).toBeInTheDocument();
+        expect(screen.queryByLabelText('选择签名发布清单')).not.toBeInTheDocument();
+        await user.selectOptions(screen.getByLabelText('当前控制端的升级版本'), '1.0.5');
+        await user.click(screen.getByRole('checkbox', {name: /edge-01/}));
+        await user.click(screen.getByRole('button', {name: '创建升级批次'}));
+
+        await waitFor(() => expect(service.createMainUpgradeBatch).toHaveBeenCalledWith(['node-12345678'], '1.0.5'));
+        expect((await screen.findAllByText('等待批次确认')).length).toBeGreaterThan(0);
+        const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
+        service.approveUpgradeBatch.mockResolvedValue({
+            ...(await service.createMainUpgradeBatch.mock.results[0].value), state: 'authorized',
+        });
+        await user.click(screen.getByRole('button', {name: '确认整个升级批次'}));
+        await waitFor(() => expect(service.approveUpgradeBatch).toHaveBeenCalledTimes(1));
+        expect(confirm).toHaveBeenCalledTimes(1);
+        expect(confirm.mock.calls[0][0]).toContain('edge-01');
+        expect(confirm.mock.calls[0][0]).toContain(manifest.sha256);
+        expect(confirm.mock.calls[0][0]).toContain('授权截止');
+        confirm.mockRestore();
+    });
+    });
 });

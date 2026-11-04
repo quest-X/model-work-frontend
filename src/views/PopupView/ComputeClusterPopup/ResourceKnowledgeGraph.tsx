@@ -1,4 +1,4 @@
-import React, {useLayoutEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {
     ComputeClusterNode,
     ComputeResourceGraph,
@@ -20,6 +20,8 @@ interface ResourceKnowledgeGraphProps {
     fitWindow?: boolean;
     commercialRestricted?: boolean;
     selectedTaskType?: string;
+    deviceType?: 'all' | 'main' | 'edge' | 'sensor';
+    programStatus?: (node: ComputeClusterNode) => {tone: string; label: string} | null;
     onSelectWorkAgent: (
         agent: ComputeResourceGraphEntity,
         candidateNodeIds: string[],
@@ -28,7 +30,6 @@ interface ResourceKnowledgeGraphProps {
         node: ComputeClusterNode,
         tool: 'terminal' | 'monitor' | 'runner',
     ) => void;
-    programStatus?: (node: ComputeClusterNode) => {tone: string; label: string} | null;
 }
 
 interface GraphPoint {
@@ -162,6 +163,8 @@ const operationsTopology = (
     entities: ComputeResourceGraphEntity[],
     relations: ComputeResourceGraph['relations'],
     nodeRoles: Map<string, GraphNodeRole>,
+    visibleIds?: Set<string>,
+    viewport = {width: 720, height: 440},
 ): OperationsTopology => {
     const points = new Map<string, GraphPoint>();
     const nodes = entities.filter(entity => entity.kind === 'compute_node');
@@ -214,6 +217,66 @@ const operationsTopology = (
     const orderedRegions = [...regionRecords.values()]
         .filter(region => region.nodeIds.length > 0)
         .sort((left, right) => left.regionId.localeCompare(right.regionId) || left.entityId.localeCompare(right.entityId));
+    if (visibleIds) {
+        const regionByNodeId = new Map(nodes.map(node => [
+            node.node_id,
+            orderedRegions.find(region => region.nodeIds.includes(node.entity_id))?.entityId,
+        ]));
+        const members = new Map<string, ComputeResourceGraphEntity[]>();
+        entities.filter(entity => visibleIds.has(entity.entity_id)).forEach(entity => {
+            const regionId = regionByNodeId.get(entity.node_id) || 'region-filter:unassigned';
+            members.set(regionId, [...(members.get(regionId) || []), entity]);
+        });
+        const filteredRegions = orderedRegions.filter(region => members.has(region.entityId));
+        if (members.has('region-filter:unassigned')) filteredRegions.push({
+            entityId: 'region-filter:unassigned', regionId: 'unassigned', regionName: '未分配地域',
+            state: 'unavailable', nodeIds: [],
+        });
+        const weight = filteredRegions.reduce((total, region) => total + Math.sqrt(members.get(region.entityId).length), 0);
+        const usableWidth = Math.max(0, viewport.width - 16 * (filteredRegions.length + 1));
+        let minWidth = 16;
+        const minHeight = Math.max(280, viewport.height);
+        const layouts = filteredRegions.map(region => {
+            const items = members.get(region.entityId);
+            const cardWidth = items[0].kind === 'compute_node' ? 92 : 136;
+            const cardHeight = items[0].kind === 'compute_node' ? 92 : 58;
+            const width = usableWidth * Math.sqrt(items.length) / weight;
+            const radiusX = Math.max(0, (width - cardWidth - 48) / 2);
+            const radiusY = Math.max(0, (minHeight - cardHeight - 88) / 2);
+            const ringCount = items.length <= 8 ? 1 : Math.ceil(Math.sqrt(items.length / 6));
+            const positions: GraphPoint[] = [];
+            let remaining = items.length;
+            for (let ring = ringCount; ring > 0; ring--) {
+                const count = Math.round(remaining * 2 / (ring + 1));
+                remaining -= count;
+                for (let index = 0; index < count; index++) {
+                    positions.push(items.length === 1 ? {x: 0, y: 0}
+                        : radialPoint(0, 0, radiusX * ring / ringCount, radiusY * ring / ringCount,
+                            -Math.PI / 2 + Math.PI * 2 * (index + (ring % 2 ? 0 : .5)) / count));
+                }
+            }
+            const left = minWidth;
+            minWidth += width + 16;
+            return {region, items, positions, left, width};
+        });
+        minWidth = Math.max(viewport.width, minWidth);
+        layouts.forEach(({items, positions, left, width}) => {
+            items.forEach((entity, index) => {
+                points.set(entity.entity_id, {
+                    x: (left + width / 2 + positions[index].x) / minWidth * 100,
+                    y: (64 + (minHeight - 80) / 2 + positions[index].y) / minHeight * 100,
+                });
+            });
+        });
+        return {
+            points,
+            regions: layouts.map(({region, left, width}) => ({
+                ...region, left: left / minWidth * 100, width: width / minWidth * 100,
+            })),
+            minWidth,
+            minHeight,
+        };
+    }
     const regions = orderedRegions.map((region): GraphRegion => ({...region, left: 0, width: 100}));
     let minWidth = 16;
     let minHeight = 440;
@@ -343,9 +406,11 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     ),
     onOpenNodeTool,
     programStatus,
+    deviceType = 'all',
 }) => {
     const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
     const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
+    const [hoveredGroupLinkId, setHoveredGroupLinkId] = useState<string | null>(null);
     const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
     const [pinnedEntityId, setPinnedEntityId] = useState<string | null>(null);
     const sceneRef = useRef<HTMLDivElement>(null);
@@ -354,6 +419,20 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         height: number;
         regions: Record<string, GraphBounds>;
     }>({width: 0, height: 0, regions: {}});
+    const viewportRef = useRef<HTMLDivElement>(null);
+    const [viewportSize, setViewportSize] = useState({width: 720, height: 440});
+    useEffect(() => {
+        if (!fitWindow || !viewportRef.current || typeof ResizeObserver === 'undefined') return undefined;
+        const observer = new ResizeObserver(([entry]) => {
+            const width = Math.round(entry.contentRect.width);
+            const height = Math.round(entry.contentRect.height);
+            if (width <= 0 || height <= 0) return;
+            setViewportSize(current => current.width === width && current.height === height
+                ? current : {width, height});
+        });
+        observer.observe(viewportRef.current);
+        return () => observer.disconnect();
+    }, [fitWindow]);
     const index = useMemo(
         () => new Map(graph.entities.map(entity => [entity.entity_id, entity])),
         [graph.entities],
@@ -376,8 +455,13 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         [graph, nodeRoles],
     );
     const visibleEntities = useMemo(
-        () => operationalGraph.entities.filter(visibleEntity),
-        [operationalGraph.entities],
+        () => operationalGraph.entities.filter(entity => visibleEntity(entity) && (
+            deviceType === 'all'
+            || (deviceType === 'main' && entity.kind === 'compute_node')
+            || (deviceType === 'edge' && entity.kind === 'managed_device' && entity.device_kind === 'edge_compute')
+            || (deviceType === 'sensor' && entity.kind === 'managed_device' && entity.device_kind !== 'edge_compute')
+        )),
+        [deviceType, operationalGraph.entities],
     );
     const visibleEntityIds = useMemo(
         () => new Set(visibleEntities.map(entity => entity.entity_id)),
@@ -392,8 +476,8 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         [operationalGraph.relations, visibleEntityIds],
     );
     const topology = useMemo(
-        () => operationsTopology(operationalGraph.entities, operationalGraph.relations, nodeRoles),
-        [nodeRoles, operationalGraph.entities, operationalGraph.relations],
+        () => operationsTopology(operationalGraph.entities, operationalGraph.relations, nodeRoles, deviceType === 'all' ? undefined : visibleEntityIds, viewportSize),
+        [deviceType, nodeRoles, operationalGraph.entities, operationalGraph.relations, visibleEntityIds, viewportSize],
     );
     useLayoutEffect(() => {
         const scene = sceneRef.current;
@@ -467,6 +551,18 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         [nodeRoles, operationalGraph.entities],
     );
     const graphNodes = visibleEntities.filter(entity => entity.kind === 'compute_node');
+    const groupMembers = [...graphNodes]
+        .filter(entity => points.has(entity.entity_id))
+        .sort((left, right) => {
+            const leftPoint = points.get(left.entity_id) as GraphPoint;
+            const rightPoint = points.get(right.entity_id) as GraphPoint;
+            return leftPoint.x - rightPoint.x || leftPoint.y - rightPoint.y;
+        });
+    const groupLinks = groupMembers.slice(1).map((target, linkIndex) => ({
+        id: `${groupMembers[linkIndex].entity_id}:${target.entity_id}`,
+        source: groupMembers[linkIndex],
+        target,
+    }));
     const activeTaskFlows = tasks.flatMap(task => {
         const sourceId = task.source_entity_id
             ? operationalGraph.replacementById.get(task.source_entity_id) || task.source_entity_id
@@ -477,6 +573,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         const source = sourceId ? index.get(sourceId) : undefined;
         const target = targetId ? index.get(targetId) : undefined;
         return (task.state === 'queued' || task.state === 'running') && source && target && source !== target
+            && visibleEntityIds.has(source.entity_id) && visibleEntityIds.has(target.entity_id)
             ? [{task, source, target}]
             : [];
     });
@@ -487,7 +584,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         entity.kind === 'managed_device' && entity.device_kind !== 'edge_compute',
     );
     const workerNodes = graphNodes.filter(entity => nodeRoles.get(entity.entity_id) === 'node');
-    const nodeTones = new Map(graphNodes.map(entity => {
+    const nodeTones = new Map(operationalGraph.entities.filter(entity => entity.kind === 'compute_node').map(entity => {
         const node = entity.node_id ? nodeIndex.get(entity.node_id) : undefined;
         const state = computeNodeState(node);
         return [entity.entity_id, state === 'normal' ? 'online' : state === 'abnormal' ? 'offline' : 'warning'];
@@ -500,12 +597,16 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     const inspectedClassification = inspectedEntity?.kind === 'managed_device'
         ? deviceClass(inspectedEntity)
         : undefined;
+    const inspectedTone = inspectedEntity?.kind === 'compute_node' ? nodeTones.get(inspectedEntity.entity_id) : undefined;
     const inspectedPoint = inspectedEntityId ? points.get(inspectedEntityId) : undefined;
     const hoveredRelation = visibleRelations.find(relation => relation.relation_id === hoveredRelationId);
     const hoveredRelationSource = hoveredRelation ? index.get(hoveredRelation.source_id) : undefined;
     const hoveredRelationTarget = hoveredRelation ? index.get(hoveredRelation.target_id) : undefined;
     const hoveredRelationSourcePoint = hoveredRelation ? points.get(hoveredRelation.source_id) : undefined;
     const hoveredRelationTargetPoint = hoveredRelation ? points.get(hoveredRelation.target_id) : undefined;
+    const hoveredGroupLink = groupLinks.find(link => link.id === hoveredGroupLinkId);
+    const hoveredGroupSourcePoint = hoveredGroupLink ? points.get(hoveredGroupLink.source.entity_id) : undefined;
+    const hoveredGroupTargetPoint = hoveredGroupLink ? points.get(hoveredGroupLink.target.entity_id) : undefined;
     const hoveredTaskFlow = activeTaskFlows.find(({task}) => task.task_id === hoveredTaskId);
     const hoveredTaskSourcePoint = hoveredTaskFlow ? points.get(hoveredTaskFlow.source.entity_id) : undefined;
     const hoveredTaskTargetPoint = hoveredTaskFlow ? points.get(hoveredTaskFlow.target.entity_id) : undefined;
@@ -558,17 +659,18 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
             <span><i className='entity-shape rounded-rectangle edge-device'/>{zh ? '计算节点' : 'Compute node'}</span>
             <span><i className='entity-shape rounded-rectangle sensor'/>{zh ? '摄像头' : 'Camera'}</span>
             {!commercialRestricted && <span><i className='entity-shape task-flow'/>{zh ? '数据包' : 'Packet'}</span>}
+            {!commercialRestricted && <span><i className='entity-shape group-link'/>{zh ? '计算群成员' : 'Cluster membership'}</span>}
         </div>
 
-        <div className={`ComputeGraphViewport${fitWindow ? ' fit-window' : ''}`}>
+        <div ref={viewportRef} className={`ComputeGraphViewport${fitWindow ? ' fit-window' : ''}`}>
             <div className='ComputeGraphFit'>
             <div
                 ref={sceneRef}
-                className={`ComputeGraphScene operations-only${hoveredRelation || hoveredTaskFlow ? ' has-relation-focus' : ''}`}
+                className={`ComputeGraphScene operations-only${hoveredRelation || hoveredGroupLink || hoveredTaskFlow ? ' has-relation-focus' : ''}${hoveredGroupLink ? ' group-focus' : ''}`}
                 data-layout='radial'
                 style={{
-                    minWidth: fitWindow ? 0 : topology.minWidth,
-                    minHeight: fitWindow ? 0 : topology.minHeight,
+                    minWidth: fitWindow && deviceType === 'all' ? 0 : topology.minWidth,
+                    minHeight: fitWindow && deviceType === 'all' ? 0 : topology.minHeight,
                 }}
                 role='figure'
                 aria-label={zh ? '主节点、计算节点与摄像头关系图' : 'Main node, compute node, and camera graph'}
@@ -599,6 +701,37 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     data-testid='resource-node-link-graph'
                     aria-label={zh ? '设备连接线' : 'Device connections'}
                 >
+                    {groupLinks.map(link => {
+                        const sourcePoint = points.get(link.source.entity_id) as GraphPoint;
+                        const targetPoint = points.get(link.target.entity_id) as GraphPoint;
+                        const focused = hoveredGroupLinkId === link.id;
+                        const muted = Boolean(hoveredRelationId || hoveredTaskId || hoveredGroupLinkId) && !focused;
+                        return <React.Fragment key={link.id}>
+                            <line
+                                x1={sourcePoint.x * 10}
+                                y1={sourcePoint.y * 4.4}
+                                x2={targetPoint.x * 10}
+                                y2={targetPoint.y * 4.4}
+                                className={`ComputeGraphGroupLink ${focused ? 'focused' : ''} ${muted ? 'muted' : ''}`}
+                                data-testid='resource-graph-group-link'
+                                aria-hidden='true'
+                            />
+                            <line
+                                x1={sourcePoint.x * 10}
+                                y1={sourcePoint.y * 4.4}
+                                x2={targetPoint.x * 10}
+                                y2={targetPoint.y * 4.4}
+                                className='ComputeGraphEdgeHit'
+                                data-testid='resource-graph-group-link-hit'
+                                tabIndex={0}
+                                aria-label={`${zh ? '同群成员' : 'Cluster members'} ${link.source.label} ↔ ${link.target.label}`}
+                                onMouseEnter={() => setHoveredGroupLinkId(link.id)}
+                                onMouseLeave={() => setHoveredGroupLinkId(current => current === link.id ? null : current)}
+                                onFocus={() => setHoveredGroupLinkId(link.id)}
+                                onBlur={() => setHoveredGroupLinkId(current => current === link.id ? null : current)}
+                            />
+                        </React.Fragment>;
+                    })}
                     {visibleRelations.map(relation => {
                         const source = points.get(relation.source_id);
                         const target = points.get(relation.target_id);
@@ -610,7 +743,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         const x2 = target.x * 10;
                         const y2 = target.y * 4.4;
                         const focused = hoveredRelationId === relation.relation_id;
-                        const muted = Boolean(hoveredRelationId || hoveredTaskId) && !focused;
+                        const muted = Boolean(hoveredRelationId || hoveredGroupLinkId || hoveredTaskId) && !focused;
                         return <React.Fragment key={relation.relation_id}>
                             <line
                                 x1={x1}
@@ -655,7 +788,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         if (!sourcePoint || !targetPoint) return null;
                         const path = `M ${sourcePoint.x * 10} ${sourcePoint.y * 4.4} L ${targetPoint.x * 10} ${targetPoint.y * 4.4}`;
                         const focused = hoveredTaskId === task.task_id;
-                        const muted = Boolean(hoveredRelationId) || Boolean(hoveredTaskId && !focused);
+                        const muted = Boolean(hoveredRelationId || hoveredGroupLinkId) || Boolean(hoveredTaskId && !focused);
                         return <g
                             key={task.task_id}
                             className={`ComputeGraphTaskFlow ${focused ? 'focused' : ''} ${muted ? 'muted' : ''}`}
@@ -699,6 +832,8 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     const isPinned = pinnedEntityId === entity.entity_id;
                     const isRelationEndpoint = hoveredRelation?.source_id === entity.entity_id
                         || hoveredRelation?.target_id === entity.entity_id
+                        || hoveredGroupLink?.source.entity_id === entity.entity_id
+                        || hoveredGroupLink?.target.entity_id === entity.entity_id
                         || hoveredTaskFlow?.source.entity_id === entity.entity_id
                         || hoveredTaskFlow?.target.entity_id === entity.entity_id;
                     return <button
@@ -706,7 +841,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         key={entity.entity_id}
                         className={`ComputeGraphNode ${entity.kind} ${nodeRole ? `role-${nodeRole}` : ''} ${classification} ${entity.device_kind === 'edge_compute' ? 'edge-device' : ''} state-${entity.state} ${isNode
                             ? `node-${nodeTones.get(entity.entity_id)}`
-                            : 'sensor-node'} ${isHovered || isPinned ? 'focused' : ''} ${isPinned ? 'pinned' : ''} ${isRelationEndpoint ? 'relation-focused' : ''} ${(hoveredRelation || hoveredTaskFlow) && !isRelationEndpoint ? 'muted' : ''}`}
+                            : 'sensor-node'} ${isHovered || isPinned ? 'focused' : ''} ${isPinned ? 'pinned' : ''} ${isRelationEndpoint ? 'relation-focused' : ''} ${(hoveredRelation || hoveredGroupLink || hoveredTaskFlow) && !isRelationEndpoint ? 'muted' : ''}`}
                         style={{left: `${point.x}%`, top: `${point.y}%`}}
                         onMouseEnter={() => setHoveredEntityId(entity.entity_id)}
                         onMouseLeave={() => setHoveredEntityId(current => current === entity.entity_id ? null : current)}
@@ -761,6 +896,19 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     <strong>{hoveredRelationSource.label}<b>↔</b>{hoveredRelationTarget.label}</strong>
                 </aside>}
 
+                {hoveredGroupLink && hoveredGroupSourcePoint && hoveredGroupTargetPoint && <aside
+                    className='ComputeGraphEdgeLabel group-link'
+                    style={{
+                        left: `${(hoveredGroupSourcePoint.x + hoveredGroupTargetPoint.x) / 2}%`,
+                        top: `${(hoveredGroupSourcePoint.y + hoveredGroupTargetPoint.y) / 2}%`,
+                    }}
+                    role='status'
+                    aria-label={`${hoveredGroupLink.source.label} ${zh ? '与' : 'and'} ${hoveredGroupLink.target.label} ${zh ? '同群成员关系' : 'cluster membership'}`}
+                >
+                    <span>{zh ? '计算群成员关系' : 'Cluster membership'}</span>
+                    <strong>{hoveredGroupLink.source.label}<b>↔</b>{hoveredGroupLink.target.label}</strong>
+                </aside>}
+
                 {hoveredTaskFlow && hoveredTaskSourcePoint && hoveredTaskTargetPoint && <aside
                     className='ComputeGraphEdgeLabel task-flow'
                     style={{
@@ -775,7 +923,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                 </aside>}
 
                 {inspectedEntity && <aside
-                    className={`ComputeGraphHoverCard anchored ${inspectedRole ? `role-${inspectedRole}` : ''} ${inspectedClassification || ''} ${inspectedEntity.device_kind === 'edge_compute' ? 'edge-device' : ''} ${pinnedEntityId === inspectedEntity.entity_id ? 'pinned' : ''}`}
+                    className={`ComputeGraphHoverCard anchored ${inspectedRole ? `role-${inspectedRole}` : ''} ${inspectedClassification || ''} ${inspectedTone ? `tone-${inspectedTone}` : ''} ${inspectedEntity.device_kind === 'edge_compute' ? 'edge-device' : ''} ${pinnedEntityId === inspectedEntity.entity_id ? 'pinned' : ''}`}
                     style={{
                         '--hover-anchor-x': `${inspectedPoint?.x || 50}%`,
                         '--hover-anchor-y': `${inspectedPoint?.y || 50}%`,

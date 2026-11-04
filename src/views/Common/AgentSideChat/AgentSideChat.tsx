@@ -341,7 +341,7 @@ const bytesPerSecond = (value: number | null | undefined, zh: boolean): string =
 
 // The branching is presentation-only: localized values plus one threshold check per resource.
 // eslint-disable-next-line complexity
-const quickScanResources = (node: ComputeClusterNode, zh: boolean): Omit<QuickScanRow, 'node' | 'services' | 'status' | 'healthy'> & {problems: string[]} => {
+const quickScanResources = (node: ComputeClusterNode, zh: boolean): Omit<QuickScanRow, 'node' | 'services' | 'status' | 'healthy' | 'issues'> & {problems: string[]} => {
     const problems: string[] = [];
     const cpu = quickScanCpuPercent(node);
     const memory = quickScanUsedPercent(node.resources.memory_total_bytes, node.resources.memory_available_bytes);
@@ -964,8 +964,8 @@ export const AgentSideChat: React.FC<IProps> = ({language}) => {
             const state = latest.online ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
             const network = latest.network.online ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
             const content = zh
-                ? `@${latest.name}\n状态：${state}\n最近心跳：${Math.round(latest.heartbeat_age_seconds)} 秒前\nTailscale：${network}`
-                : `@${latest.name}\nStatus: ${state}\nLast heartbeat: ${Math.round(latest.heartbeat_age_seconds)}s ago\nTailscale: ${network}`;
+                ? `@${latest.name}\n状态：${state}\n最近通信：${Math.round(latest.heartbeat_age_seconds)} 秒前\nTailscale：${network}`
+                : `@${latest.name}\nStatus: ${state}\nLast contact: ${Math.round(latest.heartbeat_age_seconds)}s ago\nTailscale: ${network}`;
             return content;
         }
         if (operation === 'probe') return runConnectivityProbe(node, zh);

@@ -13,6 +13,7 @@ import {
 import {AgentChatService} from '../../../services/AgentChatService';
 import {ClusterGeographicMap} from '../ClusterGeographicMap';
 import {ControlCenterView} from '../ControlCenterView';
+import {version as appVersion} from '../../../../package.json';
 
 const originalFetch = global.fetch;
 
@@ -183,6 +184,26 @@ const selectMachine = async (name: string): Promise<HTMLElement> => {
     fireEvent.click(await within(machines).findByRole('button', {name: new RegExp(name)}));
     return screen.findByRole('heading', {name});
 };
+const mountedProgram: ComputeProgramSnapshot = {
+    schema_version: 'runtime.programs.v1',
+    captured_at: 1,
+    invalid_manifests: 0,
+    programs: [{
+        program_id: 'dlk',
+        name: '大炉口溢渣',
+        version: '1.0.0',
+        root: '/opt/dlk',
+        environment: '/opt/dlk/.venv',
+        mode: 'production',
+        encryption: 'encrypted',
+        state: 'healthy',
+        service: {name: 'dlk', state: 'running', pid: 123, uptime_seconds: 60},
+        health: {state: 'healthy', checked_at: 1, status_code: 200, latency_ms: 1},
+        interfaces: [],
+        events: [],
+        artifacts: [],
+    }],
+};
 
 describe('ControlCenterView', () => {
     beforeEach(() => {
@@ -235,7 +256,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(machine));
 
         render(<ControlCenterView language={Language.CHINESE}/>);
-        expect(await screen.findByText('正在获取已加入计算群的机器… 80%')).toBeInTheDocument();
+        expect(await screen.findByText('正在获取已加入计算群的机器… 75%')).toBeInTheDocument();
 
         await act(async () => resolveNodes([machine]));
         await waitFor(() => expect(
@@ -310,7 +331,7 @@ describe('ControlCenterView', () => {
         expect(screen.getByRole('heading', {name: '网络情况'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '资源管理'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '相关设备'})).toBeInTheDocument();
-        expect(screen.getByText('边缘计算设备')).toBeInTheDocument();
+        expect(screen.getByText('边缘计算设备', {selector: 'strong'})).toBeInTheDocument();
         expect(screen.getByRole('button', {name: '发现并添加局域网边缘计算设备'})).toBeInTheDocument();
         expect(screen.queryByRole('button', {name: '添加设备'})).not.toBeInTheDocument();
         expect(screen.queryByText('节点在线')).not.toBeInTheDocument();
@@ -404,7 +425,7 @@ describe('ControlCenterView', () => {
         const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
 
         expect(await selectMachine('AIPACK-05')).toBeInTheDocument();
-        expect(screen.queryByText('边缘计算设备')).not.toBeInTheDocument();
+        expect(screen.queryByText('边缘计算设备', {selector: 'strong'})).not.toBeInTheDocument();
         expect(screen.queryByRole('button', {name: '发现并添加局域网边缘计算设备'}))
             .not.toBeInTheDocument();
         expect(screen.getByText('SSH 局域网')).toBeInTheDocument();
@@ -2431,5 +2452,343 @@ describe('ControlCenterView', () => {
             '00000000-0000-4000-8000-000000000112',
         ));
         expect(await screen.findByText(/已从中央群隔离/)).toBeInTheDocument();
+    });
+
+    // Retained regression coverage from the former Master branch.
+    it('does not block initial loading on field groups', async () => {
+        jest.mocked(ComputeClusterService.groups).mockReturnValue(new Promise(() => undefined));
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(node('进度节点', true)));
+
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        expect(screen.getByText(`v${appVersion}(Platform)`)).toBeInTheDocument();
+        expect(screen.getByText('正在获取已加入计算群的机器… 0%')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByText(/正在读取计算群/)).not.toBeInTheDocument());
+        expect(screen.getByText('暂无机器')).toBeInTheDocument();
+    });
+
+    it('retains a confirmed mount on query failure and offline, but removes a confirmed empty mount', async () => {
+        jest.useFakeTimers();
+        const machine = runtimeNode('已挂载节点');
+        machine.capabilities.push('runtime.programs.read.v1');
+        const nodes = jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue(mountedProgram);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await selectMachine('已挂载节点');
+        expect(await screen.findByRole('button', {name: '打开程序运行器'})).toHaveTextContent('程序运行正常');
+
+        jest.spyOn(ComputeClusterService, 'programs').mockRejectedValue(new Error('timeout'));
+        await act(async () => { jest.advanceTimersByTime(15000); });
+        expect(screen.getByRole('button', {name: '打开程序运行器'})).toHaveTextContent('程序状态未知');
+
+        nodes.mockResolvedValue([{...machine, online: false}]);
+        fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
+        await waitFor(() => expect(screen.getByRole('button', {name: '打开程序运行器'}))
+            .toHaveTextContent('程序已停止或不可用'));
+
+        nodes.mockResolvedValue([machine]);
+        fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
+        await waitFor(() => expect(screen.getByRole('button', {name: '打开程序运行器'}))
+            .toHaveTextContent('程序状态未知'));
+        jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({...mountedProgram, programs: []});
+        await act(async () => { jest.advanceTimersByTime(15000); });
+        expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+    });
+
+    it('does not let a slow node or directory refresh block another mounted node', async () => {
+        const slow = runtimeNode('慢节点');
+        const ready = runtimeNode('快节点');
+        for (const machine of [slow, ready]) machine.capabilities.push('runtime.programs.read.v1');
+        let resolveSlow: (value: ComputeProgramSnapshot) => void;
+        const pending = new Promise<ComputeProgramSnapshot>(resolve => { resolveSlow = resolve; });
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([slow, ready]);
+        jest.spyOn(ComputeClusterService, 'programs').mockImplementation(id =>
+            id === slow.node_id ? pending : Promise.resolve(mountedProgram));
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await selectMachine('慢节点');
+        await screen.findByRole('heading', {name: slow.name});
+        expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+        const slowSignal = jest.spyOn(ComputeClusterService, 'programs').mock.calls[0][1];
+        await selectMachine('快节点');
+        expect(await screen.findByRole('button', {name: '打开程序运行器'})).toHaveTextContent('程序运行正常');
+        fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
+        await waitFor(() => expect(ComputeClusterService.nodes).toHaveBeenCalledTimes(2));
+        expect(slowSignal?.aborted).toBe(false);
+        await act(async () => { resolveSlow({...mountedProgram, programs: []}); });
+        await selectMachine('慢节点');
+        expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
+    });
+
+    it('marks machines that provide a sub-platform entry', async () => {
+        const platformNode = {
+            ...node('baosight-01', true),
+            role: 'main',
+            capabilities: ['system.health.v1', 'platform.host.v1'],
+        } as ComputeClusterNode;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            platformNode,
+            node('普通节点', true),
+        ]);
+
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        const platformMachine = await screen.findByRole('button', {name: /baosight-01/});
+        const machineList = screen.getByRole('complementary', {name: '机器列表'});
+        const marker = within(platformMachine).getByRole('img', {name: '有子平台入口'});
+        expect(marker.closest('strong')).toHaveTextContent('baosight-01');
+        expect(within(within(machineList).getByRole('button', {name: /普通节点/}))
+            .queryByRole('img', {name: '有子平台入口'})).not.toBeInTheDocument();
+    });
+
+    it('keeps the machine healthy when one optional control path fails', async () => {
+        const remoteNode = node('山东节点', true, false, null, 'Windows', 'tailscale');
+        remoteNode.network.lan_ssh_available = false;
+        remoteNode.network.tailscale_ssh_available = true;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([remoteNode]);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await selectMachine('山东节点');
+
+        const lan = await screen.findByRole('button', {name: /SSH 局域网/});
+        const remote = screen.getByRole('button', {name: /Tailscale 远程/});
+        expect(lan).toHaveTextContent('故障');
+        expect(lan.querySelector('.ControlStatusDot')).toHaveClass('warning');
+        expect(remote).toHaveTextContent('正常');
+        expect(remote.querySelector('.ControlStatusDot')).toHaveClass('healthy');
+        const machineState = screen.getByRole('button', {name: /山东节点/})
+            .querySelector('.ControlMachineState');
+        expect(machineState).toHaveTextContent('正常');
+        expect(machineState).toHaveClass('healthy');
+        expect(screen.getByRole('button', {name: /总览/}).querySelector('.ControlMachineState'))
+            .toHaveClass('healthy');
+    });
+
+    it('keeps the refresh warning above the node and lets the user close it', async () => {
+        const machine = runtimeNode('在线节点');
+        const nodes = jest.spyOn(ComputeClusterService, 'nodes')
+            .mockResolvedValueOnce([machine])
+            .mockRejectedValueOnce(new Error('HTTP 500'));
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await selectMachine('在线节点');
+
+        expect(await screen.findByRole('heading', {name: '在线节点'})).toBeInTheDocument();
+        expect(screen.queryByText('运行详情暂不可用')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
+        await waitFor(() => expect(nodes).toHaveBeenCalledTimes(2));
+        expect(await screen.findByText(/本次刷新失败.*HTTP 500/)).toBeInTheDocument();
+        expect(screen.queryByText('运行详情暂不可用')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '关闭刷新失败提示'}));
+        expect(screen.queryByText(/本次刷新失败.*HTTP 500/)).not.toBeInTheDocument();
+    });
+
+    it('opens the pinned overview and switches map and graph views', async () => {
+        const districtFetch = jest.fn();
+        Object.defineProperty(global, 'fetch', {configurable: true, writable: true, value: districtFetch});
+        const onlineNode = node('在线节点', true);
+        onlineNode.labels = {
+            region: '310000',
+            region_name: '上海市',
+            district: '310113',
+            district_name: '宝山区',
+            site: 'shanghai-baoshan-office',
+            site_name: '办公室',
+        };
+        const backupNode = node('上海备用节点', true);
+        backupNode.labels = {...onlineNode.labels};
+        const rizhaoNode = node('日照节点', false);
+        rizhaoNode.communication_state = 'abnormal';
+        rizhaoNode.labels = {
+            region: '370000',
+            region_name: '山东省',
+            city: '371100',
+            city_name: '日照市',
+        };
+        const nodesRequest = jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            onlineNode,
+            backupNode,
+            rizhaoNode,
+        ]);
+        const resourceGraph = graph(onlineNode);
+        resourceGraph.relations.push({
+            relation_id: 'contains:backup', kind: 'contains', source_id: 'region:test',
+            target_id: `node:${backupNode.node_id}`, active: true, reason: 'available',
+        });
+        resourceGraph.entities.forEach(entity => {
+            entity.region_id = '310000';
+            entity.region_name = '上海市';
+        });
+        resourceGraph.entities.push({
+            ...resourceGraph.entities[1],
+            entity_id: `node:${backupNode.node_id}`,
+            label: backupNode.name,
+            node_id: backupNode.node_id,
+        }, {
+            ...resourceGraph.entities[1],
+            entity_id: `node:${rizhaoNode.node_id}`,
+            label: rizhaoNode.name,
+            node_id: rizhaoNode.node_id,
+            region_id: '370000',
+            region_name: '山东省',
+        }, {
+            entity_id: 'device:edge-1',
+            kind: 'managed_device',
+            label: 'AIPACK-01',
+            state: 'available',
+            callable: false,
+            modes: [],
+            node_id: onlineNode.node_id,
+            device_kind: 'edge_compute',
+        }, {
+            entity_id: 'device:camera-1',
+            kind: 'managed_device',
+            label: '车间相机',
+            state: 'available',
+            callable: false,
+            modes: [],
+            node_id: onlineNode.node_id,
+            device_kind: 'camera',
+        });
+        resourceGraph.relations.push({
+            relation_id: 'manages:edge', kind: 'manages', source_id: `node:${onlineNode.node_id}`,
+            target_id: 'device:edge-1', active: true, reason: 'available',
+        }, {
+            relation_id: 'manages:camera', kind: 'manages', source_id: 'device:edge-1',
+            target_id: 'device:camera-1', active: true, reason: 'available',
+        });
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(resourceGraph);
+        const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
+        await selectMachine('在线节点');
+
+        expect(await screen.findByRole('heading', {name: '在线节点'})).toBeInTheDocument();
+        const machineList = screen.getByRole('complementary', {name: '机器列表'});
+        expect(new Set(Array.from(machineList.querySelectorAll('.ControlMachineGroupHeading strong'))
+            .map(item => item.textContent))).toEqual(new Set(['上海市', '山东省']));
+        const machine = screen.getByRole('button', {name: /在线节点/});
+        const overview = screen.getByRole('button', {name: /总览/});
+        fireEvent.click(overview);
+        fireEvent.click(screen.getByRole('button', {name: '地图'}));
+
+        expect(machine).toHaveAttribute('aria-pressed', 'false');
+        expect(overview).toHaveAttribute('aria-pressed', 'true');
+        expect(await screen.findByRole('region', {name: '计算群地理地图'}, {timeout: 15_000})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '重新定位地图'})).toBeInTheDocument();
+        expect(screen.getByText('边缘集群地图', {selector: 'strong'})).toBeInTheDocument();
+        expect(screen.getByText('地理视角 (悬浮轮廓 / 点击下钻)')).toBeInTheDocument();
+        const mapStats = screen.getByRole('region', {name: '计算群地理地图'})
+            .querySelector('.ComputeKnowledgeStats');
+        expect(mapStats).toHaveClass('map-summary');
+        expect(Array.from(mapStats?.querySelectorAll(':scope > div > span') || []).map(item => item.textContent))
+            .toEqual(['地域', '设备总数', '正常节点', '故障节点', '异常节点']);
+        expect(Array.from(mapStats?.querySelectorAll(':scope > div > strong') || []).map(item => item.textContent))
+            .toEqual(['1', '2', '2', '0', '1']);
+        expect(container.querySelector('.ControlGeoMapMarker')).toHaveTextContent('2/3');
+        expect(container.querySelector('.ControlGeoMapMarker')).toHaveClass('offline');
+        expect(screen.queryByRole('heading', {name: '在线节点'})).not.toBeInTheDocument();
+
+        const china = container.querySelector('[data-map-feature="China"]');
+        const taiwan = container.querySelector('[data-map-feature="Taiwan"]');
+        expect(china).toBeInTheDocument();
+        expect(taiwan).toBeInTheDocument();
+        const map = container.querySelector('svg[aria-label="可交互全球节点地图"]') as SVGSVGElement;
+        const setPointerCapture = jest.fn();
+        Object.defineProperty(map, 'setPointerCapture', {value: setPointerCapture});
+        fireEvent.mouseEnter(china as Element);
+        expect(screen.getByText('中国', {selector: '.ControlGeoMapInspector strong'})).toBeInTheDocument();
+        expect(china).toHaveClass('hovered');
+        expect(taiwan).toHaveClass('hovered');
+        fireEvent.pointerDown(china as Element, {button: 0, pointerId: 1, clientX: 100, clientY: 100});
+        fireEvent.pointerUp(china as Element, {button: 0, pointerId: 1, clientX: 100, clientY: 100});
+        expect(setPointerCapture).not.toHaveBeenCalled();
+        fireEvent.click(taiwan as Element);
+        expect(screen.getByText('中国节点地图')).toBeInTheDocument();
+        expect(container.querySelector('[data-map-feature="台湾省"]')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '放大地图'}));
+        fireEvent.click(screen.getByRole('button', {name: '缩小地图'}));
+        expect(screen.getByText('中国节点地图')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '缩小地图'}));
+        expect(screen.getByText('全球节点地图')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '进入中国下一级地图'}));
+        const shandong = container.querySelector('[data-map-feature="山东省"]');
+        expect(shandong).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '进入上海市下一级地图'})).toHaveClass('healthy');
+        const shandongMarker = screen.getByRole('button', {name: '进入山东省下一级地图'});
+        expect(shandongMarker).toHaveClass('offline');
+        fireEvent.click(shandongMarker);
+        expect(screen.getByText('山东省市级地图')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '缩小地图'}));
+        expect(screen.getByText('中国节点地图')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '进入山东省下一级地图'}));
+        expect(container.querySelector('[data-map-prefecture="日照市"]')).toHaveTextContent('0/1');
+        expect(screen.getByText('正常 0 · 故障 0 · 异常 1 · 日照市')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '正常节点'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '故障节点'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '异常节点'})).toBeInTheDocument();
+        expect(screen.queryByText('在线节点', {selector: '.ComputeKnowledgeLegend span'})).not.toBeInTheDocument();
+        expect(screen.queryByText('离线节点', {selector: '.ComputeKnowledgeLegend span'})).not.toBeInTheDocument();
+        const jinan = container.querySelector('[data-map-feature="济南市"]');
+        expect(jinan).toBeInTheDocument();
+        const fetchCount = districtFetch.mock.calls.length;
+        fireEvent.click(jinan as Element);
+        expect(screen.getByText('山东省市级地图')).toBeInTheDocument();
+        expect(districtFetch).toHaveBeenCalledTimes(fetchCount);
+        fireEvent.click(screen.getByRole('button', {name: '中国'}));
+        const shanghai = container.querySelector('[data-map-feature="上海市"]');
+        expect(shanghai).toBeInTheDocument();
+        fireEvent.click(shanghai as Element);
+        expect(screen.getByText('上海市地图')).toBeInTheDocument();
+        expect(container.querySelector('[data-map-prefecture="上海市"]')).toHaveTextContent('2/2');
+        expect(container.querySelector('[data-map-feature="浦东新区"]')).not.toBeInTheDocument();
+
+        expect(screen.queryByRole('button', {name: '刷新机器状态'})).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '图谱'}));
+        const graphPanel = screen.getByRole('region', {name: '主节点、计算节点与摄像头拓扑'});
+        expect(graphPanel.querySelector('.ComputeGraphViewport')).toHaveClass('fit-window');
+        const graphStats = graphPanel.querySelector('.ComputeKnowledgeStats');
+        expect(Array.from(graphStats?.querySelectorAll(':scope > div > span') || []).map(item => item.textContent))
+            .toEqual(['设备总数', '计算节点', '摄像头']);
+        expect(Array.from(graphStats?.querySelectorAll(':scope > div > strong') || []).map(item => item.textContent))
+            .toEqual(['5', '4', '1']);
+        expect(within(graphPanel).getByText('2/2 正常节点')).toBeInTheDocument();
+        expect(within(graphPanel).getByText('0/1 正常节点')).toBeInTheDocument();
+        expect(within(graphPanel).getByRole('button', {name: '查看 日照节点 节点信息'})).toHaveClass('node-offline');
+        const deviceType = screen.getByRole('combobox', {name: '设备类型'});
+        fireEvent.change(deviceType, {target: {value: 'edge'}});
+        expect(within(graphPanel).getByRole('button', {name: '查看 AIPACK-01 设备信息'})).toBeInTheDocument();
+        expect(within(graphPanel).queryByRole('button', {name: '查看 在线节点 节点信息'})).not.toBeInTheDocument();
+        fireEvent.change(deviceType, {target: {value: 'sensor'}});
+        expect(within(graphPanel).getByRole('button', {name: '查看 车间相机 设备信息'})).toBeInTheDocument();
+        expect(within(graphPanel).queryByRole('button', {name: '查看 AIPACK-01 设备信息'})).not.toBeInTheDocument();
+        fireEvent.change(deviceType, {target: {value: 'main'}});
+        expect(within(graphPanel).getByRole('button', {name: '查看 在线节点 节点信息'})).toBeInTheDocument();
+        expect(within(graphPanel).queryByRole('button', {name: '查看 车间相机 设备信息'})).not.toBeInTheDocument();
+        fireEvent.change(deviceType, {target: {value: 'all'}});
+        const graphNode = within(graphPanel).getByRole('button', {name: '查看 在线节点 节点信息'});
+        expect(graphNode).toHaveClass('node-online');
+        fireEvent.change(screen.getByRole('combobox', {name: '节点状态'}), {target: {value: 'normal'}});
+        expect(within(graphPanel).getByRole('button', {name: '查看 在线节点 节点信息'})).toBeInTheDocument();
+        expect(within(graphPanel).getByRole('button', {name: '查看 上海备用节点 节点信息'})).toBeInTheDocument();
+        expect(within(graphPanel).queryByRole('button', {name: '查看 日照节点 节点信息'})).not.toBeInTheDocument();
+        expect(within(graphPanel).queryByText('0/1 正常节点')).not.toBeInTheDocument();
+        fireEvent.mouseEnter(graphNode);
+        expect(within(graphPanel).getByText('正常 · 心跳 刚刚')).toHaveClass('online');
+        expect(screen.getByText('边缘集群图谱', {selector: 'strong'})).toBeInTheDocument();
+        fireEvent.click(within(graphPanel).getByRole('button', {name: /资源监视器/}));
+        const graphMonitor = await screen.findByRole('dialog', {name: '在线节点 资源监视器'});
+        expect(screen.getByRole('region', {name: '主节点、计算节点与摄像头拓扑'})).toBeInTheDocument();
+        expect(overview).toHaveAttribute('aria-pressed', 'true');
+        expect(machine).toHaveAttribute('aria-pressed', 'false');
+        fireEvent.mouseDown(graphMonitor.parentElement as HTMLElement);
+        await waitFor(() => expect(screen.queryByRole('dialog', {name: '在线节点 资源监视器'}))
+            .not.toBeInTheDocument());
+        expect(screen.getByRole('region', {name: '主节点、计算节点与摄像头拓扑'})).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '地图'}));
+        expect(screen.getByRole('region', {name: '计算群地理地图'})).toBeInTheDocument();
+        expect(nodesRequest).toHaveBeenCalledTimes(1);
+
+        fireEvent.click(machine);
+        expect(await screen.findByRole('heading', {name: '在线节点'})).toBeInTheDocument();
+        fireEvent.click(machine);
+        expect(screen.getByRole('heading', {name: '在线节点'})).toBeInTheDocument();
+        expect(screen.getByText(/^查询于 /)).toBeInTheDocument();
     });
 });

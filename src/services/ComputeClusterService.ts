@@ -1507,6 +1507,13 @@ export class ComputeClusterService {
         }/media`;
     }
 
+    public static edgePrograms(
+        assetId: string,
+        signal?: AbortSignal,
+    ): Promise<ComputeProgramSnapshot> {
+        return request(`/lan-assets/${encodeURIComponent(assetId)}/runtime/programs`, signal);
+    }
+
     public static programArtifactUrl(
         nodeId: string,
         programId: string,
@@ -1514,6 +1521,17 @@ export class ComputeClusterService {
         modifiedAt: number,
     ): string {
         return `${baseUrl()}/nodes/${encodeURIComponent(nodeId)}/runtime/programs/${
+            encodeURIComponent(programId)
+        }/artifacts/${encodeURIComponent(artifactId)}?v=${modifiedAt}`;
+    }
+
+    public static edgeProgramArtifactUrl(
+        assetId: string,
+        programId: string,
+        artifactId: string,
+        modifiedAt: number,
+    ): string {
+        return `${baseUrl()}/lan-assets/${encodeURIComponent(assetId)}/runtime/programs/${
             encodeURIComponent(programId)
         }/artifacts/${encodeURIComponent(artifactId)}?v=${modifiedAt}`;
     }
@@ -2013,6 +2031,12 @@ export class ComputeClusterService {
 
     public static terminalTargets(signal?: AbortSignal): Promise<ComputeTerminalTargetsResponse> {
         return request('/terminal-targets', signal);
+    }
+
+    public static openPlatform(nodeId: string): Promise<{url: string; expires_in: number}> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/platform`, undefined, {
+            method: 'POST',
+        });
     }
 
     public static startTerminal(

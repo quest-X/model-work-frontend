@@ -863,6 +863,7 @@ describe('AgentSideChat', () => {
             name: 'shanghai-205-linux',
             online: true,
             capabilities: [],
+            heartbeat_age_seconds: 2, network: {}, resources: {},
         } as ComputeClusterNode;
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
         jest.spyOn(AgentChatService, 'status').mockResolvedValue({

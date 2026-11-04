@@ -15,12 +15,16 @@ interface ChangelogEntry {
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
         version: '2.9.7',
-        date: '2026-09-24',
+        date: '2026-09-27',
         changes: [
             { zh: '【统计】新增每日溢出统计、时段分布、热度报告和月历视图', en: '[Statistics] Added daily overflow metrics, hourly distribution, heat reports, and a monthly calendar' },
             { zh: '【历史】新增机器历史控制台，查看加密快照及其对象明细', en: '[History] Added a machine-history console for encrypted snapshots and object details' },
             { zh: '【预览】改进隐藏流释放、首帧等待和目录重试，提升实时画面恢复能力', en: '[Preview] Improved hidden-stream cleanup, first-frame grace, and directory retries for live-preview recovery' },
             { zh: '【界面】按实体状态着色图谱边框，明确 Jetson 显存信息，并自动显示 Commercial 版本标识', en: '[UI] Colored graph borders by entity state, clarified Jetson memory telemetry, and automated the Commercial version label' },
+            { zh: '【图谱】支持按设备类型和节点状态筛选，并让过滤后的关系环自适应视口', en: '[Graph] Added device-type and node-status filters with viewport fitting for filtered relationship rings' },
+            { zh: '【布局】保留固定卡片尺寸并允许适度重叠，提高密集拓扑的空间利用率', en: '[Layout] Preserved fixed card sizes while allowing limited overlap for denser topology layouts' },
+            { zh: '【平台】新增远程 Main 平台入口，并按主机能力控制可用状态', en: '[Platform] Added remote Main platform access gated by host capability' },
+            { zh: '【版本】左下角统一显示 v版本号(角色)', en: '[Version] Standardized the lower-left watermark as vVersion(Role)' },
         ],
     },
     {
@@ -31,6 +35,10 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '【实时画面】内嵌实时流播放器，支持重连、加载进度和每日时间轴', en: '[Live Preview] Embedded a live stream player with reconnect, loading progress, and a daily timeline' },
             { zh: '【下载】支持下载程序运行结果，并提供清晰的下载状态反馈', en: '[Downloads] Added program-result downloads with clear progress and action states' },
             { zh: '【协议】支持 HLS、WebRTC 与外部输出切换，并优先使用可用的低延迟预览', en: '[Protocols] Added HLS, WebRTC, and external-output switching with preference for available low-latency previews' },
+            { zh: '【质量】补齐浏览器验收脚本、身份服务测试与前端质量门槛', en: '[Quality] Completed browser acceptance scripts, identity service tests, and frontend quality gates' },
+            { zh: '【开发】本地页面可识别分支、提交与端口，减少多实例混淆', en: '[Development] Local pages can identify their branch, commit, and port to reduce multi-instance confusion' },
+            { zh: '【构建】隔离 Vite 缓存，避免共享依赖的多 worktree React 冲突', en: '[Build] Isolated Vite caches to prevent multi-worktree React conflicts with shared dependencies' },
+            { zh: '【版本】编辑器与控制中心左下角统一显示 v版本号 Main / Commercial', en: '[Version] The editor and control center now show vVersion Main / Commercial in the lower-left corner' },
         ],
     },
     {
@@ -41,6 +49,10 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '【Telegram】分类并筛选 Ixcom 消息，支持格式化视图与原始日志切换', en: '[Telegram] Classified and filtered Ixcom messages with formatted and raw log views' },
             { zh: '【结果】为 GET 接口提供受控链接，离线时保留缓存并展示请求进度', en: '[Results] Added controlled links for GET APIs, retained offline cache, and displayed request progress' },
             { zh: '【图谱】按主节点、AIPACK 和摄像头归属形成关系环，完整展示设备拓扑', en: '[Graph] Arranged ownership rings for main nodes, AIPACK devices, and cameras to show the full topology' },
+            { zh: '【运行器】新增边缘程序运行器，支持状态、结果、日志与视频产物加载', en: '[Runner] Added an edge program runner with state, results, logs, and video artifact loading' },
+            { zh: '【图谱】新增计算群关系图，并区分离线、故障与正常状态', en: '[Graph] Added a compute-group relationship graph with offline, fault, and healthy states' },
+            { zh: '【快捷操作】可从图谱直接打开终端、资源监控与程序运行器', en: '[Quick Actions] Open terminals, resource monitoring, and the program runner directly from the graph' },
+            { zh: '【Agent】新增图谱 worker 调度与表格化结果展示', en: '[Agent] Added graph worker dispatch and tabular result presentation' },
         ],
     },
     {
@@ -51,6 +63,10 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '【结果】支持预览运行产生的视频、图片和数据文件，并限制大目录加载范围', en: '[Results] Added previews for runtime video, image, and data artifacts with bounded directory loading' },
             { zh: '【接口】展示程序声明的 API、探针和端点状态，便于定位服务可用性', en: '[APIs] Displayed declared APIs, probes, and endpoint status for service troubleshooting' },
             { zh: '【缓存】刷新期间复用程序快照和监控数据，保持结果页面连续可用', en: '[Cache] Reused program snapshots and monitoring data during refreshes to keep result pages available' },
+            { zh: '【状态】节点与图谱按最坏链路状态聚合，避免局部故障被正常状态掩盖', en: '[Status] Nodes and graphs now aggregate the worst link state so partial failures are not hidden by healthy links' },
+            { zh: '【网络】同时展示 LAN 与 Tailscale 的 IPv4、IPv6 地址', en: '[Network] Display LAN and Tailscale IPv4 and IPv6 addresses together' },
+            { zh: '【SSH】支持展开、复制 SSH 命令，并明确连接方式与确认反馈', en: '[SSH] Added reveal and copy actions for SSH commands with explicit connection modes and confirmation feedback' },
+            { zh: '【界面】统一中文资源标签，并压缩地址区域布局', en: '[UI] Unified Chinese resource labels and compacted the address layout' },
         ],
     },
     {
@@ -61,6 +77,10 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '【节点】新增紧凑节点详情、资源状态和相关设备入口', en: '[Nodes] Added compact node details, resource status, and related-device entry points' },
             { zh: '【性能】支持查看节点性能模式，并对选定节点执行授权优化', en: '[Performance] Added node performance-mode inspection and authorized optimization for selected nodes' },
             { zh: '【部署】新增固定提交、备份与部署锁保护的山钢前端交付脚本', en: '[Deployment] Added a Shandong frontend delivery script with pinned commits, backups, and deployment locking' },
+            { zh: '【编辑器】拆分文件导入、视口与推理阶段，降低编辑器主流程耦合', en: '[Editor] Split file import, viewport, and inference phases to reduce coupling in the main editor flow' },
+            { zh: '【视频】完善帧捕获、缓存、重试、取消与批量推理状态处理', en: '[Video] Improved frame capture, caching, retries, cancellation, and batch inference state handling' },
+            { zh: '【导入】修复 COCO、VGG、VOC、LabelMe 等格式的失败处理与完整标注恢复', en: '[Import] Fixed failure handling and complete annotation restoration for COCO, VGG, VOC, and LabelMe formats' },
+            { zh: '【可靠性】加强自动保存、历史状态、IndexedDB 与项目恢复耐久性', en: '[Reliability] Hardened autosave, history state, IndexedDB, and project restoration durability' },
         ],
     },
     {
@@ -71,6 +91,10 @@ const CHANGELOG_DATA: ChangelogEntry[] = [
             { zh: '【商业版】限制编辑工具与项目名称，并按作业区和设备归类资源', en: '[Commercial] Restricted editing tools and project naming while grouping resources by work area and device' },
             { zh: '【帮助】新增关于页面与现场操作手册入口', en: '[Help] Added the About page and field operations manual entry points' },
             { zh: '【引擎】保留引擎管理入口，同时维持其他 Commercial 操作限制', en: '[Engines] Kept engine management available while preserving the remaining Commercial restrictions' },
+            { zh: '【任务】新增统一任务中心，并支持 Agent 排队任务调整顺序与移除', en: '[Tasks] Added a unified task center with reordering and removal for queued Agent requests' },
+            { zh: '【运维】扩展节点文件、存储分析、重复项扫描、启动项与性能诊断能力', en: '[Operations] Expanded node file, storage, duplicate scan, startup item, and performance diagnosis tools' },
+            { zh: '【账号】新增成员范围控制与 Agent 项目绑定', en: '[Accounts] Added scoped member controls and Agent project binding' },
+            { zh: '【计算群】支持加入、退出与撤销确认，并统一刷新节点状态', en: '[Compute Groups] Added join, leave, and revocation confirmation with consistent node refresh' },
         ],
     },
     {

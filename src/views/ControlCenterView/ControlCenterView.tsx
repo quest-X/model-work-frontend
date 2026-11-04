@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {connect} from 'react-redux';
 import {Button, Dialog, DialogActions, DialogTitle, DialogContent} from '@mui/material';
+import {ExternalLink} from 'lucide-react';
 import {Language} from '../../data/LanguageConfig';
 import {Direction} from '../../data/enums/Direction';
 import {PopupWindowType} from '../../data/enums/PopupWindowType';
@@ -14,9 +15,9 @@ import {
     ComputeGroupResources,
     ComputeLanAsset,
     ComputeManagedDevice,
+    ComputeProgramSnapshot,
     ComputeResourceGraph,
     ComputeTask,
-    ComputeProgramSnapshot,
     ComputeRuntimeInventory,
     ComputeTerminalTarget,
     ComputeClusterService,
@@ -49,6 +50,7 @@ import {StartupItemsPanel} from './StartupItemsPanel';
 import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
 import {PerformanceModePanel} from './PerformanceModePanel';
 import {ProgramRunnerPanel} from './ProgramRunnerPanel';
+import {hasRemotePlatformEntry, RemotePlatformButton} from './RemotePlatformButton';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import {version as appVersion} from '../../../package.json';
 import '../EditorView/EditorContainer/EditorContainer.scss';
@@ -56,7 +58,7 @@ import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
 import '../PopupView/ComputeClusterPopup/ComputeClusterPopup.scss';
 import './ControlCenterView.scss';
 
-const appEdition = 'Main';
+const appEdition = 'Platform';
 
 const ClusterGeographicMap = React.lazy(() => import('./ClusterGeographicMap')
     .then(module => ({default: module.ClusterGeographicMap})));
@@ -134,8 +136,9 @@ const toneLabel = (tone: Tone, zh: boolean): string => tone === 'healthy'
 type SidePanel = 'machines' | 'features';
 type Workspace = 'node' | 'network' | 'files' | 'utilities' | 'performance-mode' | 'terminal' | 'groups';
 type MachineIconKind = 'jetson' | 'windows' | 'linux' | 'macos' | 'computer';
-type NodeGrouping = 'none' | 'region' | 'platform';
 type NodeOrdering = 'status' | 'activity' | 'name';
+type NodeGrouping = 'none' | 'region' | 'platform';
+type DeviceVisibility = 'all' | 'main' | 'edge' | 'sensor';
 type NodeVisibility = 'all' | 'normal' | 'fault' | 'abnormal';
 type OverviewView = 'map' | 'graph';
 type MonitorView = 'performance' | 'diagnostics' | 'processes' | 'startup' | 'tasks' | 'conversations';
@@ -402,6 +405,39 @@ const resourceMonitorTone = (node?: ComputeClusterNode): Tone =>
         ? 'healthy'
         : node ? machineTone(node) : 'warning';
 
+const filterResourceGraph = (
+    graph: ComputeResourceGraph | null,
+    visibleNodes: ComputeClusterNode[],
+): ComputeResourceGraph | null => {
+    if (!graph) return null;
+    const nodeIds = new Set(visibleNodes.map(node => node.node_id));
+    const entityIds = new Set(graph.entities
+        .filter(entity => entity.node_id && nodeIds.has(entity.node_id))
+        .map(entity => entity.entity_id));
+    let changed = true;
+    while (changed) {
+        changed = false;
+        graph.relations.forEach(relation => {
+            if (!entityIds.has(relation.source_id)
+                || !['manages', 'can_execute', 'depends_on'].includes(relation.kind)
+                || entityIds.has(relation.target_id)) return;
+            entityIds.add(relation.target_id);
+            changed = true;
+        });
+    }
+    graph.relations.forEach(relation => {
+        if (relation.kind === 'contains' && entityIds.has(relation.target_id)) {
+            entityIds.add(relation.source_id);
+        }
+    });
+    return {
+        ...graph,
+        entities: graph.entities.filter(entity => entityIds.has(entity.entity_id)),
+        relations: graph.relations.filter(relation =>
+            entityIds.has(relation.source_id) && entityIds.has(relation.target_id)),
+    };
+};
+
 const cameraTone = (status: ComputeManagedDevice['status']): Tone =>
     status === 'registered' || status === 'online' ? 'healthy' : 'offline';
 
@@ -465,6 +501,9 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [terminalTargets, setTerminalTargets] = useState<ComputeTerminalTarget[]>([]);
     const [copiedSshAddress, setCopiedSshAddress] = useState('');
     const [nodes, setNodes] = useState<ComputeClusterNode[]>([]);
+    const programPollingNodes = useRef(nodes);
+    programPollingNodes.current = nodes;
+    const hasProgramPollingNodes = nodes.length > 0;
     const [groupMemberships, setGroupMemberships] = useState<ComputeGroupMembership[]>([]);
     const [selectedGroupId, setSelectedGroupId] = useState('');
     const [selectedGroupDetail, setSelectedGroupDetail] = useState<ComputeGroupDetail | null>(null);
@@ -528,22 +567,21 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [queriedAt, setQueriedAt] = useState<Date | null>(null);
     const [nodeTags, setNodeTags] = useState<string[]>([]);
     const [tagDraft, setTagDraft] = useState('');
-    const [nodeGrouping, setNodeGrouping] = useState<NodeGrouping>('region');
     const [nodeOrdering, setNodeOrdering] = useState<NodeOrdering>('status');
+    const [nodeGrouping, setNodeGrouping] = useState<NodeGrouping>('region');
+    const [deviceVisibility, setDeviceVisibility] = useState<DeviceVisibility>('all');
     const [nodeVisibility, setNodeVisibility] = useState<NodeVisibility>('all');
     const [collapsedMachineGroups, setCollapsedMachineGroups] = useState<Set<string>>(new Set());
     const [overviewView, setOverviewView] = useState<OverviewView>('graph');
     const mounted = useRef(true);
     const refreshInFlight = useRef(false);
+    const groupRefreshInFlight = useRef(false);
     const overviewSelected = useRef(true);
     const selectedNodeIdRef = useRef('');
     const runtimeInventoryRequest = useRef(0);
     const runtimeInventoryPendingNode = useRef('');
     const runtimeInventoryAbort = useRef<AbortController | null>(null);
     const conversationRequest = useRef(0);
-    const programPollingNodes = useRef(nodes);
-    programPollingNodes.current = nodes;
-    const hasProgramPollingNodes = nodes.length > 0;
     useEscapeToClose(() => {
         setInspectedServiceId('');
         if (toolOpenedFromOverview) {
@@ -590,6 +628,22 @@ export const ControlCenterView: React.FC<IProps> = ({
     const refresh = useCallback(async (initial = false) => {
         if (refreshInFlight.current) return;
         refreshInFlight.current = true;
+        let completed = 0;
+        const track = <T,>(promise: Promise<T>) => promise.finally(() => {
+            completed += 1;
+            if (initial && mounted.current) setLoadProgress(completed * 25);
+        });
+        if (!groupRefreshInFlight.current) {
+            groupRefreshInFlight.current = true;
+            void ComputeClusterService.groups()
+                .then(value => {
+                    if (mounted.current) setGroupMemberships(value.groups);
+                })
+                .catch(() => undefined)
+                .finally(() => {
+                    groupRefreshInFlight.current = false;
+                });
+        }
         if (mounted.current) {
             if (initial) {
                 setLoading(true);
@@ -599,12 +653,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             }
         }
         try {
-            let completed = 0;
-            const track = <T,>(request: Promise<T>): Promise<T> => request.finally(() => {
-                completed += 1;
-                if (initial && mounted.current) setLoadProgress(completed * 20);
-            });
-            const [nextNodes, graphResult, assetResult, memberships, targets] = await Promise.all([
+            const [nextNodes, graphResult, assetResult, targets] = await Promise.all([
                 track(ComputeClusterService.nodes()),
                 track(ComputeClusterService.resourceGraph().then(
                     value => ({value, error: ''}),
@@ -617,10 +666,6 @@ export const ControlCenterView: React.FC<IProps> = ({
                     value => value.assets,
                     () => null,
                 )),
-                track(ComputeClusterService.groups().then(
-                    value => value.groups,
-                    () => [] as ComputeGroupMembership[],
-                )),
                 track(ComputeClusterService.terminalTargets().then(
                     value => value.targets,
                     () => [] as ComputeTerminalTarget[],
@@ -629,7 +674,6 @@ export const ControlCenterView: React.FC<IProps> = ({
             if (!mounted.current) return;
             setNodes(nextNodes);
             if (assetResult !== null) setLanAssets(assetResult);
-            setGroupMemberships(memberships);
             setTerminalTargets(targets);
             if (graphResult.value) setResourceGraph(graphResult.value);
             setGraphError(graphResult.error);
@@ -869,9 +913,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             return computeNodeState(node) === nodeVisibility;
         });
         visible.sort((left, right) => {
-            if (nodeOrdering === 'activity') {
-                return left.heartbeat_age_seconds - right.heartbeat_age_seconds || left.name.localeCompare(right.name);
-            }
+            if (nodeOrdering === 'activity') return left.heartbeat_age_seconds - right.heartbeat_age_seconds || left.name.localeCompare(right.name);
             if (nodeOrdering === 'name') return left.name.localeCompare(right.name);
             const rank = {normal: 0, fault: 1, abnormal: 2};
             return rank[computeNodeState(left)] - rank[computeNodeState(right)] || left.name.localeCompare(right.name);
@@ -900,6 +942,14 @@ export const ControlCenterView: React.FC<IProps> = ({
     );
     const overviewResourceGraph = activeGroupResources?.resource_graph || resourceGraph;
     const overviewNodes = activeGroupResources?.nodes || nodes;
+    const visibleOverviewNodes = useMemo(() => nodeVisibility === 'all'
+        ? overviewNodes
+        : overviewNodes.filter(node => computeNodeState(node) === nodeVisibility),
+    [nodeVisibility, overviewNodes]);
+    const visibleOverviewResourceGraph = useMemo(() => nodeVisibility === 'all'
+        ? overviewResourceGraph
+        : filterResourceGraph(overviewResourceGraph, visibleOverviewNodes),
+    [nodeVisibility, overviewResourceGraph, visibleOverviewNodes]);
     const currentGroup = overviewResourceGraph?.entities.find(entity => entity.kind === 'compute_group') || null;
     const visibleGroups = groupMemberships;
     const currentGroupTone: Tone = currentGroup?.state === 'available' ? 'healthy' : 'offline';
@@ -1028,6 +1078,13 @@ export const ControlCenterView: React.FC<IProps> = ({
             runtimeInventoryRequest.current += 1;
         };
     }, [inspectedServiceId, loadRuntimeInventory, pageVisible, runtimeInventoryCapable, selectedNodeId]);
+
+    useEffect(() => {
+        if (!pendingOverviewTool || !selectedNode) return;
+        if (pendingOverviewTool === 'monitor') setInspectedServiceId('node-runtime');
+        else setProgramRunnerOpen(true);
+        setPendingOverviewTool(null);
+    }, [pendingOverviewTool, selectedNode]);
 
     useEffect(() => {
         if (!pendingOverviewTool || !selectedNode) return;
@@ -1429,14 +1486,21 @@ export const ControlCenterView: React.FC<IProps> = ({
                 <option value='region'>{zh ? '按地域' : 'By region'}</option>
                 <option value='platform'>{zh ? '按系统' : 'By system'}</option>
             </select>
-            <select
-                aria-label={zh ? '节点排序' : 'Node ordering'}
-                value={nodeOrdering}
-                onChange={event => setNodeOrdering(event.target.value as NodeOrdering)}
-            >
+            <select aria-label={zh ? '节点排序' : 'Node ordering'} value={nodeOrdering}
+                onChange={event => setNodeOrdering(event.target.value as NodeOrdering)}>
                 <option value='status'>{zh ? '正常优先' : 'Normal first'}</option>
                 <option value='activity'>{zh ? '最近活跃' : 'Recent first'}</option>
                 <option value='name'>{zh ? '按名称' : 'By name'}</option>
+            </select>
+            <select
+                aria-label={zh ? '设备类型' : 'Device type'}
+                value={deviceVisibility}
+                onChange={event => setDeviceVisibility(event.target.value as DeviceVisibility)}
+            >
+                <option value='all'>{zh ? '全部类型' : 'All device types'}</option>
+                <option value='main'>{zh ? '计算节点' : 'Compute nodes'}</option>
+                <option value='edge'>{zh ? '边缘计算设备' : 'Edge devices'}</option>
+                <option value='sensor'>{zh ? '传感器' : 'Sensors (cameras, etc.)'}</option>
             </select>
             <select
                 aria-label={zh ? '节点状态' : 'Node status'}
@@ -1514,7 +1578,11 @@ export const ControlCenterView: React.FC<IProps> = ({
                             >
                                 <MachinePlatformIcon node={node}/>
                                 <span className='ControlMachineIdentity'>
-                                    <strong>{node.name}{programIndicator(node, programTones, zh)}</strong>
+                                    <strong className='ControlMachineName'><span>{node.name}</span>
+                                        {hasRemotePlatformEntry(node) && <span className='ControlMachineRemotePlatform'
+                                            role='img' aria-label={zh ? '有子平台入口' : 'Sub-platform available'}
+                                            title={zh ? '有子平台入口' : 'Sub-platform available'}><ExternalLink size={11} aria-hidden='true'/></span>}
+                                        {programIndicator(node, programTones, zh)}</strong>
                                     <small>{node.role === 'main' ? 'main' : 'node'} · {zh
                                         ? '活跃于 '
                                         : 'Active '}{lastSeen(node.heartbeat_age_seconds, zh)}</small>
@@ -1746,7 +1814,7 @@ export const ControlCenterView: React.FC<IProps> = ({
             <span className='ControlRuntimeIdentity'>
                 <span>{status.label}</span>
                 <strong>{zh ? '程序运行器' : 'Program runner'}</strong>
-                <small>{zh ? '程序 · 环境 · 接口 · 状态 · 日志' : 'Programs · environments · endpoints · status · logs'}</small>
+                <small>{zh ? '程序 · 环境 · 接口 · 状态 · 结果 · 日志' : 'Programs · environments · APIs · status · results · logs'}</small>
             </span>
             <span className='ControlServiceOpen' aria-hidden='true'>›</span>
         </button>;
@@ -1817,8 +1885,11 @@ export const ControlCenterView: React.FC<IProps> = ({
             </div>}
             <header className='ControlNodeHeader'>
                 <div>
-                    <h1>{node.name}</h1>
-                    <p>{zh ? '最后检查' : 'Last check'} {runtimeTime(node.resources.captured_at, zh)} · {zh ? '最近心跳' : 'Last heartbeat'} {lastSeen(node.heartbeat_age_seconds, zh)}</p>
+                    <div className='ControlNodeTitle'>
+                        <h1>{node.name}</h1>
+                        <RemotePlatformButton key={node.node_id} node={node} zh={zh}/>
+                    </div>
+                    <p>{zh ? '最后检查' : 'Last check'} {runtimeTime(node.resources.captured_at, zh)} · {zh ? '最近通信' : 'Last contact'} {lastSeen(node.heartbeat_age_seconds, zh)}</p>
                     <div className='ControlNodeTags' aria-label={zh ? '节点标签' : 'Node tags'}>
                         {locationTag && <span className='ControlNodeTag location'>
                             {zh ? `地域 (${locationTag})` : `Region (${locationTag})`}
@@ -2579,15 +2650,16 @@ export const ControlCenterView: React.FC<IProps> = ({
                     </div>}
                     {overviewView === 'map'
                         ? <React.Suspense fallback={<div className='ControlCenterMessage'>{zh ? '正在载入地图…' : 'Loading map…'}</div>}>
-                            <ClusterGeographicMap graph={overviewResourceGraph} nodes={overviewNodes} zh={zh}/>
+                            <ClusterGeographicMap graph={visibleOverviewResourceGraph} nodes={visibleOverviewNodes} zh={zh}/>
                         </React.Suspense>
-                        : overviewResourceGraph
+                        : visibleOverviewResourceGraph
                             ? <ResourceKnowledgeGraph
-                                graph={overviewResourceGraph}
-                                nodes={overviewNodes}
+                                graph={visibleOverviewResourceGraph}
+                                nodes={visibleOverviewNodes}
                                 tasks={computeTasks}
                                 zh={zh}
                                 fitWindow
+                                deviceType={deviceVisibility}
                                 onSelectWorkAgent={() => undefined}
                                 programStatus={mountedProgramStatus}
                                 onOpenNodeTool={(node, tool) => {
@@ -2932,6 +3004,10 @@ export const ControlCenterView: React.FC<IProps> = ({
         >
             <ProgramRunnerPanel
                 node={selectedNode}
+                edgeDevices={lanAssets.filter(asset =>
+                    asset.node_id === selectedNode.node_id
+                    && asset.device_kind === 'edge_compute'
+                )}
                 zh={zh}
                 maximized={programRunnerMaximized}
                 onToggleMaximized={() => setProgramRunnerMaximized(current => !current)}

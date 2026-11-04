@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import {TextDecoder} from 'util';
 import {
     ComputeClusterNode,
+    ComputeLanAsset,
+    ComputeProgramSnapshot,
     ComputeClusterService,
     ComputeProgramOverflowStatistics,
 } from '../../../services/ComputeClusterService';
@@ -1192,5 +1194,149 @@ describe('ProgramRunnerPanel', () => {
         await act(async () => { jest.advanceTimersByTime(15000); });
         expect(runtime).toHaveBeenCalledTimes(closedRuntimeCalls);
         expect(statistics).toHaveBeenCalledTimes(closedStatisticsCalls);
+    });
+
+    // Retained regression coverage from the former Master branch.
+    it('switches from a main node to an attached edge program runtime', async () => {
+        const parent = {
+            ...node,
+            node_id: 'baosight-02',
+            name: 'baosight-02',
+            capabilities: [
+                ...node.capabilities,
+                'runtime.edge-programs.read.v1',
+            ],
+        };
+        const edge: ComputeLanAsset = {
+            asset_id: `lan-${'a'.repeat(32)}`,
+            node_id: parent.node_id,
+            node_name: parent.name,
+            cidr: '10.168.10.0/24',
+            address: '10.168.10.24',
+            hostname: 'AIPACK-05',
+            mac: '',
+            device_kind: 'edge_compute',
+            display_name: 'AIPACK-05',
+            device_model: 'Orin',
+            ssh_username: 'nvidia',
+            ports: [{port: 22, service: 'ssh'}],
+            online: true,
+            first_seen_at: 1,
+            last_seen_at: 101,
+            last_changed_at: 101,
+            change_type: 'unchanged',
+        };
+        const runtime = jest.spyOn(ComputeClusterService, 'runtime').mockResolvedValue({
+            schema_version: 'runtime.snapshot.v1',
+            captured_at: 101,
+            summary: {
+                total: 0, healthy: 0, degraded: 0, unavailable: 0,
+                task_counts: {queued: 0, running: 0, paused: 0, succeeded: 0, failed: 0, cancelled: 0},
+            },
+            services: [],
+        });
+        jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
+            schema_version: 'runtime.programs.v1',
+            captured_at: 101,
+            invalid_manifests: 0,
+            programs: [],
+        });
+        const runtimeEvents = jest.spyOn(ComputeClusterService, 'runtimeEvents').mockResolvedValue({
+            schema_version: 'runtime.events.v1',
+            captured_at: 101,
+            cursor: 0,
+            has_more: false,
+            events: [],
+        });
+        const edgePayload: ComputeProgramSnapshot = {
+            schema_version: 'runtime.programs.v1',
+            captured_at: 102,
+            invalid_manifests: 0,
+            programs: [{
+                program_id: 'dlk-overflow',
+                name: 'DLK Overflow',
+                version: '1.0.0',
+                root: '/opt/dlk-overflow',
+                environment: '/opt/dlk-overflow/.venv',
+                mode: 'production',
+                encryption: 'unknown',
+                state: 'healthy',
+                service: {
+                    name: 'dlk-overflow.service',
+                    state: 'running',
+                    pid: 42,
+                    uptime_seconds: 60,
+                },
+                health: {
+                    state: 'healthy',
+                    checked_at: 102,
+                    status_code: 200,
+                    latency_ms: 3,
+                },
+                interfaces: [],
+                artifacts: [],
+                events: [{
+                    created_at: 102,
+                    level: 'info',
+                    event_type: 'classification',
+                    message: 'DLK-02 overflow level 3',
+                }],
+            }],
+        };
+        let finishEdgeLoad = () => undefined;
+        const edgePrograms = jest.spyOn(ComputeClusterService, 'edgePrograms').mockImplementation(
+            () => new Promise(resolve => {
+                finishEdgeLoad = () => resolve(edgePayload);
+            }),
+        );
+
+        const rendered = render(<ProgramRunnerPanel
+            node={parent}
+            edgeDevices={[edge]}
+            zh
+            maximized={false}
+            onToggleMaximized={jest.fn()}
+        />);
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+        await waitFor(() => expect(runtime).toHaveBeenCalledTimes(1));
+        expect(screen.queryByRole('button', {name: '刷新程序运行器'})).not.toBeInTheDocument();
+        expect(await screen.findByText('暂无程序状态')).toBeInTheDocument();
+        runtime.mockClear();
+        runtimeEvents.mockClear();
+
+        await act(async () => {
+            fireEvent.change(screen.getByRole('combobox', {name: '选择程序运行设备'}), {
+                target: {value: edge.asset_id},
+            });
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+        const dialog = await screen.findByRole('dialog', {name: 'AIPACK-05 程序运行器'});
+        await waitFor(() => expect(edgePrograms).toHaveBeenCalledWith(
+            edge.asset_id,
+            expect.any(AbortSignal),
+        ));
+        rendered.rerender(<ProgramRunnerPanel
+            node={parent}
+            edgeDevices={[{...edge}]}
+            zh
+            maximized={false}
+            onToggleMaximized={jest.fn()}
+        />);
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+        expect(edgePrograms).toHaveBeenCalledTimes(1);
+        await act(async () => { finishEdgeLoad(); });
+        fireEvent.click(within(dialog).getByRole('button', {name: '日志'}));
+        expect(await within(dialog).findByText('DLK-02 overflow level 3')).toBeInTheDocument();
+        expect(runtime).not.toHaveBeenCalled();
+        expect(runtimeEvents).not.toHaveBeenCalled();
+        rendered.rerender(<ProgramRunnerPanel node={parent} edgeDevices={[]} zh maximized={false}
+            onToggleMaximized={jest.fn()}/>);
+        await waitFor(() => expect(screen.queryByRole('combobox', {name: '选择程序运行设备'})).not.toBeInTheDocument());
+        expect(await screen.findByRole('dialog', {name: 'baosight-02 程序运行器'})).toBeInTheDocument();
+        await waitFor(() => expect(runtime).toHaveBeenCalled());
     });
 });

@@ -270,6 +270,25 @@ span.ControlMachineIcon {
   &.offline { color: #ef8b8b; }
 }
 
+.ControlMachineRemotePlatform {
+  display: inline-flex;
+  flex: 0 0 14px;
+  align-items: center;
+  justify-content: center;
+  color: #9ba9b4;
+}
+
+.ControlMachineName {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+
+  > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 .ControlMachineEmpty {
   margin: 0;
   padding: 24px 14px;
@@ -944,6 +963,7 @@ button.ComputeFileName:focus-visible { color: white; }
 
 .ControlNodeContent:has(> .ComputeKnowledgePanel) {
   display: flex;
+  min-width: 0;
   height: 100%;
   flex-direction: column;
   padding: 24px;
@@ -1040,6 +1060,51 @@ button.ComputeFileName:focus-visible { color: white; }
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+}
+
+.ControlNodeTitle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  h1 { overflow-wrap: anywhere; }
+}
+
+.ControlRemotePlatform {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+
+  [role='alert'] {
+    max-width: 360px;
+    color: #f59999;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+}
+
+.ControlRemotePlatformButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #9ba9b4;
+  cursor: pointer;
+
+  &:hover:not(:disabled), &:focus-visible {
+    color: #73caff;
+    border-color: #52616b;
+    background: #28323a;
+  }
+  &:disabled { opacity: 0.45; cursor: default; }
 }
 
 .ControlNodeTag,
@@ -1831,6 +1896,37 @@ button.ControlServiceCard {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  > header .ComputeClusterHeaderActions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .ControlProgramTarget {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 7px;
+
+    > span { color: rgba(255, 255, 255, 0.4); font-size: 9px; }
+    select {
+      height: 26px;
+      max-width: 240px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 2px;
+      outline: 0;
+      background: rgba(0, 0, 0, 0.18);
+      padding: 0 7px;
+      color: rgba(255, 255, 255, 0.86);
+      font: inherit;
+
+      &:focus-visible { border-color: rgba(255, 255, 255, 0.42); }
+    }
+  }
+
+  .ControlProgramEndpointCount { color: rgba(255, 255, 255, 0.42); font-size: 10px; }
   .ControlProgramEndpointName { display: flex; align-items: center; gap: 8px; }
   .ControlProgramEndpointName .ControlStatusDot { margin: 0; }
   .ControlProgramEndpointName > span:last-child { display: grid; gap: 2px; }

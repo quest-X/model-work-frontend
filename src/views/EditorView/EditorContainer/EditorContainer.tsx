@@ -39,7 +39,7 @@ import {useDatasetDirtyTracking} from './useDatasetDirtyTracking';
 import {createDroppedMediaQueueItems, VideoImportProgress} from './EditorFileImport';
 import {version as appVersion} from '../../../../package.json';
 
-const appEdition = 'Main';
+const appEdition = 'Platform';
 
 interface IProps {
     windowSize: ISize;

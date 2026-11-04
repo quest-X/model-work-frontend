@@ -4,6 +4,8 @@
 
 面向视觉数据的智能标注与边缘计算控制平台，覆盖标注、推理、数据集、训练、检索和节点资源管理。
 
+An intelligent visual-data annotation and edge-compute control platform covering annotation, inference, datasets, training, retrieval, and node-resource management.
+
 ![OpenSight 平台预览](docs/preview.png)
 
 [在线演示](https://model.work/) · [问题反馈](https://github.com/quest-X/model-work-frontend/issues) · [版本发布](https://github.com/quest-X/model-work-frontend/releases)

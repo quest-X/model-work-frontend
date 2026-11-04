@@ -4,6 +4,7 @@ import {Language} from '../../../data/LanguageConfig';
 import {
     ComputeClusterNode,
     computeNodeUpgradeAvailable,
+    computeNodeUpgradeReady,
     computeNodeState,
     computeNodeLabel,
     computeNodeNormal,
@@ -26,6 +27,9 @@ import {AppState} from '../../../store';
 import './ComputeClusterPopup.scss';
 import {ResourceKnowledgeGraph} from './ResourceKnowledgeGraph';
 import {ComputeTerminalPanel} from './ComputeTerminalPanel';
+import {ACTIVE_BATCH_KEY, ComputeUpgradePanel} from './ComputeUpgradePanel';
+
+declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
 
 interface IProps {
     language: Language;
@@ -349,7 +353,14 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     preferredNodeId,
 }) => {
     const zh = language === Language.CHINESE;
+    const commercialRestricted = typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
+        && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__;
     const [nodes, setNodes] = useState<ComputeClusterNode[]>([]);
+    const [upgradeOpen, setUpgradeOpen] = useState(() => !commercialRestricted
+        && Boolean(window.localStorage.getItem(ACTIVE_BATCH_KEY)));
+    const [upgradeReleasesLoading, setUpgradeReleasesLoading] = useState(true);
+    const [upgradeReleasesError, setUpgradeReleasesError] = useState('');
+    const upgradePanelRef = useRef<HTMLDivElement | null>(null);
     const [upgradeReleases, setUpgradeReleases] = useState<ComputeUpgradeManifest[]>([]);
     const [status, setStatus] = useState<ComputeClusterStatus | null>(null);
     const [tasks, setTasks] = useState<ComputeTask[]>([]);
@@ -392,13 +403,20 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const taskFormRef = useRef<HTMLDivElement | null>(null);
 
     const refreshUpgradeReleases = useCallback(async (signal?: AbortSignal) => {
+        setUpgradeReleasesLoading(true);
         try {
             const catalog = await ComputeClusterService.upgradeReleases(signal);
-            if (mounted.current) setUpgradeReleases(catalog.releases);
+            if (mounted.current) {
+                setUpgradeReleases(catalog.releases);
+                setUpgradeReleasesError('');
+            }
         } catch (reason) {
             if ((reason as {name?: string})?.name !== 'AbortError' && mounted.current) {
                 setUpgradeReleases([]);
+                setUpgradeReleasesError(reason instanceof Error ? reason.message : String(reason));
             }
+        } finally {
+            if (mounted.current) setUpgradeReleasesLoading(false);
         }
     }, []);
 
@@ -729,6 +747,10 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
     const operationsGraphEntityCount = resourceGraph?.entities.filter(entity =>
         entity.kind === 'compute_node' || entity.kind === 'managed_device',
     ).length ?? 0;
+const totalNodeCount = resourceGraph?.entities.filter(entity =>
+        entity.kind === 'compute_node'
+        || (entity.kind === 'managed_device' && entity.device_kind === 'edge_compute'),
+    ).length ?? totals.total;
     const totalDeviceCount = resourceGraph
         ? operationsGraphEntityCount
         : totals.total + (status?.nodes.device_total ?? 0);
@@ -771,6 +793,8 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
             <div className='ComputeClusterSummary'>
                 <div><span>{zh ? '地域' : 'Regions'}</span><strong>{resourceGraph?.summary.regions ?? 0}</strong></div>
                 <div><span>{zh ? '设备总数(包含摄像头等)' : 'Total devices (incl. cameras)'}</span><strong>{totalDeviceCount}</strong></div>
+                <div><span>{zh ? '节点总数' : 'Total nodes'}</span><strong>{totalNodeCount}</strong></div>
+                <div><span>{zh ? '计算节点' : 'Compute nodes'}</span><strong>{totals.total}</strong></div>
                 <div><span>{zh ? '正常节点' : 'Normal nodes'}</span><strong className='online'>{totals.online}</strong></div>
                 <div><span>{zh ? '故障节点' : 'Fault nodes'}</span><strong>{nodes.filter(node => computeNodeState(node) === 'fault').length}</strong></div>
                 <div><span>{zh ? '异常节点' : 'Abnormal nodes'}</span><strong>{nodes.filter(node => computeNodeState(node) === 'abnormal').length}</strong></div>
@@ -1085,6 +1109,14 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                             ><span>{label}</span><strong>{count}</strong></button>)}
                         </div>
                     </details>
+                    {!commercialRestricted && <button type='button' className='ComputeBatchUpgradeButton'
+                        aria-expanded={upgradeOpen} onClick={() => setUpgradeOpen(current => !current)}>
+                        {upgradeOpen ? (zh ? '收起节点升级' : 'Hide node upgrade') : (zh ? '批量升级' : 'Batch upgrade')}
+                    </button>}
+                </div>}
+                {!loading && activeWorkspace === 'nodes' && !commercialRestricted && upgradeOpen && <div className='ComputeNodeUpgradeArea' ref={upgradePanelRef}>
+                    <ComputeUpgradePanel nodes={nodes} releases={upgradeReleases} releasesLoading={upgradeReleasesLoading}
+                        releasesError={upgradeReleasesError} refreshReleases={refreshUpgradeReleases} zh={zh}/>
                 </div>}
                 {!loading && activeWorkspace === 'nodes' && !nodeDetail && filteredNodes.length === 0 && <div className='ComputeNodeFilterEmpty'>
                     {zh ? '没有符合当前筛选条件的节点。' : 'No nodes match the current filter.'}
@@ -1109,12 +1141,17 @@ export const ComputeClusterPopup: React.FC<IProps> = ({
                             ><i/></button>
                         </header>
                         {!collapsed && <div className='ComputeNodeGrid' id={gridId}>
-                            {areaNodes.map(node => <NodeCard
-                                key={node.node_id}
-                                node={node}
-                                zh={zh}
-                                onOpen={() => setNodeDetailId(node.node_id)}
-                            />)}
+                            {areaNodes.map(node => <div key={node.node_id} className='ComputeNodeUpgradeCard'>
+                                <NodeCard node={node} zh={zh} onOpen={() => setNodeDetailId(node.node_id)}/>
+                                {!commercialRestricted && <button type='button'
+                                    disabled={!computeNodeUpgradeAvailable(node, upgradeReleases)}
+                                    aria-label={`${zh ? '管理' : 'Manage'} ${node.name} ${zh ? '节点升级' : 'node upgrade'}`}
+                                    onClick={() => { setUpgradeOpen(true); upgradePanelRef.current?.scrollIntoView?.({block: 'nearest'}); }}>
+                                    {computeNodeUpgradeAvailable(node, upgradeReleases) ? (zh ? '升级节点' : 'Upgrade node')
+                                        : computeNodeUpgradeReady(node) ? (zh ? '暂无可用升级' : 'No upgrade available')
+                                            : (zh ? '无法联通，暂不可升级' : 'Unreachable; upgrade unavailable')}
+                                </button>}
+                            </div>)}
                         </div>}
                     </section>;
                 })}

@@ -112,8 +112,8 @@ it.each(['重新连接', '重试'])('retries a failed protocol directory using %
 });
 
 it.each(['reconnect', 'unmount'])('ignores an old protocol directory after %s', async action => {
-    let resolveDirectory: (value: unknown) => void;
-    const directory = new Promise(resolve => { resolveDirectory = resolve; });
+    let resolveDirectory: (value: {schema_version: string; protocols: string[]}) => void;
+    const directory = new Promise<{schema_version: string; protocols: string[]}>(resolve => { resolveDirectory = resolve; });
     const json = jest.fn(() => directory);
     const readOldProtocols = jest.fn(() => ['mjpeg', 'srt']);
     const fetchDirectory = jest.fn()
@@ -285,8 +285,8 @@ it('rejects the 2x2 WebRTC placeholder as a live frame', async () => {
 it('shows first-frame latency and protocol availability in the selector', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(0);
-    let resolveDirectory: (value: unknown) => void;
-    global.fetch = jest.fn(() => new Promise(resolve => { resolveDirectory = resolve; }));
+    let resolveDirectory: (value: Response) => void;
+    global.fetch = jest.fn(() => new Promise<Response>(resolve => { resolveDirectory = resolve; }));
     render(<ProgramLivePreview nodeId='node04' programId='dlk' name='DLK' path='/stream.mjpeg' zh/>);
     await act(async () => {
         resolveDirectory({
@@ -294,7 +294,7 @@ it('shows first-frame latency and protocol availability in the selector', async 
             schema_version: 'program.media.trial.v1',
             protocols: ['mjpeg', 'hls', 'llhls', 'webrtc', 'rtsp', 'srt'],
             }),
-        });
+        } as Response);
         await Promise.resolve();
     });
     const select = screen.getByRole('combobox', {name: '播放协议'});

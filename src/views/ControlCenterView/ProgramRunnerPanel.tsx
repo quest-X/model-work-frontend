@@ -4,6 +4,7 @@ import Tooltip from '@mui/material/Tooltip';
 import {CalendarDays, ChevronLeft, ChevronRight, RefreshCw} from 'lucide-react';
 import {
     ComputeClusterNode,
+    ComputeLanAsset,
     ComputeClusterService,
     ComputeProgramOverflowStatistics,
     ComputeProgramSnapshot,
@@ -29,6 +30,7 @@ type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'telegram' | 'log';
 
 interface IProps {
     node: ComputeClusterNode;
+    edgeDevices?: ComputeLanAsset[];
     zh: boolean;
     maximized: boolean;
     onToggleMaximized: () => void;
@@ -41,6 +43,39 @@ interface ProgramRunnerCache {
 }
 
 const programRunnerCache = new Map<string, ProgramRunnerCache>();
+
+const edgeRuntimeSnapshot = (
+    programs: ComputeProgramSnapshot,
+): ComputeRuntimeSnapshot => {
+    const services = programs.programs.map(program => ({
+        service_id: program.program_id,
+        name: program.name,
+        kind: 'service' as const,
+        state: program.state,
+        version: program.version,
+        uptime_seconds: program.service.uptime_seconds,
+        restart_count: null,
+        health: program.health,
+        process: {
+            pid: program.service.pid,
+            state: program.service.state,
+        },
+    }));
+    return {
+        schema_version: 'runtime.snapshot.v1',
+        captured_at: programs.captured_at,
+        summary: {
+            total: services.length,
+            healthy: services.filter(service => service.state === 'healthy').length,
+            degraded: services.filter(service => service.state === 'degraded').length,
+            unavailable: services.filter(service => service.state === 'unavailable').length,
+            task_counts: {
+                queued: 0, running: 0, paused: 0, succeeded: 0, failed: 0, cancelled: 0,
+            },
+        },
+        services,
+    };
+};
 
 const runtimeTone = (state: ComputeRuntimeService['state']): ProgramTone =>
     state === 'healthy' ? 'healthy' : state === 'unavailable' ? 'offline' : 'warning';
@@ -213,11 +248,21 @@ const taskStateLabel = (state: string, zh: boolean): string => ({
 // eslint-disable-next-line complexity
 export const ProgramRunnerPanel: React.FC<IProps> = ({
     node,
+    edgeDevices = [],
     zh,
     maximized,
     onToggleMaximized,
 }) => {
-    const cached = programRunnerCache.get(node.node_id);
+    const [targetId, setTargetId] = useState(node.node_id);
+    const selectedEdge = edgeDevices.find(device => device.asset_id === targetId) || null;
+    const selectedEdgeId = selectedEdge?.asset_id || '';
+    const targetKey = selectedEdgeId ? `edge:${selectedEdgeId}` : node.node_id;
+    const targetName = selectedEdge
+        ? selectedEdge.display_name || selectedEdge.hostname || selectedEdge.address
+        : node.name;
+    const targetOnline = node.online && (!selectedEdge || selectedEdge.online);
+    const edgeRuntimeCapable = node.online && node.capabilities.includes('runtime.edge-programs.read.v1');
+    const cached = programRunnerCache.get(targetKey);
     const [view, setView] = useState<ProgramRunnerView>('programs');
     const [snapshot, setSnapshot] = useState<ComputeRuntimeSnapshot | null>(cached?.snapshot || null);
     const [programs, setPrograms] = useState<ComputeProgramSnapshot | null>(cached?.programs || null);
@@ -262,13 +307,15 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [refreshing, setRefreshing] = useState(false);
     const [refreshProgress, setRefreshProgress] = useState(0);
     useEscapeToClose(() => setStatisticsCalendarOpen(false), statisticsCalendarOpen, 22);
-    const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
-    const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
-    const historyCapable = node.online && node.capabilities.includes('machine.history.read.v1');
+    const runtimeCapable = !selectedEdge && node.online && node.capabilities.includes('runtime.read.v1');
+    const programsCapable = selectedEdge
+        ? edgeRuntimeCapable && selectedEdge.online
+        : node.online && node.capabilities.includes('runtime.programs.read.v1');
+    const historyCapable = !selectedEdge && node.online && node.capabilities.includes('machine.history.read.v1');
     const runtimeVisible = runtimeCapable || snapshot !== null;
     const programsVisible = programsCapable || programs !== null;
     const logsVisible = runtimeVisible || programsVisible || events.length > 0;
-    const showingCache = !node.online && (snapshot !== null || programs !== null || events.length > 0);
+    const showingCache = !targetOnline && (snapshot !== null || programs !== null || events.length > 0);
     const hasTelegramFiles = Boolean(programs?.programs.some(program =>
         program.artifacts.some(artifact => artifactCategory(artifact) === 'telegram')
     ));
@@ -277,7 +324,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         || view !== 'history' && view !== 'artifacts' && view !== 'statistics'
         && (view !== 'telegrams' || !hasTelegramFiles));
     const eventsRequested = view === 'logs' || view === 'telegrams' && !hasTelegramFiles;
-    const connectionLabel = node.online
+    const connectionLabel = targetOnline
         ? runtimeCapable
             ? runtimeError
                 ? (zh ? '在线 · 状态刷新失败，正在重试' : 'Online · status refresh failed; retrying')
@@ -289,8 +336,13 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             ? (zh ? '离线 · 显示最后缓存' : 'Offline · showing last cached data')
             : (zh ? '离线' : 'Offline');
 
+    useEffect(() => { setTargetId(node.node_id); }, [node.node_id]);
     useEffect(() => {
-        const next = programRunnerCache.get(node.node_id);
+        if (targetId !== node.node_id && !selectedEdge) setTargetId(node.node_id);
+    }, [node.node_id, targetId, selectedEdge]);
+
+    useEffect(() => {
+        const next = programRunnerCache.get(targetKey);
         setView('programs');
         setSnapshot(next?.snapshot || null);
         setPrograms(next?.programs || null);
@@ -326,7 +378,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setResultPreviewError('');
         setResultPreviewLoading(false);
         setRefreshProgress(0);
-    }, [node.node_id]);
+    }, [targetKey]);
 
     useEffect(() => {
         if (!runtimeCapable && !programsRequested) return undefined;
@@ -352,8 +404,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         // eslint-disable-next-line complexity
         const load = () => {
             const updateCache = (patch: Partial<ProgramRunnerCache>) => {
-                const current = programRunnerCache.get(node.node_id);
-                programRunnerCache.set(node.node_id, {
+                const current = programRunnerCache.get(targetKey);
+                programRunnerCache.set(targetKey, {
                     snapshot: current?.snapshot || null,
                     programs: current?.programs || null,
                     events: current?.events || [],
@@ -375,10 +427,14 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                 );
             }
             if (programsRequested && !inFlight.has('programs')) {
-                void track('programs', ComputeClusterService.programs(node.node_id, controller.signal)).then(
+                void track('programs', selectedEdgeId
+                    ? ComputeClusterService.edgePrograms(selectedEdgeId, controller.signal)
+                    : ComputeClusterService.programs(node.node_id, controller.signal)).then(
                     value => {
                         if (controller.signal.aborted) return;
-                        updateCache({programs: value});
+                        const edgeSnapshot = selectedEdgeId ? edgeRuntimeSnapshot(value) : null;
+                        updateCache({programs: value, ...(edgeSnapshot ? {snapshot: edgeSnapshot} : {})});
+                        if (edgeSnapshot) setSnapshot(edgeSnapshot);
                         setPrograms(value);
                         setProgramsError('');
                     },
@@ -418,7 +474,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             window.clearInterval(timer);
             setRefreshing(false);
         };
-    }, [eventsRequested, node.node_id, programsCapable, programsRequested, runtimeCapable]);
+    }, [eventsRequested, node.node_id, programsCapable, programsRequested, runtimeCapable, selectedEdgeId, targetKey]);
 
     useEffect(() => {
         if (view !== 'history' || !historyCapable) return undefined;
@@ -574,8 +630,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     }>()).values()].sort((left, right) => right.modified_at - left.modified_at);
     const artifactFolderKeys = artifactFolders.map(folder => folder.key).join('\n');
     const selectedArtifactUrl = selectedArtifact
-        ? ComputeClusterService.programArtifactUrl(
-            node.node_id,
+        ? (selectedEdgeId ? ComputeClusterService.edgeProgramArtifactUrl : ComputeClusterService.programArtifactUrl)(
+            selectedEdgeId || node.node_id,
             selectedArtifact.program_id,
             selectedArtifact.artifact_id,
             selectedArtifact.modified_at,
@@ -773,15 +829,29 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         className={`ControlResourceMonitor ControlProgramRunner${maximized ? ' maximized' : ''}`}
         role='dialog'
         aria-modal='true'
-        aria-label={zh ? `${node.name} 程序运行器` : `${node.name} program runner`}
+        aria-label={zh ? `${targetName} 程序运行器` : `${targetName} program runner`}
     >
         <header>
             <div>
                 <span>{zh ? '程序运行器' : 'Program Runner'}</span>
-                <h2>{node.name}</h2>
+                <h2>{targetName}</h2>
+                {edgeRuntimeCapable && edgeDevices.length > 0 && <label className='ControlProgramTarget'>
+                    <span>{zh ? '查看设备' : 'View device'}</span>
+                    <select
+                        aria-label={zh ? '选择程序运行设备' : 'Select program runtime device'}
+                        value={targetId}
+                        onChange={event => {
+                            setPrograms(null); setSnapshot(null); setEvents([]); setTargetId(event.target.value);
+                        }}
+                    >
+                        <option value={node.node_id}>{node.name}</option>
+                        {edgeDevices.map(device => <option key={device.asset_id} value={device.asset_id}
+                            disabled={!device.online}>{device.display_name || device.hostname || device.address}</option>)}
+                    </select>
+                </label>}
                 <p>
                     <span className='ControlProgramConnection' role='status' aria-label={connectionLabel}>
-                        <span className={`ControlStatusDot ${node.online ? 'healthy' : 'offline'}`} aria-hidden='true'/>
+                        <span className={`ControlStatusDot ${targetOnline ? 'healthy' : 'offline'}`} aria-hidden='true'/>
                         {connectionLabel}
                     </span>
                     {' · '}{dateTime(capturedAt, zh)}
@@ -811,7 +881,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     ['logs', zh ? '日志' : 'Logs'],
                     ['statistics', zh ? '统计' : 'Statistics'],
                     ['history', zh ? '历史' : 'History'],
-                ] as [ProgramRunnerView, string][]).map(([item, label]) => <button
+                ] as [ProgramRunnerView, string][]).filter(([item]) => !selectedEdge
+                    || ['programs', 'endpoints', 'artifacts', 'logs'].includes(item)).map(([item, label]) => <button
                     type='button'
                     key={item}
                     aria-current={view === item ? 'page' : undefined}
@@ -1031,7 +1102,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 );
                                 return <tr key={endpoint.key}>
                                 <td><code>{endpoint.method}</code></td>
-                                <td className='ControlProgramEndpointAddress'>{endpoint.method === 'GET'
+                                <td className='ControlProgramEndpointAddress'>{endpoint.method === 'GET' && !selectedEdgeId
                                     ? <a
                                         className='ControlProgramEndpointLink'
                                         href={url}
