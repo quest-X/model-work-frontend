@@ -7,6 +7,7 @@ import {
 import {useAccountApprovalIdentity} from '../../services/ApprovalIdentityService';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import './AccountCenter.scss';
+import {PlatformLoginPanel} from './PlatformLoginPanel';
 
 interface IProps {
     user: AccountUser;
@@ -143,6 +144,7 @@ export const AccountCenter: React.FC<IProps> = ({user, zh, open = true, onClose,
             </div>}
             {(message || error) && <div className={error ? 'AccountCenterError' : 'AccountCenterSuccess'} role='status'>{error || message}</div>}
             <div className='AccountCenterGrid'>
+                {user.role === 'admin' && !user.password_change_required && <PlatformLoginPanel zh={zh}/>}
                 <article>
                     <h3>{zh ? '个人资料' : 'Profile'}</h3>
                     <label>{zh ? '账号' : 'Username'}<input value={user.username} disabled/></label>
