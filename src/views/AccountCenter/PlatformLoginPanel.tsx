@@ -53,8 +53,8 @@ export const PlatformLoginPanel: React.FC<{zh: boolean}> = ({zh}) => {
         event.target.value = '';
         if (file) void run(() => accept(file));
     };
-    return <article>
-        <h3>{zh ? '平台免密登录' : 'Trusted platform login'}</h3>
+    return <div className='AccountPlatformLogin'>
+        <h4>{zh ? '平台免密登录' : 'Trusted platform login'}</h4>
         <button type='button' disabled={busy} aria-expanded={open} onClick={() => {
             setOpen(!open);
             if (!open) void run(load);
@@ -104,5 +104,5 @@ export const PlatformLoginPanel: React.FC<{zh: boolean}> = ({zh}) => {
             </p>)}
             <p role='status'>{message}</p>
         </>}
-    </article>;
+    </div>;
 };
