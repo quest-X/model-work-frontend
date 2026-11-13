@@ -74,7 +74,7 @@ export type ComputeClusterNode = {
     role?: 'main' | 'node';
     agent_version: string;
     capabilities: string[];
-    control_transport?: 'lan' | 'tailscale' | null;
+    control_transport?: 'lan' | 'tailscale' | 'tailcat' | null;
     communication_state?: 'normal' | 'fault' | 'abnormal' | null;
     network: {
         provider: 'tailscale';
@@ -82,6 +82,8 @@ export type ComputeClusterNode = {
         online: boolean;
         ssh_available?: boolean;
         lan_ssh_available?: boolean | null;
+        lan_probe_failures?: number;
+        tailcat_ssh_available?: boolean | null;
         tailscale_ssh_available?: boolean | null;
         backend_state?: string | null;
         self_name?: string | null;
@@ -141,34 +143,40 @@ export const computeNodeUpgradeAvailable = (
     && compareNodeVersions(node.agent_version, release.release_version) < 0
 );
 
+export type ComputeLanProbeStatus = {
+    node_id: string;
+    lan_ssh_available: boolean;
+    lan_probe_failures: number;
+};
+
 export type ComputeCommunicationState = 'normal' | 'fault' | 'abnormal';
 
 export const aggregateCommunicationStates = (states: ComputeCommunicationState[]): ComputeCommunicationState =>
     states.includes('abnormal') ? 'abnormal' : states.length && states.every(state => state === 'normal') ? 'normal' : 'fault';
 
 export const computeLinkStates = (node?: ComputeClusterNode): {lan: ComputeCommunicationState; tailscale: ComputeCommunicationState} => {
+    const lanPaused = node?.network.lan_probe_failures === 3;
     if (node?.communication_state === 'abnormal') {
         return {lan: 'abnormal', tailscale: 'abnormal'};
     }
     if (!node || !node.online || node.network.error
         || node.communication_state === 'fault') {
-        return {lan: 'fault', tailscale: 'fault'};
+        return {lan: lanPaused ? 'abnormal' : 'fault', tailscale: 'fault'};
     }
     const ssh = computeSshAvailability(node);
     return {
-        lan: ssh.lan ? 'normal' : 'fault',
+        lan: lanPaused ? 'abnormal' : ssh.lan ? 'normal' : 'fault',
         tailscale: ssh.tailscale ? 'normal' : 'fault',
     };
 };
 
 export const computeNodeState = (node?: ComputeClusterNode): ComputeCommunicationState => {
     if (!node) return 'fault';
-    const links = computeLinkStates(node);
-    const controlLinks = /^AIPACK-/i.test(node.name?.trim() || '') ? [links.lan] : Object.values(links);
-    return aggregateCommunicationStates([
-        node.online && !node.network.error ? node.communication_state ?? 'normal' : 'fault',
-        controlLinks.includes('normal') ? 'normal' : aggregateCommunicationStates(controlLinks),
-    ]);
+    if (node.communication_state === 'abnormal') return 'abnormal';
+    return node.online && !node.network.error
+        && (node.communication_state == null || node.communication_state === 'normal')
+        ? 'normal'
+        : 'fault';
 };
 
 export const communicationStateLabel = (state: ComputeCommunicationState, zh: boolean): string =>
@@ -225,6 +233,39 @@ export type ComputeRuntimeSnapshot = {
         task_counts: Record<string, number>;
     };
     services: ComputeRuntimeService[];
+};
+
+export type MaintenanceSource = 'controller' | 'node';
+export type MaintenanceEvent = {
+    event_id: number;
+    operation: 'agentos.startup.set_enabled' | 'node.upgrade' | 'model.version.change' | 'model.delivery.commit' | 'config.restore.apply';
+    authorization_id: string | null;
+    user_id: string | null;
+    state: 'pending' | 'approved' | 'executing' | 'succeeded' | 'failed' | 'rejected' | 'expired' | 'unrecognized';
+    error_code: string | null;
+    created_at: number;
+    reference: Partial<Record<'item_id' | 'request_id' | 'release_version' | 'job_id' | 'model_id' | 'license_id' | 'backup_id', string>>;
+};
+
+export type MaintenancePage = {
+    schema_version: 'runtime.maintenance.events.v1';
+    installation_id: string;
+    source: MaintenanceSource;
+    events: MaintenanceEvent[];
+    next_before: number | null;
+};
+
+export type ComputeSecurityBaseline = {
+    schema_version: 'runtime.security-baseline.v1';
+    installation_id: string;
+    platform: 'windows' | 'macos' | 'linux' | 'other';
+    captured_at: number;
+    checks: Array<{
+        check_id: 'firewall_domain' | 'firewall_private' | 'firewall_public' | 'defender_realtime' | 'bitlocker_system'
+            | 'application_firewall' | 'filevault' | 'ufw_service' | 'firewalld_service' | 'nftables_service';
+        evidence: 'enabled' | 'disabled' | 'active' | 'inactive' | 'failed' | 'not_installed'
+            | 'unavailable' | 'permission_denied' | 'not_supported' | 'timed_out' | 'unrecognized';
+    }>;
 };
 
 export type ComputeRuntimeInventory = {
@@ -300,51 +341,132 @@ export type ComputeProgramSnapshot = {
     }[];
 };
 
-export type ComputeProgramOverflowStatistics = {
-    schema_version: 'runtime.program-overflow-statistics.v1';
-    captured_at: number;
-    program_id: string;
-    date: string;
-    timezone_offset_minutes: number;
-    total_frames: number;
-    overflow_frames: number;
-    episodes: {
-        small: number;
-        medium: number;
-        large: number;
-        unknown: number;
+type ConfigBackupSettings = {
+    name: string;
+    agent_host: '127.0.0.1' | '::1';
+    agent_port: number;
+    tailscale_auto_start: boolean;
+};
+
+export type ConfigBackupSnapshot = {
+    schema_version: 'model-work-node.config-backup.v1';
+    installation_id: string;
+    backup_id: string;
+    role: ComputeClusterNode['role'];
+    created_at: number;
+    settings: ConfigBackupSettings;
+    configuration_sha256: string;
+};
+
+type ConfigRestoreDigests = {expected_digest: string; target_digest: string};
+export type ConfigRestoreRequest = ConfigRestoreDigests & {backup_id: string; request_id: string};
+export type ConfigRestorePreview = ConfigRestoreDigests & {
+    installation_id: string;
+    backup_id: string;
+    changes: Array<{field: keyof ConfigBackupSettings; before: string | number | boolean; after: string | number | boolean}>;
+    requires_restart: boolean;
+};
+
+export type ConfigRestoreReceipt = ConfigRestoreRequest & {
+    installation_id: string;
+    previous_backup_id: string;
+    state: 'applied' | 'target_observed' | 'previous_observed' | 'uncertain';
+    recovered: boolean;
+    created_at: number;
+    finished_at: number;
+};
+
+export type ConfigBackupHistory = {
+    installation_id: string;
+    current_digest: string;
+    backups: Array<{backup_id: string; kind: 'manual' | 'imported' | 'before_restore'; recorded_at: number}>;
+    restores: ConfigRestoreReceipt[];
+    backups_have_more: boolean;
+    restores_have_more: boolean;
+};
+
+export type ConfigRestoreAuthorization = ApprovalRequest & {
+    operation: 'config.restore.apply';
+    target: {kind: 'config_backup'; backup_id: string; request_id: string};
+    parameters: ConfigRestoreDigests;
+    state: 'pending' | 'succeeded' | 'rejected';
+    error_code: string | null;
+};
+
+export type ModelVersionReceipt = {
+    request_id: string;
+    installation_id: string;
+    model_id: string;
+    license_id: string;
+    previous_license_id: string | null;
+    operation: 'update' | 'activate' | 'rollback';
+    model_sha256: string;
+    package_sha256: string;
+    expires_at: number;
+    changed_at: number;
+};
+
+export type ModelVersionHistory = {
+    installation_id: string;
+    model_id: string;
+    active_license_id: string | null;
+    history: ModelVersionReceipt[];
+    has_more: boolean;
+};
+
+export type ModelVersionChange = {
+    model_id: string;
+    license_id: string;
+    expected_license_id: string | null;
+    request_id: string;
+    rollback: boolean;
+};
+
+export type ModelVersionAuthorization = ApprovalRequest & {
+    operation: 'model.version.change';
+    target: {kind: 'model_version'; model_id: string; license_id: string; request_id: string};
+    parameters: {expected_license_id: string | null; rollback: boolean; model_sha256: string; package_sha256: string};
+    state: 'pending' | 'succeeded' | 'rejected';
+    error_code: string | null;
+};
+
+export type ModelDeliveryLicense = Record<string, unknown> & {
+    installation_id: string;
+    license_id: string;
+    model_id: string;
+    model_sha256: string;
+    package_sha256: string;
+};
+
+export type ModelDeliveryRequest = {
+    request_id: string;
+    model_id: string;
+    expected_license_id: string | null;
+    package_size: number;
+};
+
+export type ModelDeliveryProgress = {
+    installation_id: string;
+    request_id: string;
+    model_id: string;
+    license_id: string;
+    package_size: number;
+    received_bytes: number;
+    expires_at: number;
+};
+
+export type ModelDeliveryAuthorization = ApprovalRequest & {
+    operation: 'model.delivery.commit';
+    target: {kind: 'model_delivery'; model_id: string; license_id: string; request_id: string};
+    parameters: {
+        expected_license_id: string | null;
+        package_size: number;
+        model_sha256: string;
+        package_sha256: string;
+        license_sha256: string;
     };
-    hourly: number[];
-    latest_overflow_at: number | null;
-    heats: {
-        heat_id: string;
-        sequence: number;
-        label: string;
-        start_at: number;
-        end_at: number;
-        duration_seconds: number;
-        overflow_events: number;
-        levels: {
-            small: number;
-            medium: number;
-            large: number;
-            unknown: number;
-        };
-        total_overflow_duration_seconds: number;
-        max_event_duration_seconds: number;
-        avg_overflow_intensity: number;
-        max_overflow_intensity: number;
-        camera_drops: number;
-        result_folder: string;
-        events: {
-            start_at: number;
-            end_at: number;
-            duration_seconds: number;
-            level: 'small' | 'medium' | 'large' | 'unknown';
-            max_intensity: number;
-            overflow_ratio: number;
-        }[];
-    }[];
+    state: 'pending' | 'succeeded' | 'rejected';
+    error_code: string | null;
 };
 
 export type ComputeStartupItem = {
@@ -428,84 +550,6 @@ export type ComputePerformanceSnapshot = {
     metrics: Record<ComputePerformanceMetric, number | null>;
 };
 
-export type ComputePerformanceModeCheck = {
-    code:
-        | 'inspection_available'
-        | 'jetson_power_profile'
-        | 'linux_boost'
-        | 'linux_governor'
-        | 'linux_max_frequency'
-        | 'macos_energy_mode'
-        | 'windows_power_scheme'
-        | 'windows_processor_maximum';
-    passed: boolean;
-    observed: string;
-    expected: string;
-};
-
-export type ComputePerformanceMode = {
-    schema_version: 'performance.mode-result.v1';
-    captured_at: number;
-    platform: 'windows' | 'linux' | 'jetson' | 'macos' | 'unsupported';
-    available: boolean;
-    compliant: boolean;
-    current_mode: string;
-    target_mode: string;
-    checks: ComputePerformanceModeCheck[];
-};
-
-export type ComputePerformanceModeRequest = {
-    schema_version: 'agentos.capability-request.v1';
-    request_id: string;
-    idempotency_key: string;
-    tool: 'agentos.performance.mode_apply';
-    node_id: string;
-    arguments: {expected_current_mode: string; target_mode: string};
-};
-
-export type ComputePerformanceModeAuthorization = ApprovalRequest & {
-    operation: 'agentos.performance.mode_apply';
-    target: {
-        kind: 'performance_mode';
-        request_id: string;
-        idempotency_key: string;
-    };
-    parameters: {expected_current_mode: string; target_mode: string};
-    state: 'pending' | 'approved' | 'executing' | 'succeeded' | 'failed' | 'rejected' | 'expired';
-    error_code: string | null;
-    node_name?: string;
-};
-
-export type ComputePerformanceModeResponse = {
-    schema_version: 'agentos.capability-response.v1';
-    request_id: string;
-    tool: 'agentos.performance.mode_apply';
-    node_id: string;
-    state: 'authorization_required' | 'succeeded';
-    task_id: null;
-    progress: null;
-    result: {
-        schema_version: 'performance.mode-apply-result.v1';
-        before: ComputePerformanceMode;
-        after: ComputePerformanceMode;
-        changed: true;
-    } | null;
-    authorization: {
-        authorization_id: string;
-        operation: 'agentos.performance.mode_apply';
-        target_summary: string;
-        parameters_summary: string;
-        expires_at: number;
-    } | null;
-    error: null;
-};
-
-export type ComputePerformanceModeAuthorizationResult = {
-    authorization: ComputePerformanceModeAuthorization;
-    evidence?: ComputePerformanceMode;
-    response: ComputePerformanceModeResponse;
-};
-
 export type ComputePerformanceEvidence = {
     metric: ComputePerformanceMetric;
     unit: 'percent' | 'celsius';
@@ -556,6 +600,17 @@ export type ComputeRuntimeEvents = {
     cursor: number;
     events: ComputeRuntimeEvent[];
     has_more: boolean;
+};
+
+export type ComputeRuntimeEventWindow = ComputeRuntimeEvents & {
+    snapshot?: string;
+    window: {
+        from_time: number;
+        to_time: number;
+        coverage: 'complete' | 'partial' | 'unavailable';
+        retained_from: number | null;
+        reason?: 'scan_pending' | 'scan_limit' | 'rotation' | 'range' | 'source_unavailable' | 'truncated_or_invalid' | null;
+    };
 };
 
 export type ComputeClusterStatus = {
@@ -1125,6 +1180,7 @@ export type ComputeTerminalTarget = {
     platform: string;
     online: boolean;
     available: boolean;
+    tailcat_available?: boolean;
     active_session_id?: string | null;
     reason: 'available' | 'node_offline' | 'ssh_unavailable';
 };
@@ -1135,12 +1191,14 @@ export type ComputeTerminalTargetsResponse = {
     targets: ComputeTerminalTarget[];
 };
 
+export type ComputeTerminalTransport = 'lan' | 'tailscale' | 'tailcat';
+
 export type ComputeTerminalSession = {
     version: 1;
     session_id: string;
     node_id: string;
     node_name: string;
-    transport?: 'lan' | 'tailscale' | null;
+    transport?: ComputeTerminalTransport | null;
     state: 'connecting' | 'running' | 'closed' | 'failed';
     created_at: number;
     last_activity_at: number;
@@ -1325,6 +1383,18 @@ export type ComputeResourceGraph = {
 const baseUrl = (): string =>
     `${getExtensionEngineBaseUrl()}/extensions/compute-cluster`;
 
+export class ComputeClusterRequestError extends Error {
+    constructor(public readonly status: number, message: string) {
+        super(message);
+    }
+}
+
+export class ComputeRuntimeRecentOnlyError extends Error {}
+
+export const isComputeAccessDenied = (reason: unknown): boolean =>
+    (reason instanceof ComputeClusterRequestError && [401, 403].includes(reason.status))
+    || (reason instanceof Error && /permission_denied|authorization_user_unknown/.test(reason.message));
+
 const request = async <T>(path: string, signal?: AbortSignal, init: RequestInit = {}): Promise<T> => {
     const response = await fetch(`${baseUrl()}${path}`, {
         ...init,
@@ -1336,7 +1406,8 @@ const request = async <T>(path: string, signal?: AbortSignal, init: RequestInit 
     });
     if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(typeof body?.detail === 'string' ? body.detail : `HTTP ${response.status}`);
+        throw new ComputeClusterRequestError(response.status,
+            typeof body?.detail === 'string' ? body.detail : `HTTP ${response.status}`);
     }
     return response.json();
 };
@@ -1396,7 +1467,39 @@ const approveConnection = async (
     return {...authorizationChallenge(challenge), signature: await signAuthorization(challenge, current)};
 };
 
+export type ProductionOperationProposal = {
+    schema_version: 'production.action-proposal.v1';
+    proposal_id: string;
+    node_id: string;
+    operation: string;
+    state: string;
+    target: Record<string, unknown>;
+    authorization: import('./ApprovalIdentityService').ApprovalRequest | null;
+    execution?: {state: string; post_verification?: {state: string}};
+};
+
 export class ComputeClusterService {
+    public static operationProposal(id: string, project: string, signal?: AbortSignal): Promise<ProductionOperationProposal> {
+        return request(`/ops/proposals/${encodeURIComponent(id)}`, signal, {headers: {'x-opensight-project': project}});
+    }
+
+    public static prepareOperationProposal(id: string, project: string, user: import('./ApprovalIdentityService').ApprovalUser): Promise<ProductionOperationProposal> {
+        return request(`/ops/proposals/${encodeURIComponent(id)}/prepare`, undefined, {
+            method: 'POST', headers: {'x-opensight-project': project}, body: JSON.stringify(user),
+        });
+    }
+
+    public static approveOperationProposal(id: string, project: string, signature: string): Promise<ProductionOperationProposal> {
+        return request(`/ops/proposals/${encodeURIComponent(id)}/approve`, undefined, {
+            method: 'POST', headers: {'x-opensight-project': project}, body: JSON.stringify({signature}),
+        });
+    }
+
+    public static rejectOperationProposal(id: string, project: string): Promise<ProductionOperationProposal> {
+        return request(`/ops/proposals/${encodeURIComponent(id)}/reject`, undefined, {
+            method: 'POST', headers: {'x-opensight-project': project},
+        });
+    }
     private static readonly activeLanScans = new Map<string, ComputeTask>();
 
     public static activeLanScan(nodeId: string): ComputeTask | null {
@@ -1410,6 +1513,17 @@ export class ComputeClusterService {
     public static async nodes(signal?: AbortSignal): Promise<ComputeClusterNode[]> {
         const response = await request<{nodes: ComputeClusterNode[]}>('/nodes', signal);
         return response.nodes;
+    }
+
+    public static async restartLanProbe(nodeId: string): Promise<ComputeLanProbeStatus | null> {
+        try {
+            return await request(`/nodes/${encodeURIComponent(nodeId)}/lan-probe/restart`, undefined, {
+                method: 'POST', body: '{}',
+            });
+        } catch (reason) {
+            if (reason instanceof ComputeClusterRequestError && reason.status === 404) return null;
+            throw reason;
+        }
     }
 
     public static groups(signal?: AbortSignal): Promise<ComputeGroupMemberships> {
@@ -1462,49 +1576,31 @@ export class ComputeClusterService {
         return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/inventory`, signal);
     }
 
+    public static securityBaseline(nodeId: string, signal?: AbortSignal): Promise<ComputeSecurityBaseline> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/security-baseline`, signal);
+    }
+
+    public static maintenanceEvents(
+        nodeId: string, source: MaintenanceSource, before: number | null, signal?: AbortSignal,
+    ): Promise<MaintenancePage> {
+        const query = new URLSearchParams({source});
+        if (before !== null) query.set('before', String(before));
+        return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/maintenance?${query}`, signal);
+    }
+
+    public static upgradeJob(nodeId: string, jobId: string, signal?: AbortSignal): Promise<ComputeUpgradeResult> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/upgrade/${encodeURIComponent(jobId)}`, signal);
+    }
+
     public static programs(nodeId: string, signal?: AbortSignal): Promise<ComputeProgramSnapshot> {
         return request(`/nodes/${encodeURIComponent(nodeId)}/runtime/programs`, signal);
     }
 
-    public static programOverflowStatistics(
-        nodeId: string,
-        programId: string,
-        date: string,
-        timezoneOffsetMinutes: number,
+    public static edgePrograms(
+        assetId: string,
         signal?: AbortSignal,
-    ): Promise<ComputeProgramOverflowStatistics> {
-        return request(
-            `/nodes/${encodeURIComponent(nodeId)}/runtime/programs/${encodeURIComponent(programId)}`
-            + `/overflow-statistics?date=${encodeURIComponent(date)}`
-            + `&timezone_offset_minutes=${timezoneOffsetMinutes}`,
-            signal,
-        );
-    }
-
-    public static programInterfaceUrl(
-        nodeId: string,
-        programId: string,
-        path: string,
-    ): string {
-        return `${baseUrl()}/nodes/${encodeURIComponent(nodeId)}/runtime/programs/${
-            encodeURIComponent(programId)
-        }/interfaces?path=${encodeURIComponent(path)}`;
-    }
-
-    public static programInterfaceStreamUrl(
-        nodeId: string,
-        programId: string,
-        path: string,
-    ): string {
-        return `${baseUrl()}/nodes/${encodeURIComponent(nodeId)}/runtime/programs/${
-            encodeURIComponent(programId)
-        }/interfaces/stream?path=${encodeURIComponent(path)}`;
-    }
-
-    public static programMediaUrl(nodeId: string, programId: string): string {
-        return `${baseUrl()}/nodes/${encodeURIComponent(nodeId)}/runtime/programs/${
-            encodeURIComponent(programId)
-        }/media`;
+    ): Promise<ComputeProgramSnapshot> {
+        return request(`/lan-assets/${encodeURIComponent(assetId)}/runtime/programs`, signal);
     }
 
     public static programArtifactUrl(
@@ -1518,6 +1614,151 @@ export class ComputeClusterService {
         }/artifacts/${encodeURIComponent(artifactId)}?v=${modifiedAt}`;
     }
 
+    public static edgeProgramArtifactUrl(
+        assetId: string,
+        programId: string,
+        artifactId: string,
+        modifiedAt: number,
+    ): string {
+        return `${baseUrl()}/lan-assets/${encodeURIComponent(assetId)}/runtime/programs/${
+            encodeURIComponent(programId)
+        }/artifacts/${encodeURIComponent(artifactId)}?v=${modifiedAt}`;
+    }
+
+    private static configBackupPath(nodeId: string, backupId?: string): string {
+        const path = `/nodes/${encodeURIComponent(nodeId)}/config/backups`;
+        return backupId ? `${path}/${encodeURIComponent(backupId)}` : path;
+    }
+
+    public static configBackupHistory(nodeId: string, signal?: AbortSignal): Promise<ConfigBackupHistory> {
+        return request(this.configBackupPath(nodeId), signal);
+    }
+
+    public static createConfigBackup(nodeId: string, signal?: AbortSignal): Promise<ConfigBackupSnapshot> {
+        return request(this.configBackupPath(nodeId), signal, {method: 'POST', body: '{}'});
+    }
+
+    public static importConfigBackup(nodeId: string, backup: unknown, signal?: AbortSignal): Promise<ConfigBackupSnapshot> {
+        return request(`${this.configBackupPath(nodeId)}/import`, signal, {method: 'POST', body: JSON.stringify({backup})});
+    }
+
+    public static exportConfigBackup(nodeId: string, backupId: string, signal?: AbortSignal): Promise<ConfigBackupSnapshot> {
+        return request(this.configBackupPath(nodeId, backupId), signal);
+    }
+
+    public static previewConfigRestore(nodeId: string, backupId: string, signal?: AbortSignal): Promise<ConfigRestorePreview> {
+        return request(`${this.configBackupPath(nodeId, backupId)}/preview`, signal);
+    }
+
+    public static createConfigRestoreAuthorization(
+        nodeId: string, scope: ConfigRestoreRequest, signal?: AbortSignal,
+    ): Promise<ConfigRestoreAuthorization> {
+        return request(`${this.configBackupPath(nodeId, scope.backup_id)}/authorizations`, signal, {
+            method: 'POST',
+            body: JSON.stringify({request: scope, user: getApprovalIdentity().user, ttl_seconds: 120}),
+        });
+    }
+
+    public static approveConfigRestore(
+        nodeId: string, backupId: string, authorizationId: string, signature: string, signal?: AbortSignal,
+    ): Promise<{authorization: ConfigRestoreAuthorization; receipt: ConfigRestoreReceipt}> {
+        const path = `${this.configBackupPath(nodeId, backupId)}/authorizations/${encodeURIComponent(authorizationId)}`;
+        return request(`${path}/approve`, signal, {method: 'POST', body: JSON.stringify({signature})});
+    }
+
+    public static rejectConfigRestore(
+        nodeId: string, backupId: string, authorizationId: string, signal?: AbortSignal,
+    ): Promise<ConfigRestoreAuthorization> {
+        const path = `${this.configBackupPath(nodeId, backupId)}/authorizations/${encodeURIComponent(authorizationId)}`;
+        return request(`${path}/reject`, signal, {method: 'POST', body: '{}'});
+    }
+
+    public static modelVersionHistory(nodeId: string, modelId: string, signal?: AbortSignal): Promise<ModelVersionHistory> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/model/versions?${new URLSearchParams({model_id: modelId})}`, signal);
+    }
+
+    public static createModelVersionAuthorization(
+        nodeId: string, change: ModelVersionChange, signal?: AbortSignal,
+    ): Promise<ModelVersionAuthorization> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/model/versions/authorizations`, signal, {
+            method: 'POST',
+            body: JSON.stringify({request: change, user: getApprovalIdentity().user, ttl_seconds: 120}),
+        });
+    }
+
+    public static approveModelVersion(
+        nodeId: string, authorizationId: string, signature: string, signal?: AbortSignal,
+    ): Promise<{authorization: ModelVersionAuthorization; receipt: ModelVersionReceipt & {current: boolean; replayed: boolean}}> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/model/versions/authorizations/${encodeURIComponent(authorizationId)}/approve`, signal, {
+            method: 'POST', body: JSON.stringify({signature}),
+        });
+    }
+
+    public static rejectModelVersion(
+        nodeId: string, authorizationId: string, signal?: AbortSignal,
+    ): Promise<ModelVersionAuthorization> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/model/versions/authorizations/${encodeURIComponent(authorizationId)}/reject`, signal, {
+            method: 'POST', body: '{}',
+        });
+    }
+
+    private static modelDeliveryPath(nodeId: string, requestId?: string): string {
+        const path = `/nodes/${encodeURIComponent(nodeId)}/model/deliveries`;
+        return requestId ? `${path}/${encodeURIComponent(requestId)}` : path;
+    }
+
+    public static openModelDelivery(
+        nodeId: string, delivery: ModelDeliveryRequest, license: ModelDeliveryLicense, signal?: AbortSignal,
+    ): Promise<ModelDeliveryProgress> {
+        return request(this.modelDeliveryPath(nodeId), signal, {
+            method: 'POST', body: JSON.stringify({request: delivery, license}),
+        });
+    }
+
+    public static modelDeliveryProgress(nodeId: string, requestId: string, signal?: AbortSignal): Promise<ModelDeliveryProgress> {
+        return request(this.modelDeliveryPath(nodeId, requestId), signal);
+    }
+
+    public static sendModelDeliveryChunk(
+        nodeId: string, requestId: string, offset: number, data: string, signal?: AbortSignal,
+    ): Promise<ModelDeliveryProgress> {
+        return request(`${this.modelDeliveryPath(nodeId, requestId)}/chunks`, signal, {
+            method: 'POST', body: JSON.stringify({offset, data}),
+        });
+    }
+
+    public static cancelModelDelivery(
+        nodeId: string, requestId: string, signal?: AbortSignal,
+    ): Promise<{installation_id: string; request_id: string; cancelled: true}> {
+        return request(`${this.modelDeliveryPath(nodeId, requestId)}/cancel`, signal, {
+            method: 'POST', body: '{}',
+        });
+    }
+
+    public static createModelDeliveryAuthorization(
+        nodeId: string, requestId: string, signal?: AbortSignal,
+    ): Promise<ModelDeliveryAuthorization> {
+        return request(`${this.modelDeliveryPath(nodeId, requestId)}/authorizations`, signal, {
+            method: 'POST', body: JSON.stringify({user: getApprovalIdentity().user, ttl_seconds: 120}),
+        });
+    }
+
+    public static approveModelDelivery(
+        nodeId: string, requestId: string, authorizationId: string, signature: string, signal?: AbortSignal,
+    ): Promise<{authorization: ModelDeliveryAuthorization; receipt: ModelVersionReceipt & {current: boolean; replayed: boolean}}> {
+        return request(`${this.modelDeliveryPath(nodeId, requestId)}/authorizations/${encodeURIComponent(authorizationId)}/approve`, signal, {
+            method: 'POST', body: JSON.stringify({signature}),
+        });
+    }
+
+    public static rejectModelDelivery(
+        nodeId: string, requestId: string, authorizationId: string, signal?: AbortSignal,
+    ): Promise<ModelDeliveryAuthorization> {
+        return request(`${this.modelDeliveryPath(nodeId, requestId)}/authorizations/${encodeURIComponent(authorizationId)}/reject`, signal, {
+            method: 'POST', body: '{}',
+        });
+    }
+
     public static startupItems(nodeId: string, signal?: AbortSignal): Promise<ComputeStartupList> {
         return request(`/nodes/${encodeURIComponent(nodeId)}/agentos/startup`, signal);
     }
@@ -1527,52 +1768,6 @@ export class ComputeClusterService {
         signal?: AbortSignal,
     ): Promise<ComputePerformanceSnapshot> {
         return request(`/nodes/${encodeURIComponent(nodeId)}/agentos/performance/snapshot`, signal);
-    }
-
-    public static performanceMode(
-        nodeId: string,
-        signal?: AbortSignal,
-    ): Promise<ComputePerformanceMode> {
-        return request(`/nodes/${encodeURIComponent(nodeId)}/agentos/performance/mode`, signal);
-    }
-
-    public static createPerformanceModeAuthorization(
-        nodeId: string,
-        input: {
-            request: ComputePerformanceModeRequest;
-            user: ComputeFilesystemAuthorizationRequest['user'];
-            ttl_seconds: number;
-        },
-        signal?: AbortSignal,
-    ): Promise<ComputePerformanceModeAuthorizationResult> {
-        return request(
-            `/nodes/${encodeURIComponent(nodeId)}/agentos/performance/mode/authorizations`,
-            signal,
-            {method: 'POST', body: JSON.stringify(input)},
-        );
-    }
-
-    public static approvePerformanceModeAuthorization(
-        authorizationId: string,
-        signature: string,
-        signal?: AbortSignal,
-    ): Promise<ComputePerformanceModeAuthorizationResult> {
-        return request(
-            `/agentos/performance/authorizations/${encodeURIComponent(authorizationId)}/approve`,
-            signal,
-            {method: 'POST', body: JSON.stringify({signature})},
-        );
-    }
-
-    public static rejectPerformanceModeAuthorization(
-        authorizationId: string,
-        signal?: AbortSignal,
-    ): Promise<ComputePerformanceModeAuthorization & {state: 'rejected'}> {
-        return request(
-            `/agentos/performance/authorizations/${encodeURIComponent(authorizationId)}/reject`,
-            signal,
-            {method: 'POST', body: '{}'},
-        );
     }
 
     public static performanceDiagnosis(
@@ -1625,6 +1820,34 @@ export class ComputeClusterService {
             `/nodes/${encodeURIComponent(nodeId)}/runtime/events?cursor=${cursor}&limit=${limit}`,
             signal,
         );
+    }
+
+    public static async runtimeEventWindow(
+        nodeId: string,
+        from: number,
+        to: number,
+        cursor: number,
+        signal?: AbortSignal,
+        program?: {id: string; snapshot?: string},
+    ): Promise<ComputeRuntimeEventWindow> {
+        const query = new URLSearchParams({
+            cursor: String(cursor), limit: '100', from_time: String(from), to_time: String(to),
+        });
+        if (program) query.set('program_id', program.id);
+        if (program?.snapshot) query.set('snapshot', program.snapshot);
+        const result = await request<ComputeRuntimeEventWindow | ComputeRuntimeEvents>(
+            `/nodes/${encodeURIComponent(nodeId)}/runtime/events?${query}`,
+            signal,
+        );
+        if (result?.schema_version === 'runtime.events.v1' && !('window' in result)
+            && typeof result.has_more === 'boolean' && Array.isArray(result.events)) {
+            throw new ComputeRuntimeRecentOnlyError('The runtime event endpoint returned recent events only');
+        }
+        if (!result || !('window' in result) || result.window?.from_time !== from || result.window.to_time !== to
+            || (program && (!result.snapshot || (program.snapshot && program.snapshot !== result.snapshot)))) {
+            throw new Error('The requested runtime event window is unavailable');
+        }
+        return result;
     }
 
     public static createFilesystemAuthorization(
@@ -2015,9 +2238,15 @@ export class ComputeClusterService {
         return request('/terminal-targets', signal);
     }
 
+    public static openPlatform(nodeId: string): Promise<{url: string; expires_in: number}> {
+        return request(`/nodes/${encodeURIComponent(nodeId)}/platform`, undefined, {
+            method: 'POST',
+        });
+    }
+
     public static startTerminal(
         nodeId: string,
-        transport?: 'lan' | 'tailscale',
+        transport?: ComputeTerminalTransport,
         signal?: AbortSignal,
     ): Promise<ComputeTerminalSession> {
         return request('/terminals', signal, {

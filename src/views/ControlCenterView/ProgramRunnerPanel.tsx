@@ -1,33 +1,33 @@
 import React, {useEffect, useRef, useState} from 'react';
-import Popover from '@mui/material/Popover';
-import Tooltip from '@mui/material/Tooltip';
-import {CalendarDays, ChevronLeft, ChevronRight, RefreshCw} from 'lucide-react';
 import {
+    ComputeLanAsset,
     ComputeClusterNode,
     ComputeClusterService,
-    ComputeProgramOverflowStatistics,
     ComputeProgramSnapshot,
     ComputeRuntimeEvent,
+    ComputeRuntimeEventWindow,
+    ComputeRuntimeRecentOnlyError,
     ComputeRuntimeService,
     ComputeRuntimeSnapshot,
+    isComputeAccessDenied,
 } from '../../services/ComputeClusterService';
-import {
-    MachineHistoryObject,
-    MachineHistoryObjectSummary,
-    MachineHistoryService,
-    MachineHistoryStatus,
-} from '../../services/MachineHistoryService';
-import {ProgramLivePreview} from './ProgramLivePreview';
-import {ProgramStatisticsExport} from './ProgramStatisticsExport';
-import {statisticsHasRecords} from './statisticsExport';
-import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 
-type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 'telegrams' | 'logs' | 'statistics' | 'history';
+type ProgramRunnerView = 'programs' | 'endpoints' | 'artifacts' | 'logs';
 type ProgramTone = 'healthy' | 'warning' | 'offline';
-type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'telegram' | 'log';
+type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'log';
+
+export interface ProgramLogScope {
+    kind: 'runtime' | 'program';
+    id: string;
+    checkedAt: number;
+}
 
 interface IProps {
+    initialView?: ProgramRunnerView;
+    initialEdgeId?: string;
+    logScope?: ProgramLogScope;
     node: ComputeClusterNode;
+    edgeDevices: ComputeLanAsset[];
     zh: boolean;
     maximized: boolean;
     onToggleMaximized: () => void;
@@ -40,6 +40,130 @@ interface ProgramRunnerCache {
 }
 
 const programRunnerCache = new Map<string, ProgramRunnerCache>();
+
+const useRuntimeLogWindow = (nodeId: string, programId: string, from: number, to: number, revision: number) => {
+    const key = nodeId ? JSON.stringify([nodeId, programId, from, to, revision]) : '';
+    const [request, setRequest] = useState<{key: string; cursor: number; snapshot?: string}>();
+    const [result, setResult] = useState<{
+        key: string;
+        page?: ComputeRuntimeEventWindow;
+        loading: boolean;
+        failed: boolean;
+        denied?: boolean;
+        recentOnly?: boolean;
+    }>();
+    const current = result?.key === key ? result : undefined;
+
+    useEffect(() => {
+        if (!key) {
+            setRequest(undefined);
+            setResult(undefined);
+            return undefined;
+        }
+        const controller = new AbortController();
+        const next = request?.key === key ? request : undefined;
+        const cursor = next?.cursor || 0;
+        setResult(previous => ({
+            key,
+            page: cursor > 0 && previous?.key === key ? previous.page : undefined,
+            loading: true,
+            failed: false,
+        }));
+        const program = programId ? {id: programId, snapshot: next?.snapshot} : undefined;
+        void ComputeClusterService.runtimeEventWindow(nodeId, from, to, cursor, controller.signal, program)
+            .then(page => {
+                if (controller.signal.aborted) return;
+                setResult(previous => ({
+                    key,
+                    page: {
+                        ...page,
+                        events: cursor > 0 ? [...(previous?.page?.events || []), ...page.events] : page.events,
+                    },
+                    loading: false,
+                    failed: false,
+                }));
+            }, error => {
+                if (controller.signal.aborted) return;
+                const denied = isComputeAccessDenied(error);
+                setResult(previous => ({
+                    key,
+                    page: !denied && previous?.key === key ? previous.page : undefined,
+                    loading: false,
+                    failed: true,
+                    denied,
+                    recentOnly: error instanceof ComputeRuntimeRecentOnlyError,
+                }));
+            });
+        return () => controller.abort();
+    }, [key, nodeId, programId, from, to, request]);
+
+    return {
+        enabled: Boolean(key),
+        loading: Boolean(key && (!current || current.loading)),
+        failed: Boolean(current?.failed),
+        page: current?.page,
+        denied: Boolean(current?.denied),
+        recentOnly: Boolean(current?.recentOnly),
+        loadMore: () => {
+            if (current?.failed && (programId || current.denied)) {
+                setRequest({key, cursor: 0});
+            } else {
+                setRequest({
+                    key,
+                    cursor: current?.failed
+                        ? (request?.key === key ? request.cursor : 0)
+                        : (current?.page?.cursor || 0),
+                    snapshot: current?.page?.snapshot,
+                });
+            }
+        },
+    };
+};
+
+const programHistoryNotice = (reason: ComputeRuntimeEventWindow['window']['reason'], zh: boolean) => {
+    if (!reason) return '';
+    return {
+        scan_pending: zh ? '所选时段仍有日志文件待读取。' : 'More log files remain to be checked.',
+        scan_limit: zh ? '已达到读取上限，所选时段覆盖不完整。' : 'The read limit was reached before the window was covered.',
+        rotation: zh ? '已读取可用轮转文件，轮转间隙的覆盖无法确认。' : 'Available rotated logs were read, but coverage across rotations is unconfirmed.',
+        range: zh ? '可读日志未覆盖整个所选时段。' : 'Readable logs do not span the full time window.',
+        source_unavailable: zh ? '有日志来源缺失或无法读取。' : 'A log source is missing or unreadable.',
+        truncated_or_invalid: zh ? '发现截断或无法解析的日志，覆盖不完整。' : 'Truncated or unreadable records leave coverage incomplete.',
+    }[reason];
+};
+
+const edgeRuntimeSnapshot = (
+    programs: ComputeProgramSnapshot,
+): ComputeRuntimeSnapshot => {
+    const services = programs.programs.map(program => ({
+        service_id: program.program_id,
+        name: program.name,
+        kind: 'service' as const,
+        state: program.state,
+        version: program.version,
+        uptime_seconds: program.service.uptime_seconds,
+        restart_count: null,
+        health: program.health,
+        process: {
+            pid: program.service.pid,
+            state: program.service.state,
+        },
+    }));
+    return {
+        schema_version: 'runtime.snapshot.v1',
+        captured_at: programs.captured_at,
+        summary: {
+            total: services.length,
+            healthy: services.filter(service => service.state === 'healthy').length,
+            degraded: services.filter(service => service.state === 'degraded').length,
+            unavailable: services.filter(service => service.state === 'unavailable').length,
+            task_counts: {
+                queued: 0, running: 0, paused: 0, succeeded: 0, failed: 0, cancelled: 0,
+            },
+        },
+        services,
+    };
+};
 
 const runtimeTone = (state: ComputeRuntimeService['state']): ProgramTone =>
     state === 'healthy' ? 'healthy' : state === 'unavailable' ? 'offline' : 'warning';
@@ -80,13 +204,6 @@ const dateTime = (timestamp: number, zh: boolean): string => timestamp
     ? new Date(timestamp * 1000).toLocaleString(zh ? 'zh-CN' : 'en-US')
     : (zh ? '未知' : 'Unknown');
 
-const time = (timestamp: number, zh: boolean): string => new Date(timestamp * 1000)
-    .toLocaleTimeString(zh ? 'zh-CN' : 'en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-    });
-
 const duration = (seconds: number | null, zh: boolean): string => {
     if (seconds === null) return zh ? '未上报' : 'Not reported';
     if (seconds < 60) return zh ? `${Math.round(seconds)} 秒` : `${Math.round(seconds)}s`;
@@ -113,16 +230,10 @@ const bytes = (value: number): string => {
 };
 
 type ProgramArtifact = ComputeProgramSnapshot['programs'][number]['artifacts'][number];
-type ListedProgramArtifact = ProgramArtifact & {
-    selection_id: string;
-    program_id: string;
-    program_name: string;
-};
 
 const artifactCategory = (artifact: ProgramArtifact): Exclude<ResultCategory, 'all'> => {
     if (artifact.kind === 'video') return 'video';
     if (artifact.kind === 'image') return 'image';
-    if (artifact.name.toLowerCase() === 'ixcom.jsonl') return 'telegram';
     if (artifact.name.toLowerCase().endsWith('.jsonl')) return 'log';
     return 'data';
 };
@@ -132,20 +243,8 @@ const artifactCategoryLabel = (category: ResultCategory, zh: boolean): string =>
     video: zh ? '视频' : 'Videos',
     image: zh ? '图片' : 'Images',
     data: zh ? '数据' : 'Data',
-    telegram: zh ? '电文' : 'Telegrams',
     log: zh ? '日志' : 'Logs',
 }[category]);
-
-const artifactFolderPath = (relativePath: string): string => {
-    const parts = relativePath.split('/');
-    if (parts.length >= 4 && parts[0] === 'runs') return parts.slice(0, 3).join('/');
-    const separator = relativePath.lastIndexOf('/');
-    return separator < 0 ? '.' : relativePath.slice(0, separator);
-};
-
-const artifactFolderName = (path: string): string => path === '.'
-    ? path
-    : path.slice(path.lastIndexOf('/') + 1);
 
 const localDateKey = (timestamp: number): string => {
     const date = new Date(timestamp * 1000);
@@ -154,20 +253,6 @@ const localDateKey = (timestamp: number): string => {
     return `${date.getFullYear()}-${month}-${day}`;
 };
 const todayDateKey = (): string => localDateKey(Date.now() / 1000);
-
-const monthDateKeys = (month: string): string[] => {
-    const [year, monthNumber] = month.split('-').map(Number);
-    const days = new Date(year, monthNumber, 0).getDate();
-    return Array.from({length: days}, (_, index) =>
-        `${month}-${`${index + 1}`.padStart(2, '0')}`
-    );
-};
-
-const shiftMonth = (month: string, offset: number): string => {
-    const [year, monthNumber] = month.split('-').map(Number);
-    const date = new Date(year, monthNumber - 1 + offset, 1);
-    return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}`;
-};
 
 const RESULT_PREVIEW_BYTES = 256 * 1024;
 
@@ -180,14 +265,6 @@ const formatResultPreview = (contentType: string, value: string, truncated: bool
         }
     }
     return value;
-};
-
-const isTelegramLog = (message: string): boolean => {
-    try {
-        return JSON.parse(message)?.src === 'ixcom';
-    } catch {
-        return false;
-    }
 };
 
 const bufferedPercent = (media: HTMLMediaElement): number => {
@@ -208,16 +285,27 @@ const taskStateLabel = (state: string, zh: boolean): string => ({
     cancelled: zh ? '已取消' : 'Cancelled',
 })[state] || state;
 
-// Each source refreshes independently; closing the runner cancels all requests.
+// The four views share one polling boundary so closing the runner cancels every request together.
 // eslint-disable-next-line complexity
 export const ProgramRunnerPanel: React.FC<IProps> = ({
     node,
+    edgeDevices,
     zh,
     maximized,
     onToggleMaximized,
+    initialView = 'programs',
+    initialEdgeId,
+    logScope,
 }) => {
-    const cached = programRunnerCache.get(node.node_id);
-    const [view, setView] = useState<ProgramRunnerView>('programs');
+    const [targetId, setTargetId] = useState(initialEdgeId || node.node_id);
+    const selectedEdgeId = targetId === node.node_id ? '' : targetId;
+    const selectedEdge = edgeDevices.find(device => device.node_id === node.node_id && device.asset_id === selectedEdgeId) || null;
+    const targetKey = selectedEdgeId ? `edge:${node.node_id}:${selectedEdgeId}` : node.node_id;
+    const targetName = selectedEdge
+        ? selectedEdge.display_name || selectedEdge.hostname || selectedEdge.address
+        : node.name;
+    const cached = selectedEdgeId ? undefined : programRunnerCache.get(targetKey);
+    const [view, setView] = useState<ProgramRunnerView>(initialView);
     const [snapshot, setSnapshot] = useState<ComputeRuntimeSnapshot | null>(cached?.snapshot || null);
     const [programs, setPrograms] = useState<ComputeProgramSnapshot | null>(cached?.programs || null);
     const [events, setEvents] = useState<ComputeRuntimeEvent[]>(cached?.events || []);
@@ -226,28 +314,16 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [eventsError, setEventsError] = useState('');
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [logServiceId, setLogServiceId] = useState('');
-    const [prettyTelegramLogs, setPrettyTelegramLogs] = useState(true);
-    const [statisticsDate, setStatisticsDate] = useState(todayDateKey);
-    const [statisticsCalendarOpen, setStatisticsCalendarOpen] = useState(false);
-    const statisticsDateButton = useRef<HTMLButtonElement>(null);
-    const [statisticsMonth, setStatisticsMonth] = useState(() => todayDateKey().slice(0, 7));
-    const [statisticsMonthCounts, setStatisticsMonthCounts] = useState<Record<string, {count: number; hasRecords: boolean} | null>>({});
-    const [statisticsMonthLoading, setStatisticsMonthLoading] = useState(false);
-    const [statisticsMonthRetry, setStatisticsMonthRetry] = useState(0);
-    const [overflowStatistics, setOverflowStatistics] = useState<ComputeProgramOverflowStatistics | null>(null);
-    const [statisticsError, setStatisticsError] = useState('');
-    const [selectedHeatId, setSelectedHeatId] = useState('');
-    const [historyStatus, setHistoryStatus] = useState<MachineHistoryStatus | null>(null);
-    const [historyObjects, setHistoryObjects] = useState<MachineHistoryObjectSummary[]>([]);
-    const [historyDocument, setHistoryDocument] = useState<MachineHistoryObject | null>(null);
-    const [historyError, setHistoryError] = useState('');
-    const [historyLoading, setHistoryLoading] = useState(false);
-    const [historyRefresh, setHistoryRefresh] = useState(0);
+    const [logSearch, setLogSearch] = useState('');
+    const [logWindow, setLogWindow] = useState<{
+        target: string; source: string; from: number; to: number; revision: number;
+    }>();
+    const logWindowRevision = useRef(0);
+    const [invalidLogWindow, setInvalidLogWindow] = useState(false);
     const [selectedArtifactId, setSelectedArtifactId] = useState('');
     const [artifactDate, setArtifactDate] = useState(todayDateKey);
     const [artifactCategoryFilter, setArtifactCategoryFilter] = useState<ResultCategory>('all');
     const [artifactQuery, setArtifactQuery] = useState('');
-    const [expandedArtifactFolders, setExpandedArtifactFolders] = useState<string[]>([]);
     const [loadedVideoId, setLoadedVideoId] = useState('');
     const [readyVideoId, setReadyVideoId] = useState('');
     const [videoPreviewProgress, setVideoPreviewProgress] = useState(0);
@@ -257,35 +333,49 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [resultPreview, setResultPreview] = useState('');
     const [resultPreviewError, setResultPreviewError] = useState('');
     const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
-    const [refreshing, setRefreshing] = useState(false);
-    const [refreshProgress, setRefreshProgress] = useState(0);
-    useEscapeToClose(() => setStatisticsCalendarOpen(false), statisticsCalendarOpen, 22);
-    const runtimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
-    const programsCapable = node.online && node.capabilities.includes('runtime.programs.read.v1');
-    const historyCapable = node.online && node.capabilities.includes('machine.history.read.v1');
-    const runtimeVisible = runtimeCapable || snapshot !== null;
-    const programsVisible = programsCapable || programs !== null;
-    const logsVisible = runtimeVisible || programsVisible || events.length > 0;
-    const showingCache = !node.online && (snapshot !== null || programs !== null || events.length > 0);
-    // Keep heavy scans off report/preview reads after the initial directory arrives.
-    const programsRequested = programsCapable && (programs === null
-        || view !== 'history' && view !== 'artifacts' && view !== 'statistics');
-    const eventsRequested = view === 'telegrams' || view === 'logs';
-    const connectionLabel = node.online
-        ? runtimeCapable
-            ? runtimeError
-                ? (zh ? '在线 · 状态刷新失败，正在重试' : 'Online · status refresh failed; retrying')
-                : (zh ? '在线 · 基础状态每 5 秒刷新' : 'Online · basic status refreshes every 5 seconds')
-            : programsRequested
-                ? (zh ? '在线 · 程序状态每 5 秒刷新' : 'Online · program status refreshes every 5 seconds')
-                : (zh ? '在线' : 'Online')
-        : showingCache
-            ? (zh ? '离线 · 显示最后缓存' : 'Offline · showing last cached data')
-            : (zh ? '离线' : 'Offline');
+    const [refreshing, setRefreshing] = useState(initialView === 'logs');
+    const nodeRuntimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
+    const edgeRuntimeCapable = node.online
+        && node.capabilities.includes('runtime.edge-programs.read.v1');
+    const programsCapable = selectedEdgeId
+        ? Boolean(edgeRuntimeCapable && selectedEdge?.online)
+        : node.online && node.capabilities.includes('runtime.programs.read.v1');
+    const runtimeCapable = selectedEdgeId ? programsCapable : nodeRuntimeCapable;
+    const logSource = logScope ? `${logScope.kind}:${logScope.id}` : logServiceId;
+    const manualWindow = logWindow?.target === targetKey && logWindow.source === logSource ? logWindow : undefined;
+    const logFrom = logScope ? Math.max(0, logScope.checkedAt - 300) : manualWindow?.from ?? 0;
+    const logTo = logScope ? Math.floor(logScope.checkedAt) + 1 : manualWindow?.to ?? Infinity;
+    const historyProgramId = logSource.startsWith('program:') ? logSource.slice('program:'.length) : '';
+    const historyCapable = !selectedEdgeId && (historyProgramId ? programsCapable
+        : nodeRuntimeCapable && logSource === 'runtime:task-executor');
+    const history = useRuntimeLogWindow(
+        view === 'logs' && historyCapable && (logScope || manualWindow) ? node.node_id : '',
+        historyProgramId,
+        logFrom,
+        logTo,
+        logScope ? 0 : manualWindow?.revision ?? 0,
+    );
+
+    const submitLogWindow = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!historyCapable || logScope) return;
+        const fields = new FormData(event.currentTarget);
+        const from = Date.parse(String(fields.get('from'))) / 1000;
+        const to = Date.parse(String(fields.get('to'))) / 1000;
+        const valid = from >= 0 && to > from && to - from <= 3600;
+        setInvalidLogWindow(!valid);
+        if (!valid) return;
+        logWindowRevision.current += 1;
+        setLogWindow({target: targetKey, source: logSource, from, to, revision: logWindowRevision.current});
+    };
 
     useEffect(() => {
-        const next = programRunnerCache.get(node.node_id);
-        setView('programs');
+        setTargetId(initialEdgeId || node.node_id);
+    }, [initialEdgeId, node.node_id]);
+
+    useEffect(() => {
+        const next = selectedEdgeId ? undefined : programRunnerCache.get(targetKey);
+        setView(initialView);
         setSnapshot(next?.snapshot || null);
         setPrograms(next?.programs || null);
         setEvents(next?.events || []);
@@ -294,18 +384,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setEventsError('');
         setSelectedServiceId('');
         setLogServiceId('');
-        setPrettyTelegramLogs(true);
-        setStatisticsDate(todayDateKey());
-        setStatisticsCalendarOpen(false);
-        setStatisticsMonth(todayDateKey().slice(0, 7));
-        setOverflowStatistics(null);
-        setStatisticsError('');
-        setHistoryStatus(null);
-        setHistoryObjects([]);
-        setHistoryDocument(null);
-        setHistoryError('');
-        setHistoryLoading(false);
-        setHistoryRefresh(0);
+        setLogSearch('');
+        setLogWindow(undefined);
+        setInvalidLogWindow(false);
         setSelectedArtifactId('');
         setArtifactDate(todayDateKey());
         setArtifactCategoryFilter('all');
@@ -319,150 +400,105 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setResultPreview('');
         setResultPreviewError('');
         setResultPreviewLoading(false);
-        setRefreshProgress(0);
-    }, [node.node_id]);
+    }, [initialView, selectedEdgeId, targetKey]);
 
     useEffect(() => {
-        if (!runtimeCapable && !programsRequested) return undefined;
+        if (!runtimeCapable && !programsCapable) return undefined;
         const controller = new AbortController();
-        const inFlight = new Set<keyof ProgramRunnerCache>();
-        const completed = new Set<keyof ProgramRunnerCache>();
-        const requestCount = Number(runtimeCapable)
-            + Number(programsRequested)
-            + Number(runtimeCapable && eventsRequested);
-        setRefreshProgress(0);
-        const track = <T,>(key: keyof ProgramRunnerCache, request: Promise<T>): Promise<T> => {
-            inFlight.add(key);
-            setRefreshing(true);
-            return request.finally(() => {
-                inFlight.delete(key);
-                completed.add(key);
-                if (!controller.signal.aborted) {
-                    setRefreshProgress(Math.round(completed.size / requestCount * 100));
-                    setRefreshing(inFlight.size > 0);
-                }
-            });
-        };
+        let inFlight = false;
         // eslint-disable-next-line complexity
-        const load = () => {
-            const updateCache = (patch: Partial<ProgramRunnerCache>) => {
-                const current = programRunnerCache.get(node.node_id);
-                programRunnerCache.set(node.node_id, {
-                    snapshot: current?.snapshot || null,
-                    programs: current?.programs || null,
-                    events: current?.events || [],
-                    ...patch,
-                });
-            };
-            if (runtimeCapable && !inFlight.has('snapshot')) {
-                void track('snapshot', ComputeClusterService.runtime(node.node_id, controller.signal)).then(
-                    value => {
-                        if (controller.signal.aborted) return;
-                        updateCache({snapshot: value});
-                        setSnapshot(value);
-                        setRuntimeError('');
-                    },
-                    reason => {
-                        if (controller.signal.aborted) return;
-                        setRuntimeError(reason instanceof Error ? reason.message : String(reason));
-                    },
-                );
+        const load = async () => {
+            if (inFlight) return;
+            inFlight = true;
+            setRefreshing(true);
+            const [runtimeResult, programsResult, eventsResult] = await Promise.allSettled([
+                nodeRuntimeCapable && !selectedEdgeId
+                    ? ComputeClusterService.runtime(node.node_id, controller.signal)
+                    : Promise.resolve(null),
+                programsCapable
+                    ? selectedEdgeId
+                        ? ComputeClusterService.edgePrograms(selectedEdgeId, controller.signal)
+                        : ComputeClusterService.programs(node.node_id, controller.signal)
+                    : Promise.resolve(null),
+                nodeRuntimeCapable && !selectedEdgeId
+                    ? ComputeClusterService.runtimeEvents(node.node_id, 0, 100, controller.signal)
+                    : Promise.resolve(null),
+            ]);
+            if (!controller.signal.aborted) {
+                const cachedResult = programRunnerCache.get(targetKey);
+                const nextCache: ProgramRunnerCache = {
+                    snapshot: cachedResult?.snapshot || null,
+                    programs: cachedResult?.programs || null,
+                    events: cachedResult?.events || [],
+                };
+                if (runtimeResult.status === 'fulfilled') {
+                    if (runtimeResult.value) {
+                        nextCache.snapshot = runtimeResult.value;
+                        setSnapshot(runtimeResult.value);
+                    }
+                    setRuntimeError('');
+                } else {
+                    setRuntimeError(runtimeResult.reason instanceof Error
+                        ? runtimeResult.reason.message
+                        : String(runtimeResult.reason));
+                }
+                if (programsResult.status === 'fulfilled') {
+                    if (programsResult.value) {
+                        nextCache.programs = programsResult.value;
+                        setPrograms(programsResult.value);
+                        if (selectedEdgeId) {
+                            const edgeSnapshot = edgeRuntimeSnapshot(programsResult.value);
+                            nextCache.snapshot = edgeSnapshot;
+                            setSnapshot(edgeSnapshot);
+                        }
+                    }
+                    setProgramsError('');
+                } else {
+                    if (selectedEdgeId || isComputeAccessDenied(programsResult.reason)) {
+                        nextCache.programs = null;
+                        setPrograms(null);
+                        if (selectedEdgeId) setSnapshot(null);
+                    }
+                    setProgramsError(programsResult.reason instanceof Error
+                        ? programsResult.reason.message
+                        : String(programsResult.reason));
+                }
+                if (eventsResult.status === 'fulfilled') {
+                    if (eventsResult.value) {
+                        nextCache.events = eventsResult.value.events;
+                        setEvents(eventsResult.value.events);
+                    }
+                    setEventsError('');
+                } else {
+                    if (isComputeAccessDenied(eventsResult.reason)) {
+                        nextCache.events = [];
+                        setEvents([]);
+                    }
+                    setEventsError(eventsResult.reason instanceof Error
+                        ? eventsResult.reason.message
+                        : String(eventsResult.reason));
+                }
+                if (!selectedEdgeId) programRunnerCache.set(targetKey, nextCache);
+                setRefreshing(false);
             }
-            if (programsRequested && !inFlight.has('programs')) {
-                void track('programs', ComputeClusterService.programs(node.node_id, controller.signal)).then(
-                    value => {
-                        if (controller.signal.aborted) return;
-                        updateCache({programs: value});
-                        setPrograms(value);
-                        setProgramsError('');
-                    },
-                    reason => {
-                        if (controller.signal.aborted) return;
-                        setProgramsError(reason instanceof Error ? reason.message : String(reason));
-                    },
-                );
-            }
-            if (runtimeCapable && eventsRequested && !inFlight.has('events')) {
-                void track('events', ComputeClusterService.runtimeEvents(
-                    node.node_id,
-                    0,
-                    100,
-                    controller.signal,
-                )).then(
-                    value => {
-                        if (controller.signal.aborted) return;
-                        updateCache({events: value.events});
-                        setEvents(value.events);
-                        setEventsError('');
-                    },
-                    reason => {
-                        if (controller.signal.aborted) return;
-                        setEventsError(reason instanceof Error ? reason.message : String(reason));
-                    },
-                );
-            }
+            inFlight = false;
         };
-        if (!runtimeCapable) setRuntimeError('');
-        if (!programsCapable) setProgramsError('');
-        if (!eventsRequested) setEventsError('');
-        load();
-        const timer = window.setInterval(load, 5000);
+        void load();
+        const timer = window.setInterval(() => void load(), 5000);
         return () => {
             controller.abort();
             window.clearInterval(timer);
-            setRefreshing(false);
         };
-    }, [eventsRequested, node.node_id, programsCapable, programsRequested, runtimeCapable]);
+    }, [
+        node.node_id,
+        nodeRuntimeCapable,
+        programsCapable,
+        selectedEdgeId,
+        targetKey,
+    ]);
 
-    useEffect(() => {
-        if (view !== 'history' || !historyCapable) return undefined;
-        const controller = new AbortController();
-        setHistoryLoading(true);
-        setHistoryError('');
-        void Promise.all([
-            MachineHistoryService.status(node.node_id, controller.signal).then(status => {
-                if (!controller.signal.aborted) setHistoryStatus(status);
-            }),
-            MachineHistoryService.objects(node.node_id, controller.signal).then(async listing => {
-                if (controller.signal.aborted) return;
-                setHistoryObjects(listing.objects);
-                const first = listing.objects[0];
-                const document = first
-                    ? await MachineHistoryService.object(
-                        node.node_id,
-                        first.namespace,
-                        first.object_key,
-                        controller.signal,
-                    )
-                    : null;
-                if (!controller.signal.aborted) setHistoryDocument(document);
-            }),
-        ]).then(() => {
-            if (!controller.signal.aborted) setHistoryLoading(false);
-        }).catch(error => {
-            if (controller.signal.aborted) return;
-            setHistoryError(error instanceof Error ? error.message : String(error));
-            setHistoryLoading(false);
-        });
-        return () => controller.abort();
-    }, [historyCapable, historyRefresh, node.node_id, view]);
-
-    const selectHistoryObject = (object: MachineHistoryObjectSummary) => {
-        setHistoryLoading(true);
-        setHistoryError('');
-        void MachineHistoryService.object(
-            node.node_id,
-            object.namespace,
-            object.object_key,
-        ).then(value => {
-            setHistoryDocument(value);
-            setHistoryLoading(false);
-        }).catch(error => {
-            setHistoryError(error instanceof Error ? error.message : String(error));
-            setHistoryLoading(false);
-        });
-    };
-
+    const showExecutorLogOption = nodeRuntimeCapable && !selectedEdgeId
+        && !snapshot?.services.some(service => service.service_id === 'task-executor');
     const selectedService = snapshot?.services.find(service =>
         service.service_id === selectedServiceId
     ) || snapshot?.services[0] || null;
@@ -476,46 +512,54 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         program.interfaces.map(endpoint => ({
             ...endpoint,
             key: `${program.program_id}-${endpoint.method}-${endpoint.path}`,
-            program_id: program.program_id,
             program_name: program.name,
         }))
     );
-    const livePreview = endpointRows.find(endpoint =>
-        endpoint.method === 'GET' && endpoint.path === '/stream.mjpeg'
-    ) || endpointRows.find(endpoint =>
-        endpoint.method === 'GET' && endpoint.path === '/rtsp'
-    );
-    const overflowProgram = (programs?.programs || []).find(program =>
-        /dlk|overflow|溢渣/i.test(`${program.program_id} ${program.name}`)
-        || program.events.some(event => event.event_type === 'frame')
-    ) || null;
-    const statisticsDayKey = (date: string) => `${node.node_id}:${overflowProgram?.program_id}:${date}`;
-    const updateStatisticsDay = (date: string, value: ComputeProgramOverflowStatistics | null) => {
-        const key = statisticsDayKey(date);
-        setStatisticsMonthCounts(current => ({...current, [key]: value ? {
-            count: Object.values(value.episodes).reduce((sum, count) => sum + count, 0),
-            hasRecords: statisticsHasRecords(value),
-        } : null}));
-    };
-    const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
-        view === 'telegrams'
-            ? isTelegramLog(event.message)
-            : !logServiceId || event.service_id === logServiceId;
-    const filteredEvents = [...events]
-        .filter(matchesLogFilter)
-        .reverse();
-    const programEvents = (programs?.programs || []).flatMap(program =>
+    const matchesLog = (kind: ProgramLogScope['kind'], id: string, createdAt: number) =>
+        (!logSource || `${kind}:${id}` === logSource) && createdAt >= logFrom && createdAt < logTo;
+    const showRecent = !history.enabled || (history.failed && !history.denied);
+    const runtimeEvents = (!historyProgramId && history.page?.events) || (showRecent ? events : []);
+    const recentProgramEvents = (showRecent ? programs?.programs || [] : []).flatMap(program =>
         program.events.map(event => ({...event, service_id: program.program_id}))
-    ).filter(matchesLogFilter)
-        .sort((left, right) => right.created_at - left.created_at);
-    const logRows = [
-        ...filteredEvents.map(event => ({...event, key: `runtime-${event.cursor}`})),
-        ...programEvents.map((event, index) => ({
-            ...event,
-            key: `program-${event.service_id}-${event.created_at}-${index}`,
-            task_id: null,
-        })),
+    );
+    const programEvents = (historyProgramId && history.page?.events) || recentProgramEvents;
+    const allLogRows = [
+        ...runtimeEvents.filter(event => matchesLog('runtime', event.service_id, event.created_at))
+            .map(event => ({...event, key: `runtime-${event.cursor}`})),
+        ...programEvents.filter(event => matchesLog('program', event.service_id, event.created_at))
+            .map((event, index) => ({
+                ...event,
+                key: `program-${event.service_id}-${event.created_at}-${index}`,
+                task_id: null,
+            })),
     ].sort((left, right) => right.created_at - left.created_at);
+    const keyword = logSearch.trim().toLowerCase();
+    const logRows = keyword ? allLogRows.filter(event =>
+        [event.message, event.event_type, event.task_id, event.service_id, serviceNames.get(event.service_id)]
+            .some(value => value?.toLowerCase().includes(keyword))
+    ) : allLogRows;
+    const logReadError = history.page || history.denied ? '' : logSource.startsWith('runtime:')
+        ? eventsError
+        : historyProgramId ? programsError : [eventsError, programsError].filter(Boolean).join(' · ');
+    const historyReason = history.page?.window.reason;
+    const noKeywordMatch = keyword && allLogRows.length > 0;
+    const emptyLogTitle = history.enabled
+        ? history.loading
+            ? (zh ? '正在读取历史日志…' : 'Loading historical logs…')
+            : history.page?.has_more && !history.failed
+                ? (zh ? '已读范围暂无匹配记录，可继续读取' : 'No matches in the pages read so far')
+                : history.page?.window.coverage === 'complete' && !history.failed
+                    ? noKeywordMatch
+                        ? (zh ? '该时段无匹配记录' : 'No matching logs in this time window')
+                        : (zh ? '该时段无日志' : 'No logs in this time window')
+                    : (zh ? '该时段的日志覆盖未确认' : 'Log coverage for this time window is unconfirmed')
+        : logReadError
+            ? (zh ? '日志暂不可用' : 'Logs are unavailable')
+            : refreshing
+                ? (zh ? '正在读取日志…' : 'Loading logs…')
+                : initialView === 'logs' || noKeywordMatch
+                    ? (zh ? '最近可读事件中无匹配记录' : 'No matches in recent readable events')
+                    : (zh ? '暂无结构化日志' : 'No structured logs');
     const programArtifacts = (programs?.programs || []).flatMap(program =>
         program.artifacts.map(artifact => ({
             ...artifact,
@@ -539,56 +583,29 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const selectedArtifact = filteredProgramArtifacts.find(artifact =>
         artifact.selection_id === selectedArtifactId
     ) || filteredProgramArtifacts[0] || null;
-    const artifactFolders = [...filteredProgramArtifacts.reduce((folders, artifact) => {
-        const path = artifactFolderPath(artifact.relative_path);
-        const key = `${artifact.program_id}:${path}`;
-        const folder = folders.get(key);
-        if (folder) {
-            folder.artifacts.push(artifact);
-            folder.size_bytes += artifact.size_bytes;
-            folder.modified_at = Math.max(folder.modified_at, artifact.modified_at);
-        } else {
-            folders.set(key, {
-                key,
-                path,
-                name: artifactFolderName(path),
-                size_bytes: artifact.size_bytes,
-                modified_at: artifact.modified_at,
-                artifacts: [artifact],
-            });
-        }
-        return folders;
-    }, new Map<string, {
-        key: string;
-        path: string;
-        name: string;
-        size_bytes: number;
-        modified_at: number;
-        artifacts: ListedProgramArtifact[];
-    }>()).values()].sort((left, right) => right.modified_at - left.modified_at);
-    const artifactFolderKeys = artifactFolders.map(folder => folder.key).join('\n');
+    const artifactGroups = (['video', 'image', 'data', 'log'] as const).map(category => ({
+        category,
+        artifacts: filteredProgramArtifacts.filter(artifact => artifactCategory(artifact) === category),
+    }));
     const selectedArtifactUrl = selectedArtifact
-        ? ComputeClusterService.programArtifactUrl(
-            node.node_id,
-            selectedArtifact.program_id,
-            selectedArtifact.artifact_id,
-            selectedArtifact.modified_at,
-        )
+        ? selectedEdge
+            ? ComputeClusterService.edgeProgramArtifactUrl(
+                selectedEdge.asset_id,
+                selectedArtifact.program_id,
+                selectedArtifact.artifact_id,
+                selectedArtifact.modified_at,
+            )
+            : ComputeClusterService.programArtifactUrl(
+                node.node_id,
+                selectedArtifact.program_id,
+                selectedArtifact.artifact_id,
+                selectedArtifact.modified_at,
+            )
         : '';
     const resultPreviewTruncated = Boolean(
         selectedArtifact?.kind === 'data'
         && selectedArtifact.size_bytes > RESULT_PREVIEW_BYTES,
     );
-
-    useEffect(() => {
-        const available = new Set(artifactFolderKeys.split('\n').filter(Boolean));
-        setExpandedArtifactFolders(current => {
-            const retained = current.filter(key => available.has(key));
-            return retained.length > 0 || artifactFolders.length === 0
-                ? retained
-                : [artifactFolders[0].key];
-        });
-    }, [artifactFolderKeys]);
 
     useEffect(() => {
         setLoadedVideoId('');
@@ -603,7 +620,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setResultPreview('');
         setResultPreviewError('');
         setResultPreviewLoading(false);
-        if (view !== 'artifacts' || !selectedArtifact || selectedArtifact.kind !== 'data' || !selectedArtifactUrl) {
+        if (!selectedArtifact || selectedArtifact.kind !== 'data' || !selectedArtifactUrl) {
             return undefined;
         }
         const controller = new AbortController();
@@ -631,144 +648,56 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         });
         return () => controller.abort();
     }, [
-        view,
         resultPreviewTruncated,
         selectedArtifact?.content_type,
         selectedArtifact?.selection_id,
         selectedArtifactUrl,
     ]);
 
-    useEffect(() => {
-        if (view !== 'statistics' || !node.online || !overflowProgram) return undefined;
-        const controller = new AbortController();
-        let inFlight = false;
-        setStatisticsError('');
-        setOverflowStatistics(current => current?.date === statisticsDate
-            && current.program_id === overflowProgram.program_id
-            && current.timezone_offset_minutes === -new Date(`${statisticsDate}T12:00:00`).getTimezoneOffset()
-            ? current : null);
-        const load = async () => {
-            if (inFlight) return;
-            inFlight = true;
-            try {
-                const value = await ComputeClusterService.programOverflowStatistics(
-                    node.node_id,
-                    overflowProgram.program_id,
-                    statisticsDate,
-                    -new Date(`${statisticsDate}T12:00:00`).getTimezoneOffset(),
-                    controller.signal,
-                );
-                if (!controller.signal.aborted) {
-                    setOverflowStatistics(value);
-                    updateStatisticsDay(statisticsDate, value);
-                    setStatisticsError('');
-                }
-            } catch (error) {
-                if (!controller.signal.aborted) {
-                    setStatisticsError(error instanceof Error ? error.message : String(error));
-                    updateStatisticsDay(statisticsDate, null);
-                }
-            } finally {
-                inFlight = false;
-            }
-        };
-        void load();
-        const timer = window.setInterval(() => void load(), 5000);
-        return () => {
-            controller.abort();
-            window.clearInterval(timer);
-        };
-    }, [node.node_id, node.online, overflowProgram?.program_id, statisticsDate, statisticsMonthRetry, view]);
-
-    useEffect(() => {
-        if (
-            view !== 'statistics'
-            || !node.online
-            || !overflowProgram
-        ) return undefined;
-        const controller = new AbortController();
-        const dates = monthDateKeys(statisticsMonth)
-            .filter(date =>
-                date <= todayDateKey()
-                && date !== statisticsDate
-                && !statisticsMonthCounts[statisticsDayKey(date)]
-            ).reverse();
-        let nextDate = 0;
-        setStatisticsMonthLoading(dates.length > 0);
-        const load = async () => {
-            while (!controller.signal.aborted && nextDate < dates.length) {
-                const date = dates[nextDate];
-                nextDate += 1;
-                try {
-                    const value = await ComputeClusterService.programOverflowStatistics(
-                        node.node_id,
-                        overflowProgram.program_id,
-                        date,
-                        -new Date(`${date}T12:00:00`).getTimezoneOffset(),
-                        controller.signal,
-                    );
-                    if (!controller.signal.aborted) {
-                        updateStatisticsDay(date, value);
-                    }
-                } catch {
-                    if (!controller.signal.aborted) {
-                        updateStatisticsDay(date, null);
-                    }
-                }
-            }
-        };
-        void Promise.all([load(), load()]).then(() => {
-            if (!controller.signal.aborted) setStatisticsMonthLoading(false);
-        });
-        return () => controller.abort();
-    }, [
-        node.node_id,
-        node.online,
-        overflowProgram?.program_id,
-        statisticsMonth,
-        statisticsDate,
-        statisticsMonthRetry,
-        view,
-    ]);
-
     const capturedAt = snapshot?.captured_at
         || programs?.captured_at
-        || node.resources.captured_at;
-    const selectedHeat = overflowStatistics?.heats.find(heat => heat.heat_id === selectedHeatId)
-        || overflowStatistics?.heats[0]
-        || null;
-    const statisticsDates = monthDateKeys(statisticsMonth);
-    const statisticsMonthStart = new Date(`${statisticsMonth}-01T12:00:00`);
-    const statisticsCalendarOffset = (statisticsMonthStart.getDay() + 6) % 7;
-    const statisticsPastDates = statisticsDates.filter(date => date <= todayDateKey());
-    const statisticsLoadedDays = statisticsPastDates.filter(date => statisticsMonthCounts[statisticsDayKey(date)] !== undefined).length;
-    const statisticsFailedDays = statisticsPastDates.filter(date => statisticsMonthCounts[statisticsDayKey(date)] === null).length;
-    const statisticsPendingDays = statisticsPastDates.length - statisticsLoadedDays;
-    const statisticsMonthMaximum = Math.max(
-        0,
-        ...statisticsDates.map(date => statisticsMonthCounts[statisticsDayKey(date)]?.count || 0),
-    );
+        || (selectedEdge?.last_seen_at ?? node.resources.captured_at);
 
     const unavailable = (title: string, detail = '') => <div className='ControlMonitorUnavailable'>
         <strong>{title}</strong>
         {detail && <span>{detail}</span>}
     </div>;
 
+    if (selectedEdgeId && !programsCapable) return <section className='ControlResourceMonitor ControlProgramRunner'
+        role='dialog' aria-modal='true' aria-label={zh ? '边缘设备程序运行器' : 'Edge device program runner'}>
+        {unavailable(zh ? '所选边缘设备的程序与日志暂不可读。' : 'Programs and logs for the selected edge device are unavailable.')}
+        {!initialEdgeId && <button type='button' onClick={() => setTargetId(node.node_id)}>
+            {zh ? '返回所属机器' : 'Return to owning machine'}
+        </button>}
+    </section>;
+
     return <section
         className={`ControlResourceMonitor ControlProgramRunner${maximized ? ' maximized' : ''}`}
         role='dialog'
         aria-modal='true'
-        aria-label={zh ? `${node.name} 程序运行器` : `${node.name} program runner`}
+        aria-label={zh ? `${targetName} 程序运行器` : `${targetName} program runner`}
     >
         <header>
             <div>
                 <span>{zh ? '程序运行器' : 'Program Runner'}</span>
-                <h2>{node.name}</h2>
+                <h2>{targetName}</h2>
+                {!initialEdgeId && edgeRuntimeCapable && edgeDevices.length > 0 && <label className='ControlProgramTarget'>
+                    <span>{zh ? '查看设备' : 'View device'}</span>
+                    <select
+                        aria-label={zh ? '选择程序运行设备' : 'Select program runtime device'}
+                        value={targetId}
+                        onChange={event => setTargetId(event.target.value)}
+                    >
+                        <option value={node.node_id}>{node.name}</option>
+                        {edgeDevices.filter(device => device.node_id === node.node_id).map(device => <option
+                            key={device.asset_id}
+                            value={device.asset_id}
+                            disabled={!device.online}
+                        >{device.display_name || device.hostname || device.address}</option>)}
+                    </select>
+                </label>}
                 <p>
-                    <span className='ControlProgramConnection' role='status' aria-label={connectionLabel}>
-                        <span className={`ControlStatusDot ${node.online ? 'healthy' : 'offline'}`} aria-hidden='true'/>
-                        {connectionLabel}
-                    </span>
+                    {zh ? '程序状态每 5 秒刷新' : 'Program status refreshes every 5 seconds'}
                     {' · '}{dateTime(capturedAt, zh)}
                 </p>
             </div>
@@ -789,13 +718,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             <nav className='ControlMonitorNav' aria-label={zh ? '程序运行器导航' : 'Program runner navigation'}>
                 {([
                     ['programs', zh ? '程序' : 'Programs'],
-                    ['preview', zh ? '预览' : 'Preview'],
                     ['endpoints', zh ? '接口' : 'APIs'],
                     ['artifacts', zh ? '结果' : 'Results'],
-                    ['telegrams', zh ? '电文' : 'Telegrams'],
                     ['logs', zh ? '日志' : 'Logs'],
-                    ['statistics', zh ? '统计' : 'Statistics'],
-                    ['history', zh ? '历史' : 'History'],
                 ] as [ProgramRunnerView, string][]).map(([item, label]) => <button
                     type='button'
                     key={item}
@@ -805,7 +730,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             </nav>
 
             <div className='ControlMonitorContent'>
-                {view === 'programs' && (!runtimeVisible
+                {view === 'programs' && (!runtimeCapable
                     ? unavailable(
                         zh ? '当前节点尚不支持程序状态' : 'Program status is not supported',
                         node.online
@@ -877,7 +802,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     </div>
                                     <div>
                                         <dt>{zh ? '运行环境' : 'Environment'}</dt>
-                                        <dd>{node.resources.platform} · {node.resources.architecture}</dd>
+                                        <dd>{selectedEdge
+                                            ? `${selectedEdge.device_model || 'Edge device'} · ${selectedEdge.address}`
+                                            : `${node.resources.platform} · ${node.resources.architecture}`}
+                                        </dd>
                                     </div>
                                 </dl>
                                 <section className='ControlProgramDeployments' aria-label={zh ? '已注册程序' : 'Registered programs'}>
@@ -914,9 +842,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                         </dl>
                                                     </article>)}</div>
                                                     : <p>{zh ? '节点尚未注册部署程序。' : 'No deployed programs are registered on this node.'}</p>
-                                                : <p>{zh
-                                                    ? `正在读取受控程序目录… ${refreshProgress}%`
-                                                    : `Loading the managed program directory… ${refreshProgress}%`}</p>}
+                                                : <p>{zh ? '正在读取受控程序目录…' : 'Loading the managed program directory…'}</p>}
                                     {Boolean(programs?.invalid_manifests) && <p className='warning'>
                                         {zh
                                             ? `${programs?.invalid_manifests} 个程序清单未通过安全校验`
@@ -942,45 +868,18 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 </div>
                             </section>
                         </div>
-                        : unavailable(
-                            runtimeError
-                                ? (zh ? '程序状态暂不可用' : 'Program status is unavailable')
-                                : refreshing && !snapshot
-                                    ? (zh
-                                        ? `正在读取程序状态… ${refreshProgress}%`
-                                        : `Loading program status… ${refreshProgress}%`)
-                                    : (zh ? '暂无程序状态' : 'No program status'),
-                            runtimeError,
-                        ))}
+                        : snapshot
+                            ? unavailable(
+                                zh ? '节点尚未注册部署程序。' : 'No deployed programs are registered on this node.',
+                            )
+                            : unavailable(
+                                runtimeError
+                                    ? (zh ? '程序状态暂不可用' : 'Program status is unavailable')
+                                    : (zh ? '正在读取程序状态…' : 'Loading program status…'),
+                                runtimeError,
+                            ))}
 
-                {view === 'preview' && (!programsVisible
-                    ? unavailable(
-                        zh ? '当前节点尚不支持实时预览' : 'Live preview is not supported',
-                        node.online
-                            ? (zh ? '升级节点程序后可查看实时画面。' : 'Upgrade the node software to view the live stream.')
-                            : (zh ? '节点恢复在线后才能读取实时画面。' : 'The node must return online before the live stream can be read.'),
-                    )
-                    : livePreview
-                        ? <ProgramLivePreview
-                            key={`${node.node_id}-${livePreview.program_id}`}
-                            nodeId={node.node_id}
-                            programId={livePreview.program_id}
-                            name={livePreview.program_name}
-                            path={livePreview.path}
-                            zh={zh}
-                        />
-                        : unavailable(
-                            programsError
-                                ? (zh ? '实时预览暂不可用' : 'Live preview is unavailable')
-                                : refreshing && !programs
-                                    ? (zh
-                                        ? `正在读取实时预览… ${refreshProgress}%`
-                                        : `Loading live preview… ${refreshProgress}%`)
-                                    : (zh ? '该程序未声明 /rtsp 预览接口' : 'The program has not declared a /rtsp preview API'),
-                            programsError,
-                        ))}
-
-                {view === 'endpoints' && (!programsVisible
+                {view === 'endpoints' && (!programsCapable
                     ? unavailable(
                         zh ? '当前节点尚不支持程序接口' : 'Program APIs are not supported',
                         node.online
@@ -991,65 +890,47 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         <header className='ControlMonitorSearchHeader'>
                             <div>
                                 <h3>{zh ? '接口' : 'APIs'}</h3>
-                                <p>{zh ? '声明接口状态每 5 秒刷新' : 'Declared API status refreshes every 5 seconds'}</p>
+                                <p>{zh ? '每 5 秒检查程序声明的安全只读接口' : 'Declared safe read-only APIs refresh every 5 seconds'}</p>
                             </div>
-                            <span className='ControlProgramEndpointCount'>
-                                {endpointRows.length} {zh ? '个接口' : endpointRows.length === 1 ? 'API' : 'APIs'}
-                            </span>
+                            <span className='ControlProgramEndpointCount'>{endpointRows.length}</span>
                         </header>
                         {programsError && <p className='ControlProgramError' role='status'>
                             {programsError}
                         </p>}
                         {endpointRows.length > 0 ? <table>
                             <thead><tr>
-                                <th>{zh ? '提交方式' : 'Method'}</th>
-                                <th>{zh ? '原始地址' : 'Original path'}</th>
-                                <th>{zh ? '用途' : 'Purpose'}</th>
+                                <th>{zh ? '程序' : 'Program'}</th>
+                                <th>{zh ? '方法' : 'Method'}</th>
+                                <th>{zh ? '路径' : 'Path'}</th>
+                                <th>{zh ? '功能' : 'Function'}</th>
                                 <th>{zh ? '状态' : 'Status'}</th>
+                                <th>{zh ? '响应' : 'Response'}</th>
+                                <th>{zh ? '延迟' : 'Latency'}</th>
                                 <th>{zh ? '最近检查' : 'Last checked'}</th>
                             </tr></thead>
-                            <tbody>{endpointRows.map(endpoint => {
-                                const url = ComputeClusterService.programInterfaceUrl(
-                                    node.node_id,
-                                    endpoint.program_id,
-                                    endpoint.path,
-                                );
-                                return <tr key={endpoint.key}>
+                            <tbody>{endpointRows.map(endpoint => <tr key={endpoint.key}>
+                                <td>{endpoint.program_name}</td>
                                 <td><code>{endpoint.method}</code></td>
-                                <td className='ControlProgramEndpointAddress'>{endpoint.method === 'GET'
-                                    ? <a
-                                        className='ControlProgramEndpointLink'
-                                        href={url}
-                                        target='_blank'
-                                        rel='noreferrer'
-                                    ><code title={endpoint.path}>{endpoint.path}</code></a>
-                                    : <code title={endpoint.path}>{endpoint.path}</code>}</td>
+                                <td><code>{endpoint.path}</code></td>
                                 <td><span className='ControlProgramEndpointName'>
                                     <span className={`ControlStatusDot ${interfaceTone(endpoint.state)}`} aria-hidden='true'/>
                                     <span><strong>{endpoint.name}</strong><small>{endpoint.description}</small></span>
                                 </span></td>
-                                <td><span className='ControlProgramEndpointStatus'>
-                                    <strong>{interfaceStateLabel(endpoint.state, zh)}</strong>
-                                    <small>
-                                        {endpoint.status_code === null ? '—' : `HTTP ${endpoint.status_code}`}
-                                        {endpoint.latency_ms === null ? '' : ` · ${endpoint.latency_ms} ms`}
-                                    </small>
-                                </span></td>
+                                <td>{interfaceStateLabel(endpoint.state, zh)}</td>
+                                <td>{endpoint.status_code === null ? '—' : `HTTP ${endpoint.status_code}`}</td>
+                                <td>{endpoint.latency_ms === null ? '—' : `${endpoint.latency_ms} ms`}</td>
                                 <td>{endpoint.checked_at === null ? '—' : dateTime(endpoint.checked_at, zh)}</td>
-                            </tr>;
-                            })}</tbody>
+                            </tr>)}</tbody>
                         </table> : unavailable(
                             programsError
                                 ? (zh ? '程序接口暂不可用' : 'Program APIs are unavailable')
-                                : refreshing && !programs
-                                    ? (zh
-                                        ? `正在读取程序接口… ${refreshProgress}%`
-                                        : `Loading program APIs… ${refreshProgress}%`)
+                                : refreshing
+                                    ? (zh ? '正在读取程序接口…' : 'Loading program APIs…')
                                     : (zh ? '该程序未声明接口' : 'The program has not declared any APIs'),
                         )}
                     </section>)}
 
-                {view === 'artifacts' && (!programsVisible
+                {view === 'artifacts' && (!programsCapable
                     ? unavailable(
                         zh ? '当前节点尚不支持程序结果' : 'Program results are not supported',
                         node.online
@@ -1081,7 +962,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     value={artifactCategoryFilter}
                                     onChange={event => setArtifactCategoryFilter(event.target.value as ResultCategory)}
                                 >
-                                    {(['all', 'video', 'image', 'data', 'telegram', 'log'] as ResultCategory[]).map(category => <option
+                                    {(['all', 'video', 'image', 'data', 'log'] as ResultCategory[]).map(category => <option
                                         key={category}
                                         value={category}
                                     >{artifactCategoryLabel(category, zh)}</option>)}
@@ -1094,54 +975,35 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         setArtifactCategoryFilter('all');
                                     }}
                                 >{zh ? '清除筛选' : 'Clear filters'}</button>}
-                                <span>{zh
-                                    ? `${artifactFolders.length} 个文件夹 · ${filteredProgramArtifacts.length} 个文件`
-                                    : `${artifactFolders.length} folders · ${filteredProgramArtifacts.length} files`}
-                                </span>
+                                <span>{filteredProgramArtifacts.length}/{programArtifacts.length}</span>
                             </div>
                         </header>
-                        {programsError && programs && <div className='ControlRefreshWarning' role='status'>
-                            <span>
-                                {zh ? '刷新失败，正在重试：' : 'Refresh failed; retrying: '}
-                                {programsError}
-                            </span>
-                        </div>}
-                        {programsError && !programs
+                        {programsError
                             ? <p className='ControlProgramError' role='status'>{programsError}</p>
                             : programArtifacts.length > 0 && selectedArtifact
                                 ? <div className='ControlProgramArtifactWorkspace'>
                                     <aside aria-label={zh ? '结果列表' : 'Result list'}>
-                                        {artifactFolders.map(folder => <details
-                                            className='ControlProgramArtifactFolder'
-                                            key={folder.key}
-                                            open={expandedArtifactFolders.includes(folder.key)}
-                                            onToggle={event => {
-                                                const open = event.currentTarget.open;
-                                                setExpandedArtifactFolders(current => open
-                                                    ? [...new Set([...current, folder.key])]
-                                                    : current.filter(key => key !== folder.key));
-                                            }}
+                                        {artifactGroups.map(group => group.artifacts.length > 0 && <section
+                                            className='ControlProgramArtifactGroup'
+                                            key={group.category}
                                         >
-                                            <summary aria-label={`${zh ? '结果文件夹' : 'Result folder'} ${folder.name}`}>
-                                                <strong>{folder.name}</strong>
-                                                <span>{folder.artifacts.length} {zh ? '个文件' : 'files'} · {bytes(folder.size_bytes)}</span>
-                                                <small>{folder.path}</small>
-                                            </summary>
-                                            <div>
-                                                {folder.artifacts.map(artifact => <button
-                                                    type='button'
-                                                    key={`${artifact.program_id}-${artifact.artifact_id}`}
-                                                    aria-current={artifact.selection_id === selectedArtifact.selection_id
-                                                        ? 'page'
-                                                        : undefined}
-                                                    onClick={() => setSelectedArtifactId(artifact.selection_id)}
-                                                >
-                                                    <strong>{artifact.name}</strong>
-                                                    <span>{artifactCategoryLabel(artifactCategory(artifact), zh)} · {bytes(artifact.size_bytes)}</span>
-                                                    <small>{dateTime(artifact.modified_at, zh)}</small>
-                                                </button>)}
-                                            </div>
-                                        </details>)}
+                                            <header>
+                                                <strong>{artifactCategoryLabel(group.category, zh)}</strong>
+                                                <span>{group.artifacts.length}</span>
+                                            </header>
+                                            {group.artifacts.map(artifact => <button
+                                                type='button'
+                                                key={`${artifact.program_id}-${artifact.artifact_id}`}
+                                                aria-current={artifact.selection_id === selectedArtifact.selection_id
+                                                    ? 'page'
+                                                    : undefined}
+                                                onClick={() => setSelectedArtifactId(artifact.selection_id)}
+                                            >
+                                                <strong>{artifact.name}</strong>
+                                                <span>{artifact.program_name} · {bytes(artifact.size_bytes)}</span>
+                                                <small>{dateTime(artifact.modified_at, zh)}</small>
+                                            </button>)}
+                                        </section>)}
                                     </aside>
                                     <div className='ControlProgramArtifactPreview'>
                                         <header>
@@ -1253,93 +1115,104 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                                         </span>}
                                                     </footer>
                                                 </div>}
-                                        <a
-                                            className='ControlProgramArtifactDownload'
-                                            href={selectedArtifactUrl}
-                                            download={selectedArtifact.name}
-                                            aria-label={zh ? '下载原文件' : 'Download original file'}
-                                            title={zh ? '下载原文件' : 'Download original file'}
-                                        >
-                                            <span>{zh ? '下载' : 'Download'}</span>
-                                        </a>
                                     </div>
                                 </div>
                                 : unavailable(
-                                    refreshing && !programs
-                                        ? (zh
-                                            ? `正在读取程序结果… ${refreshProgress}%`
-                                            : `Loading program results… ${refreshProgress}%`)
+                                    refreshing
+                                        ? (zh ? '正在读取程序结果…' : 'Loading program results…')
                                         : programArtifacts.length > 0
                                             ? (zh ? '没有符合筛选条件的结果' : 'No results match the filters')
                                             : (zh ? '暂无录像、图片或数据文件' : 'No recordings, images, or data files'),
                                 )}
                     </section>)}
 
-                {(view === 'telegrams' || view === 'logs') && (!logsVisible
+                {view === 'logs' && (!runtimeCapable && !programsCapable
                     ? unavailable(
-                        view === 'telegrams'
-                            ? (zh ? '当前节点尚不支持电文' : 'Telegrams are not supported')
-                            : (zh ? '当前节点尚不支持结构化日志' : 'Structured logs are not supported'),
+                        zh ? '当前节点尚不支持结构化日志' : 'Structured logs are not supported',
                         node.online
-                            ? (view === 'telegrams'
-                                ? (zh ? '升级节点程序后可查看电文。' : 'Upgrade the node software to view telegrams.')
-                                : (zh ? '升级节点程序后可查看日志。' : 'Upgrade the node software to view logs.'))
-                            : (view === 'telegrams'
-                                ? (zh ? '节点恢复在线后才能读取电文。' : 'The node must return online before telegrams can be read.')
-                                : (zh ? '节点恢复在线后才能读取日志。' : 'The node must return online before logs can be read.')),
+                            ? (zh ? '升级节点程序后可查看日志。' : 'Upgrade the node software to view logs.')
+                            : (zh ? '节点恢复在线后才能读取日志。' : 'The node must return online before logs can be read.'),
                     )
-                    : <section
-                        className='ControlProgramLogs'
-                        aria-label={view === 'telegrams'
-                            ? (zh ? '程序电文' : 'Program telegrams')
-                            : (zh ? '程序日志' : 'Program logs')}
-                    >
+                    : <section className='ControlProgramLogs' aria-label={zh ? '程序日志' : 'Program logs'}>
                         <header className='ControlMonitorSearchHeader'>
                             <div>
-                                <h3>{view === 'telegrams'
-                                    ? (zh ? '电文' : 'Telegrams')
-                                    : (zh ? '结构化日志' : 'Structured logs')}</h3>
-                                <p>{view === 'telegrams'
-                                    ? (zh ? '程序收发电文' : 'Program telegram traffic')
-                                    : (zh ? '任务与程序运行事件' : 'Task and program runtime events')}</p>
+                                <h3>{zh ? '结构化日志' : 'Structured logs'}</h3>
+                                <p>{zh ? '任务与程序运行事件' : 'Task and program runtime events'}</p>
                             </div>
-                            <div className='ControlProgramLogTools'>
-                                {view === 'telegrams' && <div
-                                    className='ControlProgramLogFormat'
-                                    role='group'
-                                    aria-label={zh ? '电文显示格式' : 'Telegram display format'}
-                                >
-                                    <button
-                                        type='button'
-                                        aria-pressed={prettyTelegramLogs}
-                                        onClick={() => setPrettyTelegramLogs(true)}
-                                    >{zh ? '美化格式' : 'Pretty'}</button>
-                                    <button
-                                        type='button'
-                                        aria-pressed={!prettyTelegramLogs}
-                                        onClick={() => setPrettyTelegramLogs(false)}
-                                    >{zh ? '原始格式' : 'Raw'}</button>
-                                </div>}
-                                {view === 'logs' && <select
-                                    aria-label={zh ? '筛选日志程序' : 'Filter log program'}
-                                    value={logServiceId}
-                                    onChange={event => setLogServiceId(event.target.value)}
-                                >
-                                    <option value=''>{zh ? '全部程序' : 'All programs'}</option>
-                                    {(snapshot?.services || []).map(service => <option
-                                        key={service.service_id}
-                                        value={service.service_id}
-                                    >{programName(service, zh)}</option>)}
-                                    {(programs?.programs || []).map(program => <option
-                                        key={program.program_id}
-                                        value={program.program_id}
-                                    >{program.name}</option>)}
-                                </select>}
-                            </div>
+                            {logScope ? <p>
+                                {logScope.id} · {dateTime(logFrom, zh)} – {dateTime(logTo, zh)}
+                            </p> : <select
+                                aria-label={zh ? '筛选日志程序' : 'Filter log program'}
+                                value={logServiceId}
+                                onChange={event => {
+                                    setLogServiceId(event.target.value);
+                                    setLogWindow(undefined);
+                                    setInvalidLogWindow(false);
+                                }}
+                            >
+                                <option value=''>{zh ? '全部程序' : 'All programs'}</option>
+                                {(snapshot?.services || []).map(service => <option
+                                    key={`runtime:${service.service_id}`}
+                                    value={`runtime:${service.service_id}`}
+                                >{programName(service, zh)}</option>)}
+                                {showExecutorLogOption && <option value='runtime:task-executor'>
+                                    {zh ? '任务执行器' : 'Task executor'}
+                                </option>}
+                                {(programs?.programs || []).map(program => <option
+                                    key={`program:${program.program_id}`}
+                                    value={`program:${program.program_id}`}
+                                >{program.name}</option>)}
+                            </select>}
                         </header>
-                        {(eventsError || programsError) && <p className='ControlProgramError' role='status'>
-                            {[eventsError, programsError].filter(Boolean).join(' · ')}
+                        <div className='ControlProgramLogFilters'>
+                            <input
+                                type='search' maxLength={160} value={logSearch}
+                                onChange={event => setLogSearch(event.target.value)}
+                                aria-label={zh ? '日志关键词' : 'Log keyword'}
+                                placeholder={zh ? '筛选已读取的日志' : 'Filter loaded logs'}
+                            />
+                            {!logScope && historyCapable && <form key={targetKey} onSubmit={submitLogWindow}>
+                                <label>
+                                    <span>{zh ? '起始时间' : 'Start time'}</span>
+                                    <input name='from' type='datetime-local' required />
+                                </label>
+                                <label>
+                                    <span>{zh ? '结束时间（不含）' : 'End time (exclusive)'}</span>
+                                    <input name='to' type='datetime-local' required />
+                                </label>
+                                <button className='ControlProgramLogPagination' type='submit'>
+                                    {zh ? '查找历史日志' : 'Search history'}
+                                </button>
+                                {manualWindow && <button className='ControlProgramLogPagination' type='button' onClick={() => {
+                                    setLogWindow(undefined);
+                                    setInvalidLogWindow(false);
+                                }}>{zh ? '返回最近日志' : 'Back to recent logs'}</button>}
+                            </form>}
+                        </div>
+                        {invalidLogWindow && <p className='ControlProgramError' role='status'>{zh
+                            ? '请选择有效的时间范围，结束时间应晚于起始时间，间隔最长 1 小时。'
+                            : 'Choose a valid time window with an end after the start and a duration of up to one hour.'}</p>}
+                        {manualWindow && <p>{dateTime(logFrom, zh)} – {dateTime(logTo, zh)}</p>}
+                        {!logScope && !historyCapable && !selectedEdgeId && <p>{zh
+                            ? '选择任务执行器或已登记程序，可查询最长 1 小时的历史。'
+                            : 'Select the task executor or a registered program to query up to one hour of history.'}</p>}
+                        {initialView === 'logs' && !history.enabled && <p role='status'>{zh
+                            ? '仅显示最近可读事件，历史时段可能未覆盖。'
+                            : 'Showing recent readable events. Historical coverage may be incomplete.'}</p>}
+                        {history.denied && <p className='ControlProgramError' role='status'>{zh
+                            ? '当前账号无权读取该来源的历史日志。'
+                            : 'Your account cannot read history from this source.'}</p>}
+                        {history.failed && !history.denied && <p role='status'>{history.recentOnly
+                            ? (zh ? '接口只返回近期日志，无法确认所选时段的覆盖情况。已读取的日志仍可查看。'
+                                : 'The endpoint returned recent logs only. Coverage for the selected window is unconfirmed. Previously loaded logs remain visible.')
+                            : (zh ? '历史日志读取失败。已读取的日志仍可查看。'
+                                : 'Could not load historical logs. Previously loaded logs remain visible.')}</p>}
+                        {!history.failed && history.page && history.page.window.coverage !== 'complete' && <p role='status'>
+                            {programHistoryNotice(historyReason, zh) || (history.page.window.coverage === 'unavailable'
+                                ? (zh ? '当前节点没有可用的任务事件历史。' : 'Task event history is unavailable on this node.')
+                                : (zh ? '日志未完整覆盖所选时段。' : 'Logs do not cover the full time window.'))}
                         </p>}
+                        {logReadError && <p className='ControlProgramError' role='status'>{logReadError}</p>}
                         {logRows.length > 0 ? <ol>
                             {logRows.map(event => <li className={event.level} key={event.key}>
                                 <span className='ControlProgramLogTime'>{dateTime(event.created_at, zh)}</span>
@@ -1347,439 +1220,18 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     {serviceNames.get(event.service_id) || event.service_id}
                                 </span>
                                 <span className='ControlProgramLogType'>{event.event_type}</span>
-                                {view === 'telegrams'
-                                    ? <pre className='ControlProgramLogMessage' aria-label={zh ? '电文内容' : 'Telegram content'}>
-                                        {prettyTelegramLogs
-                                            ? JSON.stringify(JSON.parse(event.message), null, 2)
-                                            : event.message}
-                                    </pre>
-                                    : <strong>{event.message}</strong>}
+                                <strong>{event.message}</strong>
                                 <small>{event.task_id ? `${zh ? '任务' : 'Task'} ${event.task_id}` : ''}</small>
                             </li>)}
-                        </ol> : unavailable(
-                            eventsError || programsError
-                                ? (view === 'telegrams'
-                                    ? (zh ? '电文暂不可用' : 'Telegrams are unavailable')
-                                    : (zh ? '日志暂不可用' : 'Logs are unavailable'))
-                                : refreshing && !snapshot && !programs && events.length === 0
-                                    ? (view === 'telegrams'
-                                        ? (zh ? `正在读取电文… ${refreshProgress}%` : `Loading telegrams… ${refreshProgress}%`)
-                                        : (zh ? `正在读取日志… ${refreshProgress}%` : `Loading logs… ${refreshProgress}%`))
-                                    : (view === 'telegrams'
-                                        ? (zh ? '暂无电文' : 'No telegrams')
-                                        : (zh ? '暂无结构化日志' : 'No structured logs')),
-                        )}
-                    </section>)}
-
-                {view === 'statistics' && (!programsVisible
-                    ? unavailable(
-                        zh ? '当前节点尚不支持溢渣统计' : 'Overflow statistics are not supported',
-                        node.online
-                            ? (zh ? '升级节点程序后可读取每日溢渣统计。' : 'Upgrade the node software to read daily overflow statistics.')
-                            : (zh ? '节点恢复在线后才能读取每日统计。' : 'The node must return online before daily statistics can be read.'),
-                    )
-                    : programs === null
-                        ? unavailable(
-                            programsError
-                                ? (zh ? '统计程序目录暂不可用' : 'Statistics program directory is unavailable')
-                                : (zh ? '正在定位统计程序… 1 / 2' : 'Locating the statistics program… 1 / 2'),
-                            programsError,
-                        )
-                    : !overflowProgram
-                        ? unavailable(
-                            zh ? '未找到大炉口溢渣程序' : 'Overflow program not found',
-                            zh ? '当前节点没有注册 DLK 溢渣检测程序。' : 'No DLK overflow program is registered on this node.',
-                        )
-                        : <section className='ControlProgramStatistics' aria-label={zh ? '大炉口溢渣统计' : 'Furnace overflow statistics'}>
-                            <header className='ControlMonitorSearchHeader'>
-                                <div>
-                                    <h3>{zh ? '每日溢渣统计' : 'Daily overflow statistics'}</h3>
-                                    <p>{zh ? '连续溢渣帧合并为一次，并按最高等级统计' : 'Consecutive overflow frames are merged and counted by peak level'}</p>
-                                </div>
-                                <div className='ControlProgramStatisticsActions'>
-                                    <button
-                                        type='button'
-                                        ref={statisticsDateButton}
-                                        className='ControlProgramStatisticsDateButton'
-                                        aria-expanded={statisticsCalendarOpen}
-                                        aria-label={`${zh ? '选择统计日期' : 'Choose statistics date'} ${statisticsDate}`}
-                                        onClick={() => {
-                                            setStatisticsMonth(statisticsDate.slice(0, 7));
-                                            setStatisticsCalendarOpen(open => !open);
-                                        }}
-                                    >
-                                        <span>{statisticsDate}</span>
-                                        <CalendarDays aria-hidden='true'/>
-                                    </button>
-                                    <ProgramStatisticsExport
-                                        key={`${node.node_id}:${overflowProgram.program_id}:${statisticsDate}`}
-                                        nodeId={node.node_id} nodeName={node.name} programId={overflowProgram.program_id}
-                                        date={statisticsDate} today={todayDateKey()} zh={zh}
-                                        onOpen={() => setStatisticsCalendarOpen(false)}
-                                    />
-                                </div>
-                            </header>
-                            {statisticsCalendarOpen && <Popover
-                                open
-                                anchorEl={statisticsDateButton.current}
-                                anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
-                                transformOrigin={{vertical: 'top', horizontal: 'right'}}
-                                marginThreshold={12}
-                                onClose={() => setStatisticsCalendarOpen(false)}
-                                PaperProps={{
-                                    component: 'section',
-                                    className: 'ControlProgramStatisticsCalendar',
-                                    'aria-label': zh ? '统计日历' : 'Statistics calendar',
-                                }}
-                            >
-                                <header>
-                                    <button
-                                        type='button'
-                                        aria-label={zh ? '上个月' : 'Previous month'}
-                                        title={zh ? '上个月' : 'Previous month'}
-                                        onClick={() => setStatisticsMonth(current => shiftMonth(current, -1))}
-                                    >
-                                        <ChevronLeft aria-hidden='true'/>
-                                    </button>
-                                    <strong>{statisticsMonthStart.toLocaleDateString(zh ? 'zh-CN' : 'en-US', {
-                                        year: 'numeric',
-                                        month: 'long',
-                                    })}</strong>
-                                    <button
-                                        type='button'
-                                        aria-label={zh ? '下个月' : 'Next month'}
-                                        title={zh ? '下个月' : 'Next month'}
-                                        disabled={statisticsMonth >= todayDateKey().slice(0, 7)}
-                                        onClick={() => setStatisticsMonth(current => shiftMonth(current, 1))}
-                                    >
-                                        <ChevronRight aria-hidden='true'/>
-                                    </button>
-                                </header>
-                                <div className='weekdays' aria-hidden='true'>
-                                    {(zh ? ['一', '二', '三', '四', '五', '六', '日'] : ['M', 'T', 'W', 'T', 'F', 'S', 'S'])
-                                        .map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}
-                                </div>
-                                <div className='days'>
-                                    {Array.from({length: statisticsCalendarOffset}, (_, index) =>
-                                        <span key={`empty-${index}`}/>
-                                    )}
-                                    {statisticsDates.map(date => {
-                                        const day = statisticsMonthCounts[statisticsDayKey(date)];
-                                        const count = day?.count;
-                                        const level = count && statisticsMonthMaximum
-                                            ? Math.max(1, Math.ceil(count / statisticsMonthMaximum * 4))
-                                            : 0;
-                                        const state = date > todayDateKey() ? 'future' : day === undefined ? 'pending'
-                                            : day === null ? 'failed' : day.hasRecords ? 'recorded' : 'empty';
-                                        const stateLabel = {
-                                            future: zh ? '未来日期' : 'Future date',
-                                            pending: zh ? '待读取' : 'Not read yet',
-                                            failed: zh ? '读取失败' : 'Read failed',
-                                            empty: zh ? '无统计记录' : 'No statistics records',
-                                            recorded: `${count} ${zh ? '次溢渣' : 'episodes'}`,
-                                        }[state];
-                                        const label = `${zh ? '统计日期' : 'Statistics date'} ${date}，${stateLabel}`;
-                                        return <button
-                                            type='button'
-                                            key={date}
-                                            className={`level-${level} ${state}`}
-                                            aria-label={label}
-                                            aria-pressed={date === statisticsDate}
-                                            title={label}
-                                            disabled={date > todayDateKey()}
-                                            onClick={() => {
-                                                setStatisticsDate(date);
-                                                setStatisticsCalendarOpen(false);
-                                            }}
-                                        >
-                                            {Number(date.slice(-2))}
-                                            <small aria-hidden='true'>{({failed: '!', empty: '-'})[state]}</small>
-                                        </button>;
-                                    })}
-                                </div>
-                                <div className='load-status' role='status'>
-                                    <span>{statisticsPendingDays === 0 && statisticsFailedDays === 0
-                                        ? (zh ? '当月已读取完成' : 'Month loaded')
-                                        : `${zh ? '当月读取' : 'Month'} ${statisticsLoadedDays} / ${statisticsPastDates.length}`}
-                                        {statisticsFailedDays > 0 && ` · ${statisticsFailedDays} ${zh ? '天失败' : 'failed'}`}</span>
-                                    {statisticsFailedDays > 0 && <button type='button'
-                                        aria-label={zh ? '重试失败日期' : 'Retry failed days'}
-                                        title={zh ? '重试失败日期' : 'Retry failed days'}
-                                        disabled={statisticsMonthLoading}
-                                        onClick={() => setStatisticsMonthRetry(value => value + 1)}>
-                                        <RefreshCw aria-hidden='true'/>
-                                    </button>}
-                                </div>
-                                <footer>
-                                    <span>{zh ? '少' : 'Less'}</span>
-                                    <i className='level-0'/>
-                                    <i className='level-1'/>
-                                    <i className='level-2'/>
-                                    <i className='level-3'/>
-                                    <i className='level-4'/>
-                                    <span>{zh ? '多' : 'More'}</span>
-                                </footer>
-                            </Popover>}
-                            {statisticsError && overflowStatistics && <p className='ControlRefreshWarning' role='status'>
-                                {zh ? '刷新失败，显示上次统计，正在重试：' : 'Refresh failed; showing previous statistics and retrying: '}
-                                {statisticsError}
-                            </p>}
-                            {statisticsError && !overflowStatistics
-                                ? unavailable(zh ? '每日统计暂不可用' : 'Daily statistics are unavailable', statisticsError)
-                                : !node.online && !overflowStatistics
-                                    ? unavailable(
-                                        zh ? '节点离线，无法加载统计日志' : 'The node is offline; statistics logs cannot be loaded',
-                                    )
-                                    : !overflowStatistics
-                                        ? unavailable(
-                                            zh ? '正在加载统计日志… 2 / 2' : 'Loading statistics logs… 2 / 2',
-                                        )
-                                    : overflowStatistics
-                                        ? <>
-                                            <div className='ControlProgramStatisticCards'>
-                                                <article>
-                                                    <span>{zh ? '溢渣次数' : 'Episodes'}</span>
-                                                    <strong>{Object.values(overflowStatistics.episodes)
-                                                        .reduce((sum, value) => sum + value, 0)}</strong>
-                                                </article>
-                                                {([
-                                                    ['small', zh ? '小溢渣' : 'Small'],
-                                                    ['medium', zh ? '中溢渣' : 'Medium'],
-                                                    ['large', zh ? '大溢渣' : 'Large'],
-                                                ] as const).map(([level, label]) => <article className={level} key={level}>
-                                                    <span>{label}</span>
-                                                    <strong>{overflowStatistics.episodes[level]}</strong>
-                                                </article>)}
-                                            </div>
-                                            <dl className='ControlProgramStatisticSummary'>
-                                                <div>
-                                                    <dt>{zh ? '溢渣帧' : 'Overflow frames'}</dt>
-                                                    <dd>{overflowStatistics.overflow_frames} / {overflowStatistics.total_frames}
-                                                        {' · '}{overflowStatistics.total_frames > 0
-                                                            ? `${(overflowStatistics.overflow_frames / overflowStatistics.total_frames * 100).toFixed(1)}%`
-                                                            : '0.0%'}</dd>
-                                                </div>
-                                                <div>
-                                                    <dt>{zh ? '最近溢渣' : 'Latest overflow'}</dt>
-                                                    <dd>{overflowStatistics.latest_overflow_at
-                                                        ? dateTime(overflowStatistics.latest_overflow_at, zh)
-                                                        : (zh ? '当日无溢渣' : 'No overflow that day')}</dd>
-                                                </div>
-                                            </dl>
-                                            <div className='ControlProgramHourlyStatistics'>
-                                                <strong>{zh ? '时段分布' : 'Hourly distribution'}</strong>
-                                                <div>
-                                                    {overflowStatistics.hourly.map((count, hour) => <Tooltip
-                                                        key={hour}
-                                                        title={`${`${hour}`.padStart(2, '0')}:00 - ${`${hour + 1}`.padStart(2, '0')}:00 · ${
-                                                            zh ? `溢渣 ${count} 次` : `${count} overflow events`
-                                                        }`}
-                                                        placement='top'
-                                                        enterDelay={0}
-                                                        arrow
-                                                    >
-                                                        <span role='img' tabIndex={0}>
-                                                            <i style={{height: `${Math.max(2, count / Math.max(...overflowStatistics.hourly, 1) * 100)}%`}}/>
-                                                            <small>{hour % 3 === 0 ? `${`${hour}`.padStart(2, '0')}` : ''}</small>
-                                                        </span>
-                                                    </Tooltip>)}
-                                                </div>
-                                            </div>
-                                            <section className='ControlProgramHeatReports'>
-                                                <header>
-                                                    <div>
-                                                        <strong>{zh ? '炉次报告' : 'Heat reports'}</strong>
-                                                        <span>{zh
-                                                            ? `按倾炉会话编号 · ${overflowStatistics.heats.length} 炉次`
-                                                            : `Session identifiers · ${overflowStatistics.heats.length} heats`}</span>
-                                                    </div>
-                                                </header>
-                                                {selectedHeat
-                                                    ? <div className='ControlProgramHeatReportBody'>
-                                                        <nav aria-label={zh ? '炉次列表' : 'Heat list'}>
-                                                            {overflowStatistics.heats.map(heat => <button
-                                                                type='button'
-                                                                className={heat.heat_id === selectedHeat.heat_id ? 'active' : ''}
-                                                                key={heat.heat_id}
-                                                                onClick={() => setSelectedHeatId(heat.heat_id)}
-                                                            >
-                                                                <strong>{zh
-                                                                    ? `第 ${`${heat.sequence}`.padStart(3, '0')} 次`
-                                                                    : `Heat ${`${heat.sequence}`.padStart(3, '0')}`}</strong>
-                                                                <span>{time(heat.start_at, zh)}–{time(heat.end_at, zh)}</span>
-                                                                <em className={heat.levels.large > 0
-                                                                    ? 'large'
-                                                                    : heat.levels.medium > 0
-                                                                        ? 'medium'
-                                                                        : heat.levels.small > 0
-                                                                            ? 'small'
-                                                                            : ''}
-                                                                >
-                                                                    {heat.overflow_events > 0
-                                                                        ? `${heat.overflow_events} ${zh ? '次' : 'events'}`
-                                                                        : (zh ? '无溢渣' : 'No overflow')}
-                                                                </em>
-                                                            </button>)}
-                                                        </nav>
-                                                        <article aria-label={zh ? '炉次详细报告' : 'Heat detail report'}>
-                                                            <header>
-                                                                <div>
-                                                                    <h4>{zh
-                                                                        ? `第 ${`${selectedHeat.sequence}`.padStart(3, '0')} 次出钢`
-                                                                        : `Heat ${`${selectedHeat.sequence}`.padStart(3, '0')}`}</h4>
-                                                                    <p>{dateTime(selectedHeat.start_at, zh)}
-                                                                        {' · '}{duration(selectedHeat.duration_seconds, zh)}</p>
-                                                                </div>
-                                                                <span>{selectedHeat.heat_id}</span>
-                                                            </header>
-                                                            <dl>
-                                                                <div>
-                                                                    <dt>{zh ? '溢渣次数' : 'Overflow events'}</dt>
-                                                                    <dd>{selectedHeat.overflow_events}</dd>
-                                                                </div>
-                                                                <div>
-                                                                    <dt>{zh ? '等级构成' : 'Levels'}</dt>
-                                                                    <dd>{zh ? '小' : 'S'} {selectedHeat.levels.small}
-                                                                        {' · '}{zh ? '中' : 'M'} {selectedHeat.levels.medium}
-                                                                        {' · '}{zh ? '大' : 'L'} {selectedHeat.levels.large}</dd>
-                                                                </div>
-                                                                <div>
-                                                                    <dt>{zh ? '累计溢渣' : 'Overflow duration'}</dt>
-                                                                    <dd>{selectedHeat.total_overflow_duration_seconds.toFixed(1)} {zh ? '秒' : 's'}</dd>
-                                                                </div>
-                                                                <div>
-                                                                    <dt>{zh ? '最长一次' : 'Longest event'}</dt>
-                                                                    <dd>{selectedHeat.max_event_duration_seconds.toFixed(1)} {zh ? '秒' : 's'}</dd>
-                                                                </div>
-                                                                <div>
-                                                                    <dt>{zh ? '最大强度' : 'Peak intensity'}</dt>
-                                                                    <dd>{selectedHeat.max_overflow_intensity.toFixed(3)}</dd>
-                                                                </div>
-                                                                <div>
-                                                                    <dt>{zh ? '相机丢帧' : 'Camera drops'}</dt>
-                                                                    <dd>{selectedHeat.camera_drops}</dd>
-                                                                </div>
-                                                            </dl>
-                                                            <strong>{zh ? '溢渣明细' : 'Overflow detail'}</strong>
-                                                            {selectedHeat.events.length > 0
-                                                                ? <ol>
-                                                                    {selectedHeat.events.map((event, index) => <li key={`${event.start_at}-${index}`}>
-                                                                        <span>{time(event.start_at, zh)}</span>
-                                                                        <em className={event.level}>
-                                                                            {({
-                                                                                small: zh ? '小溢渣' : 'Small',
-                                                                                medium: zh ? '中溢渣' : 'Medium',
-                                                                                large: zh ? '大溢渣' : 'Large',
-                                                                                unknown: zh ? '未分级' : 'Unknown',
-                                                                            })[event.level]}
-                                                                        </em>
-                                                                        <span>{event.duration_seconds.toFixed(1)} {zh ? '秒' : 's'}</span>
-                                                                        <span>{zh ? '强度' : 'Intensity'} {event.max_intensity.toFixed(3)}</span>
-                                                                    </li>)}
-                                                                </ol>
-                                                                : <p>{zh ? '本炉次未检测到溢渣。' : 'No overflow was detected for this heat.'}</p>}
-                                                        </article>
-                                                    </div>
-                                                    : <p className='ControlProgramHeatEmpty'>
-                                                        {zh ? '当日没有完整的倾炉会话报告。' : 'No completed heat report for this day.'}
-                                                    </p>}
-                                            </section>
-                                            {overflowStatistics.episodes.unknown > 0 && <p className='ControlProgramStatisticsNote'>
-                                                {zh
-                                                    ? `${overflowStatistics.episodes.unknown} 次溢渣缺少等级，未计入小/中/大分类。`
-                                                    : `${overflowStatistics.episodes.unknown} episodes had no level and are excluded from small/medium/large.`}
-                                            </p>}
-                                        </>
-                                        : unavailable(zh ? '暂无每日统计' : 'No daily statistics')}
-                        </section>)}
-
-                {view === 'history' && (!historyCapable
-                    ? unavailable(
-                        zh ? '当前节点尚不支持机器历史' : 'Machine history is not supported',
-                        node.online
-                            ? (zh ? '升级节点程序后可读取加密快照。' : 'Upgrade the node software to read encrypted snapshots.')
-                            : (zh ? '节点恢复在线后才能读取机器历史。' : 'The node must return online before machine history can be read.'),
-                    )
-                    : <section className='ControlMachineHistory' aria-label={zh ? '机器历史' : 'Machine history'}>
-                        <header className='ControlMonitorSearchHeader'>
-                            <div>
-                                <h3>{zh ? '机器历史' : 'Machine history'}</h3>
-                                <p>{zh ? '节点本地加密保存的缓存、快照和结构化报告' : 'Node-local encrypted caches, snapshots, and structured reports'}</p>
-                            </div>
-                            <button
-                                type='button'
-                                className='ControlMachineHistoryRefresh'
-                                aria-label={zh ? '刷新机器历史' : 'Refresh machine history'}
-                                title={zh ? '刷新' : 'Refresh'}
-                                disabled={historyLoading}
-                                onClick={() => setHistoryRefresh(value => value + 1)}
-                            ><RefreshCw aria-hidden='true'/></button>
-                        </header>
-                        {historyError
-                            ? unavailable(zh ? '机器历史暂不可用' : 'Machine history is unavailable', historyError)
-                            : historyLoading && !historyStatus
-                                ? unavailable(zh ? '正在读取机器历史…' : 'Loading machine history…')
-                                : historyStatus
-                                    ? <>
-                                        <div className='ControlMachineHistorySummary'>
-                                            <article>
-                                                <span>{zh ? '存储状态' : 'Storage'}</span>
-                                                <strong>{historyStatus.encrypted
-                                                    ? (zh ? '已加密' : 'Encrypted')
-                                                    : (zh ? '未加密' : 'Plain')}</strong>
-                                            </article>
-                                            <article>
-                                                <span>{zh ? '对象' : 'Objects'}</span>
-                                                <strong>{historyStatus.objects}</strong>
-                                            </article>
-                                            <article>
-                                                <span>{zh ? '版本' : 'Versions'}</span>
-                                                <strong>{historyStatus.versions}</strong>
-                                            </article>
-                                            <article>
-                                                <span>{zh ? '结构化数据' : 'Structured data'}</span>
-                                                <strong>{bytes(historyStatus.plaintext_bytes)}</strong>
-                                            </article>
-                                        </div>
-                                        <div className='ControlMachineHistoryWorkspace'>
-                                            <nav aria-label={zh ? '历史对象' : 'History objects'}>
-                                                {historyObjects.map(object => <button
-                                                    type='button'
-                                                    key={`${object.namespace}:${object.object_key}`}
-                                                    aria-current={
-                                                        historyDocument?.namespace === object.namespace
-                                                        && historyDocument.object_key === object.object_key
-                                                            ? 'page'
-                                                            : undefined
-                                                    }
-                                                    onClick={() => selectHistoryObject(object)}
-                                                >
-                                                    <strong>{object.object_key}</strong>
-                                                    <span>{object.namespace} · v{object.version}</span>
-                                                    <small>{dateTime(object.captured_at || object.created_at, zh)}</small>
-                                                </button>)}
-                                            </nav>
-                                            <article>
-                                                {historyDocument
-                                                    ? <>
-                                                        <header>
-                                                            <div>
-                                                                <h4>{historyDocument.object_key}</h4>
-                                                                <p>{historyDocument.namespace} · v{historyDocument.version}
-                                                                    {' · '}{bytes(historyDocument.size_bytes)}</p>
-                                                            </div>
-                                                            <span>{dateTime(
-                                                                historyDocument.captured_at || historyDocument.created_at,
-                                                                zh,
-                                                            )}</span>
-                                                        </header>
-                                                        <pre>{JSON.stringify(historyDocument.payload, null, 2)}</pre>
-                                                    </>
-                                                    : <p>{zh ? '尚无历史对象。' : 'No history objects yet.'}</p>}
-                                            </article>
-                                        </div>
-                                    </>
-                                    : unavailable(zh ? '暂无机器历史' : 'No machine history')}
+                        </ol> : !history.denied && unavailable(emptyLogTitle)}
+                        {(history.page?.has_more || history.failed) && <button
+                            className='ControlProgramLogPagination' type='button'
+                            onClick={history.loadMore} disabled={history.loading}
+                        >{history.failed
+                            ? (historyProgramId
+                                ? (zh ? '重新查询历史日志' : 'Restart historical search')
+                                : (zh ? '重试读取历史日志' : 'Retry historical logs'))
+                            : (zh ? '加载更多日志' : 'Load more logs')}</button>}
                     </section>)}
             </div>
         </div>

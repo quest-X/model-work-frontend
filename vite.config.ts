@@ -75,9 +75,10 @@ export default ({ mode }: UserConfig): UserConfigExport => {
         process.env.VITE_OPENSIGHT_HOST_SYSTEM || '',
       ),
       __OPENSIGHT_DEMO__: JSON.stringify(process.env.VITE_OPENSIGHT_DEMO === '1'),
-      __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: JSON.stringify(true),
     },
     server: {
+      port: Number(process.env.VITE_DEV_PORT || 3001),
+      strictPort: true,
       proxy: {
         '/extension_service/extensions/llm-control': llmControlProxy,
         '/core_service': serviceProxy,

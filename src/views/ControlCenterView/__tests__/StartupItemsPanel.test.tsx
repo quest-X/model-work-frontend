@@ -1,18 +1,19 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {
     ComputeClusterNode,
+    ComputeClusterRequestError,
     ComputeClusterService,
     ComputeStartupAuthorization,
     ComputeStartupAuthorizationResult,
     ComputeStartupItem,
-    ComputeStartupList,
 } from '../../../services/ComputeClusterService';
 import * as ApprovalIdentity from '../../../services/ApprovalIdentityService';
 import {StartupItemsPanel} from '../StartupItemsPanel';
 
 jest.mock('uuid', () => ({v4: () => '00000000-0000-4000-8000-000000000033'}));
 jest.mock('../../../services/ApprovalIdentityService', () => ({
+    ...jest.requireActual('../../../services/ApprovalIdentityService'),
     canonicalAuthorizationJson: (value: unknown) => JSON.stringify(value),
     getApprovalIdentity: jest.fn(),
     signAuthorization: jest.fn(),
@@ -88,35 +89,21 @@ const challenge = (enabled: boolean): ComputeStartupAuthorizationResult => ({
 describe('StartupItemsPanel', () => {
     afterEach(() => jest.restoreAllMocks());
 
-    it('loads the latest items on reopen without a refresh button', async () => {
-        let resolveRefresh: (value: ComputeStartupList) => void = () => undefined;
-        const refresh = new Promise<ComputeStartupList>(resolve => {
-            resolveRefresh = resolve;
-        });
-        const load = jest.spyOn(ComputeClusterService, 'startupItems')
+    it('distinguishes a denied list from a successful empty list after retry', async () => {
+        jest.spyOn(ComputeClusterService, 'startupItems')
+            .mockRejectedValueOnce(new ComputeClusterRequestError(403, 'Forbidden'))
             .mockResolvedValueOnce({
-                schema_version: 'startup.list-result.v1', platform: 'windows', available: true,
-                items: [item],
-            })
-            .mockReturnValueOnce(refresh);
-        const view = render(<StartupItemsPanel node={node} zh visible/>);
+                schema_version: 'startup.list-result.v1', platform: 'windows', available: true, items: [],
+            });
 
-        expect(await screen.findByText('已启用')).toBeInTheDocument();
-        expect(screen.queryByRole('button', {name: '刷新'})).not.toBeInTheDocument();
-        expect(screen.getByRole('searchbox', {name: '搜索启动应用'})).toBeInTheDocument();
+        render(<StartupItemsPanel node={node} zh visible readOnly/>);
+        expect(screen.getByRole('status')).toHaveTextContent('正在读取启动项');
+        expect(await screen.findByRole('alert')).toHaveTextContent('当前账号无权读取启动项');
+        expect(screen.queryByText('当前没有启动项')).not.toBeInTheDocument();
 
-        view.rerender(<></>);
-        view.rerender(<StartupItemsPanel node={node} zh visible/>);
-
-        expect(screen.getByText('已启用')).toBeInTheDocument();
-        resolveRefresh({
-            schema_version: 'startup.list-result.v1', platform: 'windows', available: true,
-            items: [{...item, enabled: false}],
-        });
-        expect(await screen.findByText('已禁用')).toBeInTheDocument();
-        expect(load).toHaveBeenCalledTimes(2);
-        expect(load).toHaveBeenLastCalledWith(nodeId);
-        expect(screen.queryByRole('button', {name: '刷新'})).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '重试'}));
+        expect(await screen.findByText('当前没有启动项')).toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
     it('requires a fresh exact authorization for disable and restore', async () => {
@@ -126,33 +113,53 @@ describe('StartupItemsPanel', () => {
             schema_version: 'startup.list-result.v1', platform: 'windows', available: true,
             items: [item, protectedItem],
         });
+        const restore = challenge(true);
+        const restoreId = '00000000-0000-4000-8000-000000000023';
+        restore.authorization.authorization_id = restoreId;
+        if (restore.response.authorization) restore.response.authorization.authorization_id = restoreId;
         const create = jest.spyOn(ComputeClusterService, 'createStartupAuthorization')
             .mockResolvedValueOnce(challenge(false))
-            .mockResolvedValueOnce(challenge(true));
-        jest.spyOn(ComputeClusterService, 'approveStartupAuthorization').mockResolvedValue({
-            authorization: authorization(false, 'succeeded'),
+            .mockResolvedValueOnce(restore);
+        const applied = (prepared: ComputeStartupAuthorizationResult): ComputeStartupAuthorizationResult => ({
+            authorization: {...prepared.authorization, state: 'succeeded'},
             response: {
                 schema_version: 'agentos.capability-response.v1', request_id: requestId,
                 tool: 'agentos.startup.set_enabled', node_id: nodeId, state: 'succeeded',
                 task_id: null, progress: null,
                 result: {
                     schema_version: 'startup.set-enabled-result.v1',
-                    item: {...item, enabled: false}, previous_enabled: true, changed: true,
+                    item: {...item, enabled: prepared.authorization.parameters.enabled},
+                    previous_enabled: prepared.authorization.parameters.expected_enabled, changed: true,
                 },
                 authorization: null, error: null,
             },
         });
+        const apply = jest.spyOn(ComputeClusterService, 'approveStartupAuthorization')
+            .mockResolvedValueOnce(applied(challenge(false)))
+            .mockResolvedValueOnce(applied(restore));
 
         render(<StartupItemsPanel node={node} zh visible/>);
         expect(await screen.findByRole('button', {name: '受保护'})).toBeDisabled();
         fireEvent.click(await screen.findByRole('button', {name: '禁用'}));
-        fireEvent.click(await screen.findByRole('button', {name: '授权并执行'}));
+        const confirm = await screen.findByRole('dialog', {name: '确认禁用启动项'});
+        expect(confirm).toHaveTextContent('baoxin-156-windows · ExampleUpdater · 当前用户');
+        expect(confirm).toHaveTextContent('已启用 → 已禁用');
+        fireEvent.click(within(confirm).getByRole('button', {name: '授权并执行'}));
         expect(await screen.findByText('已禁用')).toBeInTheDocument();
         await waitFor(() => expect(screen.queryByRole('dialog', {name: '确认禁用启动项'})).not.toBeInTheDocument());
+        const receipts = screen.getByRole('region', {name: '此面板的启动项操作记录'});
+        expect(receipts).toHaveTextContent('已确认执行');
+        expect(receipts).toHaveTextContent(authorizationId);
 
         fireEvent.click(screen.getByRole('button', {name: '恢复'}));
-        await screen.findByRole('dialog', {name: '确认恢复启动项'});
-        await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+        const restoreDialog = await screen.findByRole('dialog', {name: '确认恢复启动项'});
+        expect(restoreDialog).toHaveTextContent('已禁用 → 已启用');
+        fireEvent.click(within(restoreDialog).getByRole('button', {name: '授权并执行'}));
+        expect(await screen.findByText('已启用')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByRole('dialog', {name: '确认恢复启动项'})).not.toBeInTheDocument());
+        expect(apply).toHaveBeenNthCalledWith(1, authorizationId, 'signed');
+        expect(apply).toHaveBeenNthCalledWith(2, restoreId, 'signed');
+        expect(create).toHaveBeenCalledTimes(2);
         expect(create.mock.calls[0][1].request.arguments).toEqual({
             item_id: item.item_id, enabled: false, expected_enabled: true,
         });
@@ -177,5 +184,55 @@ describe('StartupItemsPanel', () => {
 
         expect(await screen.findByText('启动项操作失败，请刷新后重试。')).toBeInTheDocument();
         await waitFor(() => expect(screen.queryByRole('dialog', {name: '确认禁用启动项'})).not.toBeInTheDocument());
+        expect(screen.getByRole('button', {name: '禁用'})).toBeDisabled();
+        expect(screen.getByRole('region', {name: '此面板的启动项操作记录'})).toHaveTextContent('结果待核对');
+
+        fireEvent.click(screen.getByRole('button', {name: '刷新'}));
+        expect(await screen.findByRole('button', {name: '禁用'})).toBeEnabled();
     });
+
+    it('cancels the exact pending approval and shows its receipt without signing', async () => {
+        jest.mocked(ApprovalIdentity.signAuthorization).mockClear();
+        jest.mocked(ApprovalIdentity.getApprovalIdentity).mockReturnValue({privateKey: {} as CryptoKey, user});
+        jest.spyOn(ComputeClusterService, 'startupItems').mockResolvedValue({
+            schema_version: 'startup.list-result.v1', platform: 'windows', available: true, items: [item],
+        });
+        jest.spyOn(ComputeClusterService, 'createStartupAuthorization').mockResolvedValue(challenge(false));
+        const reject = jest.spyOn(ComputeClusterService, 'rejectStartupAuthorization')
+            .mockResolvedValue({...authorization(false, 'rejected'), state: 'rejected'});
+        const apply = jest.spyOn(ComputeClusterService, 'approveStartupAuthorization');
+
+        render(<StartupItemsPanel node={node} zh visible/>);
+        fireEvent.click(await screen.findByRole('button', {name: '禁用'}));
+        fireEvent.click(await screen.findByRole('button', {name: '取消'}));
+        expect(await screen.findByText('已取消授权')).toBeInTheDocument();
+        expect(reject).toHaveBeenCalledWith(authorizationId);
+        expect(ApprovalIdentity.signAuthorization).not.toHaveBeenCalled();
+        expect(apply).not.toHaveBeenCalled();
+    });
+
+    it('drops an approval when the signing identity changes before submission', async () => {
+        jest.mocked(ApprovalIdentity.getApprovalIdentity).mockReturnValue({privateKey: {} as CryptoKey, user});
+        let completeSignature: (value: string) => void = () => undefined;
+        jest.mocked(ApprovalIdentity.signAuthorization).mockReturnValueOnce(new Promise(resolve => {
+            completeSignature = resolve;
+        }));
+        jest.spyOn(ComputeClusterService, 'startupItems').mockResolvedValue({
+            schema_version: 'startup.list-result.v1', platform: 'windows', available: true, items: [item],
+        });
+        jest.spyOn(ComputeClusterService, 'createStartupAuthorization').mockResolvedValue(challenge(false));
+        const apply = jest.spyOn(ComputeClusterService, 'approveStartupAuthorization');
+
+        render(<StartupItemsPanel node={node} zh visible/>);
+        fireEvent.click(await screen.findByRole('button', {name: '禁用'}));
+        fireEvent.click(await screen.findByRole('button', {name: '授权并执行'}));
+        await act(async () => {
+            window.dispatchEvent(new Event(ApprovalIdentity.APPROVAL_IDENTITY_CHANGED));
+            completeSignature('old-signature');
+        });
+
+        expect(apply).not.toHaveBeenCalled();
+        expect(screen.queryByRole('dialog', {name: '确认禁用启动项'})).not.toBeInTheDocument();
+    });
+
 });

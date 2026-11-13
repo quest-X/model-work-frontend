@@ -259,6 +259,7 @@
 
 .ComputeKnowledgeHeading {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
@@ -282,7 +283,7 @@
 
 .ComputeKnowledgeStats.graph-summary {
   display: grid;
-  grid-template-columns: repeat(3, max-content);
+  grid-template-columns: repeat(4, max-content);
 }
 
 .ComputeKnowledgeStats.map-summary {
@@ -319,6 +320,7 @@
   i.entity-shape.region { width: 15px; height: 9px; border-color: rgba(229, 179, 94, .6); border-radius: 3px; background: rgba(67, 48, 91, 0.38); }
   i.entity-shape.sensor { border-color: rgba(91, 195, 255, 0.78); background: rgba(43, 113, 153, 0.62); }
   i.entity-shape.edge-device { border-color: rgba(102, 221, 160, 0.78); background: rgba(34, 117, 77, 0.72); }
+  i.entity-shape.group-link { width: 15px; height: 0; border: 0; border-top: 1px solid rgba(241, 189, 103, .9); background: none; }
   i.entity-shape.task-flow { width: 7px; height: 7px; border: 0; border-radius: 50%; background: #64c8ff; box-shadow: 0 0 5px #42baff; }
   i.entity-shape.controller { border-color: rgba(190, 137, 241, 0.78); background: rgba(76, 47, 105, 0.72); }
   i.entity-shape.actuator { border-color: rgba(244, 194, 83, 0.82); background: rgba(136, 100, 34, 0.64); }
@@ -343,7 +345,7 @@
 .ComputeGraphFit { width: 100%; }
 
 .ComputeGraphViewport.fit-window {
-  overflow: hidden;
+  overflow: auto;
 
   .ComputeGraphFit {
     display: flex;
@@ -448,6 +450,15 @@
   &.focused { opacity: 1; stroke-width: 2.2; filter: drop-shadow(0 0 3px currentColor); }
 }
 
+.ComputeGraphGroupLink {
+  stroke: rgba(241, 189, 103, .72);
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+  transition: opacity .18s ease, stroke-width .18s ease;
+  &.muted { opacity: .08; }
+  &.focused { opacity: 1; stroke-width: 2.2; filter: drop-shadow(0 0 3px rgba(241, 189, 103, .9)); }
+}
+
 .ComputeGraphEdgeHit {
   stroke: transparent;
   stroke-width: 16;
@@ -550,16 +561,12 @@
     letter-spacing: -.02em;
     transform: translateX(-50%);
   }
-  > i.has-program {
-    box-shadow: 0 0 0 1px currentColor, 0 0 3px currentColor;
-    animation: compute-program-badge-pulse 2s ease-in-out infinite;
-  }
   > span { color: rgba(213, 183, 249, 0.64); font-size: 7px; letter-spacing: .06em; text-transform: uppercase; }
   > strong { overflow: hidden; width: 100%; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
   > small { overflow: hidden; width: 100%; color: rgba(255, 255, 255, 0.42); font-size: 7px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 
   &.compute_group,
-  &.compute_node.role-main {
+  &.compute_node {
     width: 92px;
     height: 92px;
     min-height: 0;
@@ -577,7 +584,7 @@
     > span { color: rgba(132, 231, 175, 0.7); }
   }
   // Role colors stay stable across health states; details retain status text.
-  &.compute_node.role-main {
+  &.compute_node {
     border: 2px solid rgba(190, 137, 241, 0.92);
     background: radial-gradient(circle at 38% 30%, rgba(109, 68, 154, 0.98), rgba(49, 34, 68, 0.98) 68%);
     box-shadow: 0 0 0 6px rgba(190, 137, 241, 0.06), 0 0 24px rgba(190, 137, 241, 0.22);
@@ -585,15 +592,16 @@
     > i { color: #d7b7ff; }
     > span { color: rgba(213, 183, 249, 0.8); }
   }
-  &.compute_node.role-node {
-    width: 136px;
-    border-color: rgba(102, 221, 160, 0.78);
-    border-radius: 18px;
-    background: linear-gradient(145deg, rgba(34, 117, 77, 0.94), rgba(18, 49, 36, 0.98));
-    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
-    filter: none;
-    > i { border-color: rgba(102, 221, 160, 0.62); background: #173b2b; color: #8ee4b3; }
-    > span { color: rgba(132, 231, 175, 0.78); }
+  &.compute_node.node-warning {
+    border-color: rgba(224, 170, 72, 0.94);
+    box-shadow: 0 0 0 6px rgba(224, 170, 72, 0.08), 0 0 24px rgba(224, 170, 72, 0.28);
+  }
+  &.compute_node.node-offline {
+    border-color: rgba(226, 76, 76, 0.96);
+    background: radial-gradient(circle at 38% 30%, rgba(126, 47, 62, 0.98), rgba(60, 27, 36, 0.98) 68%);
+    box-shadow: 0 0 0 6px rgba(226, 76, 76, 0.09), 0 0 26px rgba(226, 76, 76, 0.34);
+    > i { color: #ffb4b4; }
+    > span { color: rgba(255, 174, 174, 0.82); }
   }
   .ComputeGraphNodeState {
     position: absolute;
@@ -692,6 +700,11 @@
   }
 }
 
+.ComputeGraphScene.group-focus .ComputeGraphNode.relation-focused {
+  border-color: #f1bd67;
+  box-shadow: 0 0 0 2px rgba(241, 189, 103, .22), 0 0 26px rgba(241, 189, 103, .3);
+}
+
 .ComputeGraphEdgeLabel {
   position: absolute;
   z-index: 6;
@@ -714,10 +727,15 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, .42), 0 0 16px rgba(66, 186, 255, .22);
     > span, b { color: #64c8ff; }
   }
+  &.group-link {
+    border-color: rgba(241, 189, 103, .78);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .42), 0 0 16px rgba(241, 189, 103, .22);
+    > span, b { color: #f1bd67; }
+  }
 }
 
 .ComputeGraphHoverCard {
-  --entity-accent: 180, 139, 232;
+  --node-status-color: 180, 139, 232;
   position: absolute;
   z-index: 7;
   display: flex;
@@ -725,20 +743,19 @@
   gap: 7px;
   width: 284px;
   box-sizing: border-box;
-  border: 1px solid rgba(var(--entity-accent), 0.48);
+  border: 1px solid rgba(var(--node-status-color), 0.48);
   border-radius: 10px;
   background: rgba(17, 18, 23, 0.96);
   padding: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 24px rgba(var(--entity-accent), 0.12);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 24px rgba(var(--node-status-color), 0.12);
   pointer-events: none;
   backdrop-filter: blur(12px);
-  &.role-node,
-  &.edge-device { --entity-accent: 102, 221, 160; }
-  &.sensor { --entity-accent: 91, 195, 255; }
-  &.actuator { --entity-accent: 244, 194, 83; }
+  &.tone-online { --node-status-color: 102, 221, 160; }
+  &.tone-warning { --node-status-color: 241, 189, 103; }
+  &.tone-offline { --node-status-color: 255, 112, 112; }
   &.pinned {
-    border-color: rgba(var(--entity-accent), 0.72);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 26px rgba(var(--entity-accent), 0.18);
+    border-color: rgba(var(--node-status-color), 0.72);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 26px rgba(var(--node-status-color), 0.18);
     pointer-events: auto;
   }
   &.align-left { left: 14px; }
@@ -771,16 +788,16 @@
     flex-direction: column;
     gap: 3px;
     min-width: 0;
-    border: 1px solid rgba(var(--entity-accent), 0.24);
+    border: 1px solid rgba(var(--node-status-color), 0.24);
     border-radius: 7px;
-    background: rgba(var(--entity-accent), 0.07);
+    background: rgba(var(--node-status-color), 0.07);
     padding: 8px;
     text-align: left;
     cursor: pointer;
-    > span { color: #7fe0a8; font-size: 7px; }
+    > span { color: rgba(var(--node-status-color), 0.95); font-size: 7px; }
     > strong { overflow: hidden; color: rgba(255, 255, 255, 0.88); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
     > small { overflow: hidden; color: rgba(255, 255, 255, 0.38); font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
-    &:hover, &:focus-visible { border-color: rgba(var(--entity-accent), 0.68); background: rgba(var(--entity-accent), 0.13); outline: none; }
+    &:hover, &:focus-visible { border-color: rgba(var(--node-status-color), 0.68); background: rgba(var(--node-status-color), 0.13); outline: none; }
     &:disabled { opacity: .42; cursor: not-allowed; }
   }
 }
@@ -794,13 +811,14 @@
     flex-direction: column;
     gap: 3px;
     min-width: 0;
-    border: 1px solid rgba(var(--entity-accent), 0.24);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 7px;
-    background: rgba(var(--entity-accent), 0.07);
+    background: rgba(255, 255, 255, 0.025);
     padding: 7px;
     > span { color: rgba(255, 255, 255, 0.45); font-size: 7px; white-space: nowrap; }
     > strong { color: $computeFaultColor; font-size: 9px; }
     > small { overflow: hidden; color: rgba(255, 255, 255, 0.3); font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
+    &.available { border-color: rgba(102, 221, 160, 0.24); background: rgba(56, 139, 94, 0.08); }
     &.available > strong { color: #7fe0a8; }
   }
 }
@@ -967,6 +985,7 @@
   color: rgba(255, 255, 255, .45);
   font-size: 9px;
   i { width: 7px; height: 7px; border-radius: 50%; background: #6c7174; }
+  &.available { color: #82db9e; i { background: #55c77b; } }
   &.running.lan,
   &.connecting.lan { color: #82db9e; i { background: #55c77b; box-shadow: 0 0 8px rgba(85, 199, 123, .65); } }
   &.running.remote,
@@ -985,7 +1004,7 @@
   select, button { height: 32px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 4px; background: #15191a; padding: 0 10px; color: rgba(255, 255, 255, .82); font-size: 9px; }
   button { border-color: rgba(85, 199, 123, .48); cursor: pointer; }
   button.danger { border-color: rgba(214, 99, 99, .45); color: #eaa29e; }
-  button:disabled { opacity: .4; cursor: wait; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
 }
 
 .ComputeTerminalScreen {
@@ -1030,7 +1049,10 @@
   > input { position: relative; width: 100%; }
 }
 
+.ComputeTerminalNotice,
 .ComputeTerminalError { margin: 0 18px 10px; border-radius: 4px; background: rgba(214, 99, 99, .13); padding: 8px 10px; color: #eaa29e; font-size: 9px; }
+.ComputeTerminalNotice { background: rgba(255, 255, 255, .05); color: rgba(255, 255, 255, .7); }
+.ComputeTerminalError button { margin-left: 6px; border: 1px solid currentColor; border-radius: 3px; background: transparent; color: inherit; cursor: pointer; }
 .ComputeTerminalBoundary { display: block; padding: 10px 18px 14px; color: rgba(255, 255, 255, .34); font-size: 8px; }
 
 .ComputeClusterContent:has(> .ComputeTerminalPanel) {
@@ -1040,6 +1062,7 @@
   > .ComputeTerminalPanel { display: flex; min-height: 0; flex: 1; flex-direction: column; }
   .ComputeTerminalHeading,
   .ComputeTerminalToolbar,
+  .ComputeTerminalNotice,
   .ComputeTerminalError,
   .ComputeTerminalInput,
   .ComputeTerminalBoundary { flex: 0 0 auto; }
@@ -1261,55 +1284,12 @@
   justify-content: space-between;
   padding: 0 0 9px;
   > div { display: flex; align-items: center; gap: 7px; }
-}
-
-.ComputeNodeManage {
-  position: relative;
-  summary {
-    min-width: 62px;
-    border: 1px solid rgba(51, 174, 247, 0.34);
-    border-radius: 4px;
-    background: rgba(51, 174, 247, 0.12);
-    padding: 7px 14px;
-    color: #a9ddfb;
-    font-size: 9px;
-    text-align: center;
-    list-style: none;
-    cursor: pointer;
-  }
-  summary::-webkit-details-marker { display: none; }
-  &[open] summary { border-color: rgba(51, 174, 247, 0.68); background: rgba(51, 174, 247, 0.2); }
-}
-
-.ComputeNodeManageMenu {
-  position: absolute;
-  z-index: 8;
-  top: calc(100% + 6px);
-  right: 0;
-  display: grid;
-  gap: 3px;
-  min-width: 132px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 5px;
-  background: #17181a;
-  padding: 4px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.46);
-  button {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 18px;
-    border: 0;
-    border-radius: 3px;
-    background: transparent;
-    padding: 7px 9px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 9px;
-    text-align: left;
-  }
-  button:hover,
-  button[aria-checked='true'] { background: rgba(51, 174, 247, 0.16); color: #d7f1ff; }
-  strong { color: #79c9f8; font-size: inherit; }
+  .ComputeNodeToolbar { gap: 18px; }
+  .ComputeNodeFilters { display: flex; gap: 8px; }
+  button { border: 1px solid rgba(51, 174, 247, 0.24); border-radius: 4px; background: rgba(51, 174, 247, 0.08); padding: 7px 10px; color: #a9ddfb; font-size: 9px; }
+  .ComputeNodeFilters button[aria-pressed='true'] { border-color: rgba(51, 174, 247, 0.62); background: rgba(51, 174, 247, 0.2); color: #d7f1ff; }
+  .ComputeNodeFilters strong { margin-left: 3px; font-size: inherit; }
+  .ComputeBatchUpgradeButton { padding: 7px 14px; }
 }
 
 .ComputeTaskEmpty,
@@ -1322,8 +1302,6 @@
   font-size: 9px;
   text-align: center;
 }
-
-.ComputeNodeFilterEmpty { padding: 24px; color: rgba(255, 255, 255, 0.4); font-size: 10px; text-align: center; }
 
 .ComputeTaskDisabled {
   margin: 0 0 16px;
@@ -1436,168 +1414,93 @@
   i:nth-child(3) { height: 30px; }
 }
 
-.ComputeNodeGroup {
-  margin-bottom: 16px;
-  > header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 7px;
-    border: 1px solid rgba(51, 174, 247, 0.18);
-    border-radius: 4px;
-    background: rgba(51, 174, 247, 0.055);
-    padding: 8px 11px;
-  }
-  &.collapsed > header { margin-bottom: 0; }
-}
-
-.ComputeNodeGroupTitle {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  strong { color: rgba(255, 255, 255, 0.78); font-size: 10px; font-weight: 500; }
-  span { border-radius: 999px; background: rgba(102, 194, 250, 0.14); padding: 2px 6px; color: #79c9f8; font-size: 8px; }
-}
-
-.ComputeNodeGroupToggle {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border: 1px solid rgba(51, 174, 247, 0.24);
-  border-radius: 4px;
-  background: rgba(51, 174, 247, 0.08);
-  color: #79c9f8;
-  cursor: pointer;
-  i {
-    width: 6px;
-    height: 6px;
-    border-right: 1px solid currentColor;
-    border-bottom: 1px solid currentColor;
-    transform: rotate(225deg) translate(-1px, -1px);
-  }
-  &[aria-expanded='false'] i { transform: rotate(45deg) translate(-1px, -1px); }
-  &:hover { border-color: rgba(51, 174, 247, 0.5); background: rgba(51, 174, 247, 0.15); }
-  &:focus-visible { outline: 1px solid #33aef7; outline-offset: 2px; }
-}
-
-.ComputeNodeGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 8px;
-}
-
 .ComputeNodeCard {
   overflow: hidden;
+  margin-bottom: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
   background: #202124;
-  box-sizing: border-box;
+  &:last-child { margin-bottom: 0; }
 }
 
-.ComputeNodeCard {
-  width: 100%;
-  min-height: 90px;
-  padding: 11px 13px;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  &:hover { border-color: rgba(51, 174, 247, 0.35); background: #232529; }
-  &:focus-visible { outline: 1px solid #33aef7; outline-offset: 2px; }
-}
-
-.ComputeNodeOverview {
+.ComputeNodeHeading {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto auto;
-  grid-template-areas:
-    'name status'
-    'model model'
-    'stats stats';
+  grid-template-columns: repeat(12, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 10px 15px;
+  list-style: none;
+  cursor: pointer;
+  &::-webkit-details-marker { display: none; }
+  &::before { grid-column: 13; grid-row: 1; justify-self: end; content: '›'; color: rgba(255, 255, 255, 0.5); font-size: 17px; transition: transform 0.15s ease; }
+  &:focus-visible { outline: 1px solid #33aef7; outline-offset: -2px; }
+}
+
+.ComputeNodeCard[open] > .ComputeNodeHeading::before { transform: rotate(90deg); }
+
+.ComputeNodeHeaderActions {
+  grid-column: 9 / span 4;
+  display: grid;
   min-width: 0;
-  gap: 5px 8px;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  align-items: center;
+  justify-items: start;
+  gap: 8px;
+  .ComputeNodeHeartbeat { grid-column: 1; }
+  .ComputeNodeVersion { grid-column: 2; }
+  > button { grid-column: 3; }
+  > button,
+  .ComputeNodeVersion {
+    border: 1px solid rgba(51, 174, 247, 0.28);
+    border-radius: 4px;
+    background: rgba(51, 174, 247, 0.09);
+    padding: 6px 9px;
+    color: #a9ddfb;
+    font-size: 9px;
+  }
+  > button:disabled { border-color: rgba(229, 179, 94, 0.24); background: rgba(229, 179, 94, 0.07); color: #e5b35e; }
+  .ComputeNodeVersion { border: 0; background: transparent; padding: 0; color: rgba(255, 255, 255, 0.36); white-space: nowrap; }
+  .ComputeNodeVersion strong { color: rgba(255, 255, 255, 0.7); font-weight: 500; }
 }
 
 .ComputeNodeCompactStats {
-  grid-area: stats;
+  grid-column: 4 / span 5;
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(4, auto);
-  justify-content: start;
-  gap: 10px;
+  grid-template-columns: repeat(5, minmax(38px, 1fr));
+  gap: 8px;
   color: rgba(255, 255, 255, 0.38);
   font-size: 8px;
-  strong { margin-left: 2px; color: rgba(255, 255, 255, 0.72); font-size: 9px; font-weight: 500; }
+  text-align: left;
+  strong { margin-left: 3px; color: rgba(255, 255, 255, 0.8); font-size: 10px; font-weight: 500; }
 }
 
 .ComputeNodeIdentity {
-  display: contents;
-  h3 { grid-area: name; overflow: hidden; margin: 0; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-  small { grid-area: model; overflow: hidden; color: rgba(255, 255, 255, 0.34); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
-}
-
-.ComputeNodeOverview > .ComputeNodeStatus {
-  grid-area: status;
-  align-self: start;
-  justify-self: end;
-  font-size: 8px;
-  white-space: nowrap;
+  grid-column: 1 / span 3;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  h3 { margin: 0; font-size: 14px; }
+  .ComputeNodeRegion { color: rgba(255, 255, 255, 0.38); font-size: 9px; }
 }
 
 .ComputeNodeStatus i { background: #6d737a; }
-.ComputeNodeCard.normal .ComputeNodeStatus,
-.ComputeNodeDetail.normal .ComputeNodeStatus { color: #8bdd9f; }
-.ComputeNodeCard.fault .ComputeNodeStatus,
-.ComputeNodeDetail.fault .ComputeNodeStatus { color: $computeFaultColor; }
-.ComputeNodeCard.abnormal .ComputeNodeStatus,
-.ComputeNodeDetail.abnormal .ComputeNodeStatus { color: $computeAbnormalColor; }
-.ComputeNodeCard.normal .ComputeNodeStatus i,
-.ComputeNodeDetail.normal .ComputeNodeStatus i { background: #55c77b; }
-.ComputeNodeCard.fault .ComputeNodeStatus i,
-.ComputeNodeDetail.fault .ComputeNodeStatus i { background: $computeFaultColor; }
-.ComputeNodeCard.abnormal .ComputeNodeStatus i,
-.ComputeNodeDetail.abnormal .ComputeNodeStatus i { background: $computeAbnormalColor; }
+.ComputeNodeCard.normal .ComputeNodeStatus { color: #8bdd9f; }
+.ComputeNodeCard.fault .ComputeNodeStatus { color: $computeFaultColor; }
+.ComputeNodeCard.abnormal .ComputeNodeStatus { color: $computeAbnormalColor; }
+.ComputeNodeCard.normal .ComputeNodeStatus i { background: #55c77b; }
+.ComputeNodeCard.fault .ComputeNodeStatus i { background: $computeFaultColor; }
+.ComputeNodeCard.abnormal .ComputeNodeStatus i { background: $computeAbnormalColor; }
 
-.ComputeNodeVersion {
-  color: rgba(121, 201, 248, 0.68);
-  font-size: 8px;
+.ComputeNodeHeartbeat {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
   white-space: nowrap;
-}
-
-.ComputeNodeDetail {
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  background: #202124;
-}
-
-.ComputeNodeDetailHeader {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-  padding: 13px 15px;
-  > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-  > div small { color: #79c9f8; font-size: 8px; }
-  > div h3 { overflow: hidden; margin: 0; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
-  > div > span { overflow: hidden; color: rgba(255, 255, 255, 0.4); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-  > .ComputeNodeStatus { align-self: start; margin-top: 2px; }
-}
-
-.ComputeNodeBackButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid rgba(51, 174, 247, 0.24);
-  border-radius: 4px;
-  background: rgba(51, 174, 247, 0.08);
-  padding: 7px 10px;
-  color: #a9ddfb;
-  font-size: 9px;
-  cursor: pointer;
-  span { font-size: 14px; line-height: 1; }
-  &:hover { border-color: rgba(51, 174, 247, 0.48); background: rgba(51, 174, 247, 0.14); }
-  &:focus-visible { outline: 1px solid #33aef7; outline-offset: 2px; }
+  span { color: rgba(255, 255, 255, 0.36); font-size: 9px; }
+  strong { color: rgba(255, 255, 255, 0.7); font-size: 10px; font-weight: 500; }
 }
 
 .ComputeNodeResourceGrid {
@@ -1682,7 +1585,7 @@
   font-size: 9px;
 }
 
-.ComputeNodeDetail > footer {
+.ComputeNodeCard > footer {
   display: flex;
   gap: 18px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -1693,10 +1596,78 @@
   .ssh-ready { color: #7bd694; }
 }
 
-@keyframes compute-spin { to { transform: rotate(360deg); } }
-@keyframes compute-program-badge-pulse {
-  50% { box-shadow: 0 0 0 2px currentColor, 0 0 12px currentColor; filter: brightness(1.45); }
+.ComputeNodeFilterEmpty { padding: 24px; color: rgba(255, 255, 255, 0.4); font-size: 10px; text-align: center; }
+
+.ComputeNodeUpgradeArea { margin-bottom: 12px; }
+
+.ComputeUpgradePanel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: #17181a;
+  padding: 16px;
+  > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+  > header div { display: flex; align-items: baseline; gap: 8px; }
+  > header span { color: #79c9f8; font-size: 9px; }
+  > header h3 { margin: 0; font-size: 14px; }
+  > header p { max-width: 520px; margin: 0; color: rgba(255, 255, 255, 0.48); font-size: 9px; }
+  button { border: 1px solid rgba(51, 174, 247, 0.34); border-radius: 4px; background: rgba(51, 174, 247, 0.13); padding: 7px 12px; color: #a9ddfb; }
+  button:disabled { opacity: 0.4; }
+  button.danger { border-color: rgba(255, 93, 93, 0.35); background: rgba(255, 93, 93, 0.1); color: #ff9b9b; }
 }
+
+.ComputeUpgradeManifestInput {
+  display: grid;
+  gap: 5px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  padding: 12px;
+  label { font-size: 11px; }
+  select { min-width: 0; width: 100%; padding: 8px; color: #e8edf2; background: #202226; border: 1px solid #42474d; border-radius: 4px; }
+  button { justify-self: start; }
+  span { font-size: 10px; }
+  small { color: rgba(255, 255, 255, 0.42); font-size: 8px; }
+}
+
+.ComputeUpgradeNodes,
+.ComputeUpgradeBatch { display: grid; gap: 7px; }
+
+.ComputeUpgradeNodeState { align-items: flex-end; }
+
+.ComputeUpgradeNodes > label,
+.ComputeUpgradeBatch > article {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  background: #1b1c1e;
+  padding: 9px 10px;
+  div { display: flex; flex-direction: column; gap: 2px; }
+  strong { font-size: 10px; }
+  small { color: rgba(255, 255, 255, 0.4); font-size: 8px; }
+  span, code { color: #79c9f8; font-size: 8px; }
+}
+
+.ComputeUpgradeBatch > article.current { border-color: rgba(51, 174, 247, 0.38); }
+.ComputeUpgradeLog {
+  grid-column: 1 / -1;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 8px;
+  summary { cursor: pointer; color: rgba(255, 255, 255, 0.66); font-size: 9px; }
+  summary span { margin-left: 4px; }
+  ol { display: grid; gap: 5px; max-height: 190px; margin: 8px 0 0; padding: 0; overflow: auto; list-style: none; }
+  li { display: grid; grid-template-columns: minmax(150px, auto) minmax(100px, 1fr) auto; gap: 10px; }
+  time { color: rgba(255, 255, 255, 0.38); font: 8px monospace; }
+  > small { display: block; margin-top: 7px; }
+}
+.ComputeUpgradeBatch > div:first-child,
+.ComputeUpgradeActions { display: flex; align-items: center; gap: 10px; }
+.ComputeUpgradeBatch > div:first-child code { color: rgba(255, 255, 255, 0.35); }
+
+@keyframes compute-spin { to { transform: rotate(360deg); } }
 @keyframes compute-status-pulse {
   50% { box-shadow: 0 0 0 6px transparent; opacity: 0.72; }
 }
@@ -1706,7 +1677,6 @@
   .ComputeClusterPopup { transition: none; }
   .ComputeClusterServiceState.syncing i,
   .ComputeClusterServiceState.error i { animation: none; }
-  .ComputeGraphNode > i.has-program { animation: none; }
 }
 
 @media (max-width: 720px) {
@@ -1744,8 +1714,12 @@
   .ComputeLanScheduleList article { grid-template-columns: auto 1fr; }
   .ComputeTaskActions { justify-content: flex-start; }
   .ComputeNodeGpuList > div { grid-template-columns: 1fr; }
-  .ComputeNodeSectionTitle { align-items: flex-start; flex-direction: column; }
-  .ComputeNodeGrid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+  .ComputeNodeSectionTitle, .ComputeNodeToolbar { align-items: flex-start; flex-direction: column; }
+  .ComputeNodeHeading { grid-template-columns: minmax(0, 1fr) auto; align-items: flex-start; }
+  .ComputeNodeHeading::before { grid-column: 2; }
+  .ComputeNodeIdentity { grid-column: 1; }
+  .ComputeNodeCompactStats, .ComputeNodeHeaderActions { grid-column: 1 / -1; width: 100%; }
+  .ComputeNodeHeaderActions { width: 100%; }
   .ComputeNodeDeviceList > div { grid-template-columns: auto 1fr; }
   .ComputeDeviceMeta { align-items: flex-start; }
   .ComputeWorkspaceNav button { min-height: 48px; flex-direction: column; gap: 3px; font-size: 9px; }

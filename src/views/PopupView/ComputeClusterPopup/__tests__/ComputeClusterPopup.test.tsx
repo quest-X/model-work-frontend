@@ -1,9 +1,10 @@
 import React from 'react';
-import {act, render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Language} from '../../../../data/LanguageConfig';
-import {ComputeClusterService} from '../../../../services/ComputeClusterService';
+import {ComputeClusterRequestError, ComputeClusterService, ComputeUpgradeBatch} from '../../../../services/ComputeClusterService';
 import {ComputeClusterPopup} from '../ComputeClusterPopup';
+import {ComputeTerminalPanel} from '../ComputeTerminalPanel';
 import {ResourceKnowledgeGraph} from '../ResourceKnowledgeGraph';
 import {AGENT_CHAT_SEND_EVENT} from '../../../Common/AgentSideChat/AgentSideChat';
 
@@ -19,12 +20,19 @@ jest.mock('../../../../services/ComputeClusterService', () => ({
         lanSchedules: jest.fn(), createLanSchedule: jest.fn(), controlLanSchedule: jest.fn(),
         terminalTargets: jest.fn(), startTerminal: jest.fn(), terminal: jest.fn(),
         terminalInput: jest.fn(), terminalControl: jest.fn(),
-        upgradeReleases: jest.fn(),
+        upgradeReleases: jest.fn(), createMainUpgradeBatch: jest.fn(), createUpgradeBatch: jest.fn(), upgradeBatch: jest.fn(), refreshUpgradeBatch: jest.fn(),
+        approveUpgradeBatch: jest.fn(), rejectUpgradeBatch: jest.fn(),
         submitTask: jest.fn(), controlTask: jest.fn(),
     },
 }));
 
 const service = ComputeClusterService as jest.Mocked<typeof ComputeClusterService>;
+
+const openNodeUpgrade = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole('button', {name: /节点管理 \d+/}));
+    const expand = screen.queryByRole('button', {name: '批量升级'});
+    if (expand) await user.click(expand);
+};
 
 describe('ComputeClusterPopup', () => {
     beforeEach(() => {
@@ -37,7 +45,6 @@ describe('ComputeClusterPopup', () => {
         });
         service.nodes.mockResolvedValue([{
             node_id: 'node-12345678', installation_id: 'install-1', name: 'edge-01',
-            role: 'main',
             agent_version: '0.1.0', capabilities: ['system.health.v1', 'control.node.upgrade.v1'],
             network: {
                 provider: 'tailscale', installed: true, online: true, ssh_available: true,
@@ -235,78 +242,63 @@ describe('ComputeClusterPopup', () => {
         service.terminalControl.mockResolvedValue({...terminalSession, state: 'closed'});
     });
 
-    it('shows staged progress while loading nodes', async () => {
-        let resolveStatus!: (value: Awaited<ReturnType<typeof service.status>>) => void;
-        let resolveNodes!: (value: Awaited<ReturnType<typeof service.nodes>>) => void;
-        service.status.mockImplementation(() => new Promise(resolve => { resolveStatus = resolve; }));
-        service.nodes.mockImplementation(() => new Promise(resolve => { resolveNodes = resolve; }));
-
-        render(<ComputeClusterPopup language={Language.CHINESE}/>);
-        expect(screen.getByText('正在读取节点… 0%')).toBeInTheDocument();
-
-        await act(async () => resolveStatus({
-            state: 'ready',
-            version: '9.9.9',
-            protocol_version: 1,
-            admin_configured: true,
-            nodes: {total: 0, online: 0, gpu_total: 0, device_total: 0},
-        }));
-        expect(await screen.findByText('正在读取节点… 25%')).toBeInTheDocument();
-
-        await act(async () => resolveNodes([]));
-        await waitFor(() => expect(screen.queryByText(/正在读取节点/)).not.toBeInTheDocument());
-    });
-
     it('shows node, aggregate resources, and the phase-six boundary', async () => {
         const user = userEvent.setup();
-        const {container} = render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
 
         expect(await screen.findByRole('navigation', {name: '计算群工作区'})).toBeInTheDocument();
         expect(screen.getByRole('button', {name: '节点与传感器 0'})).toHaveAttribute('aria-current', 'page');
         await user.click(await screen.findByRole('button', {name: '节点管理 1'}));
-        const nodeCard = screen.getByRole('button', {name: '查看 edge-01 节点详情'});
-        expect(nodeCard.querySelector('.ComputeNodeOverview > .ComputeNodeStatus')).toHaveTextContent('正常');
-        expect(Array.from(nodeCard.querySelectorAll('.ComputeNodeCompactStats > span')).map(item => item.textContent))
-            .toEqual(['CPU 16', 'MEM 25%', 'DISK 32%', 'v0.1.0']);
-        expect(nodeCard.querySelector('.ComputeNodeHeartbeat')).not.toBeInTheDocument();
-        expect(nodeCard.querySelector('.ComputeNodeCompactStats > .ComputeNodeVersion')).toHaveTextContent('v0.1.0');
-
-        await user.click(nodeCard);
-        const nodeDetail = screen.getByRole('region', {name: 'edge-01 节点详情'});
-        expect(screen.getByRole('button', {name: '返回节点管理'})).toBeInTheDocument();
+        expect(screen.getByText('edge-01')).toBeInTheDocument();
         expect(screen.getByText('NVIDIA RTX 4090')).toBeInTheDocument();
         expect(screen.getByText('IP CAMERA')).toBeInTheDocument();
         expect(screen.getByText('DS-2CD2686FWDA2-IZS')).toBeInTheDocument();
         expect(screen.getByText('2 个通道')).toBeInTheDocument();
-        expect(nodeDetail.querySelector('.ComputeNodeStatus')).toHaveTextContent('正常');
-        expect(nodeDetail.querySelector('.ComputeNodeDeviceHeading')).toHaveTextContent('设备源：正常');
-        const relatedDevices = nodeDetail.querySelector('.ComputeNodeDeviceSection') as HTMLDetailsElement;
+        const nodeCard = screen.getByText('edge-01').closest('.ComputeNodeCard') as HTMLElement;
+        expect(nodeCard).not.toHaveAttribute('open');
+        await user.click(within(nodeCard).getByText('edge-01'));
+        expect(nodeCard).toHaveAttribute('open');
+        expect(nodeCard.querySelector('.ComputeNodeStatus')).toHaveTextContent('正常');
+        expect(nodeCard.querySelector('.ComputeNodeDeviceHeading')).toHaveTextContent('设备源：正常');
+        const relatedDevices = nodeCard.querySelector('.ComputeNodeDeviceSection') as HTMLDetailsElement;
         expect(relatedDevices).not.toHaveAttribute('open');
-        expect(nodeDetail.querySelector('.ComputeNodeDeviceList')).not.toBeVisible();
-        await user.click(within(nodeDetail).getByText('相关设备'));
+        expect(nodeCard.querySelector('.ComputeNodeDeviceList')).not.toBeVisible();
+        await user.click(within(nodeCard).getByText('相关设备'));
         expect(relatedDevices).toHaveAttribute('open');
-        expect(nodeDetail.querySelector('.ComputeNodeDeviceList')).toBeVisible();
-        expect(nodeDetail.querySelector('.ComputeDeviceStatus')).toHaveTextContent('故障');
+        expect(nodeCard.querySelector('.ComputeNodeDeviceList')).toBeVisible();
+        expect(nodeCard.querySelector('.ComputeDeviceStatus')).toHaveTextContent('故障');
         expect(screen.getByText('SSH: 正常')).toBeInTheDocument();
         expect(screen.getByText('Tailscale: 正常')).toBeInTheDocument();
+        expect(Array.from(nodeCard.querySelectorAll('.ComputeNodeCompactStats > span')).map(item => item.textContent))
+            .toEqual(['CPU 16', 'MEM 25%', 'GPU 1', 'DISK 32%', 'DEVICE 1']);
+        expect(nodeCard.querySelector('.ComputeNodeHeartbeat span')).toHaveTextContent('HEARTBEAT');
+        expect(nodeCard.querySelector('.ComputeNodeHeartbeat strong')).toHaveTextContent('刚刚');
+        expect(nodeCard.querySelector('.ComputeNodeVersion')).toHaveTextContent('SERVICE v0.1.0');
         expect(screen.queryByRole('button', {name: '节点升级 1'})).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', {name: '管理 edge-01 节点升级'})).not.toBeInTheDocument();
-        await user.click(screen.getByRole('button', {name: '返回节点管理'}));
-        expect(container.querySelector('.ComputeNodeDetail')).not.toBeInTheDocument();
-        expect(screen.getByRole('button', {name: '查看 edge-01 节点详情'})).toBeInTheDocument();
-        expect(screen.queryByRole('heading', {name: '一键升级节点'})).not.toBeInTheDocument();
-        expect(screen.getByRole('button', {name: '管理'})).toBeInTheDocument();
-        expect(screen.queryByRole('checkbox', {name: '选择 edge-01'})).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toBeDisabled();
+        await user.click(screen.getByRole('button', {name: '批量升级'}));
+        expect(await screen.findByRole('heading', {name: '一键升级节点'})).toBeInTheDocument();
         expect(screen.getByText('统一查看资源关系、工作调度、网络资产、节点状态与终端连接。')).toBeInTheDocument();
+        expect(nodeCard.querySelector('.ComputeNodeResourceGrid')).toHaveTextContent('16');
         const summary = Array.from(document.querySelectorAll('.ComputeClusterSummary > div'));
         expect(summary.map(item => item.querySelector('span')?.textContent))
-            .toEqual(['地域', '设备总数(包含摄像头等)', '正常节点', '故障节点', '异常节点']);
+            .toEqual(['地域', '节点总数', '计算节点', '正常节点', '故障节点', '异常节点']);
         expect(summary.map(item => item.querySelector('strong')?.textContent))
-            .toEqual(['0', '2', '1', '0', '0']);
-        expect(summary[2].querySelector('strong')).toHaveClass('online');
+            .toEqual(['0', '1', '1', '1', '0', '0']);
+        expect(summary[3].querySelector('strong')).toHaveClass('online');
         expect(screen.queryByRole('button', {name: '刷新'})).not.toBeInTheDocument();
         expect(screen.getByRole('status', {name: '正常 · v0.1.0'})).toBeInTheDocument();
         await waitFor(() => expect(service.status).toHaveBeenCalledTimes(1));
+    });
+
+    it('does not report an empty cluster when StrictMode cancels the initial read', async () => {
+        service.nodes.mockImplementationOnce(signal => new Promise((_, reject) => {
+            signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), {once: true});
+        }));
+        render(<React.StrictMode><ComputeClusterPopup language={Language.CHINESE} embedded initialWorkspace='network'/></React.StrictMode>);
+        await act(async () => undefined);
+        expect(screen.getByText('正在读取节点…')).toBeInTheDocument();
+        expect(screen.queryByText('尚未注册计算节点')).not.toBeInTheDocument();
     });
 
     it('embeds the network workspace without modal chrome', async () => {
@@ -336,16 +328,45 @@ describe('ComputeClusterPopup', () => {
         expect(screen.getByRole('heading', {name: '局域网扫描计划'})).toBeInTheDocument();
         expect(screen.queryByRole('navigation', {name: '计算群工作区'})).not.toBeInTheDocument();
         expect(container.querySelector('.ComputeClusterBackdrop.embedded')).toBeInTheDocument();
+        expect(service.tasks).not.toHaveBeenCalled();
         expect(screen.getByRole('combobox', {name: '计划节点'})).toHaveValue('node-12345678');
     });
 
-    it('groups compact nodes by work area and folds status filters into management', async () => {
+    it('keeps the network inventory visible when task and schedule reads fail', async () => {
+        const user = userEvent.setup();
+        const base = await service.status();
+        service.status.mockResolvedValue({
+            ...base,
+            task_control: {
+                enabled: true, allowed_task_types: ['network.lan_discovery'],
+                lan_discovery: true, lan_asset_inventory: true, lan_discovery_schedules: true,
+            },
+        });
+        service.tasks.mockRejectedValueOnce(new Error('task list unavailable'));
+        let rejectSchedules: (reason: Error) => void = () => undefined;
+        service.lanSchedules.mockReturnValueOnce(new Promise((_, reject) => {
+            rejectSchedules = reject;
+        }));
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+
+        await user.click(await screen.findByRole('button', {name: '网络资产 1'}));
+        expect(screen.getByText('camera.local')).toBeInTheDocument();
+        const schedules = screen.getByRole('heading', {name: '局域网扫描计划'}).closest('section');
+        const schedulesView = within(schedules as HTMLElement);
+        expect(schedulesView.getByRole('status')).toHaveTextContent('正在读取');
+        await act(async () => rejectSchedules(new ComputeClusterRequestError(403, 'Forbidden')));
+        expect(await schedulesView.findByRole('alert')).toHaveTextContent('当前账号没有读取权限');
+        expect(screen.queryByText('尚无定时计划。')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '创建计划'})).not.toBeInTheDocument();
+    });
+
+    it('sorts faults first and filters the compact node list', async () => {
         const user = userEvent.setup();
         const [baseNode] = await service.nodes();
         service.nodes.mockResolvedValue([
-            {...baseNode, node_id: 'shanghai-offline', name: 'shanghai-z', online: false, labels: {site_name: '作业区 B'}},
-            {...baseNode, node_id: 'shanghai-online', name: 'shanghai-a', online: true, labels: {site_name: '作业区 B'}},
-            {...baseNode, node_id: 'shandong-online', name: 'shandong-a', online: true, labels: {site_name: '作业区 A'}},
+            {...baseNode, node_id: 'shanghai-offline', name: 'shanghai-z', online: false},
+            {...baseNode, node_id: 'shanghai-online', name: 'shanghai-a', online: true},
+            {...baseNode, node_id: 'shandong-online', name: 'shandong-a', online: true},
         ]);
         const graph = await service.resourceGraph();
         service.resourceGraph.mockResolvedValue({
@@ -373,38 +394,18 @@ describe('ComputeClusterPopup', () => {
         const {container} = render(<ComputeClusterPopup language={Language.CHINESE}/>);
         await user.click(await screen.findByRole('button', {name: '节点管理 3'}));
 
-        const groups = Array.from(container.querySelectorAll<HTMLElement>('.ComputeNodeGroup'));
-        expect(groups.map(group => group.querySelector('header strong')?.textContent))
-            .toEqual(['作业区 A', '作业区 B']);
-        expect(groups.map(group => group.querySelector('.ComputeNodeGroupTitle span')?.textContent))
-            .toEqual(['1', '2']);
-        expect(Array.from(groups[1].querySelectorAll('.ComputeNodeCard h3')).map(element => element.textContent))
-            .toEqual(['shanghai-z', 'shanghai-a']);
-        expect(screen.getByRole('button', {name: '查看 shanghai-z 节点详情'})).toBeInTheDocument();
+        const nodeNames = Array.from(container.querySelectorAll('.ComputeNodeCard h3'))
+            .map(element => element.textContent);
+        expect(nodeNames).toEqual(['shanghai-z', 'shandong-a', 'shanghai-a']);
+        expect(container.querySelectorAll('.ComputeNodeCard[open]')).toHaveLength(0);
 
-        const collapseGroup = within(groups[1]).getByRole('button', {name: '折叠 作业区 B'});
-        expect(collapseGroup).toHaveAttribute('aria-expanded', 'true');
-        await user.click(collapseGroup);
-        expect(within(groups[1]).queryByRole('button', {name: '查看 shanghai-z 节点详情'})).not.toBeInTheDocument();
-        const expandGroup = within(groups[1]).getByRole('button', {name: '展开 作业区 B'});
-        expect(expandGroup).toHaveAttribute('aria-expanded', 'false');
-        await user.click(expandGroup);
-
-        expect(Array.from(container.querySelectorAll('.ComputeNodeCard h3')).map(element => element.textContent))
-            .toEqual(['shandong-a', 'shanghai-z', 'shanghai-a']);
-
-        const manage = screen.getByRole('button', {name: '管理'});
-        await user.click(manage);
-        expect(screen.getByRole('menu', {name: '节点筛选'})).toBeInTheDocument();
-        await user.click(screen.getByRole('menuitemradio', {name: '故障 1'}));
+        await user.click(screen.getByRole('button', {name: '故障 1'}));
         expect(Array.from(container.querySelectorAll('.ComputeNodeCard h3')).map(element => element.textContent))
             .toEqual(['shanghai-z']);
-        expect(manage.closest('details')).not.toHaveAttribute('open');
-
-        await user.click(manage);
-        await user.click(screen.getByRole('menuitemradio', {name: '正常 2'}));
+        await user.click(screen.getByRole('button', {name: '正常 2'}));
         expect(Array.from(container.querySelectorAll('.ComputeNodeCard h3')).map(element => element.textContent))
             .toEqual(['shandong-a', 'shanghai-a']);
+        expect(screen.getByRole('button', {name: '可升级 0'})).toBeInTheDocument();
     });
 
     it('maximizes and restores the compute cluster workspace', async () => {
@@ -582,13 +583,15 @@ describe('ComputeClusterPopup', () => {
         expect(screen.getByTestId('resource-graph-unavailable-marker')).toBeInTheDocument();
         const graphLegend = graphPanel?.querySelector('.ComputeKnowledgeLegend');
         expect(graphLegend).toHaveTextContent('地域');
-        expect(graphLegend).toHaveTextContent('主节点');
         expect(graphLegend).toHaveTextContent('计算节点');
+        expect(graphLegend).toHaveTextContent('边缘计算设备');
         expect(graphLegend).toHaveTextContent('摄像头');
+        expect(graphLegend).toHaveTextContent('计算群成员');
         expect(graphLegend).toHaveTextContent('数据包');
         expect(graphLegend).not.toHaveTextContent('实时任务流');
         expect(screen.queryByText('黄色 · 执行器（预留）')).not.toBeInTheDocument();
         expect(screen.getAllByTestId('resource-graph-region')).toHaveLength(2);
+        expect(screen.getAllByTestId('resource-graph-group-link')).toHaveLength(1);
         expect(screen.getByText('上海')).toBeInTheDocument();
         expect(screen.getByText('山东')).toBeInTheDocument();
         expect(screen.queryByText('绿色 · 在线')).not.toBeInTheDocument();
@@ -599,10 +602,10 @@ describe('ComputeClusterPopup', () => {
         expect(graphPanel?.querySelector('[data-entity-kind="work_agent"]')).not.toBeInTheDocument();
         const graphStats = graphPanel?.querySelector('.ComputeKnowledgeStats');
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > span') || []).map(item => item.textContent))
-            .toEqual(['设备总数', '计算节点', '摄像头']);
+            .toEqual(['设备总数', '计算节点', '边缘计算设备', '摄像头']);
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > strong') || []).map(item => item.textContent))
-            .toEqual(['2', '1', '1']);
-        expect(document.querySelector('.ComputeClusterSummary > div:nth-child(2) strong')).toHaveTextContent('4');
+            .toEqual(['4', '2', '1', '1']);
+        expect(screen.getByText('节点总数').closest('div')?.querySelector('strong')).toHaveTextContent('3');
         const offlineNode = screen.getByRole('button', {name: '查看 edge-offline 节点信息'});
         expect(offlineNode).toHaveClass('node-offline');
         expect(offlineNode).toHaveAttribute('data-entity-kind', 'compute_node');
@@ -619,6 +622,14 @@ describe('ComputeClusterPopup', () => {
         expect(camera).toHaveClass('sensor');
         expect(within(camera).getByText('S-001')).toBeInTheDocument();
         const onlineNode = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
+        const groupLink = screen.getByTestId('resource-graph-group-link-hit');
+        expect(groupLink).toHaveAttribute('aria-label', '同群成员 edge-offline ↔ edge-01');
+        await user.hover(groupLink);
+        expect(screen.getByText('计算群成员关系').closest('[role="status"]'))
+            .toHaveTextContent('计算群成员关系edge-offline↔edge-01');
+        expect(onlineNode).toHaveClass('relation-focused');
+        expect(offlineNode).toHaveClass('relation-focused');
+        await user.unhover(groupLink);
 
         const taskFlow = screen.getByLabelText('任务流 edge-01 → edge-offline');
         expect(screen.getAllByTestId('resource-graph-task-flow')).toHaveLength(2);
@@ -659,7 +670,7 @@ describe('ComputeClusterPopup', () => {
         await user.hover(onlineNode);
         const operationsCard = screen.getByRole('status', {name: 'edge-01 运维信息'});
         expect(operationsCard).toHaveClass('anchored');
-        expect(operationsCard).toHaveClass('role-main');
+        expect(operationsCard).toHaveClass('tone-online');
         expect(within(operationsCard).getByText('SSH 通路')).toBeInTheDocument();
         expect(within(operationsCard).getByText('公网出口')).toBeInTheDocument();
         expect(within(operationsCard).getByText('Tailscale 私有组网')).toBeInTheDocument();
@@ -681,7 +692,7 @@ describe('ComputeClusterPopup', () => {
         await user.unhover(onlineNode);
         expect(screen.getByRole('status', {name: 'edge-01 运维信息'})).toBeInTheDocument();
 
-        await user.click(screen.getByRole('figure', {name: '主节点、计算节点与摄像头关系图'}));
+        await user.click(screen.getByRole('figure', {name: '计算节点、边缘设备与摄像头关系图'}));
         expect(onlineNode).toHaveAttribute('aria-pressed', 'false');
         expect(screen.queryByRole('status', {name: 'edge-01 运维信息'})).not.toBeInTheDocument();
 
@@ -694,15 +705,13 @@ describe('ComputeClusterPopup', () => {
 
         await user.hover(offlineNode);
         const offlineCard = screen.getByRole('status', {name: 'edge-offline 运维信息'});
+        expect(offlineCard).toHaveClass('tone-offline');
         expect(within(offlineCard).getByText('异常 · 最后心跳 20 小时前')).toHaveClass('offline');
+        expect(within(offlineCard).getAllByText('异常')).toHaveLength(2);
 
         await user.unhover(offlineNode);
-        await user.hover(edgeDevice);
-        expect(screen.getByRole('status', {name: 'AIPACK-01 运维信息'})).toHaveClass('edge-device');
-        await user.unhover(edgeDevice);
         await user.hover(camera);
         const sensorCard = screen.getByRole('status', {name: 'IP CAMERA 运维信息'});
-        expect(sensorCard).toHaveClass('sensor');
         expect(within(sensorCard).getByText('摄像头传感器 S-001 · 正常')).toBeInTheDocument();
         expect(within(sensorCard).getByText('DS-2CD2686FWDA2-IZS')).toBeInTheDocument();
         expect(within(sensorCard).getByText('2 个通道')).toBeInTheDocument();
@@ -710,45 +719,32 @@ describe('ComputeClusterPopup', () => {
         await waitFor(() => expect(service.resourceGraph).toHaveBeenCalledTimes(1));
     });
 
-    it('shows the graph program runner only for mounted programs alongside the other node tools', async () => {
+    it('opens the three classic node tools from a pinned graph card', async () => {
         const user = userEvent.setup();
         const graph = await service.resourceGraph();
         const nodes = await service.nodes();
         const onOpenNodeTool = jest.fn();
-        const {rerender} = render(<ResourceKnowledgeGraph
+        const rendered = render(<ResourceKnowledgeGraph
             graph={graph}
             nodes={nodes}
             zh={true}
             onSelectWorkAgent={jest.fn()}
             onOpenNodeTool={onOpenNodeTool}
-            programStatus={() => null}
+            programStatus={() => ({tone: 'warning', label: '程序运行异常'})}
         />);
 
-        const graphNode = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
-        expect(graphNode.querySelector('i')).not.toHaveClass('has-program');
-        await user.dblClick(graphNode);
+        const nodeButton = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
+        await user.dblClick(nodeButton);
         const card = screen.getByRole('status', {name: 'edge-01 运维信息'});
-        expect(within(card).queryByRole('button', {name: /程序运行器/})).not.toBeInTheDocument();
+        expect(card).toHaveClass('pinned');
+
         await user.click(within(card).getByRole('button', {name: /SSH \/ Tailscale/}));
         await user.click(within(card).getByRole('button', {name: /资源监视器/}));
-        rerender(<ResourceKnowledgeGraph
-            graph={graph}
-            nodes={nodes}
-            zh={true}
-            onSelectWorkAgent={jest.fn()}
-            onOpenNodeTool={onOpenNodeTool}
-            programStatus={() => ({tone: 'offline', label: '程序已停止或不可用'})}
-        />);
-        expect(within(card).getByRole('button', {name: /程序运行器/}))
-            .toHaveTextContent('程序已停止或不可用');
-        expect(graphNode.querySelector('i')).toHaveClass('has-program');
-        expect(graphNode.querySelector('i')).toHaveAttribute('title', '已挂载程序');
-        expect(graphNode).toHaveAttribute('aria-description', '已挂载程序');
-        expect(screen.getByRole('button', {name: '查看 IP CAMERA 设备信息'}).querySelector('i'))
-            .not.toHaveClass('has-program');
         await user.click(within(card).getByRole('button', {name: /程序运行器/}));
+
         expect(onOpenNodeTool.mock.calls.map(([, tool]) => tool))
             .toEqual(['terminal', 'monitor', 'runner']);
+        expect(within(card).getByRole('button', {name: /程序运行器/})).toHaveTextContent('程序运行异常');
 
         const sent = jest.fn();
         window.addEventListener(AGENT_CHAT_SEND_EVENT, sent);
@@ -757,18 +753,19 @@ describe('ComputeClusterPopup', () => {
             .toBe('@edge-01 执行 等待诊断（system.wait） 服务，并将执行结果按表格输出');
         window.removeEventListener(AGENT_CHAT_SEND_EVENT, sent);
 
-        rerender(<ResourceKnowledgeGraph
+        rendered.rerender(<ResourceKnowledgeGraph
             graph={graph}
-            nodes={nodes}
+            nodes={nodes.map(node => ({...node, communication_state: 'fault'}))}
             zh={true}
             onSelectWorkAgent={jest.fn()}
-            programStatus={() => null}
+            onOpenNodeTool={onOpenNodeTool}
         />);
-        expect(graphNode.querySelector('i')).not.toHaveClass('has-program');
-        expect(graphNode).not.toHaveAttribute('aria-description');
+        expect(screen.getByRole('status', {name: 'edge-01 运维信息'})).toHaveClass('tone-warning');
+        expect(within(card).queryByRole('button', {name: /程序运行器/})).not.toBeInTheDocument();
+        expect(within(card).getByRole('button', {name: /资源监视器/})).toBeInTheDocument();
     });
 
-    it('centers a direct camera owner and keeps peer main nodes outside the ring', async () => {
+    it('puts a direct camera owner at the top without changing the clockwise node order', async () => {
         const base = await service.resourceGraph();
         const main = base.entities.find(entity => entity.kind === 'compute_node');
         const region = base.entities.find(entity => entity.kind === 'compute_region');
@@ -807,180 +804,10 @@ describe('ComputeClusterPopup', () => {
 
         const camera = screen.getByRole('button', {name: '查看 IP CAMERA 设备信息'});
         const owner = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
-        const peer = screen.getByRole('button', {name: '查看 before-1 节点信息'});
-        expect(Number.parseFloat(owner.style.left)).toBeCloseTo(55, 0);
-        expect(owner).toHaveStyle({top: '52%'});
-        expect(camera).toHaveStyle({top: '12%'});
+        const clockwiseNext = screen.getByRole('button', {name: '查看 before-1 节点信息'});
+        expect(camera).toHaveStyle({top: '24%'});
         expect(owner.style.left).toBe(camera.style.left);
-        expect(Number.parseFloat(peer.style.left)).toBeLessThan(Number.parseFloat(owner.style.left));
-    });
-
-    it('keeps fixed-size cards inside their regional frame when the graph fits its window', async () => {
-        const rect = jest.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-            const scene = this.classList.contains('ComputeGraphScene');
-            const region = this.classList.contains('ComputeGraphRegion');
-            const width = scene ? 800 : region ? 776 : 0;
-            const height = scene ? 440 : region ? 416 : 0;
-            const left = region ? 12 : 0;
-            const top = region ? 12 : 0;
-            return {
-                x: left, y: top, top, right: left + width, bottom: top + height, left, width, height,
-                toJSON: () => ({}),
-            } as DOMRect;
-        });
-        const base = await service.resourceGraph();
-        const main = base.entities.find(entity => entity.kind === 'compute_node');
-        const region = base.entities.find(entity => entity.kind === 'compute_region');
-        if (!main || !region) throw new Error('regional bounds fixture needs one main node and one region');
-        const peers = ['peer-1', 'peer-2', 'peer-3'].map(nodeId => ({
-            ...main,
-            entity_id: `node:${nodeId}`,
-            node_id: nodeId,
-            label: nodeId,
-        }));
-
-        try {
-            render(<ResourceKnowledgeGraph
-                graph={{
-                    ...base,
-                    entities: [region, ...peers, ...base.entities.filter(entity => entity !== region)],
-                    relations: [
-                        ...base.relations,
-                        ...peers.map(node => ({
-                            relation_id: `contains:${node.node_id}`,
-                            kind: 'contains' as const,
-                            source_id: region.entity_id,
-                            target_id: node.entity_id,
-                            active: true,
-                            reason: 'available' as const,
-                        })),
-                    ],
-                }}
-                nodes={await service.nodes()}
-                zh={true}
-                fitWindow
-                onSelectWorkAgent={jest.fn()}
-            />);
-
-            const peer = screen.getByRole('button', {name: '查看 peer-1 节点信息'});
-            await waitFor(() => expect(Number.parseFloat(peer.style.left)).toBeGreaterThan(10));
-            screen.getAllByTestId('resource-graph-node').forEach(card => {
-                const mainCard = card.dataset.entityRole === 'main';
-                const x = Number.parseFloat(card.style.left) * 8;
-                const y = Number.parseFloat(card.style.top) * 4.4;
-                const halfWidth = mainCard ? 46 : 68;
-                const topExtent = mainCard ? 46 : 40;
-                const bottomExtent = mainCard ? 46 : 31;
-                expect(x - halfWidth).toBeGreaterThanOrEqual(12);
-                expect(x + halfWidth).toBeLessThanOrEqual(788);
-                expect(y - topExtent).toBeGreaterThanOrEqual(12);
-                expect(y + bottomExtent).toBeLessThanOrEqual(428);
-            });
-        } finally {
-            rect.mockRestore();
-        }
-    });
-
-    it('hides region and packet legend entries in the restricted commercial build', async () => {
-        render(<ResourceKnowledgeGraph
-            graph={await service.resourceGraph()}
-            nodes={await service.nodes()}
-            zh={true}
-            commercialRestricted
-            onSelectWorkAgent={jest.fn()}
-        />);
-
-        const legend = document.querySelector('.ComputeKnowledgeLegend');
-        expect(legend).not.toHaveTextContent('地域');
-        expect(legend).not.toHaveTextContent('数据包');
-        expect(legend).toHaveTextContent('主节点');
-        expect(legend).toHaveTextContent('计算节点');
-        expect(legend).toHaveTextContent('摄像头');
-    });
-
-    it('renders registered AIPACK nodes once and preserves their authoritative ownership chain', async () => {
-        const base = await service.resourceGraph();
-        const main = base.entities.find(entity => entity.kind === 'compute_node');
-        const region = base.entities.find(entity => entity.kind === 'compute_region');
-        const edge = {
-            entity_id: 'managed-device:node-12345678:aipack-01',
-            kind: 'managed_device' as const,
-            label: 'AIPACK-01',
-            state: 'available' as const,
-            callable: false,
-            node_id: main?.node_id,
-            modes: [],
-            provider: 'jetson-connect',
-            device_kind: 'edge_compute',
-            device_status: 'registered',
-            channels: 0,
-            device_model: 'NVIDIA Jetson Orin',
-            device_capabilities: ['terminal.ssh.v1'],
-        };
-        const aipack = {
-            ...main,
-            entity_id: 'node:aipack-01',
-            node_id: 'aipack-01',
-            label: 'AIPACK-01',
-        };
-        if (!main || !region) throw new Error('role projection fixture needs one main node and one region');
-        const baseNodes = await service.nodes();
-
-        render(<ResourceKnowledgeGraph
-            graph={{
-                ...base,
-                entities: [...base.entities, aipack, edge],
-                relations: [
-                    ...base.relations.filter(relation => relation.relation_id !== 'manages:camera-1'),
-                    {
-                        relation_id: 'contains:aipack-01',
-                        kind: 'contains',
-                        source_id: region.entity_id,
-                        target_id: aipack.entity_id,
-                        active: true,
-                        reason: 'available',
-                    },
-                    {
-                        relation_id: 'manages:aipack-01',
-                        kind: 'manages',
-                        source_id: main.entity_id,
-                        target_id: edge.entity_id,
-                        active: true,
-                        reason: 'available',
-                    },
-                    {
-                        relation_id: 'manages:aipack-camera',
-                        kind: 'manages',
-                        source_id: edge.entity_id,
-                        target_id: 'managed-device:node-12345678:camera-1',
-                        active: true,
-                        reason: 'available',
-                    },
-                ],
-            }}
-            nodes={[...baseNodes, {
-                ...baseNodes[0],
-                node_id: 'aipack-01',
-                installation_id: 'install-aipack-01',
-                name: 'AIPACK-01',
-                role: 'node',
-            }]}
-            zh={true}
-            onSelectWorkAgent={jest.fn()}
-        />);
-
-        const mainCard = screen.getByRole('button', {name: '查看 edge-01 节点信息'});
-        expect(mainCard).toHaveAttribute('data-entity-role', 'main');
-        expect(mainCard).toHaveAttribute('data-entity-shape', 'circle');
-        const aipackCard = screen.getByRole('button', {name: '查看 AIPACK-01 节点信息'});
-        expect(aipackCard).toHaveAttribute('data-entity-role', 'node');
-        expect(aipackCard).toHaveAttribute('data-entity-shape', 'rounded-rectangle');
-        expect(aipackCard).toHaveClass('role-node');
-        expect(within(aipackCard).getByText('计算节点')).toBeInTheDocument();
-        expect(screen.queryByRole('button', {name: '查看 AIPACK-01 设备信息'})).not.toBeInTheDocument();
-        expect(screen.getByLabelText('连接 edge-01 ↔ AIPACK-01')).toBeInTheDocument();
-        expect(screen.getByLabelText('连接 AIPACK-01 ↔ IP CAMERA')).toBeInTheDocument();
-        expect(screen.getAllByTestId('resource-graph-node')).toHaveLength(3);
+        expect(Number.parseFloat(clockwiseNext.style.left)).toBeGreaterThan(Number.parseFloat(owner.style.left));
     });
 
     it('expands a dense radial graph so fixed-size cards do not overlap', async () => {
@@ -1023,7 +850,7 @@ describe('ComputeClusterPopup', () => {
             onSelectWorkAgent={jest.fn()}
         />);
 
-        const scene = screen.getByRole('figure', {name: '主节点、计算节点与摄像头关系图'});
+        const scene = screen.getByRole('figure', {name: '计算节点、边缘设备与摄像头关系图'});
         const width = parseFloat(scene.style.minWidth);
         const height = parseFloat(scene.style.minHeight);
         expect(width).toBeGreaterThan(720);
@@ -1040,13 +867,6 @@ describe('ComputeClusterPopup', () => {
                 && Math.abs(card.y - other.y) < (card.height + other.height) / 2 + 10)
             .map(other => `${card.label}/${other.label}`));
         expect(overlaps).toEqual([]);
-        const center = {x: 55, y: 52};
-        const ring = edges.map(edge => screen.getByRole('button', {name: `查看 ${edge.label} 设备信息`}))
-            .map(card => ({x: parseFloat(card.style.left), y: parseFloat(card.style.top)}));
-        expect(Math.min(...ring.map(point => point.x))).toBeLessThan(center.x);
-        expect(Math.max(...ring.map(point => point.x))).toBeGreaterThan(center.x);
-        expect(Math.min(...ring.map(point => point.y))).toBeLessThan(center.y);
-        expect(Math.max(...ring.map(point => point.y))).toBeGreaterThan(center.y);
     });
 
     it('shows Chinese region names in Chinese and pinyin region IDs in English', async () => {
@@ -1074,9 +894,113 @@ describe('ComputeClusterPopup', () => {
         rerender(<ComputeClusterPopup language={Language.ENGLISH}/>);
 
         expect(Array.from(document.querySelectorAll('.ComputeClusterSummary span')).map(item => item.textContent))
-            .toEqual(['Regions', 'Total devices (incl. cameras)', 'Normal nodes', 'Fault nodes', 'Abnormal nodes']);
+            .toEqual(['Regions', 'Total nodes', 'Compute nodes', 'Normal nodes', 'Fault nodes', 'Abnormal nodes']);
         expect(await screen.findByText('shanghai')).toBeInTheDocument();
         expect(screen.queryByText('上海')).not.toBeInTheDocument();
+    });
+
+    it('reflows filtered rings and fixed-size cards when the viewport changes', async () => {
+        const base = await service.resourceGraph();
+        const node = (await service.nodes())[0];
+        const main = base.entities.find(entity => entity.kind === 'compute_node');
+        const region = base.entities.find(entity => entity.kind === 'compute_region');
+        const camera = base.entities.find(entity => entity.device_kind === 'camera');
+        const regions = ['上海', '山东'].map((name, index) => ({
+            ...region, entity_id: `region:${index}`, region_id: String(index), region_name: name, label: name,
+        }));
+        const mains = Array.from({length: 7}, (_, index) => ({
+            ...main, entity_id: `node:${index}`, node_id: String(index), label: `node-${index}`,
+            region_id: index < 5 ? '0' : '1',
+        }));
+        const devices = Array.from({length: 47}, (_, index) => ({
+            ...camera, entity_id: `device:${index}`, node_id: '6', label: `device-${index}`,
+            device_kind: index < 18 ? 'edge_compute' : 'camera',
+        }));
+        const graph = {
+            ...base,
+            entities: [...regions, ...mains, ...devices],
+            relations: [
+                ...mains.map(entity => ({
+                    relation_id: `contains:${entity.entity_id}`, kind: 'contains' as const,
+                    source_id: `region:${entity.region_id}`, target_id: entity.entity_id,
+                    active: true, reason: 'available' as const,
+                })),
+                ...devices.map(entity => ({
+                    relation_id: `manages:${entity.entity_id}`, kind: 'manages' as const,
+                    source_id: 'node:6', target_id: entity.entity_id,
+                    active: true, reason: 'available' as const,
+                })),
+            ],
+        };
+        const nodes = mains.map((entity, index) => ({
+            ...node, node_id: entity.node_id, online: index === 6,
+        }));
+        const previousObserver = window.ResizeObserver;
+        let resize: ResizeObserverCallback;
+        const disconnect = jest.fn();
+        window.ResizeObserver = jest.fn(callback => {
+            resize = callback;
+            return {observe: jest.fn(), unobserve: jest.fn(), disconnect};
+        });
+        const props = {graph, nodes, zh: true, fitWindow: true, onSelectWorkAgent: jest.fn()};
+        const rendered = render(<ResourceKnowledgeGraph {...props} deviceType='main'/>);
+        const checkLayout = (count: number, expectedWidth: number, expectedHeight: number) => {
+            const scene = screen.getByRole('figure', {name: '计算节点、边缘设备与摄像头关系图'});
+            expect(scene).toHaveAttribute('data-layout', 'radial');
+            const width = parseFloat(scene.style.minWidth);
+            const height = parseFloat(scene.style.minHeight);
+            expect(width).toBeCloseTo(expectedWidth);
+            expect(height).toBeCloseTo(expectedHeight);
+            const cards = screen.getAllByTestId('resource-graph-node').map(card => ({
+                x: parseFloat(card.style.left) * width / 100,
+                y: parseFloat(card.style.top) * height / 100,
+                width: card.dataset.entityKind === 'compute_node' ? 92 : 136,
+                height: card.dataset.entityKind === 'compute_node' ? 92 : 58,
+            }));
+            expect(cards).toHaveLength(count);
+            cards.forEach(card => {
+                expect(card.x - card.width / 2).toBeGreaterThanOrEqual(0);
+                expect(card.x + card.width / 2).toBeLessThanOrEqual(width);
+                expect(card.y - card.height / 2 - 10).toBeGreaterThanOrEqual(48);
+                expect(card.y + card.height / 2).toBeLessThanOrEqual(height);
+            });
+            return cards;
+        };
+        try {
+            act(() => resize([{contentRect: {width: 1000, height: 600}}] as ResizeObserverEntry[], null));
+            const ring = checkLayout(7, 1000, 600).slice(0, 5);
+            const centerX = ring.reduce((sum, card) => sum + card.x, 0) / ring.length;
+            const centerY = ring.reduce((sum, card) => sum + card.y, 0) / ring.length;
+            const radiusX = (ring[1].x - centerX) / Math.sin(Math.PI * 2 / ring.length);
+            const radiusY = centerY - ring[0].y;
+            ring.forEach(card => expect(((card.x - centerX) / radiusX) ** 2
+                + ((card.y - centerY) / radiusY) ** 2).toBeCloseTo(1));
+            const mainRegions = screen.getAllByTestId('resource-graph-region');
+            expect(parseFloat(mainRegions[0].style.flexGrow)).toBeGreaterThan(parseFloat(mainRegions[1].style.flexGrow));
+            expect(within(mainRegions[1]).getByText('1/2 正常节点')).toBeInTheDocument();
+            const stats = document.querySelector('.graph-summary');
+            expect([...stats.querySelectorAll('strong')].map(item => item.textContent)).toEqual(['7', '7', '0', '0']);
+
+            rendered.rerender(<ResourceKnowledgeGraph {...props} deviceType='edge'/>);
+            checkLayout(18, 1000, 600);
+            expect(screen.getAllByTestId('resource-graph-region')).toHaveLength(1);
+            expect(screen.getByTestId('resource-graph-region')).toHaveTextContent('山东');
+            expect(screen.getByTestId('resource-graph-region')).toHaveTextContent('1/2 正常节点');
+            rendered.rerender(<ResourceKnowledgeGraph {...props} deviceType='sensor'/>);
+            checkLayout(29, 1000, 600);
+
+            act(() => resize([{contentRect: {width: 360, height: 400}}] as ResizeObserverEntry[], null));
+            checkLayout(29, 360, 400);
+            rendered.rerender(<ResourceKnowledgeGraph {...props} deviceType='main'/>);
+            checkLayout(7, 360, 400);
+            rendered.rerender(<ResourceKnowledgeGraph {...props} graph={{...graph, entities: [...regions, ...mains]}} deviceType='edge'/>);
+            expect(screen.queryByTestId('resource-graph-node')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('resource-graph-region')).not.toBeInTheDocument();
+        } finally {
+            rendered.unmount();
+            expect(disconnect).toHaveBeenCalled();
+            window.ResizeObserver = previousObserver;
+        }
     });
 
     it('shows task dispatch, durable progress, and controls when enabled', async () => {
@@ -1361,15 +1285,15 @@ describe('ComputeClusterPopup', () => {
         expect(await screen.findByText('节点终端连接')).toBeInTheDocument();
         expect(screen.getByText('选择节点并连接；故障节点仍有可用 SSH 路径时也可连接。')).toBeInTheDocument();
         expect(screen.getByText(/连接目标与认证材料由 Mac Client 保管/)).toBeInTheDocument();
-        expect(screen.getByRole('option', {name: 'edge-01 · linux · 正常'})).toBeInTheDocument();
+        expect(screen.getByRole('option', {name: 'edge-01 · linux · 可连接'})).toBeInTheDocument();
         const targetSelect = screen.getByRole('combobox', {name: '目标节点'});
         expect(targetSelect).toHaveValue('');
         expect(service.terminal).not.toHaveBeenCalled();
         await user.selectOptions(targetSelect, 'node-12345678');
-        expect(await screen.findByText('正常', {selector: '.ComputeTerminalState strong'})).toBeInTheDocument();
+        expect(await screen.findByText('可连接', {selector: '.ComputeTerminalState strong'})).toBeInTheDocument();
         await user.click(screen.getByRole('button', {name: '连接终端'}));
         await waitFor(() => expect(service.startTerminal).toHaveBeenCalledWith('node-12345678'));
-        const connectionState = await screen.findByText('局域网 SSH · 正常');
+        const connectionState = await screen.findByText('局域网 SSH · 已连接');
         expect(connectionState.closest('.ComputeTerminalState')).toHaveClass('lan');
         const terminalOutput = screen.getByLabelText('终端输出');
         expect(terminalOutput.textContent).toContain('model-work-node-backups');
@@ -1386,35 +1310,6 @@ describe('ComputeClusterPopup', () => {
         await waitFor(() => expect(input).toHaveFocus());
         await user.click(terminalOutput);
         expect(input).toHaveFocus();
-    });
-
-    it('clears a transient terminal poll error after the connection recovers', async () => {
-        const user = userEvent.setup();
-        service.status.mockResolvedValue({
-            state: 'ready', version: '0.5.0', protocol_version: 1,
-            admin_configured: true,
-            task_control: {
-                enabled: true,
-                allowed_task_types: ['system.wait'],
-                terminal_sessions: true,
-                phase8_terminal: true,
-            },
-            nodes: {total: 1, online: 1, gpu_total: 1, device_total: 1},
-        });
-        const recovered = await service.startTerminal('node-12345678');
-        service.terminal
-            .mockRejectedValueOnce(new Error('node_admission_required'))
-            .mockResolvedValue(recovered);
-
-        render(<ComputeClusterPopup language={Language.CHINESE}/>);
-
-        await user.click(await screen.findByRole('button', {name: '终端连接 1'}));
-        await user.selectOptions(screen.getByRole('combobox', {name: '目标节点'}), 'node-12345678');
-        await user.click(screen.getByRole('button', {name: '连接终端'}));
-
-        expect(await screen.findByText('node_admission_required')).toBeInTheDocument();
-        await waitFor(() => expect(screen.queryByText('node_admission_required')).not.toBeInTheDocument());
-        expect(service.terminal).toHaveBeenCalledTimes(2);
     });
 
     it('marks offline SSH-reachable targets as faults without blocking recovery', async () => {
@@ -1448,11 +1343,11 @@ describe('ComputeClusterPopup', () => {
 
         await user.click(await screen.findByRole('button', {name: '终端连接 1'}));
         const targetSelect = screen.getByRole('combobox', {name: '目标节点'});
-        expect(screen.getByRole('option', {name: 'edge-offline · windows · 故障'})).not.toBeDisabled();
+        expect(screen.getByRole('option', {name: 'edge-offline · windows · 节点离线，SSH 可达'})).not.toBeDisabled();
         expect(targetSelect).toHaveValue('');
         expect(document.querySelector('.ComputeTerminalState')).not.toBeInTheDocument();
         await user.selectOptions(targetSelect, 'node-offline-87654321');
-        expect(await screen.findByText('故障', {selector: '.ComputeTerminalState strong'})).toBeInTheDocument();
+        expect(await screen.findByText('节点离线，SSH 可达', {selector: '.ComputeTerminalState strong'})).toBeInTheDocument();
         await user.click(screen.getByRole('button', {name: '连接终端'}));
         await waitFor(() => expect(service.startTerminal).toHaveBeenCalledWith('node-offline-87654321'));
     });
@@ -1479,9 +1374,110 @@ describe('ComputeClusterPopup', () => {
         await user.click(await screen.findByRole('button', {name: '终端连接 1'}));
         await user.selectOptions(screen.getByRole('combobox', {name: '目标节点'}), 'node-12345678');
         await user.click(screen.getByRole('button', {name: '连接终端'}));
-        const connectionState = await screen.findByText('Tailscale · 正常');
+        const connectionState = await screen.findByText('Tailscale · 已连接');
         expect(connectionState.closest('.ComputeTerminalState')).toHaveClass('remote');
         expect(connectionState.closest('.ComputeTerminalState')).not.toHaveClass('lan');
+    });
+
+    it('keeps the requested node and failed route visible across target refreshes', async () => {
+        jest.useFakeTimers();
+        try {
+            const targets = await service.terminalTargets();
+            const other = {...targets.targets[0], node_id: 'other-node', node_name: 'Other'};
+            service.terminalTargets
+                .mockRejectedValueOnce(new ComputeClusterRequestError(403, 'Forbidden'))
+                .mockResolvedValueOnce({...targets, targets: [other]});
+            service.startTerminal.mockRejectedValueOnce(new Error('LAN SSH is unavailable for this node'));
+
+            render(<ComputeTerminalPanel zh preferredNodeId='node-12345678' preferredTransport='lan' autoConnect/>);
+
+            expect(await screen.findByText('当前账号无权查看终端目标。')).toBeInTheDocument();
+            const target = screen.getByRole('combobox', {name: '目标节点'});
+            expect(target).toHaveValue('node-12345678');
+            expect(target).toBeDisabled();
+
+            await act(async () => { jest.advanceTimersByTime(5000); });
+            expect(target).toHaveValue('node-12345678');
+            expect(screen.getByRole('button', {name: '连接终端'})).toBeDisabled();
+            expect(service.startTerminal).not.toHaveBeenCalled();
+
+            await act(async () => { jest.advanceTimersByTime(5000); });
+            expect(service.startTerminal).toHaveBeenCalledWith('node-12345678', 'lan');
+            expect(screen.getByText('局域网 SSH · 连接失败')).toBeInTheDocument();
+            expect(screen.getByText('LAN SSH is unavailable for this node')).toBeInTheDocument();
+
+            await act(async () => { jest.advanceTimersByTime(5000); });
+            expect(screen.getByText('LAN SSH is unavailable for this node')).toBeInTheDocument();
+            expect(service.startTerminal).toHaveBeenCalledTimes(1);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it.each([
+        ['lan', 'tailcat', '局域网 SSH', 'Tailcat', true],
+        ['tailcat', 'lan', 'Tailcat', '局域网 SSH', true],
+        ['tailscale', 'lan', 'Tailscale', 'LAN SSH', false],
+    ] as const)('requires explicit viewing of a conflicting session from %s', async (requested, existing, requestedLabel, existingLabel, zh) => {
+        const user = userEvent.setup();
+        const targets = await service.terminalTargets();
+        const session = await service.terminal('terminal-session-1');
+        const existingSession = {...session, transport: existing, output: 'existing session output'};
+        service.terminal.mockResolvedValue(existingSession).mockClear();
+        service.terminalTargets.mockResolvedValue({
+            ...targets, targets: [{...targets.targets[0], tailcat_available: true, active_session_id: session.session_id}],
+        });
+        render(<ComputeTerminalPanel zh={zh} preferredNodeId='node-12345678' preferredTransport={requested} initialCommand='whoami' autoConnect/>);
+
+        const view = await screen.findByRole('button', {name: zh ? `查看现有 ${existingLabel} 会话` : `View existing ${existingLabel} session`});
+        expect(screen.getByText(`${requestedLabel} · ${zh ? '已有其他路线会话' : 'Session on another route'}`)).toBeInTheDocument();
+        expect(screen.getByLabelText(zh ? '终端输出' : 'Terminal output')).not.toHaveTextContent('existing session output');
+        expect(screen.getByRole('button', {name: zh ? '连接终端' : 'Connect'})).toBeDisabled();
+        expect(service.startTerminal).not.toHaveBeenCalled();
+        expect(service.terminalControl).not.toHaveBeenCalled();
+        await user.click(view);
+        await waitFor(() => expect(service.terminal.mock.calls.length).toBeGreaterThanOrEqual(3));
+        expect(screen.getByText(`${existingLabel} · ${zh ? '已连接' : 'Connected'}`)).toBeInTheDocument();
+        expect(screen.getByLabelText(zh ? '终端输出' : 'Terminal output')).toHaveTextContent('existing session output');
+        expect(screen.getByRole('textbox', {name: zh ? '终端指令' : 'Terminal command'})).toBeEnabled();
+        expect(service.terminalInput).not.toHaveBeenCalled();
+
+        service.terminalControl.mockResolvedValue({...existingSession, state: 'closed'});
+        service.startTerminal.mockResolvedValue({...session, session_id: 'new-session', transport: requested});
+        service.terminal.mockResolvedValue({...session, session_id: 'new-session', transport: requested});
+        await user.click(screen.getByRole('button', {name: zh ? '断开' : 'Disconnect'}));
+        expect(service.terminalControl).toHaveBeenCalledWith(session.session_id, 'close');
+        await user.click(screen.getByRole('button', {name: zh ? '连接终端' : 'Connect'}));
+        expect(service.startTerminal).toHaveBeenCalledWith('node-12345678', requested);
+        expect(await screen.findByText(`${requestedLabel} · ${zh ? '已连接' : 'Connected'}`)).toBeInTheDocument();
+    });
+
+    it('does not offer to view a conflicting session from another node', async () => {
+        const targets = await service.terminalTargets();
+        const session = await service.terminal('terminal-session-1');
+        service.terminalTargets.mockResolvedValue({
+            ...targets, targets: [{...targets.targets[0], active_session_id: session.session_id}],
+        });
+        service.terminal.mockResolvedValue({...session, node_id: 'other-node', transport: 'tailcat', output: 'private output'});
+        render(<ComputeTerminalPanel zh preferredNodeId='node-12345678' preferredTransport='lan' autoConnect/>);
+
+        expect(await screen.findByText('返回的会话与所选节点不一致。')).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: /查看现有/})).not.toBeInTheDocument();
+        expect(screen.getByLabelText('终端输出')).not.toHaveTextContent('private output');
+        expect(service.startTerminal).not.toHaveBeenCalled();
+        expect(service.terminalControl).not.toHaveBeenCalled();
+    });
+
+    it('blocks terminal input when session reading is denied, independently of the target list', async () => {
+        service.terminal.mockRejectedValue(new ComputeClusterRequestError(403, 'Forbidden'));
+        render(<ComputeTerminalPanel zh preferredNodeId='node-12345678'/>);
+        const connect = screen.getByRole('button', {name: '连接终端'});
+        await waitFor(() => expect(connect).toBeEnabled());
+        fireEvent.click(connect);
+        expect(await screen.findByText(/当前账号无权访问此终端会话/)).toBeInTheDocument();
+        expect(screen.getByRole('textbox', {name: '终端指令'})).toBeDisabled();
+        expect(screen.getByLabelText('终端输出')).not.toHaveTextContent('model-work-node-backups');
+        expect(screen.queryByText('当前账号无权查看终端目标。')).not.toBeInTheDocument();
     });
 
     it('shows enrollment guidance when the cluster is empty', async () => {
@@ -1496,4 +1492,205 @@ describe('ComputeClusterPopup', () => {
         expect(screen.getByText('model-work-node cluster join --control-url <OpenSight Platform URL> --enrollment-token-file <secret file>')).toBeInTheDocument();
     });
 
+    it('shows the durable OTA phase history and the legacy controller fallback', async () => {
+        const user = userEvent.setup();
+        const manifest = {
+            version: 1 as const,
+            purpose: 'model-work-node.ota-release.v1' as const,
+            release_version: '1.0.7', minimum_node_version: '1.0.4', source_revision: 'b'.repeat(40),
+            platform: 'windows' as const, architecture: 'x86_64' as const,
+            artifact_url: 'https://releases.example/model-work-node-1.0.7-windows-x86_64.zip',
+            sha256: 'c'.repeat(64), size_bytes: 4096, signature: `${'A'.repeat(86)}==`,
+        };
+        localStorage.setItem('opensight.compute-upgrade-batch.v1', 'batch-log');
+        const loggedBatch: ComputeUpgradeBatch = {
+            batch_id: 'batch-log', release_version: '1.0.7', state: 'failed', current_index: 1,
+            created_at: 1000, updated_at: 1006, delivery_started_at: 1005,
+            error_code: 'upgrade_delivery_unconfirmed', drain_timeout_seconds: 300,
+            ttl_seconds: 14400, expires_at: 20000,
+            user: {user_id: 'user-1', user_name: 'law', user_public_key: 'A'.repeat(43) + '='},
+            nodes: [{
+                node_id: 'node-complete', job_id: 'job-complete', manifest,
+                authorization_id: 'authorization-complete', authorization: null,
+                state: 'succeeded', error_code: null,
+                result: {
+                    job_id: 'job-complete', state: 'succeeded', created_at: 1002, updated_at: 1004,
+                    drain_deadline: 1302, error_code: null, health_task_id: null,
+                    release_version: '1.0.7', events: [
+                        {event_id: 1, state: 'queued', created_at: 1002, error_code: null},
+                        {event_id: 2, state: 'downloading', created_at: 1003, error_code: null},
+                        {event_id: 3, state: 'succeeded', created_at: 1004, error_code: null},
+                    ],
+                },
+            }, {
+                node_id: 'node-12345678', job_id: 'job-legacy', manifest,
+                authorization_id: 'authorization-legacy', authorization: null,
+                state: 'failed', error_code: 'upgrade_delivery_unconfirmed', result: null,
+            }],
+        };
+        service.upgradeBatch.mockResolvedValue(loggedBatch);
+
+        const view = render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await openNodeUpgrade(user);
+        const summaries = await screen.findAllByText(/升级过程日志/);
+        const firstLog = summaries[0].closest('details') as HTMLElement;
+        const secondLog = summaries[1].closest('details') as HTMLElement;
+        expect(within(firstLog).getAllByRole('listitem').map(item => item.textContent)).toEqual([
+            expect.stringContaining('等待批次确认'),
+            expect.stringContaining('已排队'),
+            expect.stringContaining('下载中'),
+            expect.stringContaining('成功'),
+        ]);
+        expect(within(firstLog).getAllByRole('listitem')[1].querySelector('time')).toHaveAttribute(
+            'datetime', new Date(1002 * 1000).toISOString(),
+        );
+        expect(within(secondLog).getAllByRole('listitem').map(item => item.textContent)).toEqual([
+            expect.stringContaining('等待批次确认'),
+            expect.stringContaining('正在提交授权'),
+            expect.stringContaining('失败'),
+        ]);
+        expect(within(secondLog).getByText('upgrade_delivery_unconfirmed')).toBeInTheDocument();
+        expect(within(secondLog).getByText('未收到节点阶段记录；以上为主控已确认的过程。')).toBeInTheDocument();
+
+        view.unmount();
+        service.upgradeBatch.mockResolvedValue({
+            ...loggedBatch,
+            error_code: 'authorization_expired',
+            nodes: [loggedBatch.nodes[0], {
+                ...loggedBatch.nodes[1], error_code: 'authorization_expired',
+            }],
+        });
+        const staleView = render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await openNodeUpgrade(user);
+        const staleLog = (await screen.findAllByText(/升级过程日志/))[1].closest('details') as HTMLElement;
+        expect(within(staleLog).getByText('正在提交授权')).toBeInTheDocument();
+
+        staleView.unmount();
+        service.upgradeBatch.mockResolvedValue({
+            ...loggedBatch,
+            state: 'approval_submitting',
+            error_code: 'upgrade_delivery_uncertain',
+            nodes: [loggedBatch.nodes[0], {
+                ...loggedBatch.nodes[1], state: 'approval_submitting', error_code: 'upgrade_delivery_uncertain',
+            }],
+        });
+        const uncertainView = render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await openNodeUpgrade(user);
+        const uncertainLog = (await screen.findAllByText(/升级过程日志/))[1].closest('details') as HTMLElement;
+        expect(within(uncertainLog).getByText('等待节点确认')).toBeInTheDocument();
+        expect(within(uncertainLog).getByText(/尚未确认节点是否已收到升级任务/)).toBeInTheDocument();
+        expect(within(uncertainLog).getByText('upgrade_delivery_uncertain')).toBeInTheDocument();
+
+        uncertainView.unmount();
+        service.upgradeBatch.mockResolvedValue({
+            ...loggedBatch,
+            error_code: 'authorization_user_unknown',
+            nodes: [loggedBatch.nodes[0], {
+                ...loggedBatch.nodes[1], error_code: 'authorization_user_unknown',
+            }],
+        });
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await openNodeUpgrade(user);
+        const rejectedLog = (await screen.findAllByText(/升级过程日志/))[1].closest('details') as HTMLElement;
+        expect(within(rejectedLog).getByText(/审批身份未登记到目标节点/)).toBeInTheDocument();
+        expect(within(rejectedLog).getByText('authorization_user_unknown')).toBeInTheDocument();
+    });
+
+    it('shows an empty Main catalog and can retry a catalog failure', async () => {
+        const user = userEvent.setup();
+        service.upgradeReleases.mockRejectedValueOnce(new Error('Main unavailable'));
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await openNodeUpgrade(user);
+        expect(await screen.findByText('Main unavailable')).toHaveAttribute('role', 'alert');
+        expect(screen.getByRole('button', {name: '创建升级批次'})).toBeDisabled();
+        await user.click(screen.getByRole('button', {name: '刷新版本'}));
+        expect(await screen.findByText('当前控制端尚未发布可用安装包。请先发布目标版本，再刷新列表。')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '创建升级批次'})).toBeDisabled();
+    });
+
+    it('does not advertise a node already on the published target version', async () => {
+        const user = userEvent.setup();
+        const manifest = {
+            version: 1 as const,
+            purpose: 'model-work-node.ota-release.v1' as const,
+            release_version: '1.1.1', minimum_node_version: '1.0.0', source_revision: 'b'.repeat(40),
+            platform: 'windows' as const, architecture: 'x86_64' as const,
+            artifact_url: 'https://releases.example/model-work-node-1.1.1-windows-x86_64.zip',
+            sha256: 'c'.repeat(64), size_bytes: 4096, signature: `${'A'.repeat(86)}==`,
+        };
+        const nodes = await service.nodes();
+        service.nodes.mockResolvedValue(nodes.map(node => ({
+            ...node,
+            agent_version: '1.1.1',
+            resources: {...node.resources, platform: 'windows', architecture: 'amd64'},
+        })));
+        service.upgradeReleases.mockResolvedValue({source: 'main', releases: [manifest]});
+
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await user.click(await screen.findByRole('button', {name: '节点管理 1'}));
+        await waitFor(() => expect(service.upgradeReleases).toHaveBeenCalledTimes(1));
+        expect(screen.getByRole('button', {name: '可升级 0'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toBeDisabled();
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toHaveTextContent('暂无可用升级');
+
+        await user.click(screen.getByRole('button', {name: '批量升级'}));
+        await user.selectOptions(screen.getByLabelText('当前控制端的升级版本'), '1.1.1');
+        expect(screen.getByText('已是目标版本，无需升级')).toBeInTheDocument();
+    });
+
+    it('creates an OTA batch from a Main version without uploading a manifest', async () => {
+        const user = userEvent.setup();
+        const manifest = {
+            version: 1 as const,
+            purpose: 'model-work-node.ota-release.v1' as const,
+            release_version: '1.0.5', minimum_node_version: '0.1.0', source_revision: 'b'.repeat(40),
+            platform: 'windows' as const, architecture: 'x86_64' as const,
+            artifact_url: 'https://releases.example/model-work-node-1.0.5-windows-x86_64.zip',
+            sha256: 'c'.repeat(64), size_bytes: 4096, signature: `${'A'.repeat(86)}==`,
+        };
+        const nodes = await service.nodes();
+        service.nodes.mockResolvedValue(nodes.map(node => ({
+            ...node,
+            online: false,
+            communication_state: 'fault',
+            network: {...node.network, lan_ssh_available: false, tailscale_ssh_available: true},
+            resources: {...node.resources, platform: 'windows', architecture: 'amd64'},
+        })));
+        service.upgradeReleases.mockResolvedValue({source: 'main', releases: [manifest]});
+        service.createMainUpgradeBatch.mockResolvedValue({
+            batch_id: 'batch-1', release_version: '1.0.5', state: 'awaiting_authorization',
+            current_index: 0, created_at: 1, updated_at: 1, error_code: null,
+            drain_timeout_seconds: 300, ttl_seconds: 14400, expires_at: Date.now() / 1000 + 14400,
+            user: {user_id: 'user-1', user_name: 'law', user_public_key: 'A'.repeat(43) + '='},
+            nodes: [{
+                node_id: 'node-12345678', job_id: 'job-1', manifest,
+                authorization_id: 'authorization-1', authorization: null,
+                state: 'awaiting_authorization', error_code: null, result: null,
+            }],
+        });
+
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+        await openNodeUpgrade(user);
+        expect(screen.getByRole('button', {name: '管理 edge-01 节点升级'})).toBeEnabled();
+        await screen.findByRole('option', {name: 'v1.0.5'});
+        expect(screen.getByText('当前版本 v0.1.0')).toBeInTheDocument();
+        expect(screen.queryByLabelText('选择签名发布清单')).not.toBeInTheDocument();
+        await user.selectOptions(screen.getByLabelText('当前控制端的升级版本'), '1.0.5');
+        await user.click(screen.getByRole('checkbox', {name: /edge-01/}));
+        await user.click(screen.getByRole('button', {name: '创建升级批次'}));
+
+        await waitFor(() => expect(service.createMainUpgradeBatch).toHaveBeenCalledWith(['node-12345678'], '1.0.5'));
+        expect((await screen.findAllByText('等待批次确认')).length).toBeGreaterThan(0);
+        const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
+        service.approveUpgradeBatch.mockResolvedValue({
+            ...(await service.createMainUpgradeBatch.mock.results[0].value), state: 'authorized',
+        });
+        await user.click(screen.getByRole('button', {name: '确认整个升级批次'}));
+        await waitFor(() => expect(service.approveUpgradeBatch).toHaveBeenCalledTimes(1));
+        expect(confirm).toHaveBeenCalledTimes(1);
+        expect(confirm.mock.calls[0][0]).toContain('edge-01');
+        expect(confirm.mock.calls[0][0]).toContain(manifest.sha256);
+        expect(confirm.mock.calls[0][0]).toContain('授权截止');
+        confirm.mockRestore();
+    });
 });

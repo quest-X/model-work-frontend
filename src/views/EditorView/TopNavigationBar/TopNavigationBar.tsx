@@ -17,11 +17,6 @@ import {
     ACCOUNT_SESSION_CHANGED, AccountUser, currentAccountSession,
 } from '../../../services/AccountService';
 import {AccountCenter} from '../../AccountCenter/AccountCenter';
-import {useEscapeToClose} from '../../../hooks/useEscapeToClose';
-import {version as appVersion} from '../../../../package.json';
-import {isPopupAvailable} from '../../../utils/PopupAvailability';
-
-declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
 
 interface IProps {
     updateActivePopupTypeAction: typeof updateActivePopupType;
@@ -36,7 +31,6 @@ interface IProps {
     hasExtensionEngine: boolean;
     platformMode?: 'annotation' | 'control';
     onPlatformSwitch?: () => void;
-    commercialRestricted?: boolean;
 }
 
 type ServicesDropdown = 'core' | 'extension' | null;
@@ -46,25 +40,8 @@ type ServicesDropdown = 'core' | 'extension' | null;
 export const TopNavigationBar: React.FC<IProps> = (props) => {
     const currentTexts = LanguageConfig[props.language];
     const controlMode = props.platformMode === 'control';
-    const commercialRestricted = props.commercialRestricted ?? (
-        typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
-        && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__
-    );
-    const productionSwitchDisabled = commercialRestricted && controlMode;
-    const unavailableTitle = props.language === Language.CHINESE ? '暂未开放' : 'Not available yet';
-    const serviceButtonProps = (popup: PopupWindowType, divider = false) => {
-        const disabled = !isPopupAvailable(popup, commercialRestricted);
-        return {
-            className: `DropDownMenuContentOption ${disabled ? 'disabled' : 'active'}${divider ? ' divider' : ''}`,
-            disabled,
-            title: disabled ? unavailableTitle : undefined,
-        };
-    };
-    const projectName = commercialRestricted ? '山东钢铁-宝信自动化视觉组' : props.projectData.name;
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
-    const [showAboutUs, setShowAboutUs] = useState(false);
-    const [showOperationManual, setShowOperationManual] = useState(false);
     const [showAccountCenter, setShowAccountCenter] = useState<boolean | null>(
         () => currentAccountSession()?.user.password_change_required ? true : null,
     );
@@ -83,9 +60,6 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
     const localChangeDescription = props.language === Language.CHINESE
         ? `${localChangeCount} 个本地变动待处理`
         : `${localChangeCount} local ${localChangeCount === 1 ? 'change' : 'changes'} pending`;
-    const zh = props.language === Language.CHINESE;
-    useEscapeToClose(() => setShowAboutUs(false), showAboutUs, 20);
-    useEscapeToClose(() => setShowOperationManual(false), showOperationManual, 20);
 
     const onFocus = (event: React.FocusEvent<HTMLInputElement>) => {
         event.target.setSelectionRange(0, event.target.value.length);
@@ -324,12 +298,7 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             onClick={toggleActionsDropdown}
                             externalClassName={'actions-button'}
                         />
-                        {showActionsDropdown && <DropDownMenu
-                            language={props.language}
-                            isVisible={true}
-                            forceDisabled={commercialRestricted}
-                            allowEngineManagement={commercialRestricted}
-                        />}
+                        {showActionsDropdown && <DropDownMenu isVisible={true}/>}
                     </div>
                     {props.hasCoreEngine && (
                         <div className='ServicesDropdownContainer'>
@@ -350,8 +319,7 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             )}
                             {activeServicesDropdown === 'core' && (
                                 <div className='DropDownMenuContent ServicesDropdown'>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.DATA_CENTER)}
+                                    <div className='DropDownMenuContentOption active'
                                         onClick={openDataCenter}>
                                         <div className='Marker'/>
                                         <img src='ico/api.png' alt='data-center'/>
@@ -368,28 +336,25 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                                                 {localChangeCount}
                                             </span>
                                         )}
-                                    </button>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.CALL_MODEL)}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
                                         onClick={openLocalModelManager}>
                                         <div className='Marker'/>
                                         <img src='ico/ai.png' alt='local-models'/>
                                         {currentTexts.modelManagement.callModels}
-                                    </button>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.TRAINING_TASK)}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
                                         onClick={openTrainingTask}>
                                         <div className='Marker'/>
                                         <img src='ico/ai.png' alt='training-task'/>
                                         {currentTexts.modelManagement.trainingTask}
-                                    </button>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.TASK_CENTER)}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
                                         onClick={openTaskCenter}>
                                         <div className='Marker'/>
                                         <img src='ico/tasks.png' alt='task-center'/>
                                         {currentTexts.modelManagement.taskCenter}
-                                    </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -403,41 +368,36 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             />
                             {activeServicesDropdown === 'extension' && (
                                 <div className='DropDownMenuContent ServicesDropdown'>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.VECTOR_DB)}
+                                    <div className='DropDownMenuContentOption active'
                                         onClick={openVectorDb}>
                                         <div className='Marker'/>
                                         <img src='ico/api.png' alt='vector-db'/>
                                         {currentTexts.modelManagement.vectorDb}
-                                    </button>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.L2G_RETRIEVAL)}
+                                    </div>
+                                    <div className='DropDownMenuContentOption active'
                                         onClick={openL2gRetrieval}>
                                         <div className='Marker'/>
                                         <img src='ico/ai.png' alt='l2g-retrieval'/>
                                         {currentTexts.modelManagement.l2gRetrieval}
-                                    </button>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.MODEL_INSPECTOR, cameraConnectAvailable || computeClusterAvailable)}
+                                    </div>
+                                    <div className={`DropDownMenuContentOption active${cameraConnectAvailable || computeClusterAvailable ? ' divider' : ''}`}
                                         onClick={openModelInspector}>
                                         <div className='Marker'/>
                                         <img src='ico/eye.png' alt='model-inspector'/>
                                         {currentTexts.modelManagement.modelInspector}
-                                    </button>
-                                    {cameraConnectAvailable && <button type='button'
-                                        className='DropDownMenuContentOption active'
+                                    </div>
+                                    {cameraConnectAvailable && <div className='DropDownMenuContentOption active'
                                         onClick={openCameraConnect}>
                                         <div className='Marker'/>
                                         <img src='ico/camera.png' alt='camera-connect'/>
                                         {currentTexts.modelManagement.cameraConnect}
-                                    </button>}
-                                    {computeClusterAvailable && <button type='button'
-                                        className='DropDownMenuContentOption active'
+                                    </div>}
+                                    {computeClusterAvailable && <div className='DropDownMenuContentOption active'
                                         onClick={openComputeCluster}>
                                         <div className='Marker'/>
                                         <img src='ico/tasks.png' alt='compute-cluster'/>
                                         {currentTexts.modelManagement.computeCluster}
-                                    </button>}
+                                    </div>}
                                 </div>
                             )}
                         </div>
@@ -449,15 +409,14 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                     <div className='ProjectName'>{currentTexts.projectName}</div>
                     <div
                         className='ProjectNameInputWrapper'
-                        data-value={projectName}
+                        data-value={props.projectData.name}
                     >
                         <input
                             type='text'
                             size={1}
-                            value={projectName}
-                            disabled={commercialRestricted}
-                            onChange={commercialRestricted ? undefined : onChange}
-                            onFocus={commercialRestricted ? undefined : onFocus}
+                            value={props.projectData.name}
+                            onChange={onChange}
+                            onFocus={onFocus}
                         />
                     </div>
                 </div>
@@ -505,8 +464,6 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                                 type='button'
                                 role='menuitem'
                                 className='AccountMenuItem'
-                                disabled={productionSwitchDisabled}
-                                title={productionSwitchDisabled ? unavailableTitle : undefined}
                                 onClick={() => {
                                     setShowAccountDropdown(false);
                                     props.onPlatformSwitch?.();
@@ -517,30 +474,6 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                                     ? currentTexts.account.switchToAnnotationPlatform
                                     : currentTexts.account.switchToControlPlatform}
                             </button>
-                            {commercialRestricted && <button
-                                type='button'
-                                role='menuitem'
-                                className='AccountMenuItem'
-                                onClick={() => {
-                                    setShowAccountDropdown(false);
-                                    setShowOperationManual(true);
-                                }}
-                            >
-                                <img src='/ico/documentation.png' alt=''/>
-                                {zh ? '操作手册' : 'User guide'}
-                            </button>}
-                            {commercialRestricted && <button
-                                type='button'
-                                role='menuitem'
-                                className='AccountMenuItem'
-                                onClick={() => {
-                                    setShowAccountDropdown(false);
-                                    setShowAboutUs(true);
-                                }}
-                            >
-                                <img src='/ico/make-sense-ico-transparent.png' alt=''/>
-                                {zh ? '关于我们' : 'About us'}
-                            </button>}
                             <button
                                 type='button'
                                 role='menuitem'
@@ -564,112 +497,6 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                 onClose={() => setShowAccountCenter(false)}
                 onUserChanged={setAccount}
             />}
-            {showAboutUs && <div
-                className='AboutUsBackdrop'
-                role='presentation'
-                onMouseDown={event => {
-                    if (event.target === event.currentTarget) setShowAboutUs(false);
-                }}
-            >
-                <section
-                    className='AboutUsDialog'
-                    role='dialog'
-                    aria-modal='true'
-                    aria-label={zh ? '关于我们' : 'About us'}
-                >
-                    <button
-                        type='button'
-                        className='AboutUsClose'
-                        aria-label={zh ? '关闭关于我们' : 'Close about us'}
-                        onClick={() => setShowAboutUs(false)}
-                    >
-                        <img src='/ico/close.png' alt=''/>
-                    </button>
-                    <div className='AboutUsHero'>
-                        <img src='/make-sense-ico-transparent.png' alt=''/>
-                        <div>
-                            <small>OPENSIGHT PLATFORM</small>
-                            <h2>{zh ? '山东钢铁-宝信自动化视觉组' : 'Shandong Steel - Baosight Automation Vision Team'}</h2>
-                            <p>{zh
-                                ? '面向工业现场的智能视觉与边缘计算平台'
-                                : 'Industrial vision and edge computing platform'}</p>
-                        </div>
-                    </div>
-                    <dl className='AboutUsDetails'>
-                        <div>
-                            <dt>{zh ? '平台' : 'Platform'}</dt>
-                            <dd>OpenSight Platform</dd>
-                        </div>
-                        <div>
-                            <dt>{zh ? '服务场景' : 'Capabilities'}</dt>
-                            <dd>{zh
-                                ? '视觉识别 · 边缘设备管理 · 计算群协同'
-                                : 'Visual recognition · Edge device management · Cluster coordination'}</dd>
-                        </div>
-                        <div>
-                            <dt>{zh ? '版本' : 'Version'}</dt>
-                            <dd>v{appVersion}</dd>
-                        </div>
-                    </dl>
-                </section>
-            </div>}
-            {showOperationManual && <div
-                className='AboutUsBackdrop'
-                role='presentation'
-                onMouseDown={event => {
-                    if (event.target === event.currentTarget) setShowOperationManual(false);
-                }}
-            >
-                <section
-                    className='AboutUsDialog OperationManualDialog'
-                    role='dialog'
-                    aria-modal='true'
-                    aria-label={zh ? '操作手册' : 'User guide'}
-                >
-                    <button
-                        type='button'
-                        className='AboutUsClose'
-                        aria-label={zh ? '关闭操作手册' : 'Close user guide'}
-                        onClick={() => setShowOperationManual(false)}
-                    >
-                        <img src='/ico/close.png' alt=''/>
-                    </button>
-                    <div className='AboutUsHero'>
-                        <img src='/ico/documentation.png' alt=''/>
-                        <div>
-                            <small>OPENSIGHT PLATFORM</small>
-                            <h2>{zh ? '操作手册' : 'User guide'}</h2>
-                            <p>{zh ? '山钢日照现场常用操作说明' : 'Common operations for Shangang Rizhao'}</p>
-                        </div>
-                    </div>
-                    <dl className='AboutUsDetails'>
-                        <div>
-                            <dt>{zh ? '设备' : 'Devices'}</dt>
-                            <dd>{zh
-                                ? '在左侧按作业区浏览主节点、AIPACK 与摄像头；点击节点查看详情或打开终端。'
-                                : 'Browse nodes, AIPACK devices and cameras by work area; select a node for details or terminal access.'}</dd>
-                        </div>
-                        <div>
-                            <dt>{zh ? '摄像头' : 'Cameras'}</dt>
-                            <dd>{zh
-                                ? '点击摄像头名称打开实时画面，返回设备列表可切换其他点位。'
-                                : 'Select a camera to open its live view, then return to the device list to switch locations.'}</dd>
-                        </div>
-                        <div>
-                            <dt>{zh ? '计算群' : 'Cluster'}</dt>
-                            <dd>{zh
-                                ? '从“拓展引擎 → 计算群”查看拓扑、工作调度、网络资产和节点管理。'
-                                : 'Open Extension Engine → Compute Cluster for topology, scheduling, network assets and node management.'}</dd>
-                        </div>
-                        <div>
-                            <dt>Agent</dt>
-                            <dd>{zh
-                                ? '点击左下角 OpenSight Agent，查询设备状态或生成项目报告。'
-                                : 'Open OpenSight Agent in the lower-left corner to inspect device status or generate reports.'}</dd>
-                        </div>
-                    </dl>
-                </section>
-            </div>}
         </div>
     );
 };

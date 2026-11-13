@@ -1,4 +1,4 @@
-import React, {useLayoutEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
     ComputeClusterNode,
     ComputeResourceGraph,
@@ -10,16 +10,15 @@ import {
 } from '../../../services/ComputeClusterService';
 import {sendAgentMessage} from '../../Common/AgentSideChat/AgentSideChat';
 
-declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
-
 interface ResourceKnowledgeGraphProps {
     graph: ComputeResourceGraph;
     nodes: ComputeClusterNode[];
     tasks?: ComputeTask[];
     zh: boolean;
     fitWindow?: boolean;
-    commercialRestricted?: boolean;
     selectedTaskType?: string;
+    deviceType?: 'all' | 'main' | 'edge' | 'sensor';
+    programStatus?: (node: ComputeClusterNode) => {tone: string; label: string} | null;
     onSelectWorkAgent: (
         agent: ComputeResourceGraphEntity,
         candidateNodeIds: string[],
@@ -28,13 +27,11 @@ interface ResourceKnowledgeGraphProps {
         node: ComputeClusterNode,
         tool: 'terminal' | 'monitor' | 'runner',
     ) => void;
-    programStatus?: (node: ComputeClusterNode) => {tone: string; label: string} | null;
 }
 
 interface GraphPoint {
     x: number;
     y: number;
-    regionEntityId?: string;
 }
 
 interface GraphRegion {
@@ -53,15 +50,6 @@ interface OperationsTopology {
     minWidth: number;
     minHeight: number;
 }
-
-interface GraphBounds {
-    left: number;
-    right: number;
-    top: number;
-    bottom: number;
-}
-
-type GraphNodeRole = 'main' | 'node';
 
 const heartbeatLabel = (seconds: number | undefined, zh: boolean): string => {
     if (seconds == null || !Number.isFinite(seconds)) return zh ? '时间未知' : 'unknown';
@@ -83,9 +71,6 @@ const radialPoint = (
     y: centerY + Math.sin(angle) * radiusY,
 });
 
-const clamp = (value: number, min: number, max: number): number =>
-    min > max ? (min + max) / 2 : Math.min(max, Math.max(min, value));
-
 const visibleEntity = (entity: ComputeResourceGraphEntity): boolean =>
     entity.kind === 'compute_node' || entity.kind === 'managed_device';
 
@@ -96,12 +81,9 @@ const deviceClass = (entity: ComputeResourceGraphEntity): 'sensor' | 'controller
     return 'sensor';
 };
 
-const displayCodes = (
-    entities: ComputeResourceGraphEntity[],
-    nodeRoles: Map<string, GraphNodeRole>,
-): Map<string, string> => {
+const displayCodes = (entities: ComputeResourceGraphEntity[]): Map<string, string> => {
     const prefix = (entity: ComputeResourceGraphEntity): string => {
-        if (entity.kind === 'compute_node') return nodeRoles.get(entity.entity_id) === 'main' ? 'M' : 'N';
+        if (entity.kind === 'compute_node') return 'M';
         if (entity.kind === 'work_agent') return 'A';
         if (entity.kind === 'managed_device') {
             if (entity.device_kind === 'edge_compute') return 'N';
@@ -127,62 +109,27 @@ const displayCodes = (
     }));
 };
 
-const operationalProjection = (
-    graph: ComputeResourceGraph,
-    nodeRoles: Map<string, GraphNodeRole>,
-): {
-    entities: ComputeResourceGraphEntity[];
-    relations: ComputeResourceGraph['relations'];
-    replacementById: Map<string, string>;
-} => {
-    const computeByLabel = new Map(graph.entities
-        .filter(entity => entity.kind === 'compute_node' && nodeRoles.get(entity.entity_id) === 'node')
-        .map(entity => [entity.label.trim().toLocaleLowerCase(), entity.entity_id]));
-    const replacementById = new Map(graph.entities
-        .filter(entity => entity.kind === 'managed_device' && entity.device_kind === 'edge_compute')
-        .flatMap(entity => {
-            const replacement = computeByLabel.get(entity.label.trim().toLocaleLowerCase());
-            return replacement ? [[entity.entity_id, replacement] as const] : [];
-        }));
-    const project = (entityId: string): string => replacementById.get(entityId) || entityId;
-    return {
-        entities: graph.entities.filter(entity => !replacementById.has(entity.entity_id)),
-        relations: graph.relations
-            .map(relation => ({
-                ...relation,
-                source_id: project(relation.source_id),
-                target_id: project(relation.target_id),
-            }))
-            .filter(relation => relation.source_id !== relation.target_id),
-        replacementById,
-    };
-};
-
 const operationsTopology = (
     entities: ComputeResourceGraphEntity[],
     relations: ComputeResourceGraph['relations'],
-    nodeRoles: Map<string, GraphNodeRole>,
+    visibleIds?: Set<string>,
+    viewport = {width: 720, height: 440},
 ): OperationsTopology => {
     const points = new Map<string, GraphPoint>();
     const nodes = entities.filter(entity => entity.kind === 'compute_node');
-    const layoutChildren = entities.filter(entity =>
-        entity.kind === 'managed_device'
-        || (entity.kind === 'compute_node' && nodeRoles.get(entity.entity_id) !== 'main'),
-    );
+    const devices = entities.filter(entity => entity.kind === 'managed_device');
     const ownerByTarget = new Map(relations
         .filter(relation => relation.kind === 'manages')
         .map(relation => [relation.target_id, relation.source_id]));
     const childrenByOwner = new Map<string, ComputeResourceGraphEntity[]>();
-    layoutChildren.forEach(child => {
-        const ownerId = ownerByTarget.get(child.entity_id) || `unowned:${child.node_id || 'unknown'}`;
-        childrenByOwner.set(ownerId, [...(childrenByOwner.get(ownerId) || []), child]);
+    devices.forEach(device => {
+        const ownerId = ownerByTarget.get(device.entity_id) || `unowned:${device.node_id || 'unknown'}`;
+        childrenByOwner.set(ownerId, [...(childrenByOwner.get(ownerId) || []), device]);
     });
     const branchWeight = (entity: ComputeResourceGraphEntity): number =>
-        entity.kind === 'compute_node' || entity.device_kind === 'edge_compute'
+        entity.device_kind === 'edge_compute'
             ? Math.max(1, (childrenByOwner.get(entity.entity_id) || []).length)
             : 1;
-    const isBranch = (entity: ComputeResourceGraphEntity): boolean =>
-        entity.kind === 'compute_node' || entity.device_kind === 'edge_compute';
     const regionEntities = entities.filter(entity => entity.kind === 'compute_region');
     const regionRecords = new Map<string, Omit<GraphRegion, 'left' | 'width'>>();
     regionEntities.forEach(region => regionRecords.set(region.entity_id, {
@@ -214,58 +161,121 @@ const operationsTopology = (
     const orderedRegions = [...regionRecords.values()]
         .filter(region => region.nodeIds.length > 0)
         .sort((left, right) => left.regionId.localeCompare(right.regionId) || left.entityId.localeCompare(right.entityId));
+    if (visibleIds) {
+        const regionByNodeId = new Map(nodes.map(node => [
+            node.node_id,
+            orderedRegions.find(region => region.nodeIds.includes(node.entity_id))?.entityId,
+        ]));
+        const members = new Map<string, ComputeResourceGraphEntity[]>();
+        entities.filter(entity => visibleIds.has(entity.entity_id)).forEach(entity => {
+            const regionId = regionByNodeId.get(entity.node_id) || 'region-filter:unassigned';
+            members.set(regionId, [...(members.get(regionId) || []), entity]);
+        });
+        const filteredRegions = orderedRegions.filter(region => members.has(region.entityId));
+        if (members.has('region-filter:unassigned')) filteredRegions.push({
+            entityId: 'region-filter:unassigned', regionId: 'unassigned', regionName: '未分配地域',
+            state: 'unavailable', nodeIds: [],
+        });
+        const weight = filteredRegions.reduce((total, region) => total + Math.sqrt(members.get(region.entityId).length), 0);
+        const usableWidth = Math.max(0, viewport.width - 16 * (filteredRegions.length + 1));
+        let minWidth = 16;
+        const minHeight = Math.max(280, viewport.height);
+        const layouts = filteredRegions.map(region => {
+            const items = members.get(region.entityId);
+            const cardWidth = items[0].kind === 'compute_node' ? 92 : 136;
+            const cardHeight = items[0].kind === 'compute_node' ? 92 : 58;
+            const width = usableWidth * Math.sqrt(items.length) / weight;
+            const radiusX = Math.max(0, (width - cardWidth - 48) / 2);
+            const radiusY = Math.max(0, (minHeight - cardHeight - 88) / 2);
+            const ringCount = items.length <= 8 ? 1 : Math.ceil(Math.sqrt(items.length / 6));
+            const positions: GraphPoint[] = [];
+            let remaining = items.length;
+            for (let ring = ringCount; ring > 0; ring--) {
+                const count = Math.round(remaining * 2 / (ring + 1));
+                remaining -= count;
+                for (let index = 0; index < count; index++) {
+                    positions.push(items.length === 1 ? {x: 0, y: 0}
+                        : radialPoint(0, 0, radiusX * ring / ringCount, radiusY * ring / ringCount,
+                            -Math.PI / 2 + Math.PI * 2 * (index + (ring % 2 ? 0 : .5)) / count));
+                }
+            }
+            const left = minWidth;
+            minWidth += width + 16;
+            return {region, items, positions, left, width};
+        });
+        minWidth = Math.max(viewport.width, minWidth);
+        layouts.forEach(({items, positions, left, width}) => {
+            items.forEach((entity, index) => {
+                points.set(entity.entity_id, {
+                    x: (left + width / 2 + positions[index].x) / minWidth * 100,
+                    y: (64 + (minHeight - 80) / 2 + positions[index].y) / minHeight * 100,
+                });
+            });
+        });
+        return {
+            points,
+            regions: layouts.map(({region, left, width}) => ({
+                ...region, left: left / minWidth * 100, width: width / minWidth * 100,
+            })),
+            minWidth,
+            minHeight,
+        };
+    }
     const regions = orderedRegions.map((region): GraphRegion => ({...region, left: 0, width: 100}));
     let minWidth = 16;
     let minHeight = 440;
     regions.forEach(region => {
         const regionalPoints = new Map<string, GraphPoint>();
-        const centerX = 55;
+        const centerX = region.left + region.width / 2;
         const centerY = 52;
-        const rootNodeIds = region.nodeIds.filter(nodeId =>
-            nodeRoles.get(nodeId) === 'main' || !ownerByTarget.has(nodeId));
-        const layoutNodeIds = rootNodeIds.length ? rootNodeIds : region.nodeIds;
-        const ownershipWeight = (nodeId: string): number => (childrenByOwner.get(nodeId) || [])
-            .reduce((total, child) => total + branchWeight(child), 0);
-        const primaryNodeId = layoutNodeIds.reduce((primary, nodeId) =>
-            ownershipWeight(nodeId) > ownershipWeight(primary) ? nodeId : primary, layoutNodeIds[0]);
-        const satelliteNodeIds = layoutNodeIds.filter(nodeId => nodeId !== primaryNodeId);
-        regionalPoints.set(primaryNodeId, {x: centerX, y: centerY});
-        satelliteNodeIds.forEach((nodeId, index) => regionalPoints.set(nodeId, {
-            x: 5,
-            y: centerY + (index - (satelliteNodeIds.length - 1) / 2) * 18,
-        }));
-        const ringBranches = layoutNodeIds.flatMap(nodeId =>
-            (childrenByOwner.get(nodeId) || []).filter(isBranch));
-        const directSensors = layoutNodeIds.flatMap(nodeId =>
-            (childrenByOwner.get(nodeId) || []).filter(child => !isBranch(child)));
-        const ringWeight = Math.max(1, ringBranches.reduce((total, branch) => total + branchWeight(branch), 0));
-        let usedWeight = 0;
-        ringBranches.forEach(branch => {
-            const weight = branchWeight(branch);
-            const branchAngle = -Math.PI / 2 + Math.PI * 2 * (usedWeight + weight / 2) / ringWeight;
-            regionalPoints.set(branch.entity_id, radialPoint(centerX, centerY, 25, 25, branchAngle));
-            const grandchildren = childrenByOwner.get(branch.entity_id) || [];
-            const branchArc = Math.PI * 2 * weight / ringWeight;
-            grandchildren.forEach((grandchild, index) => regionalPoints.set(
-                grandchild.entity_id,
-                radialPoint(centerX, centerY, 40, 40,
-                    branchAngle + branchArc * .72 * ((index + .5) / grandchildren.length - .5)),
-            ));
-            usedWeight += weight;
+        const directOwnerIndex = region.nodeIds.findIndex(nodeId =>
+            (childrenByOwner.get(nodeId) || []).some(child => child.device_kind !== 'edge_compute'));
+        const orderedNodeIds = directOwnerIndex > 0
+            ? [...region.nodeIds.slice(directOwnerIndex), ...region.nodeIds.slice(0, directOwnerIndex)]
+            : region.nodeIds;
+        const nodeCount = orderedNodeIds.length;
+        const sectorSize = Math.PI * 2 / Math.max(1, nodeCount);
+        const directSensors = orderedNodeIds.flatMap(nodeId =>
+            (childrenByOwner.get(nodeId) || []).filter(child => child.device_kind !== 'edge_compute'));
+        let directSensorIndex = 0;
+        orderedNodeIds.forEach((nodeId, nodeIndex) => {
+            const nodeAngle = -Math.PI / 2 + sectorSize * nodeIndex;
+            regionalPoints.set(nodeId, nodeCount === 1
+                ? {x: centerX, y: centerY}
+                : radialPoint(centerX, centerY, region.width * .12, 10, nodeAngle));
+            const children = childrenByOwner.get(nodeId) || [];
+            const childrenWeight = Math.max(1, children.reduce((total, child) => total + branchWeight(child), 0));
+            let usedWeight = 0;
+            children.forEach(child => {
+                const weight = branchWeight(child);
+                const childAngle = nodeCount === 1
+                    ? -Math.PI / 2 + Math.PI * 2 * (usedWeight + weight / 2) / childrenWeight
+                    : nodeAngle - sectorSize * .38 + sectorSize * .76 * (usedWeight + weight / 2) / childrenWeight;
+                const isEdgeDevice = child.device_kind === 'edge_compute';
+                regionalPoints.set(child.entity_id, isEdgeDevice
+                    ? radialPoint(centerX, centerY, region.width * .24, 21, childAngle)
+                    : {
+                        x: centerX + region.width * .8 * ((directSensorIndex++ + .5) / directSensors.length - .5),
+                        y: 24,
+                    });
+                const grandchildren = childrenByOwner.get(child.entity_id) || [];
+                const branchArc = (nodeCount === 1 ? Math.PI * 2 : sectorSize * .76) * weight / childrenWeight;
+                grandchildren.forEach((grandchild, index) => regionalPoints.set(
+                    grandchild.entity_id,
+                    radialPoint(centerX, centerY, region.width * .4, 38,
+                        childAngle + branchArc * ((index + .5) / grandchildren.length - .5)),
+                ));
+                usedWeight += weight;
+            });
         });
-        directSensors.forEach((sensor, index) => regionalPoints.set(
-            sensor.entity_id,
-            radialPoint(centerX, centerY, 40, 40,
-                -Math.PI / 2 + Math.PI * 2 * index / Math.max(1, directSensors.length)),
-        ));
         // Keep fixed-size cards readable; expanding the canvas preserves the radial ownership layout.
         // ponytail: pairwise bounds suit inventory-sized graphs; use spatial indexing for thousands of cards.
         const entries = [...regionalPoints.entries()];
         let scale = 1;
         entries.forEach(([id, point], i) => {
-            const main = nodeRoles.get(id) === 'main';
+            const main = region.nodeIds.includes(id);
             entries.slice(0, i).forEach(([otherId, other]) => {
-                const otherMain = nodeRoles.get(otherId) === 'main';
+                const otherMain = region.nodeIds.includes(otherId);
                 // CSS card bounds plus 16px breathing room and the device's raised code badge.
                 const width = ((main ? 92 : 136) + (otherMain ? 92 : 136)) / 2 + 16;
                 const height = ((main ? 92 : 58) + (otherMain ? 92 : 58)) / 2 + 26;
@@ -281,7 +291,6 @@ const operationsTopology = (
         regionalPoints.forEach((point, id) => points.set(id, {
             x: region.left + point.x * region.width / 100,
             y: point.y,
-            regionEntityId: region.entityId,
         }));
         minWidth += region.width + 16;
     });
@@ -291,9 +300,9 @@ const operationsTopology = (
         region.width = region.width / minWidth * 100;
     });
     points.forEach(point => { point.x = point.x / minWidth * 100; });
-    const unowned = layoutChildren.filter(child => !points.has(child.entity_id));
-    unowned.forEach((child, index) => points.set(
-        child.entity_id,
+    const unowned = devices.filter(device => !points.has(device.entity_id));
+    unowned.forEach((device, index) => points.set(
+        device.entity_id,
         radialPoint(50, 52, 40, 38, -Math.PI / 2 + Math.PI * 2 * index / Math.max(1, unowned.length)),
     ));
     return {points, regions, minWidth, minHeight};
@@ -337,23 +346,29 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     tasks = [],
     zh,
     fitWindow = false,
-    commercialRestricted = (
-        typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
-        && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__
-    ),
-    onOpenNodeTool,
+    deviceType = 'all',
     programStatus,
+    onOpenNodeTool,
 }) => {
     const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
     const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
+    const [hoveredGroupLinkId, setHoveredGroupLinkId] = useState<string | null>(null);
     const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
     const [pinnedEntityId, setPinnedEntityId] = useState<string | null>(null);
-    const sceneRef = useRef<HTMLDivElement>(null);
-    const [sceneMetrics, setSceneMetrics] = useState<{
-        width: number;
-        height: number;
-        regions: Record<string, GraphBounds>;
-    }>({width: 0, height: 0, regions: {}});
+    const viewportRef = useRef<HTMLDivElement>(null);
+    const [viewportSize, setViewportSize] = useState({width: 720, height: 440});
+    useEffect(() => {
+        if (!fitWindow || !viewportRef.current || typeof ResizeObserver === 'undefined') return undefined;
+        const observer = new ResizeObserver(([entry]) => {
+            const width = Math.round(entry.contentRect.width);
+            const height = Math.round(entry.contentRect.height);
+            if (width <= 0 || height <= 0) return;
+            setViewportSize(current => current.width === width && current.height === height
+                ? current : {width, height});
+        });
+        observer.observe(viewportRef.current);
+        return () => observer.disconnect();
+    }, [fitWindow]);
     const index = useMemo(
         () => new Map(graph.entities.map(entity => [entity.entity_id, entity])),
         [graph.entities],
@@ -362,121 +377,51 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         () => new Map(clusterNodes.map(node => [node.node_id, node])),
         [clusterNodes],
     );
-    const nodeRoles = useMemo(
-        () => new Map(graph.entities
-            .filter(entity => entity.kind === 'compute_node')
-            .map(entity => [
-                entity.entity_id,
-                entity.node_id && nodeIndex.get(entity.node_id)?.role === 'main' ? 'main' : 'node',
-            ] as const)),
-        [graph.entities, nodeIndex],
-    );
-    const operationalGraph = useMemo(
-        () => operationalProjection(graph, nodeRoles),
-        [graph, nodeRoles],
-    );
     const visibleEntities = useMemo(
-        () => operationalGraph.entities.filter(visibleEntity),
-        [operationalGraph.entities],
+        () => graph.entities.filter(entity => visibleEntity(entity) && (
+            deviceType === 'all'
+            || (deviceType === 'main' && entity.kind === 'compute_node')
+            || (deviceType === 'edge' && entity.kind === 'managed_device' && entity.device_kind === 'edge_compute')
+            || (deviceType === 'sensor' && entity.kind === 'managed_device' && entity.device_kind !== 'edge_compute')
+        )),
+        [deviceType, graph.entities],
     );
     const visibleEntityIds = useMemo(
         () => new Set(visibleEntities.map(entity => entity.entity_id)),
         [visibleEntities],
     );
     const visibleRelations = useMemo(
-        () => operationalGraph.relations.filter(relation =>
+        () => graph.relations.filter(relation =>
             relation.kind === 'manages'
             && visibleEntityIds.has(relation.source_id)
             && visibleEntityIds.has(relation.target_id),
         ),
-        [operationalGraph.relations, visibleEntityIds],
+        [graph.relations, visibleEntityIds],
     );
     const topology = useMemo(
-        () => operationsTopology(operationalGraph.entities, operationalGraph.relations, nodeRoles),
-        [nodeRoles, operationalGraph.entities, operationalGraph.relations],
+        () => operationsTopology(graph.entities, graph.relations, deviceType === 'all' ? undefined : visibleEntityIds, viewportSize),
+        [deviceType, graph.entities, graph.relations, visibleEntityIds, viewportSize],
     );
-    useLayoutEffect(() => {
-        const scene = sceneRef.current;
-        if (!scene) return undefined;
-        const measure = () => {
-            const sceneRect = scene.getBoundingClientRect();
-            const regions = Object.fromEntries([...scene.querySelectorAll<HTMLElement>('.ComputeGraphRegion[data-region-id]')]
-                .flatMap(element => {
-                    const regionId = element.dataset.regionId;
-                    if (!regionId) return [];
-                    const rect = element.getBoundingClientRect();
-                    return [[regionId, {
-                        left: rect.left - sceneRect.left,
-                        right: rect.right - sceneRect.left,
-                        top: rect.top - sceneRect.top,
-                        bottom: rect.bottom - sceneRect.top,
-                    }] as const];
-                }));
-            setSceneMetrics(current => {
-                const unchanged = current.width === sceneRect.width
-                    && current.height === sceneRect.height
-                    && Object.keys(regions).length === Object.keys(current.regions).length
-                    && Object.entries(regions).every(([id, bounds]) =>
-                        Object.entries(bounds).every(([key, value]) =>
-                            current.regions[id]?.[key as keyof GraphBounds] === value));
-                return unchanged ? current : {
-                    width: sceneRect.width,
-                    height: sceneRect.height,
-                    regions,
-                };
-            });
-        };
-        measure();
-        if (typeof ResizeObserver === 'undefined') {
-            window.addEventListener('resize', measure);
-            return () => window.removeEventListener('resize', measure);
-        }
-        const observer = new ResizeObserver(measure);
-        observer.observe(scene);
-        return () => observer.disconnect();
-    }, [fitWindow, topology]);
-    const points = useMemo(() => {
-        if (!sceneMetrics.width || !sceneMetrics.height) return topology.points;
-        const regions = new Map(topology.regions.map(region => [region.entityId, region]));
-        return new Map([...topology.points].map(([id, point]) => {
-            const region = point.regionEntityId ? regions.get(point.regionEntityId) : undefined;
-            const measuredRegion = point.regionEntityId ? sceneMetrics.regions[point.regionEntityId] : undefined;
-            const entity = index.get(id);
-            if (!region || !entity) return [id, point] as const;
-            const main = entity.kind === 'compute_node' && nodeRoles.get(id) === 'main';
-            const horizontalExtent = (main ? 46 : 68) + 2;
-            const topExtent = (main ? 46 : 40) + 2;
-            const bottomExtent = (main ? 46 : 31) + 2;
-            const minX = measuredRegion
-                ? (measuredRegion.left + horizontalExtent) / sceneMetrics.width * 100
-                : region.left + (horizontalExtent + 10) / sceneMetrics.width * 100;
-            const maxX = measuredRegion
-                ? (measuredRegion.right - horizontalExtent) / sceneMetrics.width * 100
-                : region.left + region.width - (horizontalExtent + 10) / sceneMetrics.width * 100;
-            const minY = (measuredRegion?.top ?? 10) + topExtent;
-            const maxY = (measuredRegion?.bottom ?? sceneMetrics.height - 10) - bottomExtent;
-            return [id, {
-                ...point,
-                x: clamp(point.x, minX, maxX),
-                y: clamp(point.y, minY / sceneMetrics.height * 100, maxY / sceneMetrics.height * 100),
-            }] as const;
-        }));
-    }, [index, nodeRoles, sceneMetrics, topology]);
-    const codes = useMemo(
-        () => displayCodes(operationalGraph.entities, nodeRoles),
-        [nodeRoles, operationalGraph.entities],
-    );
+    const points = topology.points;
+    const codes = useMemo(() => displayCodes(graph.entities), [graph.entities]);
     const graphNodes = visibleEntities.filter(entity => entity.kind === 'compute_node');
+    const groupMembers = [...graphNodes]
+        .filter(entity => points.has(entity.entity_id))
+        .sort((left, right) => {
+            const leftPoint = points.get(left.entity_id) as GraphPoint;
+            const rightPoint = points.get(right.entity_id) as GraphPoint;
+            return leftPoint.x - rightPoint.x || leftPoint.y - rightPoint.y;
+        });
+    const groupLinks = groupMembers.slice(1).map((target, linkIndex) => ({
+        id: `${groupMembers[linkIndex].entity_id}:${target.entity_id}`,
+        source: groupMembers[linkIndex],
+        target,
+    }));
     const activeTaskFlows = tasks.flatMap(task => {
-        const sourceId = task.source_entity_id
-            ? operationalGraph.replacementById.get(task.source_entity_id) || task.source_entity_id
-            : undefined;
-        const targetId = task.target_entity_id
-            ? operationalGraph.replacementById.get(task.target_entity_id) || task.target_entity_id
-            : undefined;
-        const source = sourceId ? index.get(sourceId) : undefined;
-        const target = targetId ? index.get(targetId) : undefined;
+        const source = task.source_entity_id ? index.get(task.source_entity_id) : undefined;
+        const target = task.target_entity_id ? index.get(task.target_entity_id) : undefined;
         return (task.state === 'queued' || task.state === 'running') && source && target && source !== target
+            && visibleEntityIds.has(source.entity_id) && visibleEntityIds.has(target.entity_id)
             ? [{task, source, target}]
             : [];
     });
@@ -486,19 +431,15 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     const sensors = visibleEntities.filter(entity =>
         entity.kind === 'managed_device' && entity.device_kind !== 'edge_compute',
     );
-    const workerNodes = graphNodes.filter(entity => nodeRoles.get(entity.entity_id) === 'node');
-    const nodeTones = new Map(graphNodes.map(entity => {
+    const nodeTones = new Map(graph.entities.filter(entity => entity.kind === 'compute_node').map(entity => {
         const node = entity.node_id ? nodeIndex.get(entity.node_id) : undefined;
         const state = computeNodeState(node);
         return [entity.entity_id, state === 'normal' ? 'online' : state === 'abnormal' ? 'offline' : 'warning'];
     }));
     const inspectedEntityId = pinnedEntityId || hoveredEntityId;
     const inspectedEntity = inspectedEntityId ? index.get(inspectedEntityId) : undefined;
-    const inspectedRole = inspectedEntity?.kind === 'compute_node'
-        ? nodeRoles.get(inspectedEntity.entity_id) || 'node'
-        : undefined;
-    const inspectedClassification = inspectedEntity?.kind === 'managed_device'
-        ? deviceClass(inspectedEntity)
+    const inspectedTone = inspectedEntity?.kind === 'compute_node'
+        ? nodeTones.get(inspectedEntity.entity_id)
         : undefined;
     const inspectedPoint = inspectedEntityId ? points.get(inspectedEntityId) : undefined;
     const hoveredRelation = visibleRelations.find(relation => relation.relation_id === hoveredRelationId);
@@ -506,6 +447,9 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
     const hoveredRelationTarget = hoveredRelation ? index.get(hoveredRelation.target_id) : undefined;
     const hoveredRelationSourcePoint = hoveredRelation ? points.get(hoveredRelation.source_id) : undefined;
     const hoveredRelationTargetPoint = hoveredRelation ? points.get(hoveredRelation.target_id) : undefined;
+    const hoveredGroupLink = groupLinks.find(link => link.id === hoveredGroupLinkId);
+    const hoveredGroupSourcePoint = hoveredGroupLink ? points.get(hoveredGroupLink.source.entity_id) : undefined;
+    const hoveredGroupTargetPoint = hoveredGroupLink ? points.get(hoveredGroupLink.target.entity_id) : undefined;
     const hoveredTaskFlow = activeTaskFlows.find(({task}) => task.task_id === hoveredTaskId);
     const hoveredTaskSourcePoint = hoveredTaskFlow ? points.get(hoveredTaskFlow.source.entity_id) : undefined;
     const hoveredTaskTargetPoint = hoveredTaskFlow ? points.get(hoveredTaskFlow.target.entity_id) : undefined;
@@ -536,42 +480,43 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
         return relation ? index.get(relation.source_id) : undefined;
     };
 
-    return <section className='ComputeKnowledgePanel' aria-label={zh ? '主节点、计算节点与摄像头拓扑' : 'Main node, compute node, and camera topology'}>
+    return <section className='ComputeKnowledgePanel' aria-label={zh ? '计算节点、边缘设备与摄像头拓扑' : 'Compute node, edge device, and camera topology'}>
         <div className='ComputeKnowledgeHeading'>
             <div>
                 <span>{zh ? '地域拓扑 (悬浮查看 / 双击固定)' : 'Regional topology · Hover / double-click to pin'}</span>
                 <h3>{zh ? '计算群地域 Graph' : 'Compute cluster regional graph'}</h3>
                 <p>{zh
-                    ? '图谱按实际角色与归属关系展示主节点、计算节点及其摄像头。'
-                    : 'The graph reflects actual roles and ownership between main nodes, compute nodes, and their cameras.'}</p>
+                    ? '计算群按地域归组计算节点，计算节点连接边缘计算设备，边缘设备再连接对应摄像头。'
+                    : 'The cluster groups compute nodes by region, then links them to edge devices and each edge device to its cameras.'}</p>
             </div>
             <div className='ComputeKnowledgeStats graph-summary'>
-                <div><strong>{workerNodes.length + edgeDevices.length + sensors.length}</strong><span>{zh ? '设备总数' : 'Total devices'}</span></div>
-                <div><strong>{workerNodes.length + edgeDevices.length}</strong><span>{zh ? '计算节点' : 'Compute nodes'}</span></div>
+                <div><strong>{visibleEntities.length}</strong><span>{zh ? '设备总数' : 'Total devices'}</span></div>
+                <div><strong>{graphNodes.length}</strong><span>{zh ? '计算节点' : 'Compute nodes'}</span></div>
+                <div><strong>{edgeDevices.length}</strong><span>{zh ? '边缘计算设备' : 'Edge devices'}</span></div>
                 <div><strong>{sensors.length}</strong><span>{zh ? '摄像头' : 'Cameras'}</span></div>
             </div>
         </div>
 
         <div className='ComputeKnowledgeLegend'>
-            {!commercialRestricted && <span><i className='entity-shape region'/>{zh ? '地域' : 'Region'}</span>}
-            <span><i className='entity-shape circle'/>{zh ? '主节点' : 'Main node'}</span>
-            <span><i className='entity-shape rounded-rectangle edge-device'/>{zh ? '计算节点' : 'Compute node'}</span>
+            <span><i className='entity-shape region'/>{zh ? '地域' : 'Region'}</span>
+            <span><i className='entity-shape circle'/>{zh ? '计算节点' : 'Compute node'}</span>
+            <span><i className='entity-shape rounded-rectangle edge-device'/>{zh ? '边缘计算设备' : 'Edge device'}</span>
             <span><i className='entity-shape rounded-rectangle sensor'/>{zh ? '摄像头' : 'Camera'}</span>
-            {!commercialRestricted && <span><i className='entity-shape task-flow'/>{zh ? '数据包' : 'Packet'}</span>}
+            <span><i className='entity-shape group-link'/>{zh ? '计算群成员' : 'Cluster membership'}</span>
+            <span><i className='entity-shape task-flow'/>{zh ? '数据包' : 'Packet'}</span>
         </div>
 
-        <div className={`ComputeGraphViewport${fitWindow ? ' fit-window' : ''}`}>
+        <div ref={viewportRef} className={`ComputeGraphViewport${fitWindow ? ' fit-window' : ''}`}>
             <div className='ComputeGraphFit'>
             <div
-                ref={sceneRef}
-                className={`ComputeGraphScene operations-only${hoveredRelation || hoveredTaskFlow ? ' has-relation-focus' : ''}`}
+                className={`ComputeGraphScene operations-only${hoveredRelation || hoveredGroupLink || hoveredTaskFlow ? ' has-relation-focus' : ''}${hoveredGroupLink ? ' group-focus' : ''}`}
                 data-layout='radial'
                 style={{
-                    minWidth: fitWindow ? 0 : topology.minWidth,
-                    minHeight: fitWindow ? 0 : topology.minHeight,
+                    minWidth: fitWindow && deviceType === 'all' ? 0 : topology.minWidth,
+                    minHeight: fitWindow && deviceType === 'all' ? 0 : topology.minHeight,
                 }}
                 role='figure'
-                aria-label={zh ? '主节点、计算节点与摄像头关系图' : 'Main node, compute node, and camera graph'}
+                aria-label={zh ? '计算节点、边缘设备与摄像头关系图' : 'Compute node, edge device, and camera graph'}
                 onClick={event => {
                     const target = event.target as Element;
                     if (!target.closest('[data-testid="resource-graph-node"]')) setPinnedEntityId(null);
@@ -585,7 +530,6 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         ))}`}
                         style={{flexGrow: region.width}}
                         data-testid='resource-graph-region'
-                        data-region-id={region.entityId}
                     >
                         <span>{zh ? '地域' : 'Region'}</span>
                         <strong>{zh ? region.regionName : region.regionId}</strong>
@@ -599,6 +543,37 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     data-testid='resource-node-link-graph'
                     aria-label={zh ? '设备连接线' : 'Device connections'}
                 >
+                    {groupLinks.map(link => {
+                        const sourcePoint = points.get(link.source.entity_id) as GraphPoint;
+                        const targetPoint = points.get(link.target.entity_id) as GraphPoint;
+                        const focused = hoveredGroupLinkId === link.id;
+                        const muted = Boolean(hoveredRelationId || hoveredTaskId || hoveredGroupLinkId) && !focused;
+                        return <React.Fragment key={link.id}>
+                            <line
+                                x1={sourcePoint.x * 10}
+                                y1={sourcePoint.y * 4.4}
+                                x2={targetPoint.x * 10}
+                                y2={targetPoint.y * 4.4}
+                                className={`ComputeGraphGroupLink ${focused ? 'focused' : ''} ${muted ? 'muted' : ''}`}
+                                data-testid='resource-graph-group-link'
+                                aria-hidden='true'
+                            />
+                            <line
+                                x1={sourcePoint.x * 10}
+                                y1={sourcePoint.y * 4.4}
+                                x2={targetPoint.x * 10}
+                                y2={targetPoint.y * 4.4}
+                                className='ComputeGraphEdgeHit'
+                                data-testid='resource-graph-group-link-hit'
+                                tabIndex={0}
+                                aria-label={`${zh ? '同群成员' : 'Cluster members'} ${link.source.label} ↔ ${link.target.label}`}
+                                onMouseEnter={() => setHoveredGroupLinkId(link.id)}
+                                onMouseLeave={() => setHoveredGroupLinkId(current => current === link.id ? null : current)}
+                                onFocus={() => setHoveredGroupLinkId(link.id)}
+                                onBlur={() => setHoveredGroupLinkId(current => current === link.id ? null : current)}
+                            />
+                        </React.Fragment>;
+                    })}
                     {visibleRelations.map(relation => {
                         const source = points.get(relation.source_id);
                         const target = points.get(relation.target_id);
@@ -610,7 +585,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         const x2 = target.x * 10;
                         const y2 = target.y * 4.4;
                         const focused = hoveredRelationId === relation.relation_id;
-                        const muted = Boolean(hoveredRelationId || hoveredTaskId) && !focused;
+                        const muted = Boolean(hoveredRelationId || hoveredGroupLinkId || hoveredTaskId) && !focused;
                         return <React.Fragment key={relation.relation_id}>
                             <line
                                 x1={x1}
@@ -655,7 +630,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         if (!sourcePoint || !targetPoint) return null;
                         const path = `M ${sourcePoint.x * 10} ${sourcePoint.y * 4.4} L ${targetPoint.x * 10} ${targetPoint.y * 4.4}`;
                         const focused = hoveredTaskId === task.task_id;
-                        const muted = Boolean(hoveredRelationId) || Boolean(hoveredTaskId && !focused);
+                        const muted = Boolean(hoveredRelationId || hoveredGroupLinkId) || Boolean(hoveredTaskId && !focused);
                         return <g
                             key={task.task_id}
                             className={`ComputeGraphTaskFlow ${focused ? 'focused' : ''} ${muted ? 'muted' : ''}`}
@@ -691,22 +666,21 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     if (!point) return null;
                     const node = entity.node_id ? nodeIndex.get(entity.node_id) : undefined;
                     const isNode = entity.kind === 'compute_node';
-                    const hasMountedProgram = isNode && Boolean(node && programStatus?.(node));
-                    const programBadgeLabel = hasMountedProgram ? (zh ? '已挂载程序' : 'Programs mounted') : undefined;
-                    const nodeRole = isNode ? nodeRoles.get(entity.entity_id) || 'node' : undefined;
                     const classification = entity.kind === 'managed_device' ? deviceClass(entity) : '';
                     const isHovered = hoveredEntityId === entity.entity_id;
                     const isPinned = pinnedEntityId === entity.entity_id;
                     const isRelationEndpoint = hoveredRelation?.source_id === entity.entity_id
                         || hoveredRelation?.target_id === entity.entity_id
+                        || hoveredGroupLink?.source.entity_id === entity.entity_id
+                        || hoveredGroupLink?.target.entity_id === entity.entity_id
                         || hoveredTaskFlow?.source.entity_id === entity.entity_id
                         || hoveredTaskFlow?.target.entity_id === entity.entity_id;
                     return <button
                         type='button'
                         key={entity.entity_id}
-                        className={`ComputeGraphNode ${entity.kind} ${nodeRole ? `role-${nodeRole}` : ''} ${classification} ${entity.device_kind === 'edge_compute' ? 'edge-device' : ''} state-${entity.state} ${isNode
+                        className={`ComputeGraphNode ${entity.kind} ${classification} ${entity.device_kind === 'edge_compute' ? 'edge-device' : ''} state-${entity.state} ${isNode
                             ? `node-${nodeTones.get(entity.entity_id)}`
-                            : 'sensor-node'} ${isHovered || isPinned ? 'focused' : ''} ${isPinned ? 'pinned' : ''} ${isRelationEndpoint ? 'relation-focused' : ''} ${(hoveredRelation || hoveredTaskFlow) && !isRelationEndpoint ? 'muted' : ''}`}
+                            : 'sensor-node'} ${isHovered || isPinned ? 'focused' : ''} ${isPinned ? 'pinned' : ''} ${isRelationEndpoint ? 'relation-focused' : ''} ${(hoveredRelation || hoveredGroupLink || hoveredTaskFlow) && !isRelationEndpoint ? 'muted' : ''}`}
                         style={{left: `${point.x}%`, top: `${point.y}%`}}
                         onMouseEnter={() => setHoveredEntityId(entity.entity_id)}
                         onMouseLeave={() => setHoveredEntityId(current => current === entity.entity_id ? null : current)}
@@ -721,22 +695,13 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         aria-label={isNode
                             ? `${zh ? '查看' : 'Inspect'} ${entity.label} ${zh ? '节点信息' : 'node details'}`
                             : `${zh ? '查看' : 'Inspect'} ${entity.label} ${zh ? '设备信息' : 'device details'}`}
-                        aria-description={programBadgeLabel}
                         data-testid='resource-graph-node'
                         data-entity-kind={entity.kind}
-                        data-entity-role={nodeRole}
-                        data-region-id={point.regionEntityId}
-                        data-entity-shape={nodeRole === 'main' ? 'circle' : 'rounded-rectangle'}
+                        data-entity-shape={isNode ? 'circle' : 'rounded-rectangle'}
                         data-entity-state={entity.state}
                     >
-                        <i className={hasMountedProgram ? 'has-program' : undefined} title={programBadgeLabel}>
-                            {codes.get(entity.entity_id)}
-                        </i>
-                        <span>{isNode
-                            ? nodeRole === 'main'
-                                ? (zh ? '主节点' : 'Main node')
-                                : (zh ? '计算节点' : 'Compute node')
-                            : sensorKindLabel(entity, zh)}</span>
+                        <i>{codes.get(entity.entity_id)}</i>
+                        <span>{isNode ? (zh ? '计算节点' : 'Compute node') : sensorKindLabel(entity, zh)}</span>
                         <strong>{entity.label}</strong>
                         <small>{isNode
                             ? `${zh ? '心跳' : 'Heartbeat'} ${heartbeatLabel(node?.heartbeat_age_seconds, zh)}`
@@ -761,6 +726,19 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     <strong>{hoveredRelationSource.label}<b>↔</b>{hoveredRelationTarget.label}</strong>
                 </aside>}
 
+                {hoveredGroupLink && hoveredGroupSourcePoint && hoveredGroupTargetPoint && <aside
+                    className='ComputeGraphEdgeLabel group-link'
+                    style={{
+                        left: `${(hoveredGroupSourcePoint.x + hoveredGroupTargetPoint.x) / 2}%`,
+                        top: `${(hoveredGroupSourcePoint.y + hoveredGroupTargetPoint.y) / 2}%`,
+                    }}
+                    role='status'
+                    aria-label={`${hoveredGroupLink.source.label} ${zh ? '与' : 'and'} ${hoveredGroupLink.target.label} ${zh ? '同群成员关系' : 'cluster membership'}`}
+                >
+                    <span>{zh ? '计算群成员关系' : 'Cluster membership'}</span>
+                    <strong>{hoveredGroupLink.source.label}<b>↔</b>{hoveredGroupLink.target.label}</strong>
+                </aside>}
+
                 {hoveredTaskFlow && hoveredTaskSourcePoint && hoveredTaskTargetPoint && <aside
                     className='ComputeGraphEdgeLabel task-flow'
                     style={{
@@ -775,7 +753,7 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                 </aside>}
 
                 {inspectedEntity && <aside
-                    className={`ComputeGraphHoverCard anchored ${inspectedRole ? `role-${inspectedRole}` : ''} ${inspectedClassification || ''} ${inspectedEntity.device_kind === 'edge_compute' ? 'edge-device' : ''} ${pinnedEntityId === inspectedEntity.entity_id ? 'pinned' : ''}`}
+                    className={`ComputeGraphHoverCard anchored ${inspectedTone ? `tone-${inspectedTone}` : ''} ${pinnedEntityId === inspectedEntity.entity_id ? 'pinned' : ''}`}
                     style={{
                         '--hover-anchor-x': `${inspectedPoint?.x || 50}%`,
                         '--hover-anchor-y': `${inspectedPoint?.y || 50}%`,
@@ -789,7 +767,6 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                     {/* eslint-disable-next-line complexity */}
                     {inspectedEntity.kind === 'compute_node' ? (() => {
                         const node = inspectedEntity.node_id ? nodeIndex.get(inspectedEntity.node_id) : undefined;
-                        const nodeRole = nodeRoles.get(inspectedEntity.entity_id) || 'node';
                         const tone = nodeTones.get(inspectedEntity.entity_id);
                         const agents = callableAgentsFor(inspectedEntity);
                         const sshAvailable = dependencyFor(inspectedEntity, 'control_ssh');
@@ -799,8 +776,8 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         const runner = node ? programStatus?.(node) : null;
                         return <>
                             <span>{zh
-                                ? `${nodeRole === 'main' ? '主节点' : '计算节点'} ${codes.get(inspectedEntity.entity_id)} · 运维信息${pinnedEntityId === inspectedEntity.entity_id ? ' · 已固定（双击节点或点击空白取消）' : ''}`
-                                : `${nodeRole === 'main' ? 'Main node' : 'Compute node'} ${codes.get(inspectedEntity.entity_id)} · Operations${pinnedEntityId === inspectedEntity.entity_id ? ' · Pinned (double-click node or click blank space to unpin)' : ''}`}</span>
+                                ? `计算节点 ${codes.get(inspectedEntity.entity_id)} · 运维信息${pinnedEntityId === inspectedEntity.entity_id ? ' · 已固定（双击节点或点击空白取消）' : ''}`
+                                : `Compute node ${codes.get(inspectedEntity.entity_id)} · Operations${pinnedEntityId === inspectedEntity.entity_id ? ' · Pinned (double-click node or click blank space to unpin)' : ''}`}</span>
                             <strong>{inspectedEntity.label}</strong>
                             <small className={tone}>{computeNodeLabel(node, zh)} · {node?.online
                                 ? (zh ? '心跳' : 'heartbeat')

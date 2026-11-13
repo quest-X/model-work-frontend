@@ -13,8 +13,6 @@ import {
     computeNodeState,
 } from '../../services/ComputeClusterService';
 
-declare const __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__: boolean;
-
 type MapLevel = 'world' | 'china' | 'province';
 type MapTransform = {x: number; y: number; scale: number};
 type MapMarkerTone = 'healthy' | 'warning' | 'offline';
@@ -27,7 +25,6 @@ interface ClusterGeographicMapProps {
     graph: ComputeResourceGraph | null;
     nodes: ComputeClusterNode[];
     zh: boolean;
-    commercialRestricted?: boolean;
 }
 
 const WIDTH = 1000;
@@ -50,14 +47,14 @@ const prefectureFeatures = feature<ProvinceProperties>(
     chinaTopology,
     chinaTopology.objects.prefectures,
 ).features;
-const shandongProvince = provinceFeatures.find(item => item.properties.id === '370000') || null;
 const normalizedRegion = (value: string | null | undefined): string => (value || '')
     .trim()
     .toLocaleLowerCase()
     .replace(/(壮族自治区|回族自治区|维吾尔自治区|自治区|特别行政区|省|市)$/u, '');
 
+const isChinaMapFeature = (name: string): boolean => name === 'China' || name === 'Taiwan';
 const displayCountryName = (name: string, zh: boolean): string =>
-    zh && name === 'China' ? '中国' : name;
+    isChinaMapFeature(name) ? (zh ? '中国' : 'China') : name;
 
 const regionForNode = (
     graph: ComputeResourceGraph | null,
@@ -93,18 +90,9 @@ const mapStatusCounts = (markerNodes: ComputeClusterNode[]): MapStatusCounts => 
 
 // Geographic gestures, drill-down, and cluster overlays intentionally share one local state owner.
 // eslint-disable-next-line complexity
-export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({
-    graph,
-    nodes,
-    zh,
-    commercialRestricted = (
-        typeof __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__ !== 'undefined'
-        && __OPENSIGHT_SHANGANG_RIZHAO_COMMERCIAL__
-    ),
-}) => {
-    const restrictedProvince = commercialRestricted ? shandongProvince : null;
-    const [level, setLevel] = useState<MapLevel>(restrictedProvince ? 'province' : 'world');
-    const [selectedProvince, setSelectedProvince] = useState<Feature<Geometry, ProvinceProperties> | null>(restrictedProvince);
+export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({graph, nodes, zh}) => {
+    const [level, setLevel] = useState<MapLevel>('world');
+    const [selectedProvince, setSelectedProvince] = useState<Feature<Geometry, ProvinceProperties> | null>(null);
     const [transform, setTransform] = useState<MapTransform>(IDENTITY);
     const [hoveredName, setHoveredName] = useState('');
     const [dragging, setDragging] = useState(false);
@@ -187,7 +175,6 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({
             .filter((value): value is string => Boolean(value)))).join(' · ')
         : '';
     const changeLevel = (next: MapLevel) => {
-        if (commercialRestricted && next !== 'province') return;
         setLevel(next);
         if (next === 'world' || next === 'china') setSelectedProvince(null);
         setTransform(IDENTITY);
@@ -224,7 +211,6 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({
     });
     const zoomOut = () => {
         if (transform.scale > 1) return zoomAt(1 / 1.45);
-        if (commercialRestricted) return;
         if (level === 'province') changeLevel('china');
         else if (level === 'china') changeLevel('world');
     };
@@ -242,7 +228,7 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({
             suppressClick.current = false;
             return;
         }
-        if (level === 'world' && name === 'China') changeLevel('china');
+        if (level === 'world' && isChinaMapFeature(name)) changeLevel('china');
         else if (level === 'china') openProvince(selected);
         else zoomTo(selected);
     };
@@ -270,9 +256,7 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({
                     : level === 'china'
                         ? (zh ? '中国节点地图' : 'China node map')
                         : `${selectedProvinceLabel}${zh && selectedProvinceLabel.endsWith('市') ? '地图' : zh ? '市级地图' : ' city map'}`}</h3>
-                <p>{commercialRestricted
-                    ? (zh ? '展示山东省市级节点分布。' : 'Showing node distribution across Shandong cities.')
-                    : zh
+                <p>{zh
                     ? '滚轮缩放、拖拽移动；点击省份进入市级地图。'
                     : 'Scroll to zoom and drag to pan. Click a province to open its city map.'}</p>
             </div>
@@ -287,22 +271,18 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({
 
         <div className='ComputeKnowledgeLegend ControlGeoMapToolbar'>
             <div className='ControlGeoMapLevels' role='group' aria-label={zh ? '地图范围' : 'Map scope'}>
-                {commercialRestricted ? <button type='button' className='active' aria-pressed='true'>
-                    {zh ? '山东省' : 'Shandong'}
-                </button> : <>
-                    <button type='button' className={level === 'world' ? 'active' : ''} aria-pressed={level === 'world'} onClick={() => changeLevel('world')}>
-                        {zh ? '全球' : 'World'}
-                    </button>
+                <button type='button' className={level === 'world' ? 'active' : ''} aria-pressed={level === 'world'} onClick={() => changeLevel('world')}>
+                    {zh ? '全球' : 'World'}
+                </button>
+                <span>/</span>
+                <button type='button' className={level === 'china' ? 'active' : ''} aria-pressed={level === 'china'} onClick={() => changeLevel('china')}>
+                    {zh ? '中国' : 'China'}
+                </button>
+                {selectedProvince && <>
                     <span>/</span>
-                    <button type='button' className={level === 'china' ? 'active' : ''} aria-pressed={level === 'china'} onClick={() => changeLevel('china')}>
-                        {zh ? '中国' : 'China'}
+                    <button type='button' className={level === 'province' ? 'active' : ''} aria-pressed={level === 'province'} onClick={() => changeLevel('province')}>
+                        {zh ? selectedProvince.properties['地名'] : selectedProvince.properties.name}
                     </button>
-                    {selectedProvince && <>
-                        <span>/</span>
-                        <button type='button' className={level === 'province' ? 'active' : ''} aria-pressed={level === 'province'} onClick={() => changeLevel('province')}>
-                            {zh ? selectedProvince.properties['地名'] : selectedProvince.properties.name}
-                        </button>
-                    </>}
                 </>}
             </div>
             <button type='button' className='ControlGeoMapStatus' disabled={!statusCounts.healthy} onClick={() => cycleStatusRegion('healthy')}>
@@ -353,9 +333,7 @@ export const ClusterGeographicMap: React.FC<ClusterGeographicMapProps> = ({
                     ? (zh ? '可交互全球节点地图' : 'Interactive global node map')
                     : level === 'china'
                         ? (zh ? '可交互中国省级节点地图' : 'Interactive China province node map')
-                        : commercialRestricted
-                            ? (zh ? '可交互山东省市级节点地图' : 'Interactive Shandong city map')
-                            : (zh ? '可交互中国市级节点地图' : 'Interactive China city node map')}
+                        : (zh ? '可交互中国市级节点地图' : 'Interactive China city node map')}
                 onWheel={event => {
                     event.preventDefault();
                     const [x, y] = svgPoint(event.clientX, event.clientY);

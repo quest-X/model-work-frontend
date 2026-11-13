@@ -201,8 +201,9 @@ export const App: React.FC<IProps> = (
             return <MobileMainView/>;
 
         // 直接进入EditorView，跳过MainView和项目类型选择
-        if (windowSize.height < Settings.EDITOR_MIN_HEIGHT || windowSize.width < Settings.EDITOR_MIN_WIDTH) {
-            return <SizeItUpView/>;
+        const minimumWidth = platformMode === 'control' ? Settings.CONTROL_MIN_WIDTH : Settings.EDITOR_MIN_WIDTH;
+        if (windowSize.height < Settings.EDITOR_MIN_HEIGHT || windowSize.width < minimumWidth) {
+            return <SizeItUpView minimumWidth={minimumWidth}/>;
         } else {
             return <EditorView
                 platformMode={platformMode}

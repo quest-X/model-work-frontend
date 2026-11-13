@@ -10,7 +10,6 @@ import { ImageButton } from '../../Common/ImageButton/ImageButton';
 import { AIModel } from '../../../store/aimodels/types';
 import { Language, LanguageConfig } from '../../../data/LanguageConfig';
 import { StyledTextField } from '../../Common/StyledTextField/StyledTextField';
-import {isPopupAvailable} from '../../../utils/PopupAvailability';
 
 interface EngineServiceDescriptor {
     id: string;
@@ -27,7 +26,6 @@ export interface IProps {
     aiModels: AIModel[];
     activeModelId: string | null;
     language: Language;
-    commercialRestricted?: boolean;
 }
 
 export const ManageAIModelsPopup: React.FC<IProps> = ({
@@ -36,8 +34,7 @@ export const ManageAIModelsPopup: React.FC<IProps> = ({
     deleteAIModelAction,
     aiModels,
     activeModelId,
-    language,
-    commercialRestricted,
+    language
 }) => {
     const currentTexts = LanguageConfig[language];
     const [selectedModelId, setSelectedModelId] = useState<string | null>(activeModelId);
@@ -151,7 +148,6 @@ export const ManageAIModelsPopup: React.FC<IProps> = ({
     ];
 
     const openProvidedService = (service: EngineServiceDescriptor) => {
-        if (!isPopupAvailable(service.popupType, commercialRestricted)) return;
         updateActivePopupTypeAction(service.popupType);
     };
 
@@ -167,26 +163,21 @@ export const ManageAIModelsPopup: React.FC<IProps> = ({
                     {currentTexts.modelManagement.providedServices}
                 </div>
                 <div className='ProvidedServicesList'>
-                    {services.map(service => {
-                        const disabled = !isPopupAvailable(service.popupType, commercialRestricted);
-                        return (
-                            <button
-                                type='button'
-                                key={service.id}
-                                className='EngineServiceEntry'
-                                disabled={disabled}
-                                title={disabled ? (language === Language.CHINESE ? '暂未开放' : 'Not available yet') : undefined}
-                                onClick={() => openProvidedService(service)}
-                                aria-label={service.name}
-                            >
-                                <span className='EngineServiceText'>
-                                    <span className='EngineServiceName'>{service.name}</span>
-                                    <span className='EngineServicePath'>{service.servicePath}</span>
-                                </span>
-                                <span className='EngineServiceAction' aria-hidden='true'>›</span>
-                            </button>
-                        );
-                    })}
+                    {services.map(service => (
+                        <button
+                            type='button'
+                            key={service.id}
+                            className='EngineServiceEntry'
+                            onClick={() => openProvidedService(service)}
+                            aria-label={service.name}
+                        >
+                            <span className='EngineServiceText'>
+                                <span className='EngineServiceName'>{service.name}</span>
+                                <span className='EngineServicePath'>{service.servicePath}</span>
+                            </span>
+                            <span className='EngineServiceAction' aria-hidden='true'>›</span>
+                        </button>
+                    ))}
                 </div>
             </div>
         );

@@ -25,6 +25,7 @@ const permissionNames: Record<string, [string, string]> = {
     'agentos.storage.scan': ['存储分析', 'Analyze storage'],
     'camera.connect': ['连接摄像头', 'Connect cameras'],
     'camera.request': ['摄像头操作', 'Camera operations'],
+    'config.restore.apply': ['恢复节点配置', 'Restore node configuration'],
     'filesystem.list': ['浏览文件', 'Browse files'],
     'filesystem.stat': ['查看文件信息', 'View file information'],
     'cluster.read': ['查看节点与群', 'View nodes and groups'],
@@ -32,6 +33,8 @@ const permissionNames: Record<string, [string, string]> = {
     'agent.use': ['使用 Agent', 'Use Agent'],
     'jetson.connect': ['连接边缘设备', 'Connect edge devices'],
     'node.upgrade': ['升级节点', 'Upgrade nodes'],
+    'model.version.change': ['切换节点模型版本', 'Change node model versions'],
+    'model.delivery.commit': ['安装节点模型包', 'Install node model packages'],
 };
 const permissionLabel = (permission: string, zh: boolean): string =>
     permissionNames[permission]?.[zh ? 0 : 1] || permission;

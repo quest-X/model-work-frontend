@@ -10,7 +10,6 @@ import {
 } from '../../../../store/queue/types';
 import {TopNavigationBar} from '../TopNavigationBar';
 import {PopupWindowType} from '../../../../data/enums/PopupWindowType';
-import {version as appVersion} from '../../../../../package.json';
 
 jest.mock('../../StateBar/StateBar', () => ({
     __esModule: true,
@@ -20,19 +19,8 @@ jest.mock('../../StateBar/StateBar', () => ({
 }));
 jest.mock('../DropDownMenu/DropDownMenu', () => ({
     __esModule: true,
-    default: function MockDropDownMenu({
-        forceDisabled,
-        allowEngineManagement,
-    }: {forceDisabled?: boolean; allowEngineManagement?: boolean}) {
-        return <div>{['引擎管理', '编辑标签', '上传文件', '导入标注', '导出标注'].map((name, index) =>
-            <button
-                key={name}
-                type='button'
-                disabled={forceDisabled && !(allowEngineManagement && index === 0)}
-            >
-                {name}
-            </button>,
-        )}</div>;
+    default: function MockDropDownMenu() {
+        return <div data-testid='actions-menu'/>;
     },
 }));
 jest.mock('../../../../services/AccountService', () => {
@@ -230,56 +218,6 @@ describe('TopNavigationBar extension tool entries', () => {
     });
 });
 
-describe('TopNavigationBar commercial restrictions', () => {
-    it('keeps engine management, camera connection and compute cluster enabled', async () => {
-        const updatePopup = jest.fn();
-        const updateProject = jest.fn();
-        const previousFetch = global.fetch;
-        global.fetch = jest.fn().mockResolvedValue({
-            ok: true,
-            json: async () => ({plugins: {
-                camera_connect: {enabled: true, state: 'ready'},
-                compute_cluster: {enabled: true, state: 'ready'},
-            }}),
-        } as Response);
-        try {
-            renderNavigation([], Language.CHINESE, {
-                commercialRestricted: true,
-                hasExtensionEngine: true,
-                updateActivePopupTypeAction: updatePopup,
-                updateProjectDataAction: updateProject,
-            });
-
-            const projectName = screen.getByDisplayValue('山东钢铁-宝信自动化视觉组');
-            expect(projectName).toBeDisabled();
-            fireEvent.change(projectName, {target: {value: 'changed'}});
-            expect(updateProject).not.toHaveBeenCalled();
-
-            fireEvent.click(screen.getByText('操作'));
-            expect(screen.getByText('引擎管理').closest('button')).toBeEnabled();
-            for (const name of ['编辑标签', '上传文件', '导入标注', '导出标注']) {
-                expect(screen.getByText(name).closest('button')).toBeDisabled();
-            }
-
-            fireEvent.click(screen.getByText('核心引擎'));
-            for (const name of ['资源中心', '推理系统', '训练系统', '任务中心']) {
-                expect(screen.getByText(name).closest('button')).toBeDisabled();
-            }
-
-            fireEvent.click(screen.getByText('拓展引擎'));
-            await waitFor(() => expect(screen.getByText('计算群').closest('button')).toBeEnabled());
-            for (const name of ['向量数据库', '视觉检索', '透视']) {
-                expect(screen.getByText(name).closest('button')).toBeDisabled();
-            }
-            expect(screen.getByText('连接相机').closest('button')).toBeEnabled();
-            fireEvent.click(screen.getByText('计算群'));
-            expect(updatePopup).toHaveBeenCalledWith(PopupWindowType.COMPUTE_CLUSTER);
-        } finally {
-            global.fetch = previousFetch;
-        }
-    });
-});
-
 describe('TopNavigationBar account preview', () => {
     beforeEach(() => window.localStorage.clear());
 
@@ -307,50 +245,13 @@ describe('TopNavigationBar account preview', () => {
         expect(screen.queryByRole('menu', {name: '账户菜单'})).not.toBeInTheDocument();
     });
 
-    it('disables the production platform switch in the restricted commercial build', () => {
-        const switchPlatform = jest.fn();
-        renderNavigation([], Language.CHINESE, {
-            platformMode: 'control',
-            commercialRestricted: true,
-            onPlatformSwitch: switchPlatform,
-        });
+    it('offers a return to the annotation platform from control mode', () => {
+        renderNavigation([], Language.CHINESE, {platformMode: 'control'});
 
         expect(screen.getByText('项目名称:')).toBeInTheDocument();
         expect(screen.getByText('核心引擎')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '打开账户菜单'}));
-        const platformSwitch = screen.getByRole('menuitem', {name: '切换到生产平台'});
-        expect(platformSwitch).toBeDisabled();
-        fireEvent.click(platformSwitch);
-        expect(switchPlatform).not.toHaveBeenCalled();
-    });
-
-    it('opens the commercial about page from the account menu', () => {
-        renderNavigation([], Language.CHINESE, {commercialRestricted: true});
-
-        fireEvent.click(screen.getByRole('button', {name: '打开账户菜单'}));
-        fireEvent.click(screen.getByRole('menuitem', {name: '关于我们'}));
-
-        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-        expect(screen.getByRole('dialog', {name: '关于我们'})).toHaveTextContent(
-            '山东钢铁-宝信自动化视觉组',
-        );
-        expect(screen.getByText(`v${appVersion}`)).toBeInTheDocument();
-        fireEvent.keyDown(window, {key: 'Escape'});
-        expect(screen.queryByRole('dialog', {name: '关于我们'})).not.toBeInTheDocument();
-    });
-
-    it('opens the commercial operation manual from the account menu', () => {
-        renderNavigation([], Language.CHINESE, {commercialRestricted: true});
-
-        fireEvent.click(screen.getByRole('button', {name: '打开账户菜单'}));
-        fireEvent.click(screen.getByRole('menuitem', {name: '操作手册'}));
-
-        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-        expect(screen.getByRole('dialog', {name: '操作手册'})).toHaveTextContent(
-            '拓展引擎 → 计算群',
-        );
-        fireEvent.keyDown(window, {key: 'Escape'});
-        expect(screen.queryByRole('dialog', {name: '操作手册'})).not.toBeInTheDocument();
+        expect(screen.getByRole('menuitem', {name: '切换到生产平台'})).toBeInTheDocument();
     });
 
     it('opens account center from the summary and uploads an avatar there', async () => {

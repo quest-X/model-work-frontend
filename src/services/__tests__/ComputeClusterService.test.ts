@@ -309,9 +309,9 @@ describe('node communication state', () => {
     it.each([
         [true, false, 'normal', 'fault', 'normal'],
         [false, true, 'fault', 'normal', 'normal'],
-        [false, false, 'fault', 'fault', 'fault'],
+        [false, false, 'fault', 'fault', 'normal'],
         [true, true, 'normal', 'normal', 'normal'],
-    ] as const)('accepts either LAN %s or Tailscale %s control path', (lan, tailscale, lanState, tailscaleState, state) => {
+    ] as const)('maps LAN %s and Tailscale %s to binary health', (lan, tailscale, lanState, tailscaleState, state) => {
         const current = {...node(), network: {...node().network, lan_ssh_available: lan, tailscale_ssh_available: tailscale}};
         expect(computeNodeState(current)).toBe(state);
         expect(computeLinkStates(current)).toEqual({lan: lanState, tailscale: tailscaleState});
@@ -320,11 +320,6 @@ describe('node communication state', () => {
         expect(computeNodeState()).toBe('fault');
         expect(computeNodeState(node(false))).toBe('fault');
         expect(computeNodeState({...node(), network: {...node().network, error: 'refresh failed'}})).toBe('fault');
-    });
-    it('ignores the hidden Tailscale path for AIPACK nodes', () => {
-        const current = {...node(), name: 'AIPACK-13'};
-        expect(computeNodeState(current)).toBe('normal');
-        expect(computeLinkStates(current)).toEqual({lan: 'normal', tailscale: 'fault'});
     });
     it.each([['normal', '正常'], ['fault', '故障'], ['abnormal', '异常']] as const)(
         'uses authoritative %s state even with cached online flags', (state, label) => {
@@ -336,6 +331,34 @@ describe('node communication state', () => {
             expect(current.communication_state).toBe(state);
         },
     );
+});
+
+describe('bounded LAN probing', () => {
+    it.each([0, 1, 2, 3])('keeps a healthy remote route while LAN has %s failures', failures => {
+        const current = {
+            online: true, communication_state: 'normal',
+            network: {online: true, lan_ssh_available: false, tailscale_ssh_available: true, lan_probe_failures: failures},
+            network_dependencies: [],
+        } as unknown as ComputeClusterNode;
+        expect(computeLinkStates(current)).toEqual({lan: failures === 3 ? 'abnormal' : 'fault', tailscale: 'normal'});
+        expect(computeNodeState(current)).toBe('normal');
+    });
+
+    it('uses a guarded node-scoped restart rather than accepting a probe host', async () => {
+        const original = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({ok: true, json: async () => ({
+            node_id: 'node/1', lan_ssh_available: false, lan_probe_failures: 1,
+        })} as Response);
+        try {
+            expect(await ComputeClusterService.restartLanProbe('node/1')).toEqual({
+                node_id: 'node/1', lan_ssh_available: false, lan_probe_failures: 1,
+            });
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringMatching(/\/nodes\/node%2F1\/lan-probe\/restart$/),
+                expect.objectContaining({method: 'POST', body: '{}'}),
+            );
+        } finally { global.fetch = original; }
+    });
 });
 
 describe('communication aggregation', () => {

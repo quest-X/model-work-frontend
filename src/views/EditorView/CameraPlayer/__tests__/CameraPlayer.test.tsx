@@ -69,6 +69,35 @@ describe('CameraPlayer', () => {
         expect(container.querySelector('.CameraPlayerMeta')).toHaveTextContent('DS-2CD2686FWDA2-IZS');
     });
 
+    it('waits for the remote first frame, times out and reconnects with a fresh stream URL', () => {
+        jest.useFakeTimers();
+        try {
+            const {unmount} = render(<CameraPlayer item={{...item, cameraNodeId: 'node-1'}} language={Language.CHINESE}/>);
+            const image = () => screen.getByAltText('Camera 01 实时画面');
+            const original = image();
+            const originalUrl = original.getAttribute('src');
+            act(() => { jest.advanceTimersByTime(12_000); });
+            expect(screen.getByText('等待首帧超时')).toBeInTheDocument();
+            expect(screen.queryByAltText('Camera 01 实时画面')).not.toBeInTheDocument();
+            expect(original).not.toHaveAttribute('src');
+
+            fireEvent.click(screen.getByRole('button', {name: '重新连接'}));
+            expect(image().getAttribute('src')).not.toBe(originalUrl);
+            fireEvent.load(image());
+            expect(screen.getByText('LIVE')).toBeInTheDocument();
+            act(() => { jest.advanceTimersByTime(13_000); });
+            expect(screen.queryByText('等待首帧超时')).not.toBeInTheDocument();
+            fireEvent.error(image());
+            expect(screen.getByText('实时画面连接失败')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', {name: '重新连接'}));
+            const reconnected = image();
+            unmount();
+            expect(reconnected).not.toHaveAttribute('src');
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
     it('uses Smart controls as a panel launcher and closes it from outside', () => {
         const {container} = render(<CameraPlayer item={item} language={Language.CHINESE}/>);
 

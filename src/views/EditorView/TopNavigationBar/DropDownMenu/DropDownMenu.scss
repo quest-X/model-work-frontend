@@ -41,14 +41,6 @@
       color: white;
       font-size: 14px;
 
-      &:is(button) {
-        border: 0;
-        padding: 0;
-        background: transparent;
-        font-family: inherit;
-        text-align: left;
-      }
-
       &.divider {
         position: relative;
 
@@ -83,7 +75,7 @@
         filter: brightness(0) invert(1);
       }
 
-      &:hover:not(:disabled) {
+      &:hover {
         background-color: rgba(0, 0, 0, 0.1);
 
         .Marker {
@@ -95,11 +87,6 @@
             background-color: $secondaryColor;
           }
         }
-      }
-
-      &:disabled {
-        cursor: not-allowed;
-        opacity: 0.42;
       }
     }
   }
