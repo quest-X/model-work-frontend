@@ -18,6 +18,7 @@ export type GeneralState = {
     activePopupNodeId: string | null;
     activePopupNodeName: string | null;
     activePopupNodeRemote: boolean;
+    activePopupCameraHost: string | null;
     customCursorStyle: CustomCursorStyle;
     preventCustomCursor: boolean;
     imageDragMode: boolean;
@@ -55,6 +56,7 @@ interface UpdateActivePopupType {
         activePopupNodeId: string | null;
         activePopupNodeName: string | null;
         activePopupNodeRemote: boolean;
+        activePopupCameraHost: string | null;
     }
 }
 

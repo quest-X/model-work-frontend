@@ -47,6 +47,7 @@ interface IProps {
     activePopupNodeId: string | null;
     activePopupNodeName: string | null;
     activePopupNodeRemote: boolean;
+    activePopupCameraHost?: string | null;
 }
 
 interface RetainedPopup {
@@ -54,10 +55,11 @@ interface RetainedPopup {
     nodeId: string | null;
     nodeName: string | null;
     nodeRemote: boolean;
+    cameraHost: string | null;
 }
 
 export const PopupView: React.FC<IProps> = (
-    { activePopupType, activePopupNodeId, activePopupNodeName, activePopupNodeRemote,
+    { activePopupType, activePopupNodeId, activePopupNodeName, activePopupNodeRemote, activePopupCameraHost = null,
         onBeforeOpenAnnotation, onOpenAnnotation },
 ) => {
 
@@ -66,6 +68,7 @@ export const PopupView: React.FC<IProps> = (
     const popupNodeId = activePopupType ? activePopupNodeId : retainedPopup?.nodeId || null;
     const popupNodeName = activePopupType ? activePopupNodeName : retainedPopup?.nodeName || null;
     const popupNodeRemote = activePopupType ? activePopupNodeRemote : retainedPopup?.nodeRemote || false;
+    const popupCameraHost = activePopupType ? activePopupCameraHost : retainedPopup?.cameraHost || null;
 
     React.useEffect(() => {
         if (activePopupType) setRetainedPopup(null);
@@ -117,6 +120,7 @@ export const PopupView: React.FC<IProps> = (
             nodeId={popupNodeId}
             nodeName={popupNodeName}
             remote={popupNodeRemote}
+            initialHost={popupCameraHost}
         />,
         [PopupWindowType.JETSON_CONNECT]: () => <JetsonConnectPopup
             nodeId={popupNodeId}
@@ -147,6 +151,7 @@ export const PopupView: React.FC<IProps> = (
                     nodeId: activePopupNodeId,
                     nodeName: activePopupNodeName,
                     nodeRemote: activePopupNodeRemote,
+                    cameraHost: activePopupCameraHost,
                 });
                 PopupActions.close();
             }}>
@@ -160,6 +165,7 @@ const mapStateToProps = (state: AppState) => ({
     activePopupNodeId: state.general.activePopupNodeId,
     activePopupNodeName: state.general.activePopupNodeName,
     activePopupNodeRemote: state.general.activePopupNodeRemote,
+    activePopupCameraHost: state.general.activePopupCameraHost,
 });
 
 export default connect(

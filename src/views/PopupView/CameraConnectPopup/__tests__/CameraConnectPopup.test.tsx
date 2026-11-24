@@ -137,6 +137,16 @@ describe('CameraConnectPopup LAN discovery', () => {
         (CameraResourceService.openCluster as jest.Mock).mockResolvedValue(undefined);
     });
 
+    it('prefills the discovered camera address and updates it for another camera', async () => {
+        const popup = render(<CameraConnectPopup language={Language.CHINESE} imagesData={[]}
+            nodeId='node-1' initialHost='10.168.10.140'/>);
+        expect(screen.getByLabelText('相机 IP')).toHaveValue('10.168.10.140');
+        popup.rerender(<CameraConnectPopup language={Language.CHINESE} imagesData={[]}
+            nodeId='node-1' initialHost='10.168.10.141'/>);
+        expect(screen.getByLabelText('相机 IP')).toHaveValue('10.168.10.141');
+        expect(ComputeClusterService.connectCamera).not.toHaveBeenCalled();
+    });
+
     it('hides saved cameras while still loading known credentials by IP', async () => {
         render(<CameraConnectPopup language={Language.CHINESE} imagesData={[]} />);
 

@@ -68,6 +68,7 @@ interface IProps {
         activePopupNodeId?: string | null,
         activePopupNodeName?: string | null,
         activePopupNodeRemote?: boolean,
+        activePopupCameraHost?: string | null,
     ) => void;
 }
 
@@ -423,6 +424,16 @@ const cameraStreamUnavailableTitle = (
         ? '此相机不支持实时画面（需要 camera.stream.v1）'
         : 'This camera does not support live view (camera.stream.v1 is required)';
     return undefined;
+};
+
+const discoveredCameraTitle = (node: ComputeClusterNode, zh: boolean): string => {
+    if (!node.online) return zh
+        ? '节点当前故障，恢复正常后才能连接相机'
+        : 'The node must return to normal before connecting the camera';
+    if (!node.capabilities?.includes('task.camera.connect.v1')) return zh
+        ? '此节点不支持连接相机（需要 task.camera.connect.v1）'
+        : 'This node cannot connect cameras (task.camera.connect.v1 is required)';
+    return zh ? '已发现，点击连接相机' : 'Discovered; click to connect the camera';
 };
 
 const NODE_TAG_LIMIT = 1;
@@ -1254,18 +1265,31 @@ export const ControlCenterView: React.FC<IProps> = ({
         node: ComputeClusterNode,
         camera: ComputeManagedDevice,
         depth: number,
+        discovered = false,
     ) => <button
         type='button'
         key={camera.device_id}
         className={`ControlMachineItem camera-device tree-child tree-depth-${depth} ${
             node.node_id === selectedNodeId && camera.device_id === cameraViewerId ? 'selected' : ''
         }`}
-        disabled={!node.online || !cameraStreamingAvailable(camera)}
-        aria-label={zh ? `打开 ${camera.name} 实时画面` : `Open live view for ${camera.name}`}
-        title={cameraStreamUnavailableTitle(node, camera, zh)}
+        disabled={!node.online || (discovered
+            ? !node.capabilities?.includes('task.camera.connect.v1')
+            : !cameraStreamingAvailable(camera))}
+        aria-label={discovered
+            ? (zh ? `连接 ${camera.name} 摄像头` : `Connect camera ${camera.name}`)
+            : (zh ? `打开 ${camera.name} 实时画面` : `Open live view for ${camera.name}`)}
+        title={discovered ? discoveredCameraTitle(node, zh) : cameraStreamUnavailableTitle(node, camera, zh)}
         onClick={() => {
             selectSidebarNode(node.node_id);
-            setCameraViewerId(camera.device_id);
+            if (discovered) {
+                updateActivePopupTypeAction?.(
+                    PopupWindowType.CAMERA_CONNECT,
+                    node.node_id,
+                    node.name,
+                    node.control_transport === 'tailscale',
+                    camera.ip_address || null,
+                );
+            } else setCameraViewerId(camera.device_id);
         }}
     >
         <img
@@ -1361,10 +1385,6 @@ export const ControlCenterView: React.FC<IProps> = ({
             stateTone = machineTone(installedNode);
             stateLabel = computeNodeLabel(installedNode, zh);
         }
-        const cameras = [
-            ...edgeCameras(node, device),
-            ...discoveredEdgeCameras(node, device),
-        ];
         return <React.Fragment key={device.asset_id}>
             <button
                 type='button'
@@ -1391,7 +1411,8 @@ export const ControlCenterView: React.FC<IProps> = ({
                     {stateLabel}
                 </span>
             </button>
-            {cameras.map(camera => renderSidebarCamera(node, camera, depth + 1))}
+            {edgeCameras(node, device).map(camera => renderSidebarCamera(node, camera, depth + 1))}
+            {discoveredEdgeCameras(node, device).map(camera => renderSidebarCamera(node, camera, depth + 1, true))}
         </React.Fragment>;
     };
 

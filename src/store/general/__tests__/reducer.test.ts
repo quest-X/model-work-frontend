@@ -56,3 +56,11 @@ it('tracks popup target changes even when the popup type is unchanged', () => {
     expect(second.activePopupNodeId).toBe('node-2');
     expect(generalReducer(second, targetAction)).toBe(second);
 });
+
+it('passes the discovered camera address into the popup target', () => {
+    const action = updateActivePopupType(PopupWindowType.CAMERA_CONNECT, 'node-1', 'AIPACK-05', false, '10.168.10.140');
+    const state = generalReducer(undefined, action);
+    expect(state.activePopupCameraHost).toBe('10.168.10.140');
+    expect(generalReducer(state, action)).toBe(state);
+    expect(generalReducer(state, updateActivePopupType(null)).activePopupCameraHost).toBeNull();
+});
