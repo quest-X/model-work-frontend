@@ -31,6 +31,8 @@ export const App: React.FC<IProps> = (
         roboflowAPIDetails
     }
 ) => {
+    const [restoreWorkspaceId] = useState(() =>
+        new URLSearchParams(window.location.search).get('restore_workspace') || undefined);
     const [isRestoring, setIsRestoring] = useState(true);
     const [showRestorePrompt, setShowRestorePrompt] = useState(false);
     const [storedDataInfo, setStoredDataInfo] = useState<StoredDataInfo | null>(null);
@@ -67,7 +69,7 @@ export const App: React.FC<IProps> = (
             }
 
             // 检查是否有存储的数据
-            const dataInfo = await ProjectRestoreService.checkForStoredData();
+            const dataInfo = await ProjectRestoreService.checkForStoredData(restoreWorkspaceId);
             setStoredDataInfo(dataInfo);
 
             // 项目恢复只属于标注平台。控制中心保留待恢复快照但不弹窗；
@@ -113,7 +115,7 @@ export const App: React.FC<IProps> = (
                 if (!ready) {
                     throw new Error('恢复数据库仍被占用，请关闭其他旧标签页后重试');
                 }
-                dataInfo = await ProjectRestoreService.checkForStoredData();
+                dataInfo = await ProjectRestoreService.checkForStoredData(restoreWorkspaceId);
                 setStoredDataInfo(dataInfo);
                 setStorageUnavailable(false);
             }
@@ -136,6 +138,11 @@ export const App: React.FC<IProps> = (
             }
 
             setRestoreStatus('恢复完成');
+            if (restoreWorkspaceId) {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('restore_workspace');
+                window.history.replaceState(window.history.state, '', url);
+            }
             setStoredDataInfo(current => current ? {...current, hasProject: false} : current);
             setShowRestorePrompt(false);
 

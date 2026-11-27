@@ -24,6 +24,7 @@ export interface StoredVideoRecoveryData {
 export interface StoredProjectData {
     id: string;
     workspaceId?: string;
+    projectName?: string;
     images: StoredImageData[];
     labelNames: LabelName[];
     currentImageIndex: number;
@@ -82,6 +83,7 @@ export interface StoredQueueAnnotationSnapshot {
 }
 
 export interface StoredProjectMeta {
+    projectName?: string;
     imageCount: number;
     validImageCount: number;
     labelCount: number;
@@ -93,6 +95,10 @@ export interface StoredProjectMeta {
 interface WorkspaceMetaRecord extends StoredProjectMeta {
     id: string;
     projectId: string;
+}
+
+export interface AnnotatedProjectHistoryEntry extends StoredProjectMeta {
+    workspaceId: string;
 }
 
 interface ResolvedProjectLocation {
@@ -618,6 +624,8 @@ export class IndexedDBManager {
         return {
             id: workspaceId,
             projectId,
+            projectName: projectData.projectName || activeQueueItem?.name
+                || projectData.queueItems?.[0]?.name,
             imageCount,
             // Video placeholders carry durable annotations and stable frame indices;
             // they are not data loss merely because their pixels are runtime-cached.
@@ -861,6 +869,7 @@ export class IndexedDBManager {
 
     private static publicMeta(meta: WorkspaceMetaRecord): StoredProjectMeta {
         return {
+            projectName: meta.projectName,
             imageCount: meta.imageCount,
             validImageCount: meta.validImageCount,
             labelCount: meta.labelCount,
@@ -942,9 +951,56 @@ export class IndexedDBManager {
         return storedProject;
     }
 
-    public static async getProjectMeta(): Promise<StoredProjectMeta | null> {
+    public static async listAnnotatedProjects(): Promise<AnnotatedProjectHistoryEntry[]> {
+        if (!this.db && !await this.initialize()) {
+            throw new RecoveryStorageReadError('历史任务');
+        }
+        const database = this.db;
+        if (!database) throw new RecoveryStorageReadError('历史任务');
+        const records = await new Promise<WorkspaceMetaRecord[]>((resolve, reject) => {
+            try {
+                const transaction = database.transaction([this.META_STORE_NAME], 'readonly');
+                const request = transaction.objectStore(this.META_STORE_NAME).getAll();
+                transaction.onabort = () => reject(new RecoveryStorageReadError('历史任务', transaction.error));
+                request.onsuccess = () => resolve(request.result || []);
+                request.onerror = () => reject(new RecoveryStorageReadError('历史任务', request.error));
+            } catch (error) {
+                reject(new RecoveryStorageReadError('历史任务', error));
+            }
+        });
+        const annotated = records.filter(record =>
+            record.hasRecoverableProject && record.labelCount > 0,
+        ).sort((left, right) => right.lastModified - left.lastModified);
+        const entries: AnnotatedProjectHistoryEntry[] = [];
+        for (const record of annotated) {
+            // Older snapshots predate the projectName metadata. Read their name
+            // only here, when the history panel is opened.
+            let projectName = record.projectName;
+            if (!projectName) {
+                const project = await this.readProjectById(record.projectId);
+                projectName = project?.projectName
+                    || project?.queueItems?.find(item => item.id === project.activeQueueItemId)?.name
+                    || project?.queueItems?.[0]?.name;
+            }
+            entries.push({
+                ...this.publicMeta(record),
+                projectName,
+                workspaceId: record.id,
+            });
+        }
+        return entries;
+    }
+
+    public static async getProjectMeta(workspaceId?: string): Promise<StoredProjectMeta | null> {
         this.pinnedReadLocation = null;
-        const location = await this.resolveProjectLocation();
+        const selectedMeta = workspaceId ? await this.readWorkspaceMeta(workspaceId) : null;
+        const location = workspaceId
+            ? selectedMeta?.hasRecoverableProject ? {
+                projectId: selectedMeta.projectId,
+                workspaceId: selectedMeta.id,
+                meta: this.publicMeta(selectedMeta),
+            } : null
+            : await this.resolveProjectLocation();
         if (!location) {
             this.activeReadProjectId = null;
             this.activeReadWorkspaceId = null;
@@ -967,6 +1023,10 @@ export class IndexedDBManager {
                 ));
             }
         }
+        currentMeta = {
+            ...currentMeta,
+            projectName: await this.projectNameForSelectedHistory(location.projectId, currentMeta, workspaceId),
+        };
         // Pin the exact workspace/project pair displayed by the recovery prompt.
         // loadProject() must not run latest-selection again after user confirmation.
         this.pinnedReadLocation = {
@@ -977,6 +1037,18 @@ export class IndexedDBManager {
         this.activeReadWorkspaceId = location.workspaceId;
         this.activeReadLastModified = currentMeta.lastModified;
         return currentMeta;
+    }
+
+    private static async projectNameForSelectedHistory(
+        projectId: string,
+        meta: StoredProjectMeta,
+        workspaceId?: string,
+    ): Promise<string | undefined> {
+        if (!workspaceId || meta.projectName) return meta.projectName;
+        const project = await this.readProjectById(projectId);
+        return project?.projectName
+            || project?.queueItems?.find(item => item.id === project.activeQueueItemId)?.name
+            || project?.queueItems?.[0]?.name;
     }
 
     public static async hasStoredProject(): Promise<boolean> {

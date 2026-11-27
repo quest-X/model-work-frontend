@@ -636,6 +636,60 @@ describe('IndexedDBManager durability', () => {
         expect(loaded).toEqual(expect.objectContaining({version: 'A', workspaceId: 'tab-local'}));
     });
 
+    it('lists only annotated recoverable snapshots and reads names from older records', async () => {
+        const annotated = {
+            id: 'task-a', projectId: 'workspace:task-a', imageCount: 8,
+            validImageCount: 8, labelCount: 5, isVideoProject: true,
+            hasRecoverableProject: true, lastModified: 20,
+        };
+        const empty = {...annotated, id: 'task-b', projectId: 'workspace:task-b', labelCount: 0};
+        const request: FakeRequest<Array<typeof annotated>> = {result: [empty, annotated]};
+        setDatabase(() => ({
+            error: null,
+            objectStore: () => ({
+                getAll: () => {
+                    queueMicrotask(() => request.onsuccess?.());
+                    return request;
+                },
+            }),
+        }));
+        const readProject = mockMethod('readProjectById').mockResolvedValue({
+            ...project(), activeQueueItemId: 'video',
+            queueItems: [{
+                id: 'video', name: 'dog_4166347', type: QueueItemType.VIDEO,
+                status: QueueItemStatus.COMPLETED, uploadedAt: 1,
+            }],
+        });
+
+        await expect(IndexedDBManager.listAnnotatedProjects()).resolves.toEqual([
+            expect.objectContaining({workspaceId: 'task-a', projectName: 'dog_4166347', labelCount: 5}),
+        ]);
+        expect(readProject).toHaveBeenCalledWith('workspace:task-a');
+    });
+
+    it('pins a specifically selected historical snapshot for restore', async () => {
+        const meta = {
+            id: 'task-a', projectId: 'workspace:task-a', projectName: 'dog_4166347',
+            imageCount: 8, validImageCount: 8, labelCount: 5,
+            isVideoProject: true, hasRecoverableProject: true, lastModified: 20,
+        };
+        setDatabase();
+        IndexedDBManager['workspaceId'] = 'tab-local';
+        mockMethod('readWorkspaceMeta').mockResolvedValue(meta);
+        const resolveLatest = mockMethod('resolveProjectLocation');
+        mockMethod('readProjectById').mockResolvedValue({
+            ...project(), id: meta.projectId, lastModified: meta.lastModified,
+        });
+
+        await expect(IndexedDBManager.getProjectMeta('task-a')).resolves.toEqual(
+            expect.objectContaining({projectName: 'dog_4166347'}),
+        );
+        await expect(IndexedDBManager.loadProject()).resolves.toEqual(
+            expect.objectContaining({workspaceId: 'tab-local'}),
+        );
+        expect(resolveLatest).not.toHaveBeenCalled();
+    });
+
     it('reclassifies legacy empty metadata when the stored project is a camera workspace', async () => {
         const location = {
             projectId: 'workspace:tab-camera',

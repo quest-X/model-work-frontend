@@ -13,6 +13,7 @@ import {
 import {
     updateImageDragModeStatus,
     updateLanguage,
+    updateProjectData,
     updateSmartAnnotationActiveStatus,
     updateZoom,
 } from '../store/general/actionCreators';
@@ -78,7 +79,7 @@ export class ProjectRestoreService {
         );
     }
 
-    public static async checkForStoredData(): Promise<{
+    public static async checkForStoredData(workspaceId?: string): Promise<{
         hasSettings: boolean;
         hasProject: boolean;
         lastSaved: number;
@@ -90,8 +91,9 @@ export class ProjectRestoreService {
     }> {
         const hasSettings = LocalStorageManager.hasStoredSettings();
         const localLastSaved = LocalStorageManager.getLastSavedTime();
-        const projectName = hasSettings ? LocalStorageManager.getSettings().projectName : undefined;
-        const meta = await IndexedDBManager.getProjectMeta();
+        const meta = await IndexedDBManager.getProjectMeta(workspaceId);
+        const projectName = meta?.projectName
+            || (hasSettings ? LocalStorageManager.getSettings().projectName : undefined);
         const hasProject = meta !== null && (
             meta.hasRecoverableProject ?? meta.validImageCount > 0
         );
@@ -139,6 +141,7 @@ export class ProjectRestoreService {
             const activeQueueItem = queueItems.find(item => item.id === storedProject.activeQueueItemId)
                 || queueItems.find(item => item.id === storedProject.videoRecovery?.sourceQueueItemId)
                 || queueItems[0];
+            const projectName = storedProject.projectName || activeQueueItem?.name;
             const isVideoProject = this.isVideoProject(storedProject, activeQueueItem);
             const isCameraProject = activeQueueItem?.type === QueueItemType.CAMERA;
 
@@ -225,6 +228,13 @@ export class ProjectRestoreService {
                 store.dispatch(setActiveQueueItem(activeId));
                 ImageRepository.setActiveFileId(activeId);
                 if (activeId) ImageRepository.saveFileCache(activeId, restoredImages);
+            }
+
+            if (projectName) {
+                store.dispatch(updateProjectData({
+                    ...store.getState().general.projectData,
+                    name: projectName,
+                }));
             }
 
             onProgress?.('恢复完成');

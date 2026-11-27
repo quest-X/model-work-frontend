@@ -9,6 +9,7 @@ import type {QueueActionTypes} from '../../store/queue/types';
 import {Action} from '../../store/Actions';
 import {LabelStatus} from '../../data/enums/LabelStatus';
 import {QueueItemStatus, QueueItemType} from '../../store/queue/types';
+import {ProjectType} from '../../data/enums/ProjectType';
 
 type RestoreAction = LabelsActionTypes | VideoActionTypes | QueueActionTypes;
 const mockDispatch = jest.fn<void, [RestoreAction]>();
@@ -21,6 +22,10 @@ const rectangle = (id: string): LabelRect => ({
 jest.mock('../../index', () => ({
     store: {
         dispatch: (action: RestoreAction) => mockDispatch(action),
+        getState: () => ({general: {projectData: {
+            type: ProjectType.OBJECT_DETECTION,
+            name: 'default-project',
+        }}}),
     },
 }));
 

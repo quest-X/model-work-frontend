@@ -82,6 +82,24 @@ describe('App restore prompt scope', () => {
         expect(screen.getByText(expected === 'control' ? 'annotation' : 'control')).toBeInTheDocument();
     });
 
+    it('restores the history entry selected by its workspace ID', async () => {
+        window.history.replaceState(null, '', '/?restore_workspace=task-dog');
+        mockCurrentAccountSession.mockReturnValue({user: {role: 'member'}});
+        restore.checkForStoredData.mockResolvedValue({
+            hasSettings: true, hasProject: true, lastSaved: 20,
+            projectName: 'dog_4166347', imageCount: 182, labelCount: 173,
+        });
+        restore.restoreProject.mockResolvedValue(true);
+
+        render(<App {...props}/>);
+        expect(await screen.findByText('是否恢复之前的工作?')).toBeInTheDocument();
+        expect(restore.checkForStoredData).toHaveBeenCalledWith('task-dog');
+        fireEvent.click(screen.getByRole('button', {name: '恢复工作'}));
+        await waitFor(() => expect(restore.restoreProject).toHaveBeenCalledTimes(1));
+        expect(window.location.search).toBe('');
+        expect(restore.clearAllStoredData).not.toHaveBeenCalled();
+    });
+
     it('opens a resource in annotation when no recovery is pending', async () => {
         render(<App {...props}/>);
         await waitFor(() => expect(autoSave.resume).toHaveBeenCalled());

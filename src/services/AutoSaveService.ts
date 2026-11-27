@@ -492,6 +492,7 @@ export class AutoSaveService {
         const activeVideo = state.video?.isVideoMode ? state.video.activeVideo : null;
         const projectData: StoredProjectData = {
             id: 'current-project',
+            projectName: state.general.projectData.name,
             images: storedImages,
             labelNames: state.labels.labels || [],
             currentImageIndex: state.labels.activeImageIndex,
