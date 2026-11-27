@@ -84,6 +84,7 @@ export interface StoredQueueAnnotationSnapshot {
 
 export interface StoredProjectMeta {
     projectName?: string;
+    thumbnail?: string;
     imageCount: number;
     validImageCount: number;
     labelCount: number;
@@ -99,6 +100,8 @@ interface WorkspaceMetaRecord extends StoredProjectMeta {
 
 export interface AnnotatedProjectHistoryEntry extends StoredProjectMeta {
     workspaceId: string;
+    firstImageFileData?: StoredFileData;
+    firstImageFileType?: string;
 }
 
 interface ResolvedProjectLocation {
@@ -626,6 +629,7 @@ export class IndexedDBManager {
             projectId,
             projectName: projectData.projectName || activeQueueItem?.name
                 || projectData.queueItems?.[0]?.name,
+            thumbnail: activeQueueItem?.thumbnail || projectData.queueItems?.[0]?.thumbnail,
             imageCount,
             // Video placeholders carry durable annotations and stable frame indices;
             // they are not data loss merely because their pixels are runtime-cached.
@@ -870,6 +874,7 @@ export class IndexedDBManager {
     private static publicMeta(meta: WorkspaceMetaRecord): StoredProjectMeta {
         return {
             projectName: meta.projectName,
+            thumbnail: meta.thumbnail,
             imageCount: meta.imageCount,
             validImageCount: meta.validImageCount,
             labelCount: meta.labelCount,
@@ -973,18 +978,32 @@ export class IndexedDBManager {
         ).sort((left, right) => right.lastModified - left.lastModified);
         const entries: AnnotatedProjectHistoryEntry[] = [];
         for (const record of annotated) {
-            // Older snapshots predate the projectName metadata. Read their name
-            // only here, when the history panel is opened.
+            // Older snapshots predate the project name and thumbnail metadata.
+            // Read their queue preview only when the history panel is opened.
             let projectName = record.projectName;
-            if (!projectName) {
+            let thumbnail = record.thumbnail;
+            let firstImageFileData: StoredFileData | undefined;
+            let firstImageFileType: string | undefined;
+            if (!projectName || !thumbnail) {
                 const project = await this.readProjectById(record.projectId);
+                const activeItem = project?.queueItems?.find(item =>
+                    item.id === project.activeQueueItemId) || project?.queueItems?.[0];
                 projectName = project?.projectName
-                    || project?.queueItems?.find(item => item.id === project.activeQueueItemId)?.name
-                    || project?.queueItems?.[0]?.name;
+                    || activeItem?.name || projectName;
+                thumbnail = activeItem?.thumbnail || thumbnail;
+                const firstImage = project?.images?.[0];
+                if (!thumbnail && firstImage?.fileType?.startsWith('image/')
+                    && getStoredFileByteLength(firstImage.fileData) > 0) {
+                    firstImageFileData = firstImage.fileData;
+                    firstImageFileType = firstImage.fileType;
+                }
             }
             entries.push({
                 ...this.publicMeta(record),
                 projectName,
+                thumbnail,
+                firstImageFileData,
+                firstImageFileType,
                 workspaceId: record.id,
             });
         }

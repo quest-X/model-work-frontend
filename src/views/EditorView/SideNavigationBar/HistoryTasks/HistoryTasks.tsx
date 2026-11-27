@@ -10,6 +10,26 @@ interface Props {
     language: Language;
 }
 
+const HistoryThumbnail: React.FC<{task: AnnotatedProjectHistoryEntry; name: string; zh: boolean}> =
+    ({task, name, zh}) => {
+        const [firstImageUrl, setFirstImageUrl] = useState<string>();
+        useEffect(() => {
+            if (task.thumbnail || !task.firstImageFileData) return undefined;
+            const blob = task.firstImageFileData instanceof File
+                ? task.firstImageFileData
+                : new Blob([task.firstImageFileData], {type: task.firstImageFileType || 'image/jpeg'});
+            const url = URL.createObjectURL(blob);
+            setFirstImageUrl(url);
+            return () => URL.revokeObjectURL(url);
+        }, [task.thumbnail, task.firstImageFileData, task.firstImageFileType]);
+        const preview = task.thumbnail || firstImageUrl;
+        return <span className='HistoryTasks__thumbnail'>
+            <img src={preview || (task.isVideoProject ? '/ico/pictures.png' : '/ico/camera.png')}
+                alt={preview ? (zh ? `${name} 首张预览` : `${name} first image`) : ''}
+                loading='lazy' decoding='async'/>
+        </span>;
+    };
+
 export const HistoryTasks: React.FC<Props> = ({language}) => {
     const zh = language === Language.CHINESE;
     const [tasks, setTasks] = useState<AnnotatedProjectHistoryEntry[]>([]);
@@ -54,13 +74,16 @@ export const HistoryTasks: React.FC<Props> = ({language}) => {
                 return <a className='HistoryTasks__item' key={task.workspaceId}
                     href={url.toString()} target='_blank' rel='noopener noreferrer'
                     title={zh ? '在新标签页恢复此任务' : 'Restore this task in a new tab'}>
-                    <span className='HistoryTasks__name'>{name}</span>
-                    <span className='HistoryTasks__detail'>
-                        {task.labelCount}/{task.imageCount} {zh
-                            ? task.isVideoProject ? '帧已标注' : '张已标注'
-                            : task.isVideoProject ? 'frames annotated' : 'images annotated'}
+                    <HistoryThumbnail task={task} name={name} zh={zh}/>
+                    <span className='HistoryTasks__copy'>
+                        <span className='HistoryTasks__name'>{name}</span>
+                        <span className='HistoryTasks__detail'>
+                            {task.labelCount}/{task.imageCount} {zh
+                                ? task.isVideoProject ? '帧已标注' : '张已标注'
+                                : task.isVideoProject ? 'frames annotated' : 'images annotated'}
+                        </span>
+                        <time className='HistoryTasks__time' dateTime={new Date(task.lastModified).toISOString()}>{time}</time>
                     </span>
-                    <time className='HistoryTasks__time' dateTime={new Date(task.lastModified).toISOString()}>{time}</time>
                 </a>;
             })}
         </div>}
