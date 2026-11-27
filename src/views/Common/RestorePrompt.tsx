@@ -42,53 +42,40 @@ export const RestorePrompt: React.FC<Props> = ({
     storedDataInfo, restoreError, storageUnavailable, handleRestoreCancel, handleRestoreConfirm,
 }) => (
     <div className="App restore-prompt">
-        <div className="restore-dialog">
-            <h2>是否恢复之前的工作?</h2>
-            <div className="restore-info">
-                {storedDataInfo.projectName && (
+        <div className="restore-dialog" role="dialog" aria-modal="true" aria-labelledby="restore-dialog-title">
+            <h2 id="restore-dialog-title">是否恢复之前的工作?</h2>
+            <div className="restore-content">
+                <div className="restore-info">
+                    {storedDataInfo.projectName && (
+                        <div className="info-row">
+                            <span className="info-label">项目名称</span>
+                            <span className="info-value">{storedDataInfo.projectName}</span>
+                        </div>
+                    )}
                     <div className="info-row">
-                        <span className="info-label">项目名称</span>
-                        <span className="info-value">{storedDataInfo.projectName}</span>
+                        <span className="info-label">上次保存</span>
+                        <span className="info-value">{ProjectRestoreService.formatLastSavedTime(storedDataInfo.lastSaved)}</span>
                     </div>
-                )}
-                <div className="info-row">
-                    <span className="info-label">上次保存</span>
-                    <span className="info-value">{ProjectRestoreService.formatLastSavedTime(storedDataInfo.lastSaved)}</span>
+                    {storedDataInfo.isVideoProject !== undefined && (
+                        <div className="info-row">
+                            <span className="info-label">项目类型</span>
+                            <span className="info-value">{storedDataInfo.isVideoProject ? '视频' : '图像'}</span>
+                        </div>
+                    )}
+                    {renderImageCounts(storedDataInfo)}
                 </div>
-                {storedDataInfo.isVideoProject !== undefined && (
-                    <div className="info-row">
-                        <span className="info-label">项目类型</span>
-                        <span className="info-value">{storedDataInfo.isVideoProject ? '视频' : '图像'}</span>
-                    </div>
-                )}
-                {renderImageCounts(storedDataInfo)}
+                {restoreError && <div className="error-message" role="alert"><p>{restoreError}</p></div>}
             </div>
-            {/* 恢复失败错误提示 */}
-            {restoreError && (
-                <div className="error-message">
-                    <p>{restoreError}</p>
-                    <div className="restore-buttons">
-                        {!storageUnavailable && (
-                            <button onClick={handleRestoreCancel} className="btn-danger">
-                                清除数据，重新开始
-                            </button>
-                        )}
-                        <button onClick={handleRestoreConfirm} className="btn-success">
-                            {storageUnavailable ? '关闭旧标签页后重试' : '重试恢复'}
-                        </button>
-                    </div>
-                </div>
-            )}
-            {!restoreError && (
-                <div className="restore-buttons">
+            <div className="restore-buttons">
+                {(!restoreError || !storageUnavailable) && (
                     <button onClick={handleRestoreCancel} className="btn-danger">
-                        重新开始
+                        {restoreError ? '清除数据，重新开始' : '重新开始'}
                     </button>
-                    <button onClick={handleRestoreConfirm} className="btn-success">
-                        恢复工作
-                    </button>
-                </div>
-            )}
+                )}
+                <button onClick={handleRestoreConfirm} className="btn-success">
+                    {restoreError ? (storageUnavailable ? '关闭旧标签页后重试' : '重试恢复') : '恢复工作'}
+                </button>
+            </div>
         </div>
     </div>
 );
