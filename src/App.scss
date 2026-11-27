@@ -115,19 +115,27 @@
 				}
 
 				&.btn-danger {
-					background-color: transparent;
-					border-color: $darkThemeThirdColor;
-					color: white;
+					background-color: #7a2020;
+					border-color: #7a2020;
+					color: #ffb3b3;
 
 					&:hover {
-						border-color: $computeAbnormalColor;
-						color: $computeAbnormalColor;
+						background-color: #922828;
+						border-color: #922828;
+						color: white;
 					}
 				}
 
 				&.btn-success {
-					background-color: white;
-					color: black;
+					background-color: #1a5c2e;
+					border-color: #1a5c2e;
+					color: #7ddc97;
+
+					&:hover {
+						background-color: #21763a;
+						border-color: #21763a;
+						color: white;
+					}
 				}
 			}
 		}
