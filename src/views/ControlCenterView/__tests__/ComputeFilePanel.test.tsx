@@ -1,10 +1,11 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {ComputeClusterNode, ComputeClusterService, ComputeFilesystemTarget} from '../../../services/ComputeClusterService';
 import * as ApprovalIdentity from '../../../services/ApprovalIdentityService';
 import {ComputeFilePanel, remoteChildPath} from '../ComputeFilePanel';
 
 jest.mock('../../../services/ApprovalIdentityService', () => ({
+    APPROVAL_IDENTITY_CHANGED: 'fixture-approval-identity-changed',
     canonicalAuthorizationJson: (value: unknown) => JSON.stringify(value),
     getApprovalIdentity: jest.fn(),
     signAuthorization: jest.fn(),
@@ -59,7 +60,7 @@ describe('ComputeFilePanel', () => {
         fireEvent.change(screen.getByRole('textbox', {name: '绝对目录路径'}), {target: {value: '/home/luo'}});
         fireEvent.click(screen.getByRole('button', {name: '转到'}));
         await waitFor(() => expect(create).toHaveBeenLastCalledWith(node.node_id,
-            expect.objectContaining({target: {kind: 'path', path: '/home/luo'}})));
+            expect.objectContaining({target: {kind: 'path', path: '/home/luo'}}), expect.any(AbortSignal)));
     });
 
     it('opens the default node at its desktop and returns through cached history', async () => {
@@ -131,11 +132,41 @@ describe('ComputeFilePanel', () => {
         await waitFor(() => expect(create).toHaveBeenLastCalledWith(
             node.node_id,
             expect.objectContaining({target: {kind: 'path', path: 'C:\\Users\\Public\\Desktop\\Models'}}),
+            expect.any(AbortSignal),
         ));
         expect(await screen.findByText('此目录为空。')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '返回上一级已浏览目录'}));
         expect(screen.getByText(/report\.txt/)).toBeInTheDocument();
         expect(create).toHaveBeenCalledTimes(2);
+    });
+
+    it('discards a read challenge that arrives after the approval identity changes', async () => {
+        type Challenge = Awaited<ReturnType<typeof ComputeClusterService.createFilesystemAuthorization>>;
+        let deliver: (challenge: Challenge) => void = () => undefined;
+        const create = jest.spyOn(ComputeClusterService, 'createFilesystemAuthorization')
+            .mockImplementation(() => new Promise(resolve => { deliver = resolve; }));
+        const approve = jest.spyOn(ComputeClusterService, 'approveFilesystemAuthorization');
+        const sign = jest.mocked(ApprovalIdentity.signAuthorization);
+        sign.mockClear();
+
+        render(<ComputeFilePanel nodes={[node]} preferredNodeId={node.node_id} zh/>);
+        fireEvent.change(screen.getByRole('textbox', {name: '绝对目录路径'}), {target: {value: 'C:\\Users'}});
+        fireEvent.click(screen.getByRole('button', {name: '转到'}));
+        const signal = create.mock.calls[0][2];
+        expect(signal?.aborted).toBe(false);
+        fireEvent(window, new Event(ApprovalIdentity.APPROVAL_IDENTITY_CHANGED));
+        expect(signal?.aborted).toBe(true);
+
+        await act(async () => deliver({
+            target_installation_id: node.installation_id,
+            operation: 'filesystem.list',
+            target: {kind: 'path', path: 'C:\\Users'},
+            parameters: {limit: 500},
+            ...user,
+        } as Challenge));
+        expect(sign).not.toHaveBeenCalled();
+        expect(approve).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', {name: '转到'})).toBeEnabled();
     });
 
     it('allows retry after a failed transparent read', async () => {

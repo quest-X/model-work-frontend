@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useId, useMemo, useRef, useState} from 'react';
 import {
     ComputeClusterNode,
     computeNodeUpgradeAvailable,
@@ -12,6 +12,7 @@ import {
 import {ApprovalIdentityPanel} from '../../Common/ApprovalIdentityPanel';
 
 export const ACTIVE_BATCH_KEY = 'opensight.compute-upgrade-batch.v1';
+const ACTIVE_BATCH_CHANGED = 'opensight:active-upgrade-batch-changed';
 const manifestKey = (manifest: ComputeUpgradeManifest): string =>
     `${manifest.platform}/${manifest.architecture}`;
 const architecture = (value: string): string => ({amd64: 'x86_64', arm64: 'aarch64'}[value.toLowerCase()] || value.toLowerCase());
@@ -43,6 +44,8 @@ const stateLabel = (state: string, zh: boolean, errorCode?: string | null): stri
         rejected: zh ? '已拒绝' : 'Rejected',
     }[state] || state);
 };
+
+export {stateLabel as upgradeStateLabel};
 
 const errorLabel = (code: string, zh: boolean): string => ({
     authorization_user_unknown: zh ? '审批身份未登记到目标节点' : 'Approval identity is not registered on the target node',
@@ -90,7 +93,9 @@ export const ComputeUpgradePanel: React.FC<{
     releasesError: string;
     refreshReleases: () => Promise<void>;
     zh: boolean;
-}> = ({nodes, releases, releasesLoading, releasesError, refreshReleases, zh}) => { // eslint-disable-line complexity
+    targetNodeId?: string;
+}> = ({nodes, releases, releasesLoading, releasesError, refreshReleases, zh, targetNodeId}) => { // eslint-disable-line complexity
+    const releaseId = useId();
     const [release, setRelease] = useState('');
     const manifests = useMemo(() => Object.fromEntries(releases.filter(item => item.release_version === release)
         .map(item => [manifestKey(item), item])), [releases, release]);
@@ -99,25 +104,71 @@ export const ComputeUpgradePanel: React.FC<{
     const [batch, setBatch] = useState<ComputeUpgradeBatch | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-    const eligible = useMemo(() => nodes.filter(computeNodeUpgradeReady), [nodes]);
+    const [batchLookup, setBatchLookup] = useState(0);
+    const decisionBatchId = useRef<string | null>(null);
+    const [activeBatchReading, setActiveBatchReading] = useState(true);
+    const [activeBatchError, setActiveBatchError] = useState('');
+    const eligible = useMemo(() => nodes.filter(node => computeNodeUpgradeReady(node)
+        && (!targetNodeId || node.node_id === targetNodeId)), [nodes, targetNodeId]);
+    const inScope = (item: ComputeUpgradeBatch): boolean => !targetNodeId
+        || (item.nodes.length === 1 && item.nodes[0].node_id === targetNodeId);
+    const otherBatch = Boolean(batch && !inScope(batch));
 
     useEffect(() => {
-        const batchId = localStorage.getItem(ACTIVE_BATCH_KEY);
-        if (!batchId) return;
-        void ComputeClusterService.upgradeBatch(batchId).then(setBatch).catch(reason => {
-            // An observation outage is not proof the durable batch disappeared.
-            setError(reason instanceof Error ? reason.message : String(reason));
-        });
-    }, []);
+        const storageChanged = (event: StorageEvent) => {
+            if (event.key === null || event.key === ACTIVE_BATCH_KEY) setBatchLookup(current => current + 1);
+        };
+        const localChanged = (event: Event) => {
+            if ((event as CustomEvent<string>).detail !== releaseId) setBatchLookup(current => current + 1);
+        };
+        window.addEventListener('storage', storageChanged);
+        window.addEventListener(ACTIVE_BATCH_CHANGED, localChanged);
+        return () => {
+            window.removeEventListener('storage', storageChanged);
+            window.removeEventListener(ACTIVE_BATCH_CHANGED, localChanged);
+        };
+    }, [releaseId]);
 
     useEffect(() => {
-        if (!batch || !['authorized', 'running', 'approval_submitting'].includes(batch.state)) return undefined;
+        const controller = new AbortController();
+        const load = async () => {
+            setActiveBatchReading(true);
+            setActiveBatchError('');
+            try {
+                const checkingDecision = decisionBatchId.current;
+                const batchId = checkingDecision ?? localStorage.getItem(ACTIVE_BATCH_KEY);
+                const restored = batchId ? await ComputeClusterService.upgradeBatch(batchId, controller.signal) : null;
+                if (restored && restored.batch_id !== batchId) throw new Error('upgrade_batch_scope_mismatch');
+                if (!controller.signal.aborted) {
+                    setBatch(restored);
+                    if (checkingDecision) {
+                        decisionBatchId.current = null;
+                        if (restored?.state !== 'awaiting_authorization') setError('');
+                    }
+                }
+            } catch (reason) {
+                // A failed read does not prove the recorded batch is gone.
+                if (!controller.signal.aborted) setActiveBatchError(reason instanceof Error ? reason.message : String(reason));
+            } finally {
+                if (!controller.signal.aborted) setActiveBatchReading(false);
+            }
+        };
+        void load();
+        return () => controller.abort();
+    }, [batchLookup]);
+
+    useEffect(() => {
+        if (!batch || otherBatch || !['authorized', 'running', 'approval_submitting'].includes(batch.state)) return undefined;
         let disposed = false;
         let timer: number;
         const poll = async () => {
             try {
                 const next = await ComputeClusterService.upgradeBatch(batch.batch_id);
-                if (!disposed) setBatch(next);
+                if (next.batch_id !== batch.batch_id) throw new Error('upgrade_batch_scope_mismatch');
+                if (!disposed) {
+                    setBatch(next);
+                    setError('');
+                }
             } catch (reason) {
                 if (!disposed) setError(reason instanceof Error ? reason.message : String(reason));
             } finally {
@@ -126,7 +177,7 @@ export const ComputeUpgradePanel: React.FC<{
         };
         timer = window.setTimeout(() => void poll(), 2000);
         return () => { disposed = true; window.clearTimeout(timer); };
-    }, [batch?.batch_id, batch?.state]);
+    }, [batch?.batch_id, batch?.state, otherBatch]);
 
     useEffect(() => {
         setRelease(current => releases.some(item => item.release_version === current) ? current : '');
@@ -149,13 +200,34 @@ export const ComputeUpgradePanel: React.FC<{
             : (zh ? '节点版本不在升级包支持范围' : 'Node version is outside the supported range');
     };
 
+    const requestedNodes = targetNodeId ? [targetNodeId] : selected;
+    const canStart = !busy && !batch && !activeBatchReading && !activeBatchError
+        && !releasesLoading && !releasesError && !!release && requestedNodes.length > 0 && requestedNodes.every(id => {
+            const node = eligible.find(item => item.node_id === id);
+            return node && compatible(node);
+        });
+
     const start = async () => {
+        if (!canStart) return;
         setBusy(true);
         setError('');
-        try {
-            const created = await ComputeClusterService.createMainUpgradeBatch(selected, release);
-            localStorage.setItem(ACTIVE_BATCH_KEY, created.batch_id);
+        const create = async () => {
+            if (localStorage.getItem(ACTIVE_BATCH_KEY)) {
+                setBatchLookup(current => current + 1);
+                return;
+            }
+            const created = await ComputeClusterService.createMainUpgradeBatch(requestedNodes, release);
+            if (targetNodeId && (!inScope(created) || created.release_version !== release
+                || created.nodes[0].manifest.sha256 !== manifests[nodeKey(eligible[0])]?.sha256)) {
+                throw new Error(zh ? '升级批次与所选设备或安装包不一致。' : 'The upgrade batch does not match the selected device or package.');
+            }
             setBatch(created);
+            localStorage.setItem(ACTIVE_BATCH_KEY, created.batch_id);
+            window.dispatchEvent(new CustomEvent(ACTIVE_BATCH_CHANGED, {detail: releaseId}));
+        };
+        try {
+            if (navigator.locks) await navigator.locks.request(ACTIVE_BATCH_KEY, create);
+            else await create();
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : String(reason));
         } finally {
@@ -163,8 +235,16 @@ export const ComputeUpgradePanel: React.FC<{
         }
     };
 
+    const recoverDecision = (batchId: string, reason: unknown) => {
+        // A missing response can hide a decision that the controller already recorded.
+        decisionBatchId.current = batchId;
+        setError(reason instanceof Error ? reason.message : String(reason));
+        setActiveBatchReading(true);
+        setBatchLookup(current => current + 1);
+    };
+
     const approve = async () => {
-        if (!batch) return;
+        if (!batch || batch.state !== 'awaiting_authorization' || otherBatch || activeBatchReading || activeBatchError || busy) return;
         const targets = batch.nodes.slice(batch.current_index).map(item => {
             const node = nodes.find(candidate => candidate.node_id === item.node_id);
             return `${node?.name || item.node_id} (${item.node_id})\nv${item.manifest.release_version} · ${item.manifest.platform}/${item.manifest.architecture}\nSHA-256 ${item.manifest.sha256}`;
@@ -175,35 +255,48 @@ export const ComputeUpgradePanel: React.FC<{
         try {
             setBatch(await ComputeClusterService.approveUpgradeBatch(batch));
         } catch (reason) {
-            setError(reason instanceof Error ? reason.message : String(reason));
+            recoverDecision(batch.batch_id, reason);
         } finally {
             setBusy(false);
         }
     };
 
     const reject = async () => {
-        if (!batch) return;
+        if (!batch || batch.state !== 'awaiting_authorization' || otherBatch || activeBatchReading || activeBatchError || busy) return;
         setBusy(true);
         setError('');
         try {
             setBatch(await ComputeClusterService.rejectUpgradeBatch(batch.batch_id));
         } catch (reason) {
-            setError(reason instanceof Error ? reason.message : String(reason));
+            recoverDecision(batch.batch_id, reason);
         } finally {
             setBusy(false);
         }
     };
 
-    return <section className='ComputeUpgradePanel'>
+    return <section className='ComputeUpgradePanel' aria-label={zh ? '节点软件更新' : 'Node software update'}>
         <header>
-            <div><span>OTA</span><h3>{zh ? '一键升级节点' : 'One-confirmation node upgrade'}</h3></div>
-            <p>{zh ? '一次确认整个批次，服务端自动逐台升级，关闭页面也可继续；上一台验收成功才进入下一台，失败立即停批。' : 'Confirm the batch once. The server continues even after this page closes; each node must pass health acceptance before the next starts.'}</p>
+            <div><span>OTA</span><h3>{targetNodeId ? (zh ? '当前设备软件更新' : 'Software update for this device')
+                : (zh ? '一键升级节点' : 'One-confirmation node upgrade')}</h3></div>
+            <p>{targetNodeId
+                ? (zh ? '创建批次后核对签名版本和目标。确认后由控制端执行，关闭页面仍可查看进度和回退记录。'
+                    : 'Review the signed release and target after creating the batch. The controller runs it after approval. Progress and rollback records remain available.')
+                : (zh ? '一次确认整个批次，服务端自动逐台升级，关闭页面也可继续；上一台验收成功才进入下一台，失败立即停批。'
+                    : 'Confirm the batch once. The server continues even after this page closes; each node must pass health acceptance before the next starts.')}</p>
         </header>
-        <ApprovalIdentityPanel zh={zh}/>
-        {!batch && <>
+        {!otherBatch && <ApprovalIdentityPanel zh={zh}/>}
+        {activeBatchReading && <p role='status'>{zh ? '正在读取升级记录…' : 'Reading upgrade record…'}</p>}
+        {activeBatchError && <div className='ComputeClusterError' role='alert'>
+            <p>{zh ? '暂时无法读取升级记录。' : 'Could not read the upgrade record.'} {activeBatchError}</p>
+            <button type='button' onClick={() => setBatchLookup(current => current + 1)}>{zh ? '重试读取记录' : 'Retry reading record'}</button>
+        </div>}
+        {otherBatch && <p role='status'>{zh
+            ? '已记录的批次与当前设备范围不同，请到计算群的批量升级查看或审批。'
+            : 'The saved batch covers a different scope. Open the compute cluster batch view to review or approve it.'}</p>}
+        {!batch && !activeBatchReading && !activeBatchError && <>
             <div className='ComputeUpgradeManifestInput'>
-                <label htmlFor='compute-main-release'>{zh ? '当前控制端的升级版本' : 'Release on this controller'}</label>
-                <select id='compute-main-release' value={release} disabled={releasesLoading || busy} onChange={event => {
+                <label htmlFor={releaseId}>{zh ? '当前控制端的升级版本' : 'Release on this controller'}</label>
+                <select id={releaseId} value={release} disabled={releasesLoading || busy} onChange={event => {
                     setRelease(event.target.value);
                     setSelected([]);
                 }}>
@@ -214,10 +307,10 @@ export const ComputeUpgradePanel: React.FC<{
                 <small>{zh ? '安装包由当前控制端分发，发布信息和校验由系统自动处理。' : 'This controller distributes the package and handles release metadata and verification.'}</small>
                 {!releasesLoading && !releasesError && versions.length === 0 && <p role='status'>{zh ? '当前控制端尚未发布可用安装包。请先发布目标版本，再刷新列表。' : 'No packages published on this controller. Publish a target release, then refresh.'}</p>}
             </div>
-            <div className='ComputeUpgradeNodes'>
+            <div className={targetNodeId ? 'ComputeUpgradeNodes scoped' : 'ComputeUpgradeNodes'}>
                 {eligible.map(node => <label key={node.node_id}>
-                    <input type='checkbox' disabled={busy || !compatible(node)} checked={selected.includes(node.node_id)} onChange={event => setSelected(current =>
-                        event.target.checked ? [...current, node.node_id] : current.filter(id => id !== node.node_id))}/>
+                    {targetNodeId ? <span aria-hidden='true'>●</span> : <input type='checkbox' disabled={busy || !compatible(node)} checked={selected.includes(node.node_id)} onChange={event => setSelected(current =>
+                        event.target.checked ? [...current, node.node_id] : current.filter(id => id !== node.node_id))}/>}
                     <div><strong>{node.name}</strong><small>{node.resources.platform} · {node.resources.architecture}</small></div>
                     <div className='ComputeUpgradeNodeState'>
                         <strong>{zh ? '当前版本' : 'Current version'} v{node.agent_version}</strong>
@@ -226,12 +319,9 @@ export const ComputeUpgradePanel: React.FC<{
                 </label>)}
                 {eligible.length === 0 && <p>{zh ? '没有已启用 OTA、非异常且可联通的节点。' : 'No enabled, reachable, non-abnormal OTA nodes.'}</p>}
             </div>
-            <button type='button' disabled={busy || releasesLoading || !release || selected.length === 0 || selected.some(id => {
-                const node = eligible.find(item => item.node_id === id);
-                return !node || !compatible(node);
-            })} onClick={() => void start()}>{busy ? (zh ? '创建中…' : 'Creating…') : (zh ? '创建升级批次' : 'Create upgrade batch')}</button>
+            <button type='button' disabled={!canStart} onClick={() => void start()}>{busy ? (zh ? '创建中…' : 'Creating…') : (zh ? '创建升级批次' : 'Create upgrade batch')}</button>
         </>}
-        {batch && <div className='ComputeUpgradeBatch'>
+        {batch && !otherBatch && <div className='ComputeUpgradeBatch'>
             <div><strong>v{batch.release_version}</strong><span>{stateLabel(batch.state, zh, batch.error_code)}</span><code>{batch.batch_id.slice(0, 8)}</code></div>
             {batch.nodes.map((item, index) => {
                 const events = processEvents(batch, item);
@@ -256,12 +346,13 @@ export const ComputeUpgradePanel: React.FC<{
                 </article>;
             })}
             {batch.state === 'awaiting_authorization' && <div className='ComputeUpgradeActions'>
-                <button type='button' disabled={busy} onClick={() => void approve()}>{zh ? '确认整个升级批次' : 'Approve entire batch'}</button>
-                <button type='button' className='danger' disabled={busy} onClick={() => void reject()}>{zh ? '拒绝并停批' : 'Reject and stop'}</button>
+                <button type='button' disabled={busy || activeBatchReading || Boolean(activeBatchError)} onClick={() => void approve()}>{zh ? '确认整个升级批次' : 'Approve entire batch'}</button>
+                <button type='button' className='danger' disabled={busy || activeBatchReading || Boolean(activeBatchError)} onClick={() => void reject()}>{zh ? '拒绝并停批' : 'Reject and stop'}</button>
             </div>}
             {['succeeded', 'failed'].includes(batch.state) && <button type='button' onClick={() => {
-                localStorage.removeItem(ACTIVE_BATCH_KEY);
+                if (localStorage.getItem(ACTIVE_BATCH_KEY) === batch.batch_id) localStorage.removeItem(ACTIVE_BATCH_KEY);
                 setBatch(null);
+                window.dispatchEvent(new CustomEvent(ACTIVE_BATCH_CHANGED, {detail: releaseId}));
             }}>{zh ? '关闭批次记录' : 'Close batch record'}</button>}
         </div>}
         {(error || releasesError) && <p className='ComputeClusterError' role='alert'>{error || releasesError}</p>}

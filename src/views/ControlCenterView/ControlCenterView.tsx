@@ -20,7 +20,9 @@ import {
     ComputeTask,
     ComputeRuntimeInventory,
     ComputeTerminalTarget,
+    ComputeTerminalTransport,
     ComputeClusterService,
+    isComputeAccessDenied,
     cameraStreamingAvailable,
     computeNodeState,
     computeLinkStates,
@@ -43,21 +45,29 @@ import {EdgeDeviceTerminalPopup} from '../PopupView/EdgeDeviceTerminalPopup/Edge
 import {CameraLiveViewPopup} from '../PopupView/CameraLiveViewPopup/CameraLiveViewPopup';
 import {ComputeTerminalPanel} from '../PopupView/ComputeClusterPopup/ComputeTerminalPanel';
 import {ResourceKnowledgeGraph} from '../PopupView/ComputeClusterPopup/ResourceKnowledgeGraph';
-import {ComputeFilePanel} from './ComputeFilePanel';
+import {ComputeFilePanel, DirectoryScanTool} from './ComputeFilePanel';
 import {StorageAnalysisPanel} from './StorageAnalysisPanel';
 import {DuplicateAnalysisPanel} from './DuplicateAnalysisPanel';
 import {StartupItemsPanel} from './StartupItemsPanel';
 import {PerformanceDiagnosisPanel} from './PerformanceDiagnosisPanel';
-import {ProgramRunnerPanel} from './ProgramRunnerPanel';
+import {ProgramRunnerPanel, ProgramLogScope} from './ProgramRunnerPanel';
+import {deviceAlertAccount, useDeviceAlerts} from './DeviceAlerts';
+import {DeviceAlertsPanel} from './DeviceAlertsPanel';
+import {DeviceBatchChecks} from './DeviceBatchChecks';
+import {useDeviceChecks} from './DeviceChecks';
+import {DeviceManagerPanel, DeviceManagerTool} from './DeviceManagerPanel';
+import {ProductionActionReview} from './ProductionActionReview';
 import {hasRemotePlatformEntry, RemotePlatformButton} from './RemotePlatformButton';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
+import {ACCOUNT_SESSION_CHANGED} from '../../services/AccountService';
+import {APPROVAL_IDENTITY_CHANGED} from '../../services/ApprovalIdentityService';
 import {version as appVersion} from '../../../package.json';
 import '../EditorView/EditorContainer/EditorContainer.scss';
 import '../EditorView/EditorTopNavigationBar/EditorTopNavigationBar.scss';
 import '../PopupView/ComputeClusterPopup/ComputeClusterPopup.scss';
 import './ControlCenterView.scss';
 
-const appEdition = 'Master';
+import {appEdition} from '../../utils/AppEdition';
 
 const ClusterGeographicMap = React.lazy(() => import('./ClusterGeographicMap')
     .then(module => ({default: module.ClusterGeographicMap})));
@@ -95,12 +105,17 @@ const toneLabel = (tone: Tone, zh: boolean): string => tone === 'healthy'
     ? zh ? '正常' : 'Normal'
     : zh ? '故障' : 'Fault';
 type SidePanel = 'machines' | 'features';
-type Workspace = 'node' | 'network' | 'files' | 'utilities' | 'terminal' | 'groups';
+type Workspace = 'node' | 'device-manager' | 'network' | 'files' | 'utilities' | 'terminal' | 'groups';
 type MachineIconKind = 'jetson' | 'windows' | 'linux' | 'macos' | 'computer';
 type NodeGrouping = 'none' | 'region' | 'platform';
 type DeviceVisibility = 'all' | 'main' | 'edge' | 'sensor';
 type NodeVisibility = 'all' | 'normal' | 'fault' | 'abnormal';
 type OverviewView = 'map' | 'graph';
+type RelatedDeviceView = {nodeId: string} & (
+    {kind: 'management'; tab: 'camera' | 'edge'}
+    | {kind: 'camera'; deviceId: string}
+    | {kind: 'terminal'; deviceId: string}
+);
 type MonitorView = 'performance' | 'diagnostics' | 'processes' | 'startup' | 'tasks' | 'conversations';
 type ProcessSortKey = 'name' | 'pid' | 'cpu' | 'memory' | 'state';
 type TaskSortKey = 'task' | 'device' | 'state' | 'updated';
@@ -356,10 +371,10 @@ const filterResourceGraph = (
 };
 
 const cameraTone = (status: ComputeManagedDevice['status']): Tone =>
-    status === 'registered' || status === 'online' ? 'healthy' : 'offline';
+    status === 'online' ? 'healthy' : status === 'registered' ? 'warning' : 'offline';
 
 const cameraLabel = (status: ComputeManagedDevice['status'], zh: boolean): string =>
-    toneLabel(cameraTone(status), zh);
+    status === 'registered' ? (zh ? '已登记 · 画面待验证' : 'Registered · Live view unverified') : toneLabel(cameraTone(status), zh);
 
 const cameraStreamUnavailableTitle = (
     node: ComputeClusterNode,
@@ -369,7 +384,7 @@ const cameraStreamUnavailableTitle = (
     if (!node.online) return zh
         ? '节点当前故障，恢复正常后才能打开实时画面'
         : 'The node must return to normal before live view can be opened';
-    if (cameraTone(camera.status) !== 'healthy') return zh
+    if (camera.status === 'offline' || camera.status === 'unavailable') return zh
         ? '相机当前故障，恢复正常后才能打开实时画面'
         : 'The camera must return to normal before live view can be opened';
     if (!cameraStreamingAvailable(camera)) return zh
@@ -411,17 +426,27 @@ export const ControlCenterView: React.FC<IProps> = ({
     updateActivePopupTypeAction,
 }) => {
     const zh = language === Language.CHINESE;
+    const [managerLogScope, setManagerLogScope] = useState<ProgramLogScope>();
+    const [edgeLogScope, setEdgeLogScope] = useState<{nodeId: string; assetId: string}>();
+    const {alerts, persistent: alertPersistence, observeDirectory, observeCheck, acknowledge} = useDeviceAlerts();
+    const deviceChecks = useDeviceChecks(observeCheck);
     const [sidePanel, setSidePanel] = useState<SidePanel | null>('machines');
     const [workspace, setWorkspace] = useState<Workspace>('node');
+    const [utilityView, setUtilityView] = useState<DirectoryScanTool>('storage');
+    const [scanDirectory, setScanDirectory] = useState<{nodeId: string; path: string}>();
+    const [fileWorkspaceGeneration, setFileWorkspaceGeneration] = useState(0);
     const [terminalAutoConnect, setTerminalAutoConnect] = useState(false);
-    const [terminalTransport, setTerminalTransport] = useState<'lan' | 'tailscale'>();
+    const [terminalNodeId, setTerminalNodeId] = useState('');
+    const [terminalTransport, setTerminalTransport] = useState<ComputeTerminalTransport>();
     const [terminalTargets, setTerminalTargets] = useState<ComputeTerminalTarget[]>([]);
+    const [terminalRead, setTerminalRead] = useState<'loading' | 'ready' | 'disabled' | 'denied' | 'failed'>('loading');
     const [copiedSshAddress, setCopiedSshAddress] = useState('');
     const [nodes, setNodes] = useState<ComputeClusterNode[]>([]);
     const [mountedPrograms, setMountedPrograms] = useState<Record<string, ProgramTone>>({});
     const programPollingNodes = useRef(nodes);
     programPollingNodes.current = nodes;
     const hasProgramPollingNodes = nodes.length > 0;
+    const [groupRead, setGroupRead] = useState<'loading' | 'ready' | 'denied' | 'failed'>('loading');
     const [groupMemberships, setGroupMemberships] = useState<ComputeGroupMembership[]>([]);
     const [selectedGroupId, setSelectedGroupId] = useState('');
     const [selectedGroupDetail, setSelectedGroupDetail] = useState<ComputeGroupDetail | null>(null);
@@ -436,10 +461,14 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [joinDays, setJoinDays] = useState<7 | 30 | 180>(30);
     const [joinAdminBusy, setJoinAdminBusy] = useState(false);
     const [joinAdminError, setJoinAdminError] = useState('');
+    const [joinAdminRead, setJoinAdminRead] = useState<typeof groupRead>('loading');
+    const joinAdminReadVersion = useRef(0);
     const [lanAssets, setLanAssets] = useState<ComputeLanAsset[]>([]);
+    const [lanAssetRead, setLanAssetRead] = useState<typeof groupRead>('loading');
     const [resourceGraph, setResourceGraph] = useState<ComputeResourceGraph | null>(null);
     const [computeTasks, setComputeTasks] = useState<ComputeTask[]>([]);
     const [selectedNodeId, setSelectedNodeId] = useState('');
+    const [viewedBatchNodeId, setViewedBatchNodeId] = useState('');
     const [loading, setLoading] = useState(true);
     const [loadingProgress, setLoadingProgress] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
@@ -455,9 +484,8 @@ export const ControlCenterView: React.FC<IProps> = ({
     const [programRunnerOpen, setProgramRunnerOpen] = useState(false);
     const [programRunnerMaximized, setProgramRunnerMaximized] = useState(false);
     const [monitorView, setMonitorView] = useState<MonitorView>('performance');
-    const [deviceManagementTab, setDeviceManagementTab] = useState<'camera' | 'edge' | null>(null);
-    const [cameraViewerId, setCameraViewerId] = useState('');
-    const [edgeTerminalDeviceId, setEdgeTerminalDeviceId] = useState('');
+    const [relatedDeviceView, setRelatedDeviceView] = useState<RelatedDeviceView | null>(null);
+    const directoryGeneration = useRef(0);
     const [processQuery, setProcessQuery] = useState('');
     const [processSort, setProcessSort] = useState<{key: ProcessSortKey; direction: SortDirection}>({
         key: 'memory',
@@ -506,6 +534,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     useEscapeToClose(() => {
         setProgramRunnerOpen(false);
         setProgramRunnerMaximized(false);
+        setEdgeLogScope(undefined);
         if (toolOpenedFromOverview) {
             overviewSelected.current = true;
             setSelectedNodeId('');
@@ -538,9 +567,11 @@ export const ControlCenterView: React.FC<IProps> = ({
         }
     }, []);
 
-    const refresh = useCallback(async (initial = false) => {
+    const refresh = useCallback(async (initial = false): Promise<void> => {
         if (refreshInFlight.current) return;
         refreshInFlight.current = true;
+        const alertOwner = deviceAlertAccount();
+        const generation = directoryGeneration.current;
         let completed = 0;
         const track = <T,>(promise: Promise<T>) => promise.finally(() => {
             completed += 1;
@@ -550,24 +581,51 @@ export const ControlCenterView: React.FC<IProps> = ({
             groupRefreshInFlight.current = true;
             void ComputeClusterService.groups()
                 .then(value => {
-                    if (mounted.current) setGroupMemberships(value.groups);
+                    if (!mounted.current) return;
+                    setGroupMemberships(value.groups);
+                    setSelectedGroupId(current => value.groups.some(group => group.group_id === current) ? current : '');
+                    setGroupRead('ready');
                 })
-                .catch(() => undefined)
+                .catch(reason => {
+                    if (!mounted.current) return;
+                    setGroupMemberships([]);
+                    setSelectedGroupId('');
+                    setGroupRead(isComputeAccessDenied(reason) ? 'denied' : 'failed');
+                })
                 .finally(() => {
                     groupRefreshInFlight.current = false;
                 });
         }
         if (mounted.current) {
+            setRefreshing(true);
             if (initial) {
                 setLoading(true);
                 setLoadingProgress(0);
-            } else {
-                setRefreshing(true);
             }
         }
         try {
-            const [nextNodes, graphResult, assetResult, targets] = await Promise.all([
-                track(ComputeClusterService.nodes()),
+            const isCurrent = () => mounted.current && generation === directoryGeneration.current;
+            const nodesRead = track(ComputeClusterService.nodes()).then(nextNodes => {
+                if (!isCurrent()) return;
+                setNodes(nextNodes);
+                setSelectedNodeId(current => overviewSelected.current
+                    ? ''
+                    : nextNodes.some(node => node.node_id === current)
+                        ? current
+                        : nextNodes.find(node => node.online)?.node_id || nextNodes[0]?.node_id || '');
+                const fetchedAt = new Date();
+                setQueriedAt(fetchedAt);
+                observeDirectory(alertOwner, nextNodes, fetchedAt.getTime() / 1000);
+                setError('');
+                setLoading(false);
+            });
+            // Keep optional reads off the first directory request's critical path.
+            if (initial) {
+                await nodesRead;
+                if (!isCurrent()) return;
+            }
+            const [, graphResult, assetResult, targets] = await Promise.all([
+                nodesRead,
                 track(ComputeClusterService.resourceGraph().then(
                     value => ({value, error: ''}),
                     reason => ({
@@ -576,52 +634,61 @@ export const ControlCenterView: React.FC<IProps> = ({
                     }),
                 )),
                 track(ComputeClusterService.lanAssets().then(
-                    value => value.assets,
-                    () => [] as ComputeLanAsset[],
+                    value => ({assets: value.assets, state: 'ready'} as const),
+                    reason => ({assets: [] as ComputeLanAsset[], state: isComputeAccessDenied(reason) ? 'denied' : 'failed'} as const),
                 )),
                 track(ComputeClusterService.terminalTargets().then(
-                    value => value.targets,
-                    () => [] as ComputeTerminalTarget[],
+                    value => ({
+                        targets: value.enabled ? value.targets : [],
+                        state: value.enabled ? 'ready' : 'disabled',
+                    } as const),
+                    reason => ({
+                        targets: [] as ComputeTerminalTarget[],
+                        state: isComputeAccessDenied(reason) ? 'denied' : 'failed',
+                    } as const),
                 )),
             ]);
-            if (!mounted.current) return;
-            setNodes(nextNodes);
-            setLanAssets(assetResult);
-            setTerminalTargets(targets);
-            if (graphResult.value) setResourceGraph(graphResult.value);
+            if (!isCurrent()) return;
+            setLanAssets(assetResult.assets);
+            setLanAssetRead(assetResult.state);
+            setTerminalTargets(targets.targets);
+            setTerminalRead(targets.state);
+            setResourceGraph(previous => graphResult.value ?? previous);
             setGraphError(graphResult.error);
-            setSelectedNodeId(current => overviewSelected.current
-                ? ''
-                : nextNodes.some(node => node.node_id === current)
-                    ? current
-                    : nextNodes.find(node => node.online)?.node_id || nextNodes[0]?.node_id || '');
-            setQueriedAt(new Date());
-            setError('');
             if (!graphResult.error) setDismissedRefreshWarningKey('');
         } catch (reason) {
-            if (mounted.current) setError(reason instanceof Error ? reason.message : String(reason));
+            if (mounted.current && generation === directoryGeneration.current) {
+                setError(reason instanceof Error ? reason.message : String(reason));
+            }
         } finally {
             refreshInFlight.current = false;
             if (mounted.current) {
-                setLoading(false);
-                setRefreshing(false);
+                if (generation !== directoryGeneration.current) void refresh(true);
+                else {
+                    setLoading(false);
+                    setRefreshing(false);
+                }
             }
         }
-    }, []);
+    }, [observeDirectory]);
 
     const refreshJoinAdmin = useCallback(async () => {
+        const version = ++joinAdminReadVersion.current;
         try {
             const [code, requests] = await Promise.all([
                 ComputeClusterService.joinCode(),
                 ComputeClusterService.joinRequests(),
             ]);
-            if (!mounted.current) return;
+            if (!mounted.current || version !== joinAdminReadVersion.current) return;
             setJoinCode(code);
             setJoinRequests(requests.requests);
             if (code.days) setJoinDays(code.days);
-            setJoinAdminError('');
+            setJoinAdminRead('ready');
         } catch (reason) {
-            if (mounted.current) setJoinAdminError(reason instanceof Error ? reason.message : String(reason));
+            if (!mounted.current || version !== joinAdminReadVersion.current) return;
+            setJoinCode(null);
+            setJoinRequests([]);
+            setJoinAdminRead(isComputeAccessDenied(reason) ? 'denied' : 'failed');
         }
     }, []);
 
@@ -679,11 +746,11 @@ export const ControlCenterView: React.FC<IProps> = ({
     }, [hasProgramPollingNodes, programRunnerOpen]);
 
     useEffect(() => {
-        if (workspace !== 'groups') return undefined;
+        if (workspace !== 'groups' || joinAdminBusy) return undefined;
         void refreshJoinAdmin();
         const timer = window.setInterval(() => void refreshJoinAdmin(), 5000);
         return () => window.clearInterval(timer);
-    }, [refreshJoinAdmin, workspace]);
+    }, [joinAdminBusy, refreshJoinAdmin, workspace]);
 
     useEffect(() => {
         if (!selectedGroupId) return undefined;
@@ -763,11 +830,32 @@ export const ControlCenterView: React.FC<IProps> = ({
 
     useEffect(() => {
         const refreshDevices = () => void refresh();
+        const resetFileWorkspace = () => {
+            setScanDirectory(undefined);
+            setFileWorkspaceGeneration(current => current + 1);
+        };
+        const resetDevices = () => {
+            resetFileWorkspace();
+            directoryGeneration.current += 1;
+            setViewedBatchNodeId('');
+            setRelatedDeviceView(null);
+            setProgramRunnerOpen(false);
+            setEdgeLogScope(undefined);
+            setNodes([]);
+            setLanAssets([]);
+            setLanAssetRead('loading');
+            setQueriedAt(null);
+            void refresh();
+        };
+        window.addEventListener(ACCOUNT_SESSION_CHANGED, resetDevices);
+        window.addEventListener(APPROVAL_IDENTITY_CHANGED, resetFileWorkspace);
         window.addEventListener('opensight:edge-device-updated', refreshDevices);
         window.addEventListener('opensight:camera-resource-updated', refreshDevices);
         return () => {
             window.removeEventListener('opensight:edge-device-updated', refreshDevices);
             window.removeEventListener('opensight:camera-resource-updated', refreshDevices);
+            window.removeEventListener(ACCOUNT_SESSION_CHANGED, resetDevices);
+            window.removeEventListener(APPROVAL_IDENTITY_CHANGED, resetFileWorkspace);
         };
     }, [refresh]);
 
@@ -828,10 +916,32 @@ export const ControlCenterView: React.FC<IProps> = ({
         return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
     }, [nodeGrouping, nodeRegions, nodes, nodeVisibility, zh]);
     const selectedNode = nodes.find(node => node.node_id === selectedNodeId) || null;
+
+    useEffect(() => {
+        if (workspace !== 'node' || !selectedNodeId) return undefined;
+        let currentVisit = true;
+        void ComputeClusterService.restartLanProbe(selectedNodeId).then(probe => {
+            if (!currentVisit || !probe) return;
+            setNodes(current => current.map(node => node.node_id === probe.node_id ? {
+                ...node, network: {...node.network,
+                    lan_ssh_available: probe.lan_ssh_available,
+                    lan_probe_failures: probe.lan_probe_failures,
+                },
+            } : node));
+        }).catch(() => undefined);
+        return () => { currentVisit = false; };
+    }, [selectedNodeId, workspace]);
+
+    const viewedBatchCheck = viewedBatchNodeId === selectedNode?.node_id
+        ? deviceChecks.batch?.rows.find(row => row.node.node_id === viewedBatchNodeId)?.check
+        : undefined;
     const overviewBehindTool = Boolean(
         toolOpenedFromOverview && (inspectedServiceId || programRunnerOpen),
     );
     const backgroundNode = overviewBehindTool ? null : selectedNode;
+    const relatedView = relatedDeviceView?.nodeId === selectedNode?.node_id
+        && (workspace === 'node' || workspace === 'device-manager') ? relatedDeviceView : null;
+    const edgeLogId = edgeLogScope?.nodeId === selectedNode?.node_id ? edgeLogScope?.assetId : undefined;
     const runtimeInventoryCapable = Boolean(
         selectedNode?.online && selectedNode.capabilities.includes('runtime.inventory.v1'),
     );
@@ -847,6 +957,22 @@ export const ControlCenterView: React.FC<IProps> = ({
     [nodeVisibility, overviewResourceGraph, visibleOverviewNodes]);
     const currentGroup = overviewResourceGraph?.entities.find(entity => entity.kind === 'compute_group') || null;
     const visibleGroups = groupMemberships;
+    const groupBadge = groupRead === 'ready'
+        ? `${visibleGroups.length} ${zh ? '个群' : visibleGroups.length === 1 ? 'group' : 'groups'}`
+        : groupRead === 'loading' ? (zh ? '读取中' : 'Loading')
+            : groupRead === 'denied' ? (zh ? '无权限' : 'Access denied') : (zh ? '读取失败' : 'Read failed');
+    const lanAssetBadge = lanAssetRead === 'ready'
+        ? (zh ? '台账可用' : 'Inventory available')
+        : lanAssetRead === 'loading' ? (zh ? '读取中' : 'Loading')
+            : lanAssetRead === 'denied' ? (zh ? '无权限' : 'Access denied') : (zh ? '读取失败' : 'Read failed');
+    const groupReadNotice = groupRead === 'loading'
+        ? (zh ? '正在读取群成员关系…' : 'Loading group memberships…')
+        : groupRead === 'denied' ? (zh ? '当前账号无权查询群成员关系。' : 'You do not have access to group memberships.')
+            : (zh ? '群成员关系读取失败，请刷新重试。' : 'Could not read group memberships. Refresh to retry.');
+    const joinAdminNotice = joinAdminRead === 'loading'
+        ? (zh ? '正在读取群号和入群申请…' : 'Loading join code and requests…')
+        : joinAdminRead === 'denied' ? (zh ? '当前账号无权管理入群。' : 'You do not have access to join administration.')
+            : (zh ? '群号和入群申请读取失败，稍后自动重试。' : 'Could not read join code and requests. Retrying shortly.');
     const currentGroupTone: Tone = currentGroup?.state === 'available' ? 'healthy' : 'offline';
     const selectedGroup = visibleGroups.find(group => group.group_id === selectedGroupId);
     const groupDetail = selectedGroupDetail?.group.group_id === selectedGroup?.group_id
@@ -863,6 +989,8 @@ export const ControlCenterView: React.FC<IProps> = ({
         : '';
     const pendingJoinRequests = joinRequests.filter(request => request.status === 'pending');
     const rotateJoinCode = async () => {
+        if (joinAdminRead !== 'ready' || joinAdminBusy) return;
+        joinAdminReadVersion.current += 1;
         setJoinAdminBusy(true);
         try {
             const code = await ComputeClusterService.rotateJoinCode(joinDays);
@@ -878,7 +1006,10 @@ export const ControlCenterView: React.FC<IProps> = ({
         }
     };
     const decideJoinRequest = async (requestId: string, action: 'approve' | 'reject') => {
+        if (joinAdminRead !== 'ready' || joinAdminBusy) return;
+        joinAdminReadVersion.current += 1;
         setJoinAdminBusy(true);
+        setJoinAdminError('');
         try {
             await ComputeClusterService.decideJoinRequest(requestId, action);
             await refreshJoinAdmin();
@@ -917,9 +1048,50 @@ export const ControlCenterView: React.FC<IProps> = ({
     };
     const normalCount = overviewNodes.filter(node => machineTone(node) === 'healthy').length;
     const overviewTone = communicationTone(aggregateCommunicationStates(overviewNodes.map(computeNodeState)));
-    const terminalAvailable = Boolean(selectedNode?.online && selectedNode.network.ssh_available);
-    const filesAvailable = overviewNodes.some(node => node.online && node.capabilities.includes('filesystem.list.v1'));
-    const utilitiesAvailable = overviewNodes.some(node => node.online && node.capabilities.includes('task.storage.scan.v1'));
+    const terminalAvailable = Boolean(selectedNode?.network.ssh_available
+        || terminalTargets.some(target => target.node_id === selectedNode?.node_id && target.tailcat_available));
+    const terminalTargetAvailable = terminalTargets.some(target => target.node_id === selectedNodeId && target.available);
+    const terminalBadge = {
+        loading: zh ? '读取中' : 'Loading',
+        ready: terminalTargetAvailable ? (zh ? '可连接' : 'Available') : (zh ? '目标不可用' : 'Target unavailable'),
+        disabled: zh ? '未启用' : 'Disabled',
+        denied: zh ? '无权限' : 'Access denied',
+        failed: zh ? '读取失败' : 'Read failed',
+    }[terminalRead];
+    const filesAvailable = nodes.some(node => node.online && node.capabilities.includes('filesystem.list.v1'));
+    const utilitiesAvailable = nodes.some(node => node.online && (
+        node.capabilities.includes('task.storage.scan.v1') || node.capabilities.includes('task.duplicate.scan.v1')
+    ));
+    const openManagerNode = (nodeId: string, scope?: ProgramLogScope, fromBatch = false) => {
+        if (!nodes.some(node => node.node_id === nodeId)) return;
+        overviewSelected.current = false;
+        setSelectedNodeId(nodeId);
+        setViewedBatchNodeId(fromBatch ? nodeId : '');
+        if (scope) {
+            setManagerLogScope(scope);
+            setEdgeLogScope(undefined);
+            setProgramRunnerOpen(true);
+        }
+    };
+    const openDeviceTool = (tool: DeviceManagerTool) => {
+        if (tool === 'storage' || tool === 'duplicates') {
+            setUtilityView(tool);
+            setWorkspace('utilities');
+            return;
+        }
+        if (tool === 'terminal') {
+            setTerminalNodeId(selectedNodeId);
+            setTerminalAutoConnect(false);
+            setTerminalTransport(undefined);
+        }
+        setWorkspace(tool);
+    };
+    const openDirectoryScan = (tool: DirectoryScanTool, nodeId: string, path: string) => {
+        overviewSelected.current = false;
+        setSelectedNodeId(nodeId);
+        setScanDirectory({nodeId, path});
+        openDeviceTool(tool);
+    };
     const toolbarTone: Tone | null = workspace === 'groups'
         ? visibleGroups.length ? currentGroupTone : null
         : workspace === 'network'
@@ -941,6 +1113,8 @@ export const ControlCenterView: React.FC<IProps> = ({
         if (nodeChanged) {
             setInspectedServiceId('');
             setMonitorView('performance');
+            setRelatedDeviceView(null);
+            setEdgeLogScope(undefined);
             setProgramRunnerOpen(false);
             setProgramRunnerMaximized(false);
         }
@@ -1279,43 +1453,25 @@ export const ControlCenterView: React.FC<IProps> = ({
     </aside>;
 
     // eslint-disable-next-line complexity
-    const renderFeatureList = () => <aside className='ControlMachinePanel' aria-label={zh ? '相关功能列表' : 'Related features'}>
+    const renderDeviceManagerTools = () => <aside className='ControlMachinePanel ControlManagerNav' aria-label={zh ? '设备管家列表' : 'Device manager tools'}>
         <div className='ControlMachineList'>
-            <button
-                type='button'
-                className={`ControlMachineItem ${workspace === 'groups' ? 'selected' : ''}`}
-                aria-pressed={workspace === 'groups'}
-                onClick={() => setWorkspace('groups')}
+            <button type='button'
+                className={`ControlMachineItem ${workspace === 'device-manager' ? 'selected' : ''}`}
+                aria-pressed={workspace === 'device-manager'}
+                onClick={() => setWorkspace('device-manager')}
             >
-                <span className='ControlMachineIcon network' aria-hidden='true'>{zh ? '群' : 'GRP'}</span>
+                <span className='ControlMachineIcon files' aria-hidden='true'>+</span>
                 <span className='ControlMachineIdentity'>
-                    <strong>{zh ? '群查询' : 'Groups'}</strong>
-                    <small>{zh ? '查看本机所在计算群' : 'View this installation’s groups'}</small>
-                </span>
-                <span className={`ControlMachineState ${currentGroup ? 'healthy' : 'offline'}`}>
-                    {visibleGroups.length} {zh ? '个群' : visibleGroups.length === 1 ? 'group' : 'groups'}
+                    <strong>{zh ? '设备工作台' : 'Device workspace'}</strong>
+                    <small>{zh ? '状态 · 自检 · 日志' : 'Status · Self-check · Logs'}</small>
                 </span>
             </button>
-            <button
-                type='button'
-                className={`ControlMachineItem ${workspace === 'network' ? 'selected' : ''}`}
-                aria-pressed={workspace === 'network'}
-                onClick={() => setWorkspace('network')}
-            >
-                <span className='ControlMachineIcon network' aria-hidden='true'>LAN</span>
-                <span className='ControlMachineIdentity'>
-                    <strong>{zh ? '网络资产' : 'Network assets'}</strong>
-                    <small>{zh ? '资产台账 · 扫描计划' : 'Inventory · scan schedules'}</small>
-                </span>
-                <span className={`ControlMachineState ${error ? 'offline' : 'healthy'}`}>
-                    {toneLabel(error ? 'offline' : 'healthy', zh)}
-                </span>
-            </button>
+            <div className='ControlMachineGroupHeading'><strong>{zh ? '文件与存储' : 'Files and storage'}</strong></div>
             <button
                 type='button'
                 className={`ControlMachineItem ${workspace === 'files' ? 'selected' : ''}`}
                 aria-pressed={workspace === 'files'}
-                onClick={() => setWorkspace('files')}
+                onClick={() => openDeviceTool('files')}
             >
                 <span className='ControlMachineIcon files' aria-hidden='true'>▤</span>
                 <span className='ControlMachineIdentity'>
@@ -1335,29 +1491,56 @@ export const ControlCenterView: React.FC<IProps> = ({
                 <span className='ControlMachineIcon files' aria-hidden='true'>◎</span>
                 <span className='ControlMachineIdentity'>
                     <strong>{zh ? '实用工具' : 'Utilities'}</strong>
-                    <small>{zh ? '存储分析' : 'Storage analysis'}</small>
+                    <small>{zh ? '存储分析 · 重复文件' : 'Storage analysis · Duplicate files'}</small>
                 </span>
                 <span className={`ControlMachineState ${utilitiesAvailable ? 'healthy' : 'offline'}`}>
                     {toneLabel(utilitiesAvailable ? 'healthy' : 'offline', zh)}
+                </span>
+            </button>
+            <div className='ControlMachineGroupHeading'><strong>{zh ? '网络与连接' : 'Network and access'}</strong></div>
+            <button
+                type='button'
+                className={`ControlMachineItem ${workspace === 'groups' ? 'selected' : ''}`}
+                aria-pressed={workspace === 'groups'}
+                onClick={() => setWorkspace('groups')}
+            >
+                <span className='ControlMachineIcon network' aria-hidden='true'>{zh ? '群' : 'GRP'}</span>
+                <span className='ControlMachineIdentity'>
+                    <strong>{zh ? '群查询' : 'Groups'}</strong>
+                    <small>{zh ? '查看本机所在计算群' : 'View this installation’s groups'}</small>
+                </span>
+                <span className={`ControlMachineState ${groupRead === 'ready' ? 'healthy' : 'offline'}`}>
+                    {groupBadge}
+                </span>
+            </button>
+            <button
+                type='button'
+                className={`ControlMachineItem ${workspace === 'network' ? 'selected' : ''}`}
+                aria-pressed={workspace === 'network'}
+                onClick={() => setWorkspace('network')}
+            >
+                <span className='ControlMachineIcon network' aria-hidden='true'>LAN</span>
+                <span className='ControlMachineIdentity'>
+                    <strong>{zh ? '网络资产' : 'Network assets'}</strong>
+                    <small>{zh ? '资产台账 · 扫描计划' : 'Inventory · scan schedules'}</small>
+                </span>
+                <span className={`ControlMachineState ${lanAssetRead === 'ready' ? 'healthy' : 'offline'}`}>
+                    {lanAssetBadge}
                 </span>
             </button>
             <button
                 type='button'
                 className={`ControlMachineItem ${workspace === 'terminal' ? 'selected' : ''}`}
                 aria-pressed={workspace === 'terminal'}
-                onClick={() => {
-                    setTerminalAutoConnect(false);
-                    setTerminalTransport(undefined);
-                    setWorkspace('terminal');
-                }}
+                onClick={() => openDeviceTool('terminal')}
             >
                 <span className='ControlMachineIcon terminal' aria-hidden='true'>&gt;_</span>
                 <span className='ControlMachineIdentity'>
                     <strong>{zh ? '终端连接' : 'Terminal connection'}</strong>
                     <small>{zh ? '受控 SSH · 输入指令' : 'Controlled SSH · command input'}</small>
                 </span>
-                <span className={`ControlMachineState ${terminalAvailable ? 'healthy' : 'offline'}`}>
-                    {toneLabel(terminalAvailable ? 'healthy' : 'offline', zh)}
+                <span className={`ControlMachineState ${terminalTargetAvailable ? 'healthy' : 'offline'}`}>
+                    {terminalBadge}
                 </span>
             </button>
         </div>
@@ -1369,7 +1552,8 @@ export const ControlCenterView: React.FC<IProps> = ({
         detail: string,
         tone: Tone,
         onClick?: () => void,
-        secondaryDetail?: {label: string; address: string; command?: string},
+        secondaryDetail?: {address: string; command?: string},
+        canOpen = terminalAvailable,
     ) => {
         const content = <>
             <span className={`ControlStatusDot ${tone}`} aria-hidden='true'/>
@@ -1386,16 +1570,15 @@ export const ControlCenterView: React.FC<IProps> = ({
                 aria-label={zh
                     ? `${name}：${value}；打开当前节点终端连接`
                     : `${name}: ${value}; open terminal for current node`}
-                disabled={!terminalAvailable}
+                disabled={!canOpen}
                 onClick={onClick}
             >{content}</button>
             : <article className='ControlServiceCard'>{content}</article>;
         return <div className='ControlServiceItem'>
             {card}
-            {secondaryDetail && <button
+            {secondaryDetail?.command ? <button
                 type='button'
                 className='ControlServiceAddress'
-                disabled={!secondaryDetail.command}
                 onClick={async () => {
                     if (!secondaryDetail.command) return;
                     await navigator.clipboard.writeText(secondaryDetail.command);
@@ -1405,10 +1588,12 @@ export const ControlCenterView: React.FC<IProps> = ({
                     ), 1000);
                 }}
             >
-                {`${secondaryDetail.label}: ${secondaryDetail.address}`}
+                {secondaryDetail.address}
                 {copiedSshAddress === secondaryDetail.address
                     && (zh ? ' (已复制)' : ' (Copied)')}
-            </button>}
+            </button> : secondaryDetail && <span className='ControlServiceAddress'>
+                {secondaryDetail.address}
+            </span>}
         </div>;
     };
 
@@ -1462,6 +1647,11 @@ export const ControlCenterView: React.FC<IProps> = ({
         // Dependency health belongs to the latest node snapshot. Once that
         // snapshot expires, an old green state is no longer current evidence.
         const {lan: lanState, tailscale: tailscaleState} = computeLinkStates(node);
+        const nodeState = computeNodeState(node);
+        const tailcatAlias = typeof __OPENSIGHT_LOCAL_TAILCAT_NODE__ !== 'undefined'
+            && node.name === __OPENSIGHT_LOCAL_TAILCAT_NODE__ ? `${node.name}-tailcat` : '';
+        const tailcatAvailable = node.network.tailcat_ssh_available ?? node.control_transport === 'tailcat';
+        const tailcatState = nodeState === 'normal' && !tailcatAvailable ? 'fault' : nodeState;
         const cameras = node.device_inventory.devices.filter(device => device.kind === 'camera');
         const edgeDevices = lanAssets.filter(asset =>
             asset.node_id === node.node_id
@@ -1478,7 +1668,14 @@ export const ControlCenterView: React.FC<IProps> = ({
             || node.lan_scan_targets?.map(target => target.address).join(' · ');
         const tailscaleIpv6Addresses = node.network.tailscale_ipv6_address
             || node.network.addresses.filter(address => address.includes(':')).join(' · ');
-        const sshUser = terminalTargets.find(target => target.node_id === node.node_id)?.ssh_user;
+        const terminalTarget = terminalTargets.find(target => target.node_id === node.node_id);
+        const sshUser = terminalTarget?.ssh_user;
+        const openTerminal = (transport: ComputeTerminalTransport) => {
+            setTerminalNodeId(node.node_id);
+            setTerminalAutoConnect(true);
+            setTerminalTransport(transport);
+            setWorkspace('terminal');
+        };
         const jetsonConnectCapable = Boolean(
             node.online && node.capabilities?.includes('control.jetson.connect.v1'),
         );
@@ -1496,12 +1693,11 @@ export const ControlCenterView: React.FC<IProps> = ({
         const workAreaTag = customWorkArea || node.labels?.site_name?.trim() || '';
         return <>
             <header className='ControlNodeHeader'>
-                <div>
+                <div className='ControlNodeIdentity'>
                     <div className='ControlNodeTitle'>
                         <h1>{node.name}</h1>
-                        <RemotePlatformButton key={node.node_id} node={node} zh={zh}/>
+                        <RemotePlatformButton key={node.node_id} node={node} zh={zh} hideAddressEditor/>
                     </div>
-                    <p>{zh ? '最后检查' : 'Last check'} {runtimeTime(node.resources.captured_at, zh)} · {zh ? '最近通信' : 'Last contact'} {lastSeen(node.heartbeat_age_seconds, zh)}</p>
                     <div className='ControlNodeTags' aria-label={zh ? '节点标签' : 'Node tags'}>
                         {locationTag && <span className='ControlNodeTag location'>
                             {zh ? `地域 (${locationTag})` : `Region (${locationTag})`}
@@ -1553,7 +1749,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <div><span>{zh ? '设备型号' : 'Device model'}</span><strong title={hardwareModel}>{hardwareModel || (zh ? '未上报' : 'Not reported')}</strong><small>{hardwareModel ? (zh ? '节点上报' : 'reported by node') : (zh ? '等待节点上报' : 'waiting for node report')}</small></div>
                     <div><span>{zh ? '操作系统' : 'Operating system'}</span><strong>{node.resources.platform || '—'}</strong><small>{zh ? '设备系统' : 'device platform'}</small></div>
                     <div><span>{zh ? '处理器架构' : 'Processor architecture'}</span><strong>{node.resources.architecture || '—'}</strong><small>{zh ? '节点架构' : 'node architecture'}</small></div>
-                    <div><span>{zh ? '节点服务版本' : 'Node service version'}</span><strong>{node.agent_version && node.agent_version !== 'unknown' ? node.agent_version : '—'}</strong><small>{zh ? '计算群节点服务' : 'compute-cluster node service'}</small></div>
+                    <div><span>{zh ? '节点服务版本' : 'Node service version'}</span><strong>{node.agent_version && node.agent_version !== 'unknown' ? node.agent_version : '—'}{node.role ? `(${node.role === 'main' ? 'Main' : 'Node'})` : ''}</strong><small>{zh ? '计算群节点服务' : 'compute-cluster node service'}</small></div>
                 </div>
                 <div className='ControlSubsectionHeading'>
                     <strong>{zh ? '计算资源' : 'Compute resources'}</strong>
@@ -1572,43 +1768,52 @@ export const ControlCenterView: React.FC<IProps> = ({
                         <h2>{zh ? '网络情况' : 'Network status'}</h2>
                     </div>
                 </div>
-                <div className='ControlServiceGrid'>
+                <div className='ControlServiceGrid ControlNetworkGrid'>
                     {renderServiceCard(
                         communicationStateLabel(lanState, zh),
                         zh ? 'SSH 局域网' : 'LAN SSH',
-                        zh ? '仅使用局域网地址建立 SSH 连接' : 'Uses only the LAN address for SSH',
+                        node.network.lan_probe_failures === 3
+                            ? (zh ? '连续 3 次探测失败；重新打开此节点页面后重试' : 'Three probes failed; reopen this node page to retry')
+                            : (zh ? '仅使用局域网地址建立 SSH 连接' : 'Uses only the LAN address for SSH'),
                         communicationTone(lanState),
-                        () => {
-                            setTerminalAutoConnect(true);
-                            setTerminalTransport('lan');
-                            setWorkspace('terminal');
-                        },
+                        () => openTerminal('lan'),
                         lanAddresses
                             ? {
-                                label: 'IPv4',
                                 address: lanAddresses,
                                 command: sshUser ? `ssh ${sshUser}@${lanAddresses}` : undefined,
                             }
                             : undefined,
                     )}
-                    {renderServiceCard(
-                        communicationStateLabel(tailscaleState, zh),
-                        zh ? 'Tailscale 远程' : 'Remote Tailscale',
-                        zh ? '仅使用 Tailscale 地址建立 SSH 连接' : 'Uses only the Tailscale address for SSH',
-                        communicationTone(tailscaleState),
-                        () => {
-                            setTerminalAutoConnect(true);
-                            setTerminalTransport('tailscale');
-                            setWorkspace('terminal');
-                        },
-                        tailscaleIpv6Addresses
-                            ? {
-                                label: 'IPv6',
-                                address: tailscaleIpv6Addresses,
-                                command: sshUser ? `ssh ${sshUser}@${tailscaleIpv6Addresses}` : undefined,
-                            }
-                            : undefined,
-                    )}
+                    <div className='ControlRemoteNetworkCards'>
+                        {renderServiceCard(
+                            communicationStateLabel(tailscaleState, zh),
+                            zh ? 'Tailscale 远程' : 'Remote Tailscale',
+                            node.control_transport === 'tailscale'
+                                ? (zh ? '当前节点控制通道' : 'Current node control route')
+                                : (zh ? '仅使用 Tailscale 地址建立 SSH 连接' : 'Uses only the Tailscale address for SSH'),
+                            communicationTone(tailscaleState),
+                            () => openTerminal('tailscale'),
+                            tailscaleIpv6Addresses
+                                ? {
+                                    address: tailscaleIpv6Addresses,
+                                    command: sshUser ? `ssh ${sshUser}@${tailscaleIpv6Addresses}` : undefined,
+                                }
+                                : undefined,
+                        )}
+                        {renderServiceCard(
+                            communicationStateLabel(tailcatState, zh),
+                            zh ? 'Tailcat 远程' : 'Remote Tailcat',
+                            node.control_transport === 'tailcat'
+                                ? (zh ? '当前节点控制通道' : 'Current node control route')
+                                : (zh ? '仅使用 Tailcat 建立 SSH 连接' : 'Uses only Tailcat for SSH'),
+                            communicationTone(tailcatState),
+                            () => openTerminal('tailcat'),
+                            tailcatAlias
+                                ? {address: tailcatAlias, command: `ssh ${tailcatAlias}`}
+                                : {address: zh ? '连接地址由主控保管' : 'Connection address stored on the controller'},
+                            true,
+                        )}
+                    </div>
                 </div>
             </section>
 
@@ -1631,15 +1836,14 @@ export const ControlCenterView: React.FC<IProps> = ({
                         <button
                             type='button'
                             className='ControlSectionCountButton'
-                            aria-label={zh
-                            ? `${cameras.length + edgeDevices.length} 个相关设备`
-                            : `${cameras.length + edgeDevices.length} related devices`
-                            }
+                            aria-label={lanAssetRead === 'loading'
+                                ? (zh ? '打开设备管理，正在读取相关设备' : 'Open device management, loading related devices')
+                                : zh ? `${cameras.length + edgeDevices.length} 个相关设备`
+                                    : `${cameras.length + edgeDevices.length} related devices`}
                             title={zh ? '打开设备管理' : 'Open device management'}
-                            onClick={() => setDeviceManagementTab(
-                                cameras.length === 0 && edgeDevices.length > 0 ? 'edge' : 'camera',
-                            )}
-                        >{cameras.length + edgeDevices.length}</button>
+                            onClick={() => setRelatedDeviceView({kind: 'management', nodeId: node.node_id,
+                                tab: cameras.length === 0 && edgeDevices.length > 0 ? 'edge' : 'camera'})}
+                        >{lanAssetRead === 'loading' ? '…' : cameras.length + edgeDevices.length}</button>
                     </div>
                 </div>
                 <div className='ControlRelatedDeviceGrid'>
@@ -1662,7 +1866,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     node.name,
                                     remoteLan,
                                 )}
-                            >{cameras.length} ＋</button>}
+                            >＋</button>}
                         </div>
                         <div className='ControlCameraGrid'>
                             {cameras.map(camera => <button
@@ -1673,7 +1877,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     || !cameraStreamingAvailable(camera)}
                                 aria-label={zh ? `打开${camera.name}实时画面` : `Open live view for ${camera.name}`}
                                 title={cameraStreamUnavailableTitle(node, camera, zh)}
-                                onClick={() => setCameraViewerId(camera.device_id)}
+                                onClick={() => setRelatedDeviceView({kind: 'camera', nodeId: node.node_id, deviceId: camera.device_id})}
                             >
                                 <div className='ControlCameraIcon' aria-hidden='true'>◉</div>
                                 <div className='ControlCameraIdentity'>
@@ -1724,7 +1928,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     node.name,
                                     remoteLan,
                                 )}
-                            >{edgeDevices.length} ＋</button>}
+                            >＋</button>}
                         </div>
                         <div className='ControlCameraGrid'>
                             {edgeDevices.map(device => <button
@@ -1734,7 +1938,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 aria-label={zh
                                     ? `打开${device.display_name || device.hostname || device.address}终端`
                                     : `Open terminal for ${device.display_name || device.hostname || device.address}`}
-                                onClick={() => setEdgeTerminalDeviceId(device.asset_id)}
+                                onClick={() => setRelatedDeviceView({kind: 'terminal', nodeId: node.node_id, deviceId: device.asset_id})}
                             >
                                 <div className='ControlCameraIcon' aria-hidden='true'>
                                     <img src='/ico/jetson-agx-orin.png' alt='Jetson'/>
@@ -1747,7 +1951,10 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     </span>
                                 </div>
                             </button>)}
-                            {edgeDevices.length === 0 && <button
+                            {lanAssetRead === 'loading' && <span role='status'>
+                                {zh ? '正在读取边缘计算设备…' : 'Loading edge computing devices…'}
+                            </span>}
+                            {lanAssetRead !== 'loading' && edgeDevices.length === 0 && <button
                                 type='button'
                                 className='ControlEmptyBlock ControlRelatedDeviceAdd'
                                 aria-label={zh ? '发现并添加局域网边缘计算设备' : 'Discover and add LAN edge devices'}
@@ -1769,57 +1976,45 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </div>
             </section>
 
-            {deviceManagementTab && <DeviceManagementPopup
-                language={language}
-                node={node}
-                cameras={cameras}
-                edgeDevices={edgeDevices}
-                initialTab={deviceManagementTab}
-                onClose={() => setDeviceManagementTab(null)}
-                onAddCamera={() => {
-                    if (!cameraConnectCapable) return;
-                    setDeviceManagementTab(null);
-                    updateActivePopupTypeAction?.(
-                        PopupWindowType.CAMERA_CONNECT,
-                        node.node_id,
-                        node.name,
-                        remoteLan,
-                    );
-                }}
-                onDiscoverEdge={() => {
-                    if (!jetsonConnectCapable) return;
-                    setDeviceManagementTab(null);
-                    updateActivePopupTypeAction?.(
-                        PopupWindowType.JETSON_CONNECT,
-                        node.node_id,
-                        node.name,
-                        remoteLan,
-                    );
-                }}
-                onOpenCamera={deviceId => {
-                    setDeviceManagementTab(null);
-                    setCameraViewerId(deviceId);
-                }}
-                onOpenEdgeDevice={assetId => {
-                    setDeviceManagementTab(null);
-                    setEdgeTerminalDeviceId(assetId);
-                }}
-                onCamerasChanged={() => void refresh()}
-            />}
-            {cameraViewerId && <CameraLiveViewPopup
-                language={language}
-                node={node}
-                cameras={cameras}
-                initialCameraId={cameraViewerId}
-                onClose={() => setCameraViewerId('')}
-            />}
-            {edgeTerminalDeviceId && <EdgeDeviceTerminalPopup
-                language={language}
-                devices={edgeDevices}
-                initialDeviceId={edgeTerminalDeviceId}
-                onClose={() => setEdgeTerminalDeviceId('')}
-            />}
         </>;
+    };
+
+    const relatedDevices = (node: ComputeClusterNode) => lanAssets.filter(asset =>
+        asset.node_id === node.node_id && asset.device_kind === 'edge_compute');
+    const renderRelatedDeviceView = (node: ComputeClusterNode, view: RelatedDeviceView) => {
+        const cameraRead = error ? 'unavailable' : node.device_inventory.state;
+        const edgeRead = error ? 'failed' : lanAssetRead;
+        const cameras = cameraRead === 'ready' ? node.device_inventory.devices.filter(device => device.kind === 'camera') : [];
+        const edges = edgeRead === 'ready' ? relatedDevices(node) : [];
+        const remoteLan = node.control_transport === 'tailscale';
+        const close = () => setRelatedDeviceView(null);
+        if (view.kind === 'camera') return <CameraLiveViewPopup
+            key={`${node.node_id}:${view.deviceId}`} language={language} node={node} cameras={cameras}
+            initialCameraId={view.deviceId} onClose={close}
+        />;
+        if (view.kind === 'terminal') return <EdgeDeviceTerminalPopup
+            key={`${node.node_id}:${view.deviceId}`} language={language} devices={edges}
+            initialDeviceId={view.deviceId} onClose={close}
+        />;
+        const openConnection = (type: PopupWindowType) => {
+            close();
+            updateActivePopupTypeAction?.(type, node.node_id, node.name, remoteLan);
+        };
+        return <DeviceManagementPopup
+            key={node.node_id} language={language} node={node} cameras={cameras} edgeDevices={edges} initialTab={view.tab}
+            cameraRead={cameraRead} edgeRead={edgeRead} cameraInventoryReadAt={queriedAt?.getTime()}
+            onClose={close} onAddCamera={() => openConnection(PopupWindowType.CAMERA_CONNECT)}
+            onDiscoverEdge={() => openConnection(PopupWindowType.JETSON_CONNECT)}
+            onOpenCamera={deviceId => setRelatedDeviceView({kind: 'camera', nodeId: node.node_id, deviceId})}
+            onOpenEdgeDevice={deviceId => setRelatedDeviceView({kind: 'terminal', nodeId: node.node_id, deviceId})}
+            onOpenEdgeLogs={assetId => {
+                close();
+                setManagerLogScope(undefined);
+                setEdgeLogScope({nodeId: node.node_id, assetId});
+                setProgramRunnerOpen(true);
+            }}
+            onCamerasChanged={() => void refresh()}
+        />;
     };
 
     const memoryUsed = selectedNode?.resources.memory_total_bytes && selectedNode.resources.memory_available_bytes !== null
@@ -1925,7 +2120,15 @@ export const ControlCenterView: React.FC<IProps> = ({
         scaleLabel: zh ? '蓝色下载 · 红色上传' : 'Blue receive · red send',
     }];
     const activeMetric = resourceMetrics.find(metric => metric.id === activeMetricId) || resourceMetrics[0];
+    const toolbarNode = workspace === 'node' ? backgroundNode : null;
+    const toolbarStatus = <>
+        {toolbarNode && <small>
+            {zh ? '最后检查' : 'Last check'} {runtimeTime(toolbarNode.resources.captured_at, zh)} · {zh ? '最近通信' : 'Last contact'} {lastSeen(toolbarNode.heartbeat_age_seconds, zh)}
+        </small>}
+    </>;
+
     return <div className='EditorContainer ControlCenterView'>
+        <ProductionActionReview nodes={nodes} zh={zh}/>
         <SideNavigationBar
             direction={Direction.LEFT}
             isOpen={sidePanel !== null}
@@ -1939,22 +2142,27 @@ export const ControlCenterView: React.FC<IProps> = ({
                     style={{top: '81px'}}
                 />
                 <VerticalEditorButton
-                    label={zh ? '相关功能' : 'Features'}
+                    label={zh ? '设备管家' : 'Device Manager'}
                     image='/ico/tasks.png'
-                    imageAlt={zh ? '相关功能列表' : 'related features'}
-                    onClick={() => toggleSidePanel('features')}
+                    imageAlt={zh ? '设备管家列表' : 'device manager'}
+                    onClick={() => {
+                        if (sidePanel !== 'features') setWorkspace('device-manager');
+                        toggleSidePanel('features');
+                    }}
                     isActive={sidePanel === 'features'}
                     style={{top: '167px'}}
                 />
                 <div className='VersionWatermark'>v{appVersion}({appEdition})</div>
             </>}
-            renderContent={sidePanel === 'features' ? renderFeatureList : renderMachineList}
+            renderContent={sidePanel === 'features' ? renderDeviceManagerTools : renderMachineList}
         />
         <main className='EditorWrapper ControlCenterWorkspace'>
             <div className='EditorTopNavigationBar ControlTopNavigationBar'>
                 <div className='ControlToolbarGroup'>
                     {toolbarTone && <span className={`ControlStatusDot ${toolbarTone}`} aria-hidden='true'/>}
-                    <strong>{workspace === 'groups'
+                    <strong>{workspace === 'device-manager'
+                        ? (zh ? '设备工作台' : 'Device workspace')
+                        : workspace === 'groups'
                         ? (zh ? '群查询' : 'Groups')
                         : workspace === 'network'
                         ? (zh ? '网络资产' : 'Network assets')
@@ -1967,7 +2175,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             : backgroundNode?.name || activeGroupResources?.group.group_name || (overviewView === 'map'
                                 ? (zh ? '边缘集群地图' : 'Edge cluster map')
                                 : (zh ? '边缘集群图谱' : 'Edge cluster graph'))}</strong>
-                    {workspace === 'groups'
+                    {toolbarNode ? toolbarStatus : workspace === 'groups'
                         ? <small>{zh ? '本机群成员关系' : 'Local group memberships'}</small>
                         : workspace === 'network'
                         ? <small>{zh ? '计算群资产台账' : 'Compute-cluster inventory'}</small>
@@ -1976,9 +2184,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                             : backgroundNode.node_id}</small>}
                 </div>
                 <div className='ControlToolbarGroup right'>
-                    {queriedAt && <small>{zh ? '查询于' : 'Checked'} {queriedAt.toLocaleTimeString(zh ? 'zh-CN' : 'en-US')}</small>}
+                    {toolbarNode ? <small>{toolbarNode.node_id}</small> : toolbarStatus}
                     <span>{workspace === 'groups'
-                        ? `${visibleGroups.length} ${zh ? '个群' : visibleGroups.length === 1 ? 'group' : 'groups'}`
+                        ? groupBadge
                         : `${normalCount} / ${overviewNodes.length} ${zh ? '正常' : 'normal'}`}</span>
                     {workspace === 'node' && !backgroundNode
                         ? <div className='ControlOverviewViewSwitch' role='group' aria-label={zh ? '总览视角' : 'Overview view'}>
@@ -2007,7 +2215,65 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </div>
             </div>
             <div className='ControlCenterBody'>
-                {workspace === 'groups' && <div className='ControlNodeContent'>
+                {workspace === 'device-manager' && <section className='ControlManagerWorkspace' aria-label={zh ? '设备管家工作区' : 'Device manager workspace'}>
+                    <header className='ControlNodeHeader'>
+                        <div>
+                            <h1>{zh ? '设备管家' : 'Device Manager'}</h1>
+                            <p>{zh ? '查看机器状态并定位异常' : 'Inspect machine status and investigate issues'}</p>
+                        </div>
+                        <select aria-label={zh ? '选择机器' : 'Choose machine'} value={selectedNode?.node_id || ''}
+                            onChange={event => {
+                                overviewSelected.current = !event.target.value;
+                                setViewedBatchNodeId('');
+                                setSelectedNodeId(event.target.value);
+                            }}>
+                            <option value=''>{zh ? '请选择机器' : 'Choose a machine'}</option>
+                            {nodes.map(node => <option key={node.node_id} value={node.node_id}>{node.name}</option>)}
+                        </select>
+                    </header>
+                    <DeviceAlertsPanel alerts={alerts} persistent={alertPersistence} zh={zh}
+                        availableNodes={new Set(nodes.map(node => node.node_id))}
+                        acknowledge={acknowledge} openNode={openManagerNode}/>
+                    <DeviceBatchChecks nodes={nodes} zh={zh} active={deviceChecks.active}
+                        batch={deviceChecks.batch} cancel={deviceChecks.cancelBatch}
+                        start={selected => {
+                            setViewedBatchNodeId('');
+                            deviceChecks.startBatch(selected);
+                        }}
+                        openNode={(nodeId, scope) => openManagerNode(nodeId, scope, true)}/>
+                    {deviceChecks.storageFailed && <p className='ControlManagerStorageNotice' role='status'>
+                        {zh ? '本地存储不可用，本次记录仅在当前页面保留。'
+                            : 'Local storage is unavailable. This record is kept on this page only.'}
+                    </p>}
+                    {selectedNode ? <DeviceManagerPanel
+                        key={selectedNode.node_id}
+                        node={selectedNode}
+                        zh={zh}
+                        directoryError={error}
+                        check={viewedBatchCheck ?? deviceChecks.checks[selectedNode.node_id]}
+                        onShowLatest={viewedBatchCheck ? () => setViewedBatchNodeId('') : undefined}
+                        history={deviceChecks.history.filter(item => item.nodeId === selectedNode.node_id)}
+                        busy={Boolean(deviceChecks.active)}
+                        onCheck={() => {
+                            setViewedBatchNodeId('');
+                            deviceChecks.startSingle(selectedNode);
+                        }}
+                        openOverview={() => setWorkspace('node')}
+                        openTool={openDeviceTool}
+                        openRelated={() => setRelatedDeviceView({kind: 'management', nodeId: selectedNode.node_id, tab: 'camera'})}
+                        openLogs={scope => {
+                            setManagerLogScope(scope);
+                            setEdgeLogScope(undefined);
+                            setProgramRunnerOpen(true);
+                        }}
+                    /> : <div className='ControlMonitorUnavailable'>
+                        <strong>{loading ? (zh ? '正在读取机器…' : 'Loading machines…')
+                            : error ? (zh ? '无法读取机器列表' : 'Machine list unavailable')
+                                : nodes.length ? (zh ? '请选择一台机器' : 'Choose a machine')
+                                    : (zh ? '暂无机器' : 'No machines')}</strong>
+                    </div>}
+                </section>}
+                {workspace === 'groups' && <div className='ControlNodeContent ControlGroupWorkspace'>
                     <header className='ControlNodeHeader'>
                         <div>
                             <h1>{zh ? '群查询' : 'Groups'}</h1>
@@ -2021,7 +2287,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                         <div className='ControlSectionHeading'>
                             <h2>{zh ? '群号' : 'Join code'}</h2>
                         </div>
-                        <div className='ControlJoinCode'>
+                        {joinAdminRead !== 'ready' && <div className='ControlEmptyBlock'
+                            role={joinAdminRead === 'loading' ? 'status' : 'alert'}>{joinAdminNotice}</div>}
+                        {joinAdminRead === 'ready' && <div className='ControlJoinCode'>
                             {joinCode?.configured && joinCode.code
                                 ? <>
                                     <input aria-label={zh ? '群号' : 'Join code'} readOnly value={joinCode.code}/>
@@ -2040,7 +2308,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             <button type='button' disabled={joinAdminBusy} onClick={() => void rotateJoinCode()}>
                                 {joinCode?.configured ? (zh ? '立即更换' : 'Rotate now') : (zh ? '生成群号' : 'Create code')}
                             </button>
-                        </div>
+                        </div>}
                         {joinCode?.expires_at && <small className='ControlJoinExpiry'>
                             {zh ? '自动更换时间：' : 'Rotates at: '}
                             {new Date(joinCode.expires_at * 1000).toLocaleString(zh ? 'zh-CN' : 'en-US')}
@@ -2050,9 +2318,9 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <section className='ControlSection'>
                         <div className='ControlSectionHeading'>
                             <h2>{zh ? '待审批入群申请' : 'Pending join requests'}</h2>
-                            <span>{pendingJoinRequests.length}</span>
+                            {joinAdminRead === 'ready' && <span>{pendingJoinRequests.length}</span>}
                         </div>
-                        {pendingJoinRequests.length
+                        {joinAdminRead === 'ready' && (pendingJoinRequests.length
                             ? <div className='ControlServiceGrid' aria-label={zh ? '待审批入群申请' : 'Pending join requests'}>
                                 {pendingJoinRequests.map(request => <article className='ControlServiceCard' key={request.request_id}>
                                     <div>
@@ -2072,14 +2340,16 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     </div>
                                 </article>)}
                             </div>
-                            : <div className='ControlEmptyBlock'>{zh ? '当前没有待审批申请' : 'No pending requests'}</div>}
+                            : <div className='ControlEmptyBlock'>{zh ? '当前没有待审批申请' : 'No pending requests'}</div>)}
                     </section>
                     <section className='ControlSection'>
                         <div className='ControlSectionHeading'>
                             <h2>{zh ? '已加入的群' : 'Joined groups'}</h2>
-                            <span>{visibleGroups.length}</span>
+                            {groupRead === 'ready' && <span>{visibleGroups.length}</span>}
                         </div>
-                        {visibleGroups.length
+                        {groupRead !== 'ready' && <div className='ControlEmptyBlock'
+                            role={groupRead === 'loading' ? 'status' : 'alert'}>{groupReadNotice}</div>}
+                        {groupRead === 'ready' && (visibleGroups.length
                             ? <div className='ControlServiceGrid' aria-label={zh ? '当前群列表' : 'Current groups'}>
                                 {visibleGroups.map(group => <button
                                     type='button'
@@ -2105,7 +2375,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     </div>
                                 </button>)}
                             </div>
-                            : <div className='ControlEmptyBlock'>{graphError || (zh ? '当前没有可查询的群' : 'No queryable groups')}</div>}
+                            : <div className='ControlEmptyBlock'>{zh ? '当前没有可查询的群' : 'No queryable groups'}</div>)}
                     </section>
                     <Dialog open={Boolean(selectedGroup)} onClose={() => setSelectedGroupId('')}
                         fullWidth maxWidth='md' aria-labelledby='group-members-title'
@@ -2205,28 +2475,40 @@ export const ControlCenterView: React.FC<IProps> = ({
                     />
                 </div>}
                 {workspace === 'files' && <div className='ControlFeatureWorkspace'>
-                    <ComputeFilePanel nodes={overviewNodes} zh={zh}/>
+                    <ComputeFilePanel key={fileWorkspaceGeneration} nodes={nodes} preferredNodeId={selectedNode?.node_id}
+                        onScanDirectory={openDirectoryScan} zh={zh}/>
                 </div>}
-                <div className='ControlFeatureWorkspace' hidden={workspace !== 'utilities'}>
-                    {!selectedNode && <><StorageAnalysisPanel node={null} zh={zh} visible={workspace === 'utilities'}/><DuplicateAnalysisPanel node={null} zh={zh} visible={workspace === 'utilities'}/></>}
-                    {overviewNodes.map(candidate => <div key={candidate.node_id} hidden={candidate.node_id !== selectedNodeId}>
-                        <StorageAnalysisPanel
-                            node={candidate}
-                            zh={zh}
-                            visible={workspace === 'utilities' && candidate.node_id === selectedNodeId}
-                        />
-                        <DuplicateAnalysisPanel
-                            node={candidate}
-                            zh={zh}
-                            visible={workspace === 'utilities' && candidate.node_id === selectedNodeId}
-                        />
+                <div key={fileWorkspaceGeneration} className='ControlFeatureWorkspace' hidden={workspace !== 'utilities'}>
+                    <div className='ControlUtilitySwitch' role='group'
+                        aria-label={zh ? '存储工具' : 'Storage tools'}>
+                        <button type='button' aria-pressed={utilityView === 'storage'}
+                            onClick={() => setUtilityView('storage')}>{zh ? '存储分析' : 'Storage analysis'}</button>
+                        <button type='button' aria-pressed={utilityView === 'duplicates'}
+                            onClick={() => setUtilityView('duplicates')}>{zh ? '重复文件' : 'Duplicate files'}</button>
+                    </div>
+                    {!selectedNode && (utilityView === 'storage'
+                        ? <StorageAnalysisPanel node={null} zh={zh} visible={false}/>
+                        : <DuplicateAnalysisPanel node={null} zh={zh} visible={false}/>)}
+                    {nodes.map(candidate => <div key={candidate.node_id} hidden={candidate.node_id !== selectedNodeId}>
+                        <div hidden={utilityView !== 'storage'}>
+                            <StorageAnalysisPanel node={candidate} zh={zh}
+                                prefillDirectory={scanDirectory?.nodeId === candidate.node_id ? scanDirectory : undefined}
+                                visible={workspace === 'utilities'
+                                && utilityView === 'storage' && candidate.node_id === selectedNodeId}/>
+                        </div>
+                        <div hidden={utilityView !== 'duplicates'}>
+                            <DuplicateAnalysisPanel node={candidate} zh={zh}
+                                prefillDirectory={scanDirectory?.nodeId === candidate.node_id ? scanDirectory : undefined}
+                                visible={workspace === 'utilities'
+                                && utilityView === 'duplicates' && candidate.node_id === selectedNodeId}/>
+                        </div>
                     </div>)}
                 </div>
                 {workspace === 'terminal' && <div className='ControlFeatureWorkspace'>
                     <ComputeTerminalPanel
-                        key={selectedNodeId || 'terminal'}
+                        key={terminalNodeId || 'terminal'}
                         zh={zh}
-                        preferredNodeId={selectedNodeId}
+                        preferredNodeId={terminalNodeId}
                         preferredTransport={terminalTransport}
                         autoConnect={terminalAutoConnect}
                     />
@@ -2275,6 +2557,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     if (tool === 'terminal') {
                                         overviewSelected.current = false;
                                         setToolOpenedFromOverview(false);
+                                        setTerminalNodeId(node.node_id);
                                         setTerminalAutoConnect(true);
                                         setTerminalTransport(undefined);
                                         setWorkspace('terminal');
@@ -2286,7 +2569,11 @@ export const ControlCenterView: React.FC<IProps> = ({
                                     setWorkspace('node');
                                 }}
                             />
-                            : <div className='ControlCenterMessage error'>
+                            : refreshing && !graphError
+                                ? <div className='ControlCenterMessage' role='status'>
+                                    {zh ? '正在读取图谱…' : 'Loading resource graph…'}
+                                </div>
+                                : <div className='ControlCenterMessage error'>
                                 <strong>{zh ? '边缘集群图谱暂不可用' : 'Edge cluster graph unavailable'}</strong>
                                 <span>{graphError || (zh ? '图谱数据尚未就绪' : 'Graph data is not ready')}</span>
                                 <button type='button' onClick={() => void refresh()}>{zh ? '重试' : 'Retry'}</button>
@@ -2605,12 +2892,14 @@ export const ControlCenterView: React.FC<IProps> = ({
                 </div>
             </section>
         </div>}
+        {selectedNode && relatedView && renderRelatedDeviceView(selectedNode, relatedView)}
         {selectedNode && programRunnerOpen && <div
             className={`ControlResourceMonitorBackdrop${programRunnerMaximized ? ' maximized' : ''}`}
             onMouseDown={event => {
                 if (event.target === event.currentTarget) {
                     setProgramRunnerOpen(false);
                     setProgramRunnerMaximized(false);
+                    setEdgeLogScope(undefined);
                     if (toolOpenedFromOverview) {
                         overviewSelected.current = true;
                         setSelectedNodeId('');
@@ -2620,11 +2909,12 @@ export const ControlCenterView: React.FC<IProps> = ({
             }}
         >
             <ProgramRunnerPanel
+                key={`${selectedNode.node_id}:${edgeLogId || ''}`}
                 node={selectedNode}
-                edgeDevices={lanAssets.filter(asset =>
-                    asset.node_id === selectedNode.node_id
-                    && asset.device_kind === 'edge_compute'
-                )}
+                initialView={workspace === 'device-manager' || edgeLogId ? 'logs' : undefined}
+                initialEdgeId={edgeLogId}
+                logScope={workspace === 'device-manager' && !edgeLogId ? managerLogScope : undefined}
+                edgeDevices={error || (workspace === 'device-manager' && !edgeLogId) ? [] : relatedDevices(selectedNode)}
                 zh={zh}
                 maximized={programRunnerMaximized}
                 onToggleMaximized={() => setProgramRunnerMaximized(current => !current)}
@@ -2636,6 +2926,8 @@ export const ControlCenterView: React.FC<IProps> = ({
 const mapStateToProps = (state: AppState) => ({
     language: state.general.language,
 });
+
+declare const __OPENSIGHT_LOCAL_TAILCAT_NODE__: string;
 
 export default connect(mapStateToProps, {
     updateActivePopupTypeAction: updateActivePopupType,

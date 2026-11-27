@@ -132,7 +132,7 @@ describe('DeviceManagementPopup remote camera management', () => {
         expect(screen.getByRole('option', {name: 'Normal only'})).toBeInTheDocument();
         expect(screen.getByRole('option', {name: 'Fault only'})).toBeInTheDocument();
         expect(screen.queryByRole('option', {name: 'Abnormal only'})).not.toBeInTheDocument();
-        expect(screen.getByLabelText('Device summary')).toHaveTextContent('Total3Normal1Fault2');
+        expect(screen.getByLabelText('Device summary')).toHaveTextContent('Total3Normal0Fault2Unverified1');
         expect(screen.getAllByText('Normal').length).toBeGreaterThan(0);
         expect(screen.getAllByText('Fault').length).toBeGreaterThan(0);
         expect(screen.getByText('Abnormal')).toHaveClass('abnormal');
@@ -161,7 +161,7 @@ describe('DeviceManagementPopup remote camera management', () => {
             cameras={[{
                 device_id: 'camera-1', kind: 'camera', provider: 'camera-connect',
                 name: '远程相机', model: 'DS-2CD2686', status: 'online', channels: 1,
-                capabilities: [],
+                capabilities: ['camera.stream.v1'],
             }]}
             edgeDevices={[{
                 asset_id: 'edge-1', node_id: 'node-1', node_name: 'remote-node', cidr: '10.0.0.0/24',

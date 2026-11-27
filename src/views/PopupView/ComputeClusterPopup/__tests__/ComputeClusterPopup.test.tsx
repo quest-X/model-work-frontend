@@ -1,12 +1,16 @@
 import React from 'react';
-import {act, render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Language} from '../../../../data/LanguageConfig';
-import {ComputeClusterService, ComputeUpgradeBatch} from '../../../../services/ComputeClusterService';
+import {ComputeClusterRequestError, ComputeClusterService, ComputeUpgradeBatch} from '../../../../services/ComputeClusterService';
 import {ComputeClusterPopup} from '../ComputeClusterPopup';
+import {ComputeTerminalPanel} from '../ComputeTerminalPanel';
 import {ResourceKnowledgeGraph} from '../ResourceKnowledgeGraph';
 import {AGENT_CHAT_SEND_EVENT} from '../../../Common/AgentSideChat/AgentSideChat';
+import {Terminal} from '@xterm/xterm';
 
+jest.mock('@xterm/xterm');
+jest.mock('@xterm/addon-fit');
 jest.mock('../../../../logic/actions/PopupActions', () => ({
     PopupActions: {close: jest.fn()},
 }));
@@ -18,7 +22,7 @@ jest.mock('../../../../services/ComputeClusterService', () => ({
         connectJetson: jest.fn(),
         lanSchedules: jest.fn(), createLanSchedule: jest.fn(), controlLanSchedule: jest.fn(),
         terminalTargets: jest.fn(), startTerminal: jest.fn(), terminal: jest.fn(),
-        terminalInput: jest.fn(), terminalControl: jest.fn(),
+        terminalInput: jest.fn(), terminalResize: jest.fn(), terminalControl: jest.fn(),
         upgradeReleases: jest.fn(), createMainUpgradeBatch: jest.fn(), createUpgradeBatch: jest.fn(), upgradeBatch: jest.fn(), refreshUpgradeBatch: jest.fn(),
         approveUpgradeBatch: jest.fn(), rejectUpgradeBatch: jest.fn(),
         submitTask: jest.fn(), controlTask: jest.fn(),
@@ -238,6 +242,7 @@ describe('ComputeClusterPopup', () => {
         });
         service.terminal.mockResolvedValue(terminalSession);
         service.terminalInput.mockResolvedValue(terminalSession);
+        service.terminalResize.mockResolvedValue(terminalSession);
         service.terminalControl.mockResolvedValue({...terminalSession, state: 'closed'});
     });
 
@@ -290,6 +295,16 @@ describe('ComputeClusterPopup', () => {
         await waitFor(() => expect(service.status).toHaveBeenCalledTimes(1));
     });
 
+    it('does not report an empty cluster when StrictMode cancels the initial read', async () => {
+        service.nodes.mockImplementationOnce(signal => new Promise((_, reject) => {
+            signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), {once: true});
+        }));
+        render(<React.StrictMode><ComputeClusterPopup language={Language.CHINESE} embedded initialWorkspace='network'/></React.StrictMode>);
+        await act(async () => undefined);
+        expect(screen.getByText('正在读取节点…')).toBeInTheDocument();
+        expect(screen.queryByText('尚未注册计算节点')).not.toBeInTheDocument();
+    });
+
     it('embeds the network workspace without modal chrome', async () => {
         service.status.mockResolvedValue({
             state: 'ready', version: '0.1.0', protocol_version: 1,
@@ -317,7 +332,36 @@ describe('ComputeClusterPopup', () => {
         expect(screen.getByRole('heading', {name: '局域网扫描计划'})).toBeInTheDocument();
         expect(screen.queryByRole('navigation', {name: '计算群工作区'})).not.toBeInTheDocument();
         expect(container.querySelector('.ComputeClusterBackdrop.embedded')).toBeInTheDocument();
+        expect(service.tasks).not.toHaveBeenCalled();
         expect(screen.getByRole('combobox', {name: '计划节点'})).toHaveValue('node-12345678');
+    });
+
+    it('keeps the network inventory visible when task and schedule reads fail', async () => {
+        const user = userEvent.setup();
+        const base = await service.status();
+        service.status.mockResolvedValue({
+            ...base,
+            task_control: {
+                enabled: true, allowed_task_types: ['network.lan_discovery'],
+                lan_discovery: true, lan_asset_inventory: true, lan_discovery_schedules: true,
+            },
+        });
+        service.tasks.mockRejectedValueOnce(new Error('task list unavailable'));
+        let rejectSchedules: (reason: Error) => void = () => undefined;
+        service.lanSchedules.mockReturnValueOnce(new Promise((_, reject) => {
+            rejectSchedules = reject;
+        }));
+        render(<ComputeClusterPopup language={Language.CHINESE}/>);
+
+        await user.click(await screen.findByRole('button', {name: '网络资产 1'}));
+        expect(screen.getByText('camera.local')).toBeInTheDocument();
+        const schedules = screen.getByRole('heading', {name: '局域网扫描计划'}).closest('section');
+        const schedulesView = within(schedules as HTMLElement);
+        expect(schedulesView.getByRole('status')).toHaveTextContent('正在读取');
+        await act(async () => rejectSchedules(new ComputeClusterRequestError(403, 'Forbidden')));
+        expect(await schedulesView.findByRole('alert')).toHaveTextContent('当前账号没有读取权限');
+        expect(screen.queryByText('尚无定时计划。')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '创建计划'})).not.toBeInTheDocument();
     });
 
     it('sorts faults first and filters the compact node list', async () => {
@@ -676,6 +720,15 @@ describe('ComputeClusterPopup', () => {
         expect(within(sensorCard).getByText('DS-2CD2686FWDA2-IZS')).toBeInTheDocument();
         expect(within(sensorCard).getByText('2 个通道')).toBeInTheDocument();
         expect(within(sensorCard).getByText('上级设备 · AIPACK-01')).toBeInTheDocument();
+        await user.unhover(camera);
+        await user.dblClick(camera);
+        expect(camera).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('status', {name: 'IP CAMERA 运维信息'})).toHaveTextContent('已固定（双击节点或点击空白取消）');
+        await user.unhover(camera);
+        expect(screen.getByRole('status', {name: 'IP CAMERA 运维信息'})).toHaveClass('pinned');
+        await user.dblClick(camera);
+        expect(camera).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.queryByRole('status', {name: 'IP CAMERA 运维信息'})).not.toBeInTheDocument();
         await waitFor(() => expect(service.resourceGraph).toHaveBeenCalledTimes(1));
     });
 
@@ -1243,33 +1296,53 @@ describe('ComputeClusterPopup', () => {
         await screen.findByRole('navigation', {name: '计算群工作区'});
         await user.click(await screen.findByRole('button', {name: '终端连接 1'}));
         expect(await screen.findByText('节点终端连接')).toBeInTheDocument();
-        expect(screen.getByText('选择节点并连接；故障节点仍有可用 SSH 路径时也可连接。')).toBeInTheDocument();
-        expect(screen.getByText(/连接目标与认证材料由 Mac Client 保管/)).toBeInTheDocument();
-        expect(screen.getByRole('option', {name: 'edge-01 · linux · 正常'})).toBeInTheDocument();
+        expect(screen.getByLabelText('终端输出')).toHaveTextContent('选择节点并连接终端。');
+        expect(screen.getByText('点击终端直接输入命令；可使用目标节点已安装的程序。')).toBeInTheDocument();
+        expect(screen.getByRole('option', {name: 'edge-01 · linux · 可连接'})).toBeInTheDocument();
         const targetSelect = screen.getByRole('combobox', {name: '目标节点'});
         expect(targetSelect).toHaveValue('');
         expect(service.terminal).not.toHaveBeenCalled();
         await user.selectOptions(targetSelect, 'node-12345678');
-        expect(await screen.findByText('正常', {selector: '.ComputeTerminalState strong'})).toBeInTheDocument();
+        expect(await screen.findByText('可连接', {selector: '.ComputeTerminalState strong'})).toBeInTheDocument();
+        service.terminal.mockResolvedValue({
+            ...(await service.terminal('terminal-session-1')),
+            cursor: 24, ansi: true, output: 'model-work-node-backups\r\n\x1b[2J\x1b[Hvi screen',
+        });
+        service.terminal.mockClear();
         await user.click(screen.getByRole('button', {name: '连接终端'}));
         await waitFor(() => expect(service.startTerminal).toHaveBeenCalledWith('node-12345678'));
-        const connectionState = await screen.findByText('局域网 SSH · 正常');
+        const connectionState = await screen.findByText('局域网 SSH · 已连接');
         expect(connectionState.closest('.ComputeTerminalState')).toHaveClass('lan');
         const terminalOutput = screen.getByLabelText('终端输出');
-        expect(terminalOutput.textContent).toContain('model-work-node-backups');
-        expect(terminalOutput.textContent).not.toMatch(/\n{3,}/);
-        const input = screen.getByRole('textbox', {name: '终端指令'});
-        await waitFor(() => expect(input).toHaveFocus());
+        await waitFor(() => expect(terminalOutput.textContent).toContain('vi screen'));
+        expect(terminalOutput.textContent).toContain('\x1b[2J\x1b[H');
+        expect(screen.queryByRole('textbox', {name: '终端指令'})).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '发送'})).not.toBeInTheDocument();
+        const terminal = (Terminal as unknown as {instances: Array<{
+            element?: HTMLElement; emitData: (data: string) => void;
+            emitResize: (rows: number, cols: number) => void;
+        }>}).instances.slice(-1)[0];
+        await waitFor(() => expect(terminal.element).toHaveFocus());
+        await waitFor(() => expect(service.terminalResize).toHaveBeenCalledWith('terminal-session-1', 24, 80));
+        act(() => terminal.emitResize(40, 120));
+        await waitFor(() => expect(service.terminalResize).toHaveBeenCalledWith('terminal-session-1', 40, 120));
         await user.click(screen.getByRole('button', {name: '放大计算群窗口'}));
-        await waitFor(() => expect(input).toHaveFocus());
-        await user.type(input, 'uname -a');
-        await user.click(screen.getByRole('button', {name: '发送'}));
+        await waitFor(() => expect(terminal.element).toHaveFocus());
+        act(() => terminal.emitData('i'));
+        act(() => terminal.emitData('hello'));
+        act(() => terminal.emitData('\x1b'));
         await waitFor(() => expect(service.terminalInput).toHaveBeenCalledWith(
-            'terminal-session-1', 'uname -a\r',
+            'terminal-session-1', 'hello',
         ));
-        await waitFor(() => expect(input).toHaveFocus());
+        await waitFor(() => expect(service.terminalInput).toHaveBeenCalledWith('terminal-session-1', '\x1b'));
+        expect(service.terminalInput).toHaveBeenNthCalledWith(1, 'terminal-session-1', 'i');
+        expect(service.terminalInput).toHaveBeenNthCalledWith(2, 'terminal-session-1', 'hello');
+        expect(service.terminalInput).toHaveBeenNthCalledWith(3, 'terminal-session-1', '\x1b');
+        act(() => terminal.emitData('a'.repeat(8193)));
+        await waitFor(() => expect(service.terminalInput).toHaveBeenNthCalledWith(5, 'terminal-session-1', 'a'));
+        expect(service.terminalInput).toHaveBeenNthCalledWith(4, 'terminal-session-1', 'a'.repeat(8192));
         await user.click(terminalOutput);
-        expect(input).toHaveFocus();
+        expect(terminal.element).toHaveFocus();
     });
 
     it('marks offline SSH-reachable targets as faults without blocking recovery', async () => {
@@ -1303,11 +1376,11 @@ describe('ComputeClusterPopup', () => {
 
         await user.click(await screen.findByRole('button', {name: '终端连接 1'}));
         const targetSelect = screen.getByRole('combobox', {name: '目标节点'});
-        expect(screen.getByRole('option', {name: 'edge-offline · windows · 故障'})).not.toBeDisabled();
+        expect(screen.getByRole('option', {name: 'edge-offline · windows · 节点离线，SSH 可达'})).not.toBeDisabled();
         expect(targetSelect).toHaveValue('');
         expect(document.querySelector('.ComputeTerminalState')).not.toBeInTheDocument();
         await user.selectOptions(targetSelect, 'node-offline-87654321');
-        expect(await screen.findByText('故障', {selector: '.ComputeTerminalState strong'})).toBeInTheDocument();
+        expect(await screen.findByText('节点离线，SSH 可达', {selector: '.ComputeTerminalState strong'})).toBeInTheDocument();
         await user.click(screen.getByRole('button', {name: '连接终端'}));
         await waitFor(() => expect(service.startTerminal).toHaveBeenCalledWith('node-offline-87654321'));
     });
@@ -1334,9 +1407,112 @@ describe('ComputeClusterPopup', () => {
         await user.click(await screen.findByRole('button', {name: '终端连接 1'}));
         await user.selectOptions(screen.getByRole('combobox', {name: '目标节点'}), 'node-12345678');
         await user.click(screen.getByRole('button', {name: '连接终端'}));
-        const connectionState = await screen.findByText('Tailscale · 正常');
+        const connectionState = await screen.findByText('Tailscale · 已连接');
         expect(connectionState.closest('.ComputeTerminalState')).toHaveClass('remote');
         expect(connectionState.closest('.ComputeTerminalState')).not.toHaveClass('lan');
+    });
+
+    it('keeps the requested node and failed route visible across target refreshes', async () => {
+        jest.useFakeTimers();
+        try {
+            const targets = await service.terminalTargets();
+            const other = {...targets.targets[0], node_id: 'other-node', node_name: 'Other'};
+            service.terminalTargets
+                .mockRejectedValueOnce(new ComputeClusterRequestError(403, 'Forbidden'))
+                .mockResolvedValueOnce({...targets, targets: [other]});
+            service.startTerminal.mockRejectedValueOnce(new Error('LAN SSH is unavailable for this node'));
+
+            render(<ComputeTerminalPanel zh preferredNodeId='node-12345678' preferredTransport='lan' autoConnect/>);
+
+            expect(await screen.findByText('当前账号无权查看终端目标。')).toBeInTheDocument();
+            const target = screen.getByRole('combobox', {name: '目标节点'});
+            expect(target).toHaveValue('node-12345678');
+            expect(target).toBeDisabled();
+
+            await act(async () => { jest.advanceTimersByTime(5000); });
+            expect(target).toHaveValue('node-12345678');
+            expect(screen.getByRole('button', {name: '连接终端'})).toBeDisabled();
+            expect(service.startTerminal).not.toHaveBeenCalled();
+
+            await act(async () => { jest.advanceTimersByTime(5000); });
+            expect(service.startTerminal).toHaveBeenCalledWith('node-12345678', 'lan');
+            expect(screen.getByText('局域网 SSH · 连接失败')).toBeInTheDocument();
+            expect(screen.getByText('LAN SSH is unavailable for this node')).toBeInTheDocument();
+
+            await act(async () => { jest.advanceTimersByTime(5000); });
+            expect(screen.getByText('LAN SSH is unavailable for this node')).toBeInTheDocument();
+            expect(service.startTerminal).toHaveBeenCalledTimes(1);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it.each([
+        ['lan', 'tailcat', '局域网 SSH', 'Tailcat', true],
+        ['tailcat', 'lan', 'Tailcat', '局域网 SSH', true],
+        ['tailscale', 'lan', 'Tailscale', 'LAN SSH', false],
+    ] as const)('requires explicit viewing of a conflicting session from %s', async (requested, existing, requestedLabel, existingLabel, zh) => {
+        const user = userEvent.setup();
+        const targets = await service.terminalTargets();
+        const session = await service.terminal('terminal-session-1');
+        const existingSession = {...session, transport: existing, output: 'existing session output'};
+        service.terminal.mockResolvedValue(existingSession).mockClear();
+        service.terminalTargets.mockResolvedValue({
+            ...targets, targets: [{...targets.targets[0], tailcat_available: true, active_session_id: session.session_id}],
+        });
+        render(<ComputeTerminalPanel zh={zh} preferredNodeId='node-12345678' preferredTransport={requested} initialCommand='whoami' autoConnect/>);
+
+        const view = await screen.findByRole('button', {name: zh ? `查看现有 ${existingLabel} 会话` : `View existing ${existingLabel} session`});
+        expect(screen.getByText(`${requestedLabel} · ${zh ? '已有其他路线会话' : 'Session on another route'}`)).toBeInTheDocument();
+        expect(screen.getByLabelText(zh ? '终端输出' : 'Terminal output')).not.toHaveTextContent('existing session output');
+        expect(screen.getByRole('button', {name: zh ? '连接终端' : 'Connect'})).toBeDisabled();
+        expect(service.startTerminal).not.toHaveBeenCalled();
+        expect(service.terminalControl).not.toHaveBeenCalled();
+        await user.click(view);
+        await waitFor(() => expect(service.terminal.mock.calls.length).toBeGreaterThanOrEqual(3));
+        expect(screen.getByText(`${existingLabel} · ${zh ? '已连接' : 'Connected'}`)).toBeInTheDocument();
+        expect(screen.getByLabelText(zh ? '终端输出' : 'Terminal output')).toHaveTextContent('existing session output');
+        expect(screen.queryByRole('textbox', {name: zh ? '终端指令' : 'Terminal command'})).not.toBeInTheDocument();
+        expect(service.terminalInput).not.toHaveBeenCalled();
+
+        service.terminalControl.mockResolvedValue({...existingSession, state: 'closed'});
+        service.startTerminal.mockResolvedValue({...session, session_id: 'new-session', transport: requested});
+        service.terminal.mockResolvedValue({...session, session_id: 'new-session', transport: requested});
+        await user.click(screen.getByRole('button', {name: zh ? '断开' : 'Disconnect'}));
+        expect(service.terminalControl).toHaveBeenCalledWith(session.session_id, 'close');
+        await user.click(screen.getByRole('button', {name: zh ? '连接终端' : 'Connect'}));
+        expect(service.startTerminal).toHaveBeenCalledWith('node-12345678', requested);
+        expect(await screen.findByText(`${requestedLabel} · ${zh ? '已连接' : 'Connected'}`)).toBeInTheDocument();
+    });
+
+    it('does not offer to view a conflicting session from another node', async () => {
+        const targets = await service.terminalTargets();
+        const session = await service.terminal('terminal-session-1');
+        service.terminalTargets.mockResolvedValue({
+            ...targets, targets: [{...targets.targets[0], active_session_id: session.session_id}],
+        });
+        service.terminal.mockResolvedValue({...session, node_id: 'other-node', transport: 'tailcat', output: 'private output'});
+        render(<ComputeTerminalPanel zh preferredNodeId='node-12345678' preferredTransport='lan' autoConnect/>);
+
+        expect(await screen.findByText('返回的会话与所选节点不一致。')).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: /查看现有/})).not.toBeInTheDocument();
+        expect(screen.getByLabelText('终端输出')).not.toHaveTextContent('private output');
+        expect(service.startTerminal).not.toHaveBeenCalled();
+        expect(service.terminalControl).not.toHaveBeenCalled();
+    });
+
+    it('blocks terminal input when session reading is denied, independently of the target list', async () => {
+        service.terminal.mockRejectedValue(new ComputeClusterRequestError(403, 'Forbidden'));
+        render(<ComputeTerminalPanel zh preferredNodeId='node-12345678'/>);
+        const connect = screen.getByRole('button', {name: '连接终端'});
+        await waitFor(() => expect(connect).toBeEnabled());
+        fireEvent.click(connect);
+        expect(await screen.findByText(/当前账号无权访问此终端会话/)).toBeInTheDocument();
+        const terminal = (Terminal as unknown as {instances: Array<{emitData: (data: string) => void}>}).instances.slice(-1)[0];
+        act(() => terminal.emitData('whoami\r'));
+        expect(service.terminalInput).not.toHaveBeenCalled();
+        expect(screen.getByLabelText('终端输出')).not.toHaveTextContent('model-work-node-backups');
+        expect(screen.queryByText('当前账号无权查看终端目标。')).not.toBeInTheDocument();
     });
 
     it('shows enrollment guidance when the cluster is empty', async () => {

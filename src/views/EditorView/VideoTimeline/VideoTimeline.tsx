@@ -24,6 +24,8 @@ function setGlobalRange(r: FrameRange | null) {
     window.dispatchEvent(new CustomEvent('timelineRangeChange', { detail: r }));
 }
 
+const EMPTY_FRAME_MARKERS: number[] = [];
+
 interface IProps {
     duration: number; // 视频总时长（秒）
     currentTime: number; // 当前播放时间（秒）
@@ -41,7 +43,7 @@ interface IProps {
     language: Language;
 }
 
-const VideoTimeline: React.FC<IProps> = ({
+export const VideoTimeline: React.FC<IProps> = ({
     duration,
     currentTime,
     frames,
@@ -50,8 +52,8 @@ const VideoTimeline: React.FC<IProps> = ({
     onFrameChange,
     size,
     isPlaying = false,
-    keyframes = [],
-    annotatedFrames = [],
+    keyframes = EMPTY_FRAME_MARKERS,
+    annotatedFrames = EMPTY_FRAME_MARKERS,
     onPlayPause,
     isMuted = true,
     onToggleMute,
@@ -78,10 +80,7 @@ const VideoTimeline: React.FC<IProps> = ({
         return Math.min(Math.round(ratio * (frames - 1)), frames - 1);
     }, [frames]);
 
-    // 绘制时间轴（纯 Redux prop 驱动，简单可靠）
-    const drawTimeline = useCallback(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
+    const drawBackground = useCallback((canvas: HTMLCanvasElement) => {
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
@@ -113,7 +112,7 @@ const VideoTimeline: React.FC<IProps> = ({
         }
 
         // 绘制刻度线
-        const pixelsPerSecond = width / duration;
+        const pixelsPerSecond = duration > 0 ? width / duration : 0;
 
         // 动态计算时间标签间隔，避免文字重叠
         const minLabelSpacing = 40;
@@ -168,10 +167,32 @@ const VideoTimeline: React.FC<IProps> = ({
             ctx.fill();
         });
 
+    }, [duration, frames, keyframes, annotatedFrames, selectionRange]);
+
+    const backgroundRef = useRef<{draw: typeof drawBackground; canvas: HTMLCanvasElement} | null>(null);
+    const drawTimeline = useCallback(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx) return;
+        const {width, height} = canvas;
+        let background = backgroundRef.current;
+        if (!background || background.draw !== drawBackground ||
+            background.canvas.width !== width || background.canvas.height !== height) {
+            const layer = document.createElement('canvas');
+            layer.width = width;
+            layer.height = height;
+            drawBackground(layer);
+            background = {draw: drawBackground, canvas: layer};
+            backgroundRef.current = background;
+        }
+        // Playback and hover reuse the ticks and annotation markers.
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(background.canvas, 0, 0);
+
         // 绘制播放进度条
         const displayFrame = currentFrame;
         const displayTime = currentTime;
-        const progress = frames > 0 ? displayFrame / (frames - 1) : 0;
+        const progress = frames > 1 ? displayFrame / (frames - 1) : 0;
         const currentX = Math.min(progress * width, width);
         ctx.fillStyle = 'rgba(33, 150, 243, 0.3)';
         ctx.fillRect(0, 0, currentX, height - 30);
@@ -195,7 +216,8 @@ const VideoTimeline: React.FC<IProps> = ({
 
         // 如果鼠标悬停，显示悬停时间
         if (hoverTime !== null) {
-            const hoverX = (hoverTime / duration) * width;
+            ctx.textAlign = 'center';
+            const hoverX = duration > 0 ? (hoverTime / duration) * width : 0;
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.lineWidth = 1;
             ctx.setLineDash([5, 5]);
@@ -226,7 +248,7 @@ const VideoTimeline: React.FC<IProps> = ({
         const timeText = `${currentMinutes}:${currentSeconds.toString().padStart(2, '0')} / ${Math.floor(duration / 60)}:${Math.floor(duration % 60).toString().padStart(2, '0')}`;
         ctx.fillText(timeText, width - 10, 20);
 
-    }, [duration, currentTime, frames, currentFrame, fps, hoverTime, keyframes, annotatedFrames, selectionRange]);
+    }, [drawBackground, duration, currentTime, frames, currentFrame, fps, hoverTime]);
 
     // 处理时间跳转
     const handleSeek = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -390,6 +412,9 @@ const VideoTimeline: React.FC<IProps> = ({
         drawTimeline();
     }, [drawTimeline]);
 
+    const drawTimelineRef = useRef(drawTimeline);
+    drawTimelineRef.current = drawTimeline;
+
     // 设置画布大小
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -398,15 +423,22 @@ const VideoTimeline: React.FC<IProps> = ({
 
         const updateSize = () => {
             const rect = container.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = size?.height || 60;
-            drawTimeline();
+            const width = Math.max(0, Math.round(rect.width));
+            const height = size?.height || 60;
+            if (canvas.width !== width) canvas.width = width;
+            if (canvas.height !== height) canvas.height = height;
+            drawTimelineRef.current();
         };
 
         updateSize();
+        const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateSize) : null;
+        observer?.observe(container);
         window.addEventListener('resize', updateSize);
-        return () => window.removeEventListener('resize', updateSize);
-    }, [size, drawTimeline]);
+        return () => {
+            observer?.disconnect();
+            window.removeEventListener('resize', updateSize);
+        };
+    }, [size?.width, size?.height]);
 
     return (
         <div className="VideoTimeline" ref={containerRef}>
@@ -420,7 +452,7 @@ const VideoTimeline: React.FC<IProps> = ({
             />
             <div className="TimelineControls">
                 <div className="LeftInfo">
-                    <span>{language === 'zh' ? '帧率' : 'FPS'}: {fps}</span>
+                    <span data-video-fps={fps}>{language === 'zh' ? '帧率' : 'FPS'}: {Math.round(fps)}</span>
                     <span>{texts.video.frame + ': '}{currentFrame + 1} / {frames}</span>
                 </div>
 

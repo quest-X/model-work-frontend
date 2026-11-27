@@ -23,6 +23,7 @@ import { EditorModel } from '../../../staticModels/EditorModel';
 import { Language } from '../../../data/LanguageConfig';
 import {getVideoThumbnailSize} from '../../../utils/VideoThumbnailUtil';
 import {CanvasMultiViewStore, CanvasViewLayout} from '../MultiView/CanvasMultiViewStore';
+import {store} from '../../../index';
 
 // Module-level stable empty array used as fallback for `frames` prop when
 // fast_ffmpeg_mode runs in on-demand mode (sessionId only, preExtractedFrames undefined).
@@ -47,7 +48,7 @@ interface IProps {
     toggleImageSelection: (imageId: string) => void;
 }
 
-const VideoEditor: React.FC<IProps> = ({
+export const VideoEditor: React.FC<IProps> = ({
     activeVideo,
     imagesData,
     activeImageIndex,
@@ -63,6 +64,9 @@ const VideoEditor: React.FC<IProps> = ({
 }) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [videoUrl, setVideoUrl] = useState<string>('');
+    useEffect(() => {
+        setIsPlaying(activeVideo?.isPlaying || false);
+    }, [activeVideo?.id, activeVideo?.isPlaying]);
     const [, setLoadedThumbnailCount] = useState(0);
     const [, setTotalFrameCount] = useState(0);
     const [isMuted, setIsMuted] = useState<boolean>(true);
@@ -87,9 +91,9 @@ const VideoEditor: React.FC<IProps> = ({
     const isPlayingRef = React.useRef(isPlaying);
     isPlayingRef.current = isPlaying;
 
-    // 初始化视频URL — only needed in raw_browser_mode (no pre-extracted frames)
+    // Preview uses the original video; backend sessions remain available for inference.
     useEffect(() => {
-        if (activeVideo?.fileData && !activeVideo.preExtractedFrames) {
+        if (activeVideo?.fileData?.size > 0) {
             // 递增 generation ID，取消所有进���中的缩略图生成
             generationIdRef.current++;
             const url = URL.createObjectURL(activeVideo.fileData);
@@ -146,6 +150,8 @@ const VideoEditor: React.FC<IProps> = ({
     const lastFrameForImageRef = React.useRef<number>(-1);
     const lastIsPlayingRef = React.useRef<boolean>(false);
     useEffect(() => {
+        // The decoded-frame callback owns playback rendering; Redux only refreshes controls.
+        if (isPlaying) return;
         if (activeVideo && imagesData.length > 0) {
             // 始终同步 playbackImageData 到当前帧
             const frameData = imagesData[activeVideo.currentFrame];
@@ -240,8 +246,15 @@ const VideoEditor: React.FC<IProps> = ({
             const currentImagesData = imagesDataRef.current;
             if (!activeVideo || currentImagesData.length === 0) return;
 
-            const firstFrameImageData = currentImagesData[0];
+            const firstFrameImageData = currentImagesData[activeVideo.currentFrame] || currentImagesData[0];
             if (!firstFrameImageData) return;
+            const markFirstFrameLoaded = () => {
+                // The thumbnail callback can finish after inference; merge into the current frame.
+                const latest = store.getState().labels.imagesData.find(image => image.id === firstFrameImageData.id);
+                if (latest && !latest.loadStatus) {
+                    updateImageDataById(latest.id, {...latest, loadStatus: true});
+                }
+            };
 
             // 生成全分辨率图像给 Editor 渲染引擎使用（坐标系必须匹配视频分辨率）
             // 同时缓存到 EditorModel.videoFrameImage，播放时复用避免重复创建
@@ -296,8 +309,7 @@ const VideoEditor: React.FC<IProps> = ({
                 // Async toBlob to avoid blocking main thread
                 thumbnailCanvas.toBlob((blob) => {
                     if (!blob) {
-                        const updatedImageData = { ...firstFrameImageData, loadStatus: true };
-                        updateImageDataById(updatedImageData.id, updatedImageData);
+                        markFirstFrameLoaded();
                         return;
                     }
                     const thumbUrl = URL.createObjectURL(blob);
@@ -306,21 +318,18 @@ const VideoEditor: React.FC<IProps> = ({
                     thumbnailImage.onload = () => {
                         // 缩略图存入 ImageRepository（给 ImagePreview 用）
                         ImageRepository.storeImage(firstFrameImageData.id, thumbnailImage);
-                        const updatedImageData = { ...firstFrameImageData, loadStatus: true };
-                        updateImageDataById(updatedImageData.id, updatedImageData);
+                        markFirstFrameLoaded();
                         // 全分辨率图像给 Editor 渲染引擎
                         setFullResImage();
                     };
                     thumbnailImage.onerror = () => {
                         URL.revokeObjectURL(thumbUrl);
-                        const updatedImageData = { ...firstFrameImageData, loadStatus: true };
-                        updateImageDataById(updatedImageData.id, updatedImageData);
+                        markFirstFrameLoaded();
                     };
                     thumbnailImage.src = thumbUrl;
                 }, 'image/jpeg', 0.5);
             } else {
-                const updatedImageData = { ...firstFrameImageData, loadStatus: true };
-                updateImageDataById(updatedImageData.id, updatedImageData);
+                markFirstFrameLoaded();
             }
         },
         [activeVideo, updateImageDataById]
@@ -396,7 +405,7 @@ const VideoEditor: React.FC<IProps> = ({
                         }));
                         updateImageData(frameImageDataArray);
                     } else {
-                        frameImageDataArray = createVideoFramePlaceholders(activeVideo.fileData, frames);
+                        frameImageDataArray = createVideoFramePlaceholders(frames);
                         addImageData(frameImageDataArray);
                     }
 
@@ -479,6 +488,7 @@ const VideoEditor: React.FC<IProps> = ({
             // 从 ref 读取最新值，使此回调身份稳定（deps 仅含稳定的 action creators）
             const currentActiveVideo = activeVideoRef.current;
             if (!currentActiveVideo) return;
+            const frameChanged = frame !== lastFrameRef.current;
 
             // 检测跳帧：如果播放中且帧号跳跃超过阈值，输出警告
             // 重要：如果帧号从大跳到小（比如从300跳到0），说明视频被重置了，应该重置 lastFrameRef
@@ -497,44 +507,33 @@ const VideoEditor: React.FC<IProps> = ({
                     // 只有在跳帧超过20帧时才输出警告
                     frameSkipCountRef.current++;
                     console.warn(`[VideoEditor] 21. 检测到跳帧! 从帧 ${lastFrameRef.current} 跳到 ${frame} (跳过了 ${frameDiff - 1} 帧)`);
-                } else if (frameDiff < 0) {
-                    // 帧倒退通常发生在视频重置时，只在非正常情况输出警告
-                    if (frameDiff < -10) {
-                        console.warn(`[VideoEditor] 22. 检测到帧倒退! 从帧 ${lastFrameRef.current} 退到 ${frame}`);
-                    }
+                } else if (frameDiff < -10) {
+                    console.warn(`[VideoEditor] 22. 检测到帧倒退! 从帧 ${lastFrameRef.current} 退到 ${frame}`);
                 }
                 // 移除正常连续帧的日志输出
             }
             lastFrameRef.current = frame;
+            if (!frameChanged) return;
 
-            // 优化：减少 Redux 更新频率，避免阻塞 requestVideoFrameCallback
-            // 只在帧号变化时更新，并且限制更新频率（约30fps，33ms）
+            EditorModel.playbackImageData = getPlaybackFrame(imagesDataRef.current, EditorModel.latestImagesData, frame);
+            ViewPortActions.resizeViewPortContent();
+            EditorActions.fullRender();
+
+            // Controls can refresh at 10 Hz while annotations follow every decoded frame.
             const now = Date.now();
-            const frameChanged = frame !== currentActiveVideo.currentFrame;
             const timeSinceLastUpdate = now - lastUpdateTimeRef.current;
-            // 限制 canvas 更新频率为 30fps（33ms），但最后一帧必须更新（否则播放结束时帧号不对）
             const isLastFrame = frame >= currentActiveVideo.totalFrames - 1;
-            const shouldUpdate = frameChanged && (isLastFrame || timeSinceLastUpdate >= 33);
+            const shouldUpdate = !isPlayingRef.current || isLastFrame || timeSinceLastUpdate >= 100;
 
             if (shouldUpdate) {
                 lastUpdateTimeRef.current = now;
 
-                // 1. Redux 状态同步（每帧 dispatch，保证 timeline/侧边栏始终同步）
                 updateVideoCurrentFrame(currentActiveVideo.id, frame, time);
-
-                // 2. 设置播放时的标注数据（绕过 Redux selector，直接读 ref）
-                EditorModel.playbackImageData = getPlaybackFrame(imagesDataRef.current, EditorModel.latestImagesData, frame);
-
-                // 3. 侧边栏高亮更新：节流到 ~5fps
-                const sidebarTimeSince = now - lastSidebarUpdateRef.current;
-                if (frame !== activeImageIndexRef.current && (!isPlayingRef.current || sidebarTimeSince >= 200)) {
-                    updateActiveImageIndex(frame);
-                    lastSidebarUpdateRef.current = now;
-                }
-
-                // 播放时 Editor.componentDidUpdate 会 early-return 跳过 canvas resize,此处补上以支持 zoom>1
-                ViewPortActions.resizeViewPortContent();
-                EditorActions.fullRender();
+            }
+            const sidebarTimeSince = now - lastSidebarUpdateRef.current;
+            if (frame !== activeImageIndexRef.current && (!isPlayingRef.current || isLastFrame || sidebarTimeSince >= 200)) {
+                updateActiveImageIndex(frame);
+                lastSidebarUpdateRef.current = now;
             }
         },
         [updateVideoCurrentFrame, updateActiveImageIndex]
@@ -598,11 +597,8 @@ const VideoEditor: React.FC<IProps> = ({
                 {/* 底层：视频播放器
                      暂停时隐藏（标注画布已绘制视频帧，避免缩放时未缩放的帧透出） */}
                 <div className="VideoPlayerLayer" style={{ visibility: isPlaying ? 'visible' : 'hidden' }}>
-                    {/* Playback mode switch:
-                        - fast_ffmpeg_mode  → FramePlayer (backend FFmpeg extracts JPEG frames)
-                        - raw_browser_mode  → VideoPlayer (browser-native <video> element, fallback)
-                        Condition: preExtractedFrames or sessionId present = fast_ffmpeg_mode */}
-                    {(activeVideo.preExtractedFrames || activeVideo.sessionId) ? (
+                    {/* Prefer native decoding of the original video; frame sequences remain a fallback when source bytes are unavailable. */}
+                    {(!activeVideo.fileData?.size && (activeVideo.preExtractedFrames || activeVideo.sessionId)) ? (
                         <FramePlayer
                             key={activeVideo.id}
                             language={language}
@@ -625,6 +621,7 @@ const VideoEditor: React.FC<IProps> = ({
                         <VideoPlayer
                             language={language}
                             videoSrc={videoUrl}
+                            totalFrames={activeVideo.totalFrames}
                             currentTime={activeVideo.currentTime}
                             currentFrame={activeVideo.currentFrame}
                             fps={activeVideo.fps}
@@ -634,13 +631,15 @@ const VideoEditor: React.FC<IProps> = ({
                             onFirstFrameDrawn={handleFirstFrameDrawn}
                             onPlay={() => {
                                 setIsPlaying(true);
+                                updateVideoPlayingStatus(activeVideo.id, true);
                             }}
                             onPause={() => {
                                 setIsPlaying(false);
                                 if (activeVideo) {
                                     updateVideoPlayingStatus(activeVideo.id, false);
-                                    const finalFrame = lastFrameRef.current >= 0 ? lastFrameRef.current : activeVideo.currentFrame;
                                     const safeFps = activeVideo.fps || (console.warn('[VideoEditor] fps 缺失，使用默认值 30'), 30);
+                                    const finalFrame = Math.min(activeVideo.totalFrames - 1,
+                                        Math.round((EditorModel.videoElement?.currentTime ?? activeVideo.currentTime) * safeFps));
                                     updateVideoCurrentFrame(activeVideo.id, finalFrame, finalFrame / safeFps);
                                     updateActiveImageIndex(finalFrame);
                                 }
@@ -655,7 +654,7 @@ const VideoEditor: React.FC<IProps> = ({
                 </div>
 
                 {/* 顶层：标注编辑器 */}
-                <div className={`AnnotationLayer ${isPlaying ? 'video-playing' : ''}`}>
+                <div className={`AnnotationLayer ${isPlaying ? 'video-playing' : ''} ${isPlaying && activeVideo.fileData?.size ? 'native-video-playing' : ''}`}>
                     {currentImageData && activeVideo.videoSize.width > 0 && (
                         <Editor
                             size={canvasEditorSize}

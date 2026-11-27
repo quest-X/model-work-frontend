@@ -117,6 +117,12 @@ export class ProjectRestoreService {
             if (settings.lastSaved === 0) return false;
 
             store.dispatch(updateLanguage(settings.language));
+            if (settings.projectName?.trim()) {
+                store.dispatch(updateProjectData({
+                    ...store.getState().general.projectData,
+                    name: settings.projectName,
+                }));
+            }
             store.dispatch(updateZoom(settings.zoom));
             store.dispatch(updateImageDragModeStatus(settings.imageDragMode));
             store.dispatch(updateSmartAnnotationActiveStatus(settings.smartAnnotationActive));

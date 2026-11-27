@@ -109,4 +109,15 @@ describe('stored engine migration', () => {
             }),
         ]);
     });
+
+    it('retains the independent auto annotation engine after reload', () => {
+        localStorage.setItem('make-sense-ai-models', JSON.stringify({models: [{
+            id: 'annotation-client', name: '自动标注', url: 'http://localhost/core_service/sigine-infra',
+            modelType: 'annotation', createdAt: '2026-11-27T00:00:00.000Z', isActive: true,
+        }]}));
+        expect(AIModelsStorageManager.loadModels()).toEqual([
+            expect.objectContaining({id: 'annotation-client', modelType: 'annotation',
+                url: 'http://localhost/core_service/sigine-infra'}),
+        ]);
+    });
 });

@@ -29,6 +29,7 @@ export class EditorModel {
 
     public static videoElement: HTMLVideoElement; // raw_browser_mode: the native <video> element
     public static videoFrameImage: HTMLImageElement; // Persistent video-resolution image for coordinate mapping (both modes)
+    public static videoFrameCanvas: HTMLCanvasElement | null = null; // Decoded native paused frame; no JPEG round trip.
     public static playbackImageData: ImageData | null; // During playback: direct ref to current frame ImageData, bypasses Redux selector
     public static latestImagesData: ImageData[] | null = null; // Cache after batchApplyResults dispatch, avoids ref staleness
     public static videoFrameFiles: (File | undefined)[] = []; // fast_ffmpeg_mode (full-load): global frame file pool. Slot may be undefined after eviction (sparse array).

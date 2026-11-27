@@ -17,6 +17,7 @@ import { AutoSaveService } from './services/AutoSaveService';
 import { ProjectRestoreService } from './services/ProjectRestoreService';
 import {IndexedDBManager, RecoveryStorageReadError} from './utils/IndexedDBManager';
 import {currentAccountSession} from './services/AccountService';
+import {getDefaultPlatform} from './services/PlatformPreferenceService';
 import {RestorePrompt, StoredDataInfo} from './views/Common/RestorePrompt';
 
 interface IProps {
@@ -31,6 +32,7 @@ export const App: React.FC<IProps> = (
         roboflowAPIDetails
     }
 ) => {
+    const [startNewWork] = useState(() => new URLSearchParams(window.location.search).get('new_work') === '1');
     const [restoreWorkspaceId] = useState(() =>
         new URLSearchParams(window.location.search).get('restore_workspace') || undefined);
     const [isRestoring, setIsRestoring] = useState(true);
@@ -40,7 +42,7 @@ export const App: React.FC<IProps> = (
     const [restoreStatus, setRestoreStatus] = useState<string>('正在加载...');
     const [storageUnavailable, setStorageUnavailable] = useState(false);
     const [platformMode, setPlatformMode] = useState<PlatformMode>(
-        () => currentAccountSession()?.user.role === 'admin' ? 'control' : 'annotation',
+        () => startNewWork ? 'annotation' : getDefaultPlatform(currentAccountSession()?.user),
     );
 
     const beforeOpenAnnotationResource = () => {
@@ -64,6 +66,19 @@ export const App: React.FC<IProps> = (
                 setStoredDataInfo({hasSettings: false, hasProject: false, lastSaved: 0});
                 setStorageUnavailable(true);
                 setRestoreError('恢复数据库被其他旧标签页占用。请关闭旧标签页，然后重试；现有恢复数据不会被清除。');
+                setIsRestoring(false);
+                return;
+            }
+
+            // An explicit new-work launch uses this tab's isolated workspace. Keep all
+            // recovery snapshots, but do not offer another workspace's project here.
+            if (startNewWork) {
+                await ProjectRestoreService.restoreSettings();
+                setStoredDataInfo({hasSettings: true, hasProject: false, lastSaved: 0});
+                AutoSaveService.resume();
+                const url = new URL(window.location.href);
+                url.searchParams.delete('new_work');
+                window.history.replaceState(window.history.state, '', url);
                 setIsRestoring(false);
                 return;
             }
@@ -208,8 +223,9 @@ export const App: React.FC<IProps> = (
             return <MobileMainView/>;
 
         // 直接进入EditorView，跳过MainView和项目类型选择
-        if (windowSize.height < Settings.EDITOR_MIN_HEIGHT || windowSize.width < Settings.EDITOR_MIN_WIDTH) {
-            return <SizeItUpView/>;
+        const minimumWidth = platformMode === 'control' ? Settings.CONTROL_MIN_WIDTH : Settings.EDITOR_MIN_WIDTH;
+        if (windowSize.height < Settings.EDITOR_MIN_HEIGHT || windowSize.width < minimumWidth) {
+            return <SizeItUpView minimumWidth={minimumWidth}/>;
         } else {
             return <EditorView
                 platformMode={platformMode}

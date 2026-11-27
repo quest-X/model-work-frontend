@@ -1,10 +1,13 @@
-import React, {useMemo} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {connect} from 'react-redux';
 import {AppState} from '../../../store';
 import {ImageData} from '../../../store/labels/types';
 import {Language} from '../../../data/LanguageConfig';
 import {updateActiveImageIndex as updateActiveImageIndexAction} from '../../../store/labels/actionCreators';
 import './BatchStatisticsView.scss';
+import {VideoData} from '../../../store/video/types';
+import {updateVideoCurrentFrame as updateVideoCurrentFrameAction,
+    updateVideoPlayingStatus as updateVideoPlayingStatusAction} from '../../../store/video/actionCreators';
 
 interface ImageStat {
     index: number;
@@ -14,11 +17,17 @@ interface ImageStat {
     confidences: number[];
 }
 
+type SigineReview = {needs_correction?: boolean; reason?: string;
+    suggested_boxes?: Array<{label: string; bbox: number[]}>; error?: string};
+
 interface IProps {
     language: Language;
     imagesData: ImageData[];
     activeImageIndex: number;
     updateActiveImageIndex: typeof updateActiveImageIndexAction;
+    activeVideo?: VideoData | null;
+    updateVideoCurrentFrame?: typeof updateVideoCurrentFrameAction;
+    updateVideoPlayingStatus?: typeof updateVideoPlayingStatusAction;
 }
 
 const getConfColor = (conf: number): string => {
@@ -40,6 +49,14 @@ const ConfidenceRow: React.FC<{
             style={{color: isNaN(confidence) ? '#666' : getConfColor(confidence),
                 ...(clickable ? {cursor: imageIndex >= 0 ? 'pointer' : 'default'} : {})}}
             onClick={clickable ? () => imageIndex >= 0 && onSelect(imageIndex) : undefined}
+            role={clickable && imageIndex >= 0 ? 'button' : undefined}
+            tabIndex={clickable && imageIndex >= 0 ? 0 : undefined}
+            onKeyDown={event => {
+                if (clickable && imageIndex >= 0 && ['Enter', ' '].includes(event.key)) {
+                    event.preventDefault();
+                    onSelect(imageIndex);
+                }
+            }}
             title={clickable ? (imageIndex >= 0 ? jumpTitle : '') : undefined}>
             {pct(confidence)}
         </span>
@@ -84,8 +101,32 @@ function getConfidenceSummary(allConfs: number[]) {
     return {avgConf, maxConf, minConf};
 }
 
-export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, activeImageIndex, updateActiveImageIndex}) => {
+export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, activeImageIndex, updateActiveImageIndex,
+    activeVideo, updateVideoCurrentFrame, updateVideoPlayingStatus}) => {
     const zh = language === 'zh';
+    const rootRef = useRef<HTMLDivElement>(null);
+    const [reviews, setReviews] = useState<Record<string, SigineReview>>(() => {
+        try { return JSON.parse(sessionStorage.getItem('opensight.annotation.sigineReviews') || '{}'); }
+        catch { return {}; }
+    });
+    useEffect(() => {
+        const reset = () => setReviews({});
+        const update = () => {
+            try { setReviews(JSON.parse(sessionStorage.getItem('opensight.annotation.sigineReviews') || '{}')); }
+            catch { setReviews({}); }
+        };
+        window.addEventListener('sigineReviewReset', reset);
+        window.addEventListener('sigineReviewResult', update);
+        return () => { window.removeEventListener('sigineReviewReset', reset); window.removeEventListener('sigineReviewResult', update); };
+    }, []);
+    const selectImage = (index: number) => {
+        if (activeVideo) {
+            updateVideoPlayingStatus?.(activeVideo.id, false);
+            updateVideoCurrentFrame?.(activeVideo.id, index, index / activeVideo.fps);
+        }
+        updateActiveImageIndex(index);
+        rootRef.current?.querySelector(`[data-image-index="${index}"]`)?.scrollIntoView({block: 'center'});
+    };
 
     const imageStats: ImageStat[] = useMemo(() => {
         return imagesData.map((img, idx) => {
@@ -142,12 +183,24 @@ export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, act
         return best;
     }, [imageStats]);
 
+    const reviewList = Object.entries(reviews).length > 0 && <div className="SummarySection">
+        <div className="SummaryTitle">{zh ? 'Sigine GPT 复审建议（未自动应用）' : 'Sigine GPT review (not applied)'}</div>
+        {Object.entries(reviews).map(([frame, review]) => <div key={frame} className="ImageRow"
+            role="button" tabIndex={0} onClick={() => selectImage(Number(frame))}
+            onKeyDown={event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); selectImage(Number(frame)); } }}>
+            {zh ? `第 ${Number(frame) + 1} 帧` : `Frame ${Number(frame) + 1}`} · {review.error
+                ? `${zh ? '复审失败' : 'Review failed'}: ${review.error}`
+                : `${review.needs_correction ? (zh ? '需复核' : 'Needs checking') : (zh ? '暂未发现问题' : 'No issue found')} · ${review.reason || ''} · ${(review.suggested_boxes || []).map(box => `${box.label} [${box.bbox.join(', ')}]`).join('; ')}`}
+        </div>)}
+    </div>;
+
 
     if (totalDetections === 0) {
         return (
             <div className="BatchStatisticsView">
                 <div className="Header">{zh ? '统计' : 'Statistics'}</div>
                 <div className="Content">
+                    {reviewList}
                     <div className="EmptyResults">
                         <img src="/ico/brain.png" alt="AI" className="EmptyIcon"/>
                         <div className="EmptyText">{zh ? '暂无推理结果' : 'No inference results yet'}</div>
@@ -158,9 +211,10 @@ export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, act
     }
 
     return (
-        <div className="BatchStatisticsView">
+        <div className="BatchStatisticsView" ref={rootRef}>
             <div className="Header">{zh ? '统计' : 'Statistics'}</div>
             <div className="Content">
+                {reviewList}
                 {/* Detection rate */}
                 <DetectionOverview zh={zh} detectionRate={detectionRate} detectedImages={detectedImages}
                     totalImages={totalImages} totalDetections={totalDetections}/>
@@ -169,11 +223,11 @@ export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, act
                 <div className="ConfidenceSection">
                     <div className="SummaryTitle">{zh ? '置信度' : 'CONFIDENCE'}</div>
                     <ConfidenceRow label={zh ? '平均' : 'Average'} confidence={avgConf}
-                        jumpTitle="" onSelect={updateActiveImageIndex}/>
+                        jumpTitle="" onSelect={selectImage}/>
                     <ConfidenceRow label={zh ? '最高' : 'Highest'} confidence={maxConf} imageIndex={maxConfImageIdx}
-                        jumpTitle={zh ? '跳转到该图像' : 'Jump to image'} onSelect={updateActiveImageIndex}/>
+                        jumpTitle={zh ? '跳转到该图像' : 'Jump to image'} onSelect={selectImage}/>
                     <ConfidenceRow label={zh ? '最低' : 'Lowest'} confidence={minConf} imageIndex={minConfImageIdx}
-                        jumpTitle={zh ? '跳转到该图像' : 'Jump to image'} onSelect={updateActiveImageIndex}/>
+                        jumpTitle={zh ? '跳转到该图像' : 'Jump to image'} onSelect={selectImage}/>
 
                 </div>
 
@@ -190,7 +244,16 @@ export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, act
                             <div
                                 key={stat.index}
                                 className={`ImageRow ${isActive ? 'active' : ''} ${!hasDetection ? 'noDetection' : ''}`}
-                                onClick={() => updateActiveImageIndex(stat.index)}
+                                data-image-index={stat.index}
+                                onClick={() => selectImage(stat.index)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={event => {
+                                    if (['Enter', ' '].includes(event.key)) {
+                                        event.preventDefault();
+                                        selectImage(stat.index);
+                                    }
+                                }}
                                 title={stat.name}
                             >
                                 <span className="ImageName">{stat.name}</span>
@@ -224,10 +287,13 @@ const mapStateToProps = (state: AppState) => ({
     language: state.general.language,
     imagesData: state.labels.imagesData,
     activeImageIndex: state.labels.activeImageIndex,
+    activeVideo: state.video?.activeVideo || null,
 });
 
 const mapDispatchToProps = {
     updateActiveImageIndex: updateActiveImageIndexAction,
+    updateVideoCurrentFrame: updateVideoCurrentFrameAction,
+    updateVideoPlayingStatus: updateVideoPlayingStatusAction,
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(BatchStatisticsView);

@@ -4,6 +4,7 @@ import {App} from '../App';
 import {ProjectType} from '../data/enums/ProjectType';
 import {AutoSaveService} from '../services/AutoSaveService';
 import {ProjectRestoreService} from '../services/ProjectRestoreService';
+import {saveDefaultPlatform} from '../services/PlatformPreferenceService';
 
 jest.unmock('../App');
 const mockCurrentAccountSession = jest.fn();
@@ -34,7 +35,9 @@ jest.mock('../views/PopupView/PopupView', () => ({
 }));
 jest.mock('../views/NotificationsView/NotificationsView', () => ({__esModule: true, default: () => null}));
 jest.mock('../views/MobileMainView/MobileMainView', () => ({__esModule: true, default: () => null}));
-jest.mock('../views/SizeItUpView/SizeItUpView', () => ({SizeItUpView: () => null}));
+jest.mock('../views/SizeItUpView/SizeItUpView', () => ({
+    SizeItUpView: ({minimumWidth = 900}: {minimumWidth?: number}) => <p>Minimum width {minimumWidth}</p>,
+}));
 jest.mock('../staticModels/PlatformModel', () => ({
     PlatformModel: {mobileDeviceData: {manufacturer: '', os: ''}},
 }));
@@ -65,7 +68,8 @@ const props = {
 describe('App restore prompt scope', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        mockCurrentAccountSession.mockReturnValue({user: {role: 'admin'}});
+        localStorage.clear();
+        mockCurrentAccountSession.mockReturnValue({user: {account_id: 'account-1', role: 'admin'}});
         autoSave.initialize.mockResolvedValue();
         restore.restoreSettings.mockResolvedValue(true);
         restore.checkForStoredData.mockResolvedValue({hasSettings: false, hasProject: false, lastSaved: 0});
@@ -80,6 +84,66 @@ describe('App restore prompt scope', () => {
         expect(await screen.findByText(expected)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '切换平台'}));
         expect(screen.getByText(expected === 'control' ? 'annotation' : 'control')).toBeInTheDocument();
+    });
+
+    it.each([
+        ['admin', 'annotation'],
+        ['member', 'control'],
+    ] as const)('opens the saved default for %s again after a temporary switch', async (role, mode) => {
+        const user = {account_id: 'account-1', role};
+        mockCurrentAccountSession.mockReturnValue({user});
+        saveDefaultPlatform(user, mode);
+        const view = render(<App {...props}/>);
+        expect(await screen.findByText(mode)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '切换平台'}));
+        expect(screen.getByText(mode === 'control' ? 'annotation' : 'control')).toBeInTheDocument();
+        view.unmount();
+        render(<App {...props}/>);
+        expect(await screen.findByText(mode)).toBeInTheDocument();
+    });
+
+    it('keeps default platform preferences separate between accounts', async () => {
+        saveDefaultPlatform({account_id: 'other-account', role: 'admin'}, 'annotation');
+        render(<App {...props}/>);
+        expect(await screen.findByText('control')).toBeInTheDocument();
+    });
+
+    it.each(['invalid', 'unavailable'])('uses the role default when storage is %s', async condition => {
+        localStorage.setItem('opensight:default-platform:account-1', 'invalid');
+        const storageRead = condition === 'unavailable'
+            ? jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); })
+            : null;
+        try {
+            render(<App {...props}/>);
+            expect(await screen.findByText('control')).toBeInTheDocument();
+        } finally {
+            storageRead?.mockRestore();
+        }
+    });
+
+    it('still protects the recovery snapshot when production is the saved default', async () => {
+        saveDefaultPlatform({account_id: 'account-1', role: 'admin'}, 'annotation');
+        restore.checkForStoredData.mockResolvedValue({hasSettings: true, hasProject: true, lastSaved: 1});
+        render(<App {...props}/>);
+        expect(await screen.findByText('是否恢复之前的工作?')).toBeInTheDocument();
+        expect(restore.clearAllStoredData).not.toHaveBeenCalled();
+        expect(autoSave.resume).not.toHaveBeenCalled();
+    });
+
+    it('opens explicit new work without reading or deleting prior projects', async () => {
+        window.history.replaceState(null, '', '/?new_work=1');
+        restore.checkForStoredData.mockResolvedValue({hasSettings: true, hasProject: true, lastSaved: 1});
+        render(<App {...props}/>);
+        await waitFor(() => expect(autoSave.resume).toHaveBeenCalledTimes(1));
+        expect(screen.getByText('annotation')).toBeInTheDocument();
+        expect(restore.restoreSettings).toHaveBeenCalledTimes(1);
+        expect(restore.checkForStoredData).not.toHaveBeenCalled();
+        expect(restore.restoreProject).not.toHaveBeenCalled();
+        expect(restore.clearAllStoredData).not.toHaveBeenCalled();
+        expect(screen.queryByText('是否恢复之前的工作?')).not.toBeInTheDocument();
+        expect(window.location.search).toBe('');
+        fireEvent.click(screen.getByRole('button', {name: '使用资源'}));
+        expect(mockResourceLoad).toHaveBeenCalledTimes(1);
     });
 
     it('restores the history entry selected by its workspace ID', async () => {
@@ -106,6 +170,20 @@ describe('App restore prompt scope', () => {
         fireEvent.click(screen.getByRole('button', {name: '使用资源'}));
         expect(await screen.findByText('annotation')).toBeInTheDocument();
         expect(mockResourceLoad).toHaveBeenCalledTimes(1);
+    });
+
+    it('allows the device workspace at 720px and keeps the annotation limit at 900px', async () => {
+        render(<App {...props} windowSize={{width: 720, height: 900}}/>);
+        expect(await screen.findByText('control')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '切换平台'}));
+        expect(screen.getByText('Minimum width 900')).toBeInTheDocument();
+        expect(screen.queryByText('annotation')).not.toBeInTheDocument();
+    });
+
+    it('shows the device workspace minimum below 720px', async () => {
+        render(<App {...props} windowSize={{width: 719, height: 900}}/>);
+        expect(await screen.findByText('Minimum width 720')).toBeInTheDocument();
+        expect(screen.queryByText('control')).not.toBeInTheDocument();
     });
 
     it.each(['stored-project', 'storage-error'])('protects existing work before resource loading: %s', async condition => {

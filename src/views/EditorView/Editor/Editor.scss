@@ -83,6 +83,12 @@
         display: none;
       }
 
+      &__confidence {
+        flex: 0 0 auto;
+        margin-left: 5px;
+        font-variant-numeric: tabular-nums;
+      }
+
       // style 1 is intentionally retained as an inactive variant.
       // RectLabelSelectOverlay defaults to style 2; switch its styleVariant prop to restore style 1.
       &--style-1 {

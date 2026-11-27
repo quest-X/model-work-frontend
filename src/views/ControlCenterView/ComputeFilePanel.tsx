@@ -1,12 +1,14 @@
-import React, {FormEvent, useEffect, useMemo, useState} from 'react';
+import React, {FormEvent, useEffect, useMemo, useRef, useState} from 'react';
 import {
     ComputeClusterNode,
     ComputeClusterService,
     ComputeFilesystemEntry,
     ComputeFilesystemRequestTarget,
     ComputeFilesystemResult,
+    isComputeAccessDenied,
 } from '../../services/ComputeClusterService';
 import {
+    APPROVAL_IDENTITY_CHANGED,
     canonicalAuthorizationJson,
     getApprovalIdentity,
     signAuthorization,
@@ -14,8 +16,12 @@ import {
 
 type ListResult = Extract<ComputeFilesystemResult, {schema_version: 'filesystem.list-result.v1'}>;
 
+export type DirectoryScanTool = 'storage' | 'duplicates';
+
 interface IProps {
     nodes: ComputeClusterNode[];
+    preferredNodeId?: string;
+    onScanDirectory?: (tool: DirectoryScanTool, nodeId: string, path: string) => void;
     zh: boolean;
 }
 
@@ -68,8 +74,8 @@ const friendlyError = (reason: unknown, zh: boolean): string => {
 // Read-only listings keep a one-use signed scope without interrupting browsing for manual confirmation.
 // The branches below are presentation states for one bounded operation.
 // eslint-disable-next-line complexity
-export const ComputeFilePanel: React.FC<IProps> = ({nodes, zh}) => {
-    const [selectedNodeId, setSelectedNodeId] = useState('');
+export const ComputeFilePanel: React.FC<IProps> = ({nodes, preferredNodeId, onScanDirectory, zh}) => {
+    const [selectedNodeId, setSelectedNodeId] = useState(preferredNodeId || '');
     const [result, setResult] = useState<ListResult>();
     const [history, setHistory] = useState<ListResult[]>([]);
     const [path, setPath] = useState('');
@@ -77,6 +83,23 @@ export const ComputeFilePanel: React.FC<IProps> = ({nodes, zh}) => {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [copied, setCopied] = useState('');
+    const pendingRead = useRef<AbortController>();
+
+    useEffect(() => {
+        const abortRead = () => {
+            pendingRead.current?.abort();
+            pendingRead.current = undefined;
+        };
+        const resetRead = () => {
+            abortRead();
+            setBusy(false);
+        };
+        window.addEventListener(APPROVAL_IDENTITY_CHANGED, resetRead);
+        return () => {
+            window.removeEventListener(APPROVAL_IDENTITY_CHANGED, resetRead);
+            abortRead();
+        };
+    }, []);
     const node = nodes.find(candidate => candidate.node_id === selectedNodeId);
     const windows = windowsNode(node);
     const available = Boolean(node?.online && node.capabilities.includes('filesystem.list.v1'));
@@ -92,13 +115,16 @@ export const ComputeFilePanel: React.FC<IProps> = ({nodes, zh}) => {
         previous?: ListResult,
         targetNode: ComputeClusterNode | undefined = node,
     ) => {
-        if (!targetNode?.online || !targetNode.capabilities.includes('filesystem.list.v1') || busy) return;
+        if (!targetNode?.online || !targetNode.capabilities.includes('filesystem.list.v1') || pendingRead.current) return;
         if (target.kind === 'path' && !(windowsNode(targetNode)
             ? /^(?:[a-z]:[\\/]|\\\\[^\\])/i.test(target.path.trim())
             : target.path.trim().startsWith('/'))) {
             setError(zh ? '请输入绝对目录路径。' : 'Enter an absolute directory path.');
             return;
         }
+        const controller = new AbortController();
+        pendingRead.current = controller;
+        const {signal} = controller;
         setBusy(true);
         setError('');
         try {
@@ -109,7 +135,8 @@ export const ComputeFilePanel: React.FC<IProps> = ({nodes, zh}) => {
                 parameters: {limit: 500},
                 user: identity.user,
                 ttl_seconds: 120,
-            });
+            }, signal);
+            if (signal.aborted) return;
             if (authorization.target_installation_id !== targetNode.installation_id
                 || authorization.operation !== 'filesystem.list'
                 || authorization.target.kind !== 'path'
@@ -119,10 +146,13 @@ export const ComputeFilePanel: React.FC<IProps> = ({nodes, zh}) => {
                 throw new Error(zh ? '机器返回了不匹配的读取范围。' : 'The machine returned a mismatched read scope.');
             }
             const signature = await signAuthorization(authorization, identity);
+            if (signal.aborted) return;
             const decision = await ComputeClusterService.approveFilesystemAuthorization(
                 authorization.authorization_id,
                 signature,
+                signal,
             );
+            if (signal.aborted) return;
             if (decision.authorization.authorization_id !== authorization.authorization_id
                 || decision.result.schema_version !== 'filesystem.list-result.v1'
                 || canonicalAuthorizationJson(decision.result.target)
@@ -134,9 +164,24 @@ export const ComputeFilePanel: React.FC<IProps> = ({nodes, zh}) => {
             setPath(decision.result.target.path);
             setSearch('');
         } catch (reason) {
-            setError(friendlyError(reason, zh));
+            if (signal.aborted) return;
+            const denied = isComputeAccessDenied(reason);
+            const detail = friendlyError(reason, zh);
+            const message = denied && reason instanceof Error && detail === reason.message
+                ? (zh ? '当前账号无权读取该目录。' : 'You do not have access to this directory.')
+                : detail;
+            if (denied) {
+                setResult(undefined);
+                setHistory([]);
+            }
+            setError(result && !denied
+                ? `${message} ${zh ? '下方仍显示上次成功读取的目录。' : 'The last successfully read directory remains below.'}`
+                : message);
         } finally {
-            setBusy(false);
+            if (pendingRead.current === controller) {
+                pendingRead.current = undefined;
+                setBusy(false);
+            }
         }
     };
 
@@ -257,13 +302,24 @@ export const ComputeFilePanel: React.FC<IProps> = ({nodes, zh}) => {
             {busy && <p className='ComputeFileProgress' role='status'>{zh ? '正在读取目录…' : 'Reading directory…'}</p>}
             {error && <p className='ComputeFileError' role='alert'>{error}</p>}
 
-            {!result && !busy && <div className='ComputeFileNotice'>{zh
+            {!result && !busy && !error && <div className='ComputeFileNotice'>{zh
                 ? '打开桌面，或输入绝对路径开始浏览。'
                 : 'Open the desktop or enter an absolute path.'}</div>}
 
             {result && <>
                 <div className='ComputeFileResultHeader'>
                     <span>{zh ? `${result.entries.length} / ${result.total} 项` : `${result.entries.length} / ${result.total} entries`}</span>
+                    {node && onScanDirectory && <div className='ComputeFileDirectoryActions'
+                        role='group' aria-label={zh ? '扫描当前目录' : 'Scan current directory'}>
+                        <button type='button' disabled={busy || !node.capabilities.includes('task.storage.scan.v1')}
+                            onClick={() => onScanDirectory('storage', node.node_id, result.target.path)}>
+                            {zh ? '分析此目录' : 'Analyze this directory'}
+                        </button>
+                        <button type='button' disabled={busy || !node.capabilities.includes('task.duplicate.scan.v1')}
+                            onClick={() => onScanDirectory('duplicates', node.node_id, result.target.path)}>
+                            {zh ? '查找重复文件' : 'Find duplicates'}
+                        </button>
+                    </div>}
                     <input value={search} onChange={event => setSearch(event.target.value)} placeholder={zh ? '筛选当前目录' : 'Filter this directory'} aria-label={zh ? '筛选当前目录' : 'Filter this directory'}/>
                 </div>
                 <div className='ComputeFileTableWrap'>

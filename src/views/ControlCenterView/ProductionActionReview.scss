@@ -1,0 +1,19 @@
+.ProductionActionReview {
+  margin: auto;
+  max-height: calc(100vh - 48px);
+  height: auto;
+  min-height: 0;
+  width: min(780px, calc(100vw - 32px));
+  padding: 0;
+  color: #eee;
+  &::backdrop { background: rgba(0, 0, 0, .72); }
+  .ProductionActionReviewBody { padding: 20px; overflow: auto; }
+  dl > div { display: grid; grid-template-columns: minmax(120px, 1fr) 3fr; gap: 12px; padding: 8px 0; }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  .ProductionActionReviewBody button {
+    margin: 12px 12px 0 0; padding: 8px 12px;
+    background: #292b2e; color: inherit; border: 1px solid #555; border-radius: 4px;
+    &:focus-visible { outline: 2px solid #6cc9ff; outline-offset: 3px; }
+    &.primary { background: #185779; border-color: #48a8db; }
+  }
+}

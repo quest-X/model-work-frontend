@@ -127,6 +127,8 @@ export interface DetectionBbox {
 }
 
 export interface DetectionObjectInfo {
+    sourceName?: string;
+    sourceId?: number;
     id: number;
     name: string;
     confidence: number;
@@ -141,6 +143,8 @@ export interface DetectionAPIResponse {
     status: string;
     total: number;
     results: DetectionResult[];
+    review?: {needs_correction?: boolean; reason?: string; suggested_boxes?: Array<{label: string; bbox: number[]}>};
+    review_error?: string;
 }
 
 export class DetectionAPIDetector {
@@ -299,6 +303,25 @@ export class DetectionAPIDetector {
         if ((dict.preprocess_script || dict.postprocess_script) && sel.params.trim()) {
             formData.append('script_params', sel.params);
         }
+        if (sessionStorage.getItem('opensight.annotation.sigineReview') === 'true'
+            || localStorage.getItem('opensight.sigineReview') === 'true') {
+            formData.append('sigine_review', 'true');
+            formData.append('target_classes', this.getAnnotationTargets().join(','));
+        }
+        if (localStorage.getItem('opensight.sigineInfra') === 'true') {
+            formData.append('sigine_infra', 'true');
+            if (!formData.has('target_classes')) formData.append('target_classes', this.getAnnotationTargets().join(','));
+        }
+    }
+
+    private static recordSigineReview(filename: string, review?: DetectionAPIResponse['review'], error?: string): void {
+        if (!review && !error) return;
+        const index = store.getState().labels.imagesData.findIndex(image => image.fileData.name === filename);
+        if (index < 0) return;
+        const reviews = JSON.parse(sessionStorage.getItem('opensight.annotation.sigineReviews') || '{}');
+        reviews[index] = review || {error};
+        sessionStorage.setItem('opensight.annotation.sigineReviews', JSON.stringify(reviews));
+        window.dispatchEvent(new CustomEvent('sigineReviewResult', {detail: {frameIdx: index, ...reviews[index]}}));
     }
 
     private static captureFrame(source: CanvasImageSource, width: number, height: number, message: string): Promise<Blob> {
@@ -412,7 +435,7 @@ export class DetectionAPIDetector {
                     headers: {
                         'Content-Type': 'multipart/form-data',
                     },
-                    timeout: 30000, // 30秒超时
+                    timeout: formData.has('sigine_review') || formData.has('sigine_infra') ? 180000 : 30000,
                 }
             );
 
@@ -420,8 +443,10 @@ export class DetectionAPIDetector {
                 console.log('Detection API response:', response.data);
                 console.log(`检测完成：共检测到 ${response.data.total} 个对象`);
                 
+                const results = this.filterAnnotationTargets(response.data.results);
+                this.recordSigineReview(imageData.fileData.name, response.data.review, response.data.review_error);
                 if (onSuccess) {
-                    onSuccess(response.data.results);
+                    onSuccess(results);
                 }
             } else {
                 const error = new Error('Detection failed: ' + response.data.status);
@@ -475,6 +500,76 @@ export class DetectionAPIDetector {
      * @param blob 预捕获的图像 Blob
      * @param filename 文件名
      */
+    private static annotationSelection(): {targets: Set<string>; mapping: Map<string, string>} {
+        const queueId = store.getState().queue?.activeQueueItemId;
+        const intents = JSON.parse(sessionStorage.getItem('opensight.annotation.intents') || '{}');
+        const intent = queueId ? intents[queueId] : undefined;
+        const targets: unknown = intent?.targets ?? JSON.parse(sessionStorage.getItem('opensight.annotation.targetClasses') || '[]');
+        const mapping: unknown = intent?.mapping ?? JSON.parse(sessionStorage.getItem('opensight.annotation.classMapping') || '{}');
+        if (!Array.isArray(targets) || targets.some(name => typeof name !== 'string' || !name.trim())) {
+            throw new Error('Invalid annotation target classes');
+        }
+        const names = new Set<string>(targets.map(name => name.toLowerCase()));
+        if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)
+            || Object.entries(mapping).some(([source, label]) => !source.trim() || typeof label !== 'string'
+                || !names.has(label.toLowerCase()))) {
+            throw new Error('Invalid annotation class mapping');
+        }
+        return {targets: names, mapping: new Map(Object.entries(mapping).map(([source, label]) => [source.toLowerCase(), label as string]))};
+    }
+
+    public static hasAnnotationTargets(): boolean {
+        return this.annotationSelection().targets.size > 0;
+    }
+
+    public static getAnnotationTargets(): string[] {
+        return [...this.annotationSelection().targets];
+    }
+
+    public static async validateAnnotationTargets(): Promise<void> {
+        const {targets, mapping} = this.annotationSelection();
+        if (!targets.size) return;
+        const sync = this.syncFromActiveModel();
+        if (!sync.ok) throw new Error(sync.reason || 'Detection API is disabled');
+        let status: {state?: string; model?: string; class_names?: unknown};
+        try {
+            const response = await axios.get(this.config.url.replace(/\/detect$/, '/load-status'), {
+                params: {service: 'detection'}, timeout: 5000,
+            });
+            status = response.data;
+        } catch {
+            throw new Error('无法读取当前检测模型的类别表，已停止推理。请检查检测引擎后重试。');
+        }
+        if (status?.state !== 'ready') {
+            throw new Error('当前检测模型尚未就绪，已停止推理。请先完成模型加载。');
+        }
+        const names = status.class_names;
+        if (!Array.isArray(names) || !names.length
+            || names.some(name => typeof name !== 'string' || !name.trim())) {
+            throw new Error('当前检测模型未提供有效类别表，已停止推理。请更新检测引擎后重试。');
+        }
+        const sources = new Set<string>(names.map(name => name.toLowerCase()));
+        const invalidSources = [...mapping.keys()].filter(source => !sources.has(source));
+        if (invalidSources.length) {
+            throw new Error(`模型 ${status.model || ''} 不支持映射源类别：${invalidSources.join('、')}。请修正 class_mapping 后重试。`);
+        }
+        const available = new Set([...sources].map(source => (mapping.get(source) || source).toLowerCase()));
+        const missing = [...targets].filter(target => !available.has(target));
+        if (missing.length) {
+            throw new Error(`模型 ${status.model || ''} 无法生成目标类别：${missing.join('、')}。请通过 class_mapping 显式指定模型原生类别到目标类别的映射，或选择支持该目标的模型。`);
+        }
+    }
+
+    public static filterAnnotationTargets(results: DetectionResult[]): DetectionResult[] {
+        const {targets, mapping} = this.annotationSelection();
+        return results.map(result => {
+            const label = mapping.get(result.info.name.toLowerCase());
+            return label ? {...result, info: {...result.info, name: label,
+                sourceName: result.info.sourceName ?? result.info.name,
+                sourceId: result.info.sourceId ?? result.info.id}} : result;
+        }).filter(result => !targets.size || targets.has(result.info.name.toLowerCase()));
+    }
+
     public static async predictFromBlob(blob: Blob, filename: string = 'frame.jpg'): Promise<DetectionResult[]> {
         const sync = this.syncFromActiveModel();
         if (!sync.ok) {
@@ -490,12 +585,13 @@ export class DetectionAPIDetector {
             formData,
             {
                 headers: { 'Content-Type': 'multipart/form-data' },
-                timeout: 30000,
+                timeout: formData.has('sigine_review') || formData.has('sigine_infra') ? 180000 : 30000,
             }
         );
 
         if (response.data.status === 'success' && response.data.results) {
-            return response.data.results;
+            this.recordSigineReview(filename, response.data.review, response.data.review_error);
+            return this.filterAnnotationTargets(response.data.results);
         }
         throw new Error('Detection failed: ' + response.data.status);
     }
@@ -524,8 +620,9 @@ export class DetectionAPIDetector {
 
         const batchUrl = this.config.url.replace('/detect', '/batch_detect');
         // 超时按张数线性扩，每张 6s 上限（cold start + 大图 buffer）
-        const timeout = Math.max(30000, blobs.length * 6000);
-        const response = await axios.post<{ status: string; results: DetectionResult[][] }>(
+        const timeout = formData.has('sigine_review') || formData.has('sigine_infra') ? 180000 : Math.max(30000, blobs.length * 6000);
+        const response = await axios.post<{ status: string; results: DetectionResult[][];
+            reviews?: Array<DetectionAPIResponse['review'] & {error?: string} | null> }>(
             batchUrl,
             formData,
             {
@@ -535,7 +632,10 @@ export class DetectionAPIDetector {
         );
 
         if (response.data.status === 'success' && Array.isArray(response.data.results)) {
-            return response.data.results;
+            response.data.reviews?.forEach((review, index) => {
+                if (review) this.recordSigineReview(filenames?.[index] || `image_${index}.jpg`, review.error ? undefined : review, review.error);
+            });
+            return response.data.results.map(results => this.filterAnnotationTargets(results));
         }
         throw new Error('Batch detection failed: ' + response.data.status);
     }
