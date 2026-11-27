@@ -141,15 +141,6 @@ const EditorContainer: React.FC<IProps> = (
         return () => { AutoSaveService.onSaveComplete = null; };
     }, [triggerSaveFlash]);
 
-    // 盾牌颜色：绿色 = backend 已连接，灰色 = 未连接
-    const [backendConnected, setBackendConnected] = useState(false);
-    useEffect(() => {
-        const handler = (e: Event) =>
-            setBackendConnected((e as CustomEvent<{connected: boolean}>).detail.connected);
-        window.addEventListener('opensight:backend-status', handler);
-        return () => window.removeEventListener('opensight:backend-status', handler);
-    }, []);
-
     const formatSavedTime = (d: Date): string => {
         const yyyy = d.getFullYear();
         const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -354,12 +345,8 @@ const EditorContainer: React.FC<IProps> = (
                     src='ico/shield.png'
                     style={{
                         width: 14, height: 14,
-                        filter: isSaving
-                            ? 'brightness(0) invert(35%) sepia(90%) saturate(800%) hue-rotate(115deg) brightness(1.1)'
-                            : backendConnected
-                                ? 'brightness(0) invert(48%) sepia(98%) saturate(1500%) hue-rotate(192deg) brightness(1.05)'
-                                : 'brightness(0) invert(1)',
-                        opacity: (isSaving || backendConnected) ? 1 : 0.4,
+                        filter: 'brightness(0) invert(1)',
+                        opacity: isSaving ? 1 : 0.6,
                         transition: 'filter 0.4s ease, opacity 0.4s ease',
                     }}
                 />
