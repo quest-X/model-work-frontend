@@ -14,6 +14,21 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
     {
+        version: '2.9.8',
+        date: '2026-11-28',
+        changes: [
+            { zh: '【编辑器】顶栏按宽度自适应折叠服务菜单、操作与语言切换，品牌和头像始终可见，并新增“更多”入口', en: '[Editor] The top bar now collapses services, actions, and language by width, keeps the brand and avatar visible, and adds a More menu' },
+            { zh: '【编辑器】左右侧边栏在窗口变窄时自动折叠、变宽后自动恢复', en: '[Editor] Side panels auto-collapse on narrow windows and restore when there is room again' },
+            { zh: '【布局】移除窗口最小尺寸限制与单独保存按钮，后台自动保存保持不变，左下角恢复 Agent 聊天入口', en: '[Layout] Removed the minimum-window gate and the manual save button, kept background auto-save, and restored the Agent chat trigger' },
+            { zh: '【时间轴】播放控件保持居中，空间不足时收起辅助文字，并修复播放时的帧号跳动', en: '[Timeline] Kept playback controls centered, hid helper text when space is short, and stopped the frame counter from jittering' },
+            { zh: '【进度】顶部进度条按当前图像计算（有标注 50% + 已打标签 50%），完成后转为绿色', en: '[Progress] The top progress bar now tracks the current image (50% annotated + 50% labeled) and turns green when complete' },
+            { zh: '【标注】标签下拉贴合标注框内角展开，边框与锚点始终显示在上层，并支持选择 none 清除标签', en: '[Annotation] The label dropdown opens flush with the box corner, keeps borders and anchors on top, and supports choosing none to clear a label' },
+            { zh: '【标注】修复标注时鼠标光标被隐藏的问题', en: '[Annotation] Fixed the cursor disappearing while annotating' },
+            { zh: '【历史】打开历史任务不再重建编辑器，切换队列时预览与时间轴加载更快', en: '[History] Opening history tasks no longer rebuilds the editor, and previews and timelines load faster when switching queues' },
+            { zh: '【推理】改进 Sigine 推理目标、队列持久化与撤销/恢复的稳定性', en: '[Inference] Improved Sigine inference targets, queue persistence, and undo/restore stability' },
+        ],
+    },
+    {
         version: '2.9.7',
         date: '2026-09-27',
         changes: [
