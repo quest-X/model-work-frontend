@@ -420,7 +420,7 @@ const VideoTimeline: React.FC<IProps> = ({
             />
             <div className="TimelineControls">
                 <div className="LeftInfo">
-                    <span>{language === 'zh' ? '帧率' : 'FPS'}: {fps}</span>
+                    <span data-video-fps={fps}>{language === 'zh' ? '帧率' : 'FPS'}: {Math.round(fps)}</span>
                     <span>{texts.video.frame + ': '}{currentFrame + 1} / {frames}</span>
                 </div>
 

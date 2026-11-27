@@ -187,10 +187,11 @@ function getInferenceTargets(imagesData: ImageData[], activeImageData: ImageData
     const selectedImages = imagesData.filter((img: ImageData) => img.isSelected);
     const isTimelineBatch = range !== null;
     const isSelectionBatch = selectedImages.length > 1;
-    const isBatchMode = isTimelineBatch || isSelectionBatch;
+    const isVideo = store.getState().video.isVideoMode;
+    const isBatchMode = isTimelineBatch || isSelectionBatch || isVideo;
     const targets = range
         ? imagesData.slice(range.startFrame, range.endFrame + 1)
-        : isSelectionBatch ? selectedImages : [activeImageData];
+        : isSelectionBatch ? selectedImages : isVideo ? imagesData : [activeImageData];
     return {isBatchMode, targets};
 }
 
@@ -315,6 +316,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
     const inferenceMenuRef = useRef<HTMLDivElement>(null);
     const [selectedModelNames, setSelectedModelNames] = useState<string[]>([]);
     const [useModelMultiSelect, setUseModelMultiSelect] = useState(false);
+    const [sigineInfraAvailable, setSigineInfraAvailable] = useState(false);
+    const [sigineInfraModel, setSigineInfraModel] = useState<string | null>(null);
+    const [sigineInfraSelected, setSigineInfraSelected] = useState(() => localStorage.getItem('opensight.sigineInfra') === 'true');
     const [similaritySearchSelected, setSimilaritySearchSelected] = useState(false);
     const [showSimilarityConfig, setShowSimilarityConfig] = useState(false);
     const [similarityCollections, setSimilarityCollections] = useState<SimilarityVectorCollection[]>([]);
@@ -689,6 +693,29 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
     }, [modelDropdownEntries]);
 
     const activeModelEntry = modelDropdownEntries.find(e => e.name === activeModelName);
+    useEffect(() => {
+        if (!showInferenceMenu) return undefined;
+        let active = true;
+        fetch(`${getEngineBaseUrl()}/sigine-infra/status`)
+            .then(response => response.ok ? response.json() : null)
+            .then(status => {
+                if (!active) return;
+                const available = status?.available === true;
+                setSigineInfraAvailable(available);
+                setSigineInfraModel(typeof status?.model === 'string' ? status.model : null);
+                if (!available) {
+                    setSigineInfraSelected(false);
+                    localStorage.removeItem('opensight.sigineInfra');
+                }
+            })
+            .catch(() => {
+                if (!active) return;
+                setSigineInfraAvailable(false);
+                setSigineInfraSelected(false);
+                localStorage.removeItem('opensight.sigineInfra');
+            });
+        return () => { active = false; };
+    }, [showInferenceMenu]);
     const effectiveSelectedModelNames = useModelMultiSelect
         ? selectedModelNames
         : activeModelEntry ? [activeModelEntry.name] : [];
@@ -705,7 +732,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
 
     // 当前选中项的显示文本
 
-    const selectedOptionCount = selectedModelEntries.length + (similaritySearchSelected ? 1 : 0);
+    const selectedOptionCount = selectedModelEntries.length + (similaritySearchSelected ? 1 : 0)
+        + (sigineInfraSelected ? 1 : 0);
     const getModelButtonLabel = () => {
         const activeModelLabel = activeModelEntry
             ? `${activeModelEntry.label} (${activeModelEntry.name})`
@@ -1329,7 +1357,29 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
         </div>
     );
 
-    const inferenceDisabled = imagesData.length === 0 || (useModelMultiSelect && selectedOptionCount === 0);
+    const inferenceDisabled = imagesData.length === 0
+        || (useModelMultiSelect && selectedModelEntries.length === 0 && !similaritySearchSelected);
+
+    const renderSigineInfraChoice = () => (
+        <div
+            onClick={() => {
+                if (!sigineInfraAvailable) return;
+                const selected = !sigineInfraSelected;
+                setSigineInfraSelected(selected);
+                localStorage.setItem('opensight.sigineInfra', String(selected));
+            }}
+            title={language === 'zh' ? '对 YOLO 疑难帧调用 Sigine INFRA 模型复审' : 'Review uncertain YOLO frames with Sigine INFRA'}
+            style={{padding: '5px 10px', fontSize: 11, cursor: sigineInfraAvailable ? 'default' : 'not-allowed',
+                color: sigineInfraAvailable ? '#ccc' : '#777', whiteSpace: 'nowrap'}}
+        >
+            <input type='checkbox' checked={sigineInfraSelected && sigineInfraAvailable} readOnly
+                style={{width: 12, height: 12, margin: '0 6px 0 0', verticalAlign: '-2px',
+                    accentColor: '#c62828', pointerEvents: 'none'}} />
+            {language === 'zh' ? 'Sigine INFRA 推理引擎' : 'Sigine INFRA Inference Engine'}
+            {!sigineInfraAvailable && ` · ${language === 'zh' ? '未连接' : 'Unavailable'}`}
+            {sigineInfraAvailable && sigineInfraModel && ` · ${sigineInfraModel}`}
+        </div>
+    );
 
     const renderInferenceChoices = () => (
         <>
@@ -1382,6 +1432,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                     </React.Fragment>
                 );
             })}
+            <div style={{ height: 1, background: '#555' }} />
+            {renderSigineInfraChoice()}
             <div style={{ height: 1, background: '#555' }} />
             <div
                 title={similarityConfigSummary || (language === 'zh' ? '配置后启用检索相似' : 'Configure before enabling similarity search')}
@@ -1498,6 +1550,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                         return `${label} x${rangeCount}${language === 'zh' ? '帧' : 'f'}`;
                     }
                     const selected = imagesData.filter((img: ImageData) => img.isSelected);
+                    if (store.getState().video.isVideoMode && selected.length <= 1 && !trackingMode && !smartAnnotationActive) {
+                        return language === 'zh' ? '视频推理' : 'Infer video';
+                    }
                     const count = selected.length > 1 ? selected.length : imagesData.length > 0 ? 1 : 0;
                     return count > 1 ? `${label} x${count}` : label;
                 })()}

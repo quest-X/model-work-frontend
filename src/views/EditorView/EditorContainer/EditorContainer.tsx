@@ -1,3 +1,4 @@
+import {useVideoInferenceFlow} from './useVideoInferenceFlow';
 import React, {useState, useEffect, useCallback, useRef} from 'react';
 import {connect} from 'react-redux';
 import {Direction} from '../../../data/enums/Direction';
@@ -49,6 +50,7 @@ interface IProps {
     projectType: ProjectType;
     language: Language;
     isVideoMode: boolean;
+    inferenceInProgress: boolean;
     activeVideo: VideoData | null;
     queueItems: QueueItem[];
     activeQueueItemId: string | null;
@@ -66,6 +68,7 @@ const EditorContainer: React.FC<IProps> = (
         projectType,
         language,
         isVideoMode,
+        inferenceInProgress,
         activeVideo,
         queueItems,
         activeQueueItemId,
@@ -78,6 +81,10 @@ const EditorContainer: React.FC<IProps> = (
     const [showInferenceResults, setShowInferenceResults] = useState<boolean>(false);
     const [showBatchStatistics, setShowBatchStatistics] = useState<boolean>(false);
     const [showQueueList, setShowQueueList] = useState<boolean>(false);
+    const previewImageId = useVideoInferenceFlow(activeVideo?.id, inferenceInProgress,
+        () => { setLeftTabStatus(true); setShowQueueList(false); setRightTabStatus(true);
+            setShowBatchStatistics(false); setShowInferenceResults(true); },
+        () => { setRightTabStatus(true); setShowBatchStatistics(true); setShowInferenceResults(false); }, activeVideo?.fps);
     const [isWindowDragActive, setIsWindowDragActive] = useState(false);
     const [videoProcessing, setVideoProcessing] = useState<VideoImportProgress | null>(null);
 
@@ -178,6 +185,7 @@ const EditorContainer: React.FC<IProps> = (
     // 批量推理完成后自动弹出统计面板
     useEffect(() => {
         const handleBatchComplete = (e: Event) => {
+            if (isVideoMode) return;
             const count = (e as CustomEvent).detail?.count ?? 0;
             if (count > 2) {
                 EditorModel.lastBatchInferenceImageCount = 0;
@@ -188,7 +196,7 @@ const EditorContainer: React.FC<IProps> = (
         };
         window.addEventListener('batchInferenceComplete', handleBatchComplete);
         return () => window.removeEventListener('batchInferenceComplete', handleBatchComplete);
-    }, []);
+    }, [isVideoMode]);
 
     // 监听标注数据变化并触发自动保存
     // 5 秒防抖：只有 imagesData 引用变化（标注增删改）才触发，
@@ -439,7 +447,7 @@ const EditorContainer: React.FC<IProps> = (
 
     const rightSideBarRender = () => {
         if (showBatchStatistics) return <BatchStatisticsView/>;
-        if (showInferenceResults) return <InferenceResultsView/>;
+        if (showInferenceResults) return <InferenceResultsView previewImageId={previewImageId}/>;
         return <LabelsToolkit/>;
     };
 
@@ -530,6 +538,7 @@ const mapStateToProps = (state: AppState) => ({
     projectType: state.general.projectData.type,
     language: state.general.language,
     isVideoMode: state.video?.isVideoMode || false,
+    inferenceInProgress: !!state.video?.isVideoMode && state.ai.isFullImageInferenceInProgress,
     activeVideo: state.video?.activeVideo || null,
     queueItems: state.queue?.items || [],
     activeQueueItemId: state.queue?.activeQueueItemId || null

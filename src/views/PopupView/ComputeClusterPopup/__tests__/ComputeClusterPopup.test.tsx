@@ -707,6 +707,15 @@ describe('ComputeClusterPopup', () => {
         expect(within(sensorCard).getByText('DS-2CD2686FWDA2-IZS')).toBeInTheDocument();
         expect(within(sensorCard).getByText('2 个通道')).toBeInTheDocument();
         expect(within(sensorCard).getByText('上级设备 · AIPACK-01')).toBeInTheDocument();
+        await user.unhover(camera);
+        await user.dblClick(camera);
+        expect(camera).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('status', {name: 'IP CAMERA 运维信息'})).toHaveTextContent('已固定（双击节点或点击空白取消）');
+        await user.unhover(camera);
+        expect(screen.getByRole('status', {name: 'IP CAMERA 运维信息'})).toHaveClass('pinned');
+        await user.dblClick(camera);
+        expect(camera).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.queryByRole('status', {name: 'IP CAMERA 运维信息'})).not.toBeInTheDocument();
         await waitFor(() => expect(service.resourceGraph).toHaveBeenCalledTimes(1));
     });
 
@@ -816,7 +825,7 @@ describe('ComputeClusterPopup', () => {
     });
 
     it('keeps fixed-size cards inside their regional frame when the graph fits its window', async () => {
-        const rect = jest.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+        const rect = jest.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
             const scene = this.classList.contains('ComputeGraphScene');
             const region = this.classList.contains('ComputeGraphRegion');
             const width = scene ? 800 : region ? 776 : 0;

@@ -713,11 +713,10 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                         onFocus={() => setHoveredEntityId(entity.entity_id)}
                         onBlur={() => setHoveredEntityId(current => current === entity.entity_id ? null : current)}
                         onDoubleClick={() => {
-                            if (!isNode) return;
                             setPinnedEntityId(current => current === entity.entity_id ? null : entity.entity_id);
                             setHoveredEntityId(current => current === entity.entity_id ? null : current);
                         }}
-                        aria-pressed={isNode ? isPinned : undefined}
+                        aria-pressed={isPinned}
                         aria-label={isNode
                             ? `${zh ? '查看' : 'Inspect'} ${entity.label} ${zh ? '节点信息' : 'node details'}`
                             : `${zh ? '查看' : 'Inspect'} ${entity.label} ${zh ? '设备信息' : 'device details'}`}
@@ -875,7 +874,9 @@ export const ResourceKnowledgeGraph: React.FC<ResourceKnowledgeGraphProps> = ({
                             </div>
                         </>;
                     })() : <>
-                        <span>{sensorKindLabel(inspectedEntity, zh)} {codes.get(inspectedEntity.entity_id)} · {deviceStatusLabel(inspectedEntity.device_status, zh)}</span>
+                        <span>{sensorKindLabel(inspectedEntity, zh)} {codes.get(inspectedEntity.entity_id)} · {deviceStatusLabel(inspectedEntity.device_status, zh)}{pinnedEntityId === inspectedEntity.entity_id
+                            ? (zh ? ' · 已固定（双击节点或点击空白取消）' : ' · Pinned (double-click node or click blank space to unpin)')
+                            : ''}</span>
                         <strong>{inspectedEntity.label}</strong>
                         <small>{inspectedEntity.device_model || (zh ? '型号未知' : 'Unknown model')}</small>
                         <div className='ComputeGraphSensorFacts'>

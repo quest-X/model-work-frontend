@@ -82,6 +82,22 @@ describe('App restore prompt scope', () => {
         expect(screen.getByText(expected === 'control' ? 'annotation' : 'control')).toBeInTheDocument();
     });
 
+    it('opens explicit new work without reading or deleting prior projects', async () => {
+        window.history.replaceState(null, '', '/?new_work=1');
+        restore.checkForStoredData.mockResolvedValue({hasSettings: true, hasProject: true, lastSaved: 1});
+        render(<App {...props}/>);
+        await waitFor(() => expect(autoSave.resume).toHaveBeenCalledTimes(1));
+        expect(screen.getByText('annotation')).toBeInTheDocument();
+        expect(restore.restoreSettings).toHaveBeenCalledTimes(1);
+        expect(restore.checkForStoredData).not.toHaveBeenCalled();
+        expect(restore.restoreProject).not.toHaveBeenCalled();
+        expect(restore.clearAllStoredData).not.toHaveBeenCalled();
+        expect(screen.queryByText('是否恢复之前的工作?')).not.toBeInTheDocument();
+        expect(window.location.search).toBe('');
+        fireEvent.click(screen.getByRole('button', {name: '使用资源'}));
+        expect(mockResourceLoad).toHaveBeenCalledTimes(1);
+    });
+
     it('opens a resource in annotation when no recovery is pending', async () => {
         render(<App {...props}/>);
         await waitFor(() => expect(autoSave.resume).toHaveBeenCalled());

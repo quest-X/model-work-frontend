@@ -209,6 +209,15 @@ describe('ProgramRunnerPanel', () => {
                     status_code: 503,
                     latency_ms: 4.2,
                 }, {
+                    method: 'GET',
+                    path: '/display',
+                    name: '标注显示状态',
+                    description: '读取标注设置',
+                    state: 'healthy',
+                    checked_at: 101,
+                    status_code: 200,
+                    latency_ms: 3.5,
+                }, {
                     method: 'POST',
                     path: '/display',
                     name: '标注显示开关',
@@ -269,6 +278,14 @@ describe('ProgramRunnerPanel', () => {
                     content_type: 'application/x-ndjson',
                     size_bytes: 64,
                     modified_at: today - 4,
+                }, {
+                    artifact_id: 'f'.repeat(32),
+                    name: 'V1.png',
+                    relative_path: `runs/bottom_tuyere/AIPACK-06-camera03/${todayValue.replace(/-/g, '')}/heat/capture/V1.png`,
+                    kind: 'image',
+                    content_type: 'image/png',
+                    size_bytes: 512,
+                    modified_at: today - 5,
                 }],
             }],
         });
@@ -412,7 +429,11 @@ describe('ProgramRunnerPanel', () => {
         expect(endpoints).toHaveTextContent('3.5 ms');
         expect(endpoints).toHaveTextContent('HTTP 503');
         expect(endpoints).toHaveTextContent('POST');
-        expect(endpoints).toHaveTextContent('未检查');
+        const display = within(endpoints).getByRole('row', {name: /GET, POST.*\/display/});
+        expect(display).toHaveTextContent('正常 (1/2)');
+        expect(display).toHaveTextContent('GET · 正常 · HTTP 200');
+        expect(display).toHaveTextContent('POST · 未检查');
+        expect(display.querySelector('.ControlStatusDot')).toHaveClass('healthy');
         expect(within(endpoints).queryByRole('img')).not.toBeInTheDocument();
         const healthUrl = ComputeClusterService.programInterfaceUrl(
             node.node_id,
@@ -426,8 +447,7 @@ describe('ProgramRunnerPanel', () => {
         );
         expect(within(endpoints).getByRole('link', {name: '/health'}))
             .toHaveAttribute('target', '_blank');
-        expect(within(endpoints).queryByRole('link', {name: '/display'}))
-            .not.toBeInTheDocument();
+        expect(within(endpoints).getByRole('link', {name: '/display'})).toBeInTheDocument();
         expect(endpoints).not.toHaveTextContent('节点服务');
         expect(endpoints).not.toHaveTextContent('任务执行器');
         expect(inventory).not.toHaveBeenCalled();
@@ -442,6 +462,11 @@ describe('ProgramRunnerPanel', () => {
         const resultFolder = within(artifacts).getByLabelText('结果文件夹 017');
         expect(resultFolder.parentElement).toHaveAttribute('open');
         expect(resultFolder.parentElement).toHaveTextContent('5 个文件');
+        const captureFolder = within(artifacts).getByLabelText(
+            `结果文件夹 ${todayValue.replace(/-/g, '')}`,
+        );
+        expect(captureFolder.parentElement).toHaveTextContent(`runs/bottom_tuyere/AIPACK-06-camera03/${todayValue.replace(/-/g, '')}`);
+        expect(within(artifacts).queryByLabelText('结果文件夹 AIPACK-06-camera03')).not.toBeInTheDocument();
         fireEvent.click(resultFolder);
         expect(resultFolder.parentElement).not.toHaveAttribute('open');
         fireEvent.click(resultFolder);

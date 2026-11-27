@@ -341,7 +341,7 @@ const bytesPerSecond = (value: number | null | undefined, zh: boolean): string =
 
 // The branching is presentation-only: localized values plus one threshold check per resource.
 // eslint-disable-next-line complexity
-const quickScanResources = (node: ComputeClusterNode, zh: boolean): Omit<QuickScanRow, 'node' | 'services' | 'status' | 'healthy'> & {problems: string[]} => {
+const quickScanResources = (node: ComputeClusterNode, zh: boolean): Omit<QuickScanRow, 'node' | 'services' | 'status' | 'healthy' | 'issues'> & {problems: string[]} => {
     const problems: string[] = [];
     const cpu = quickScanCpuPercent(node);
     const memory = quickScanUsedPercent(node.resources.memory_total_bytes, node.resources.memory_available_bytes);

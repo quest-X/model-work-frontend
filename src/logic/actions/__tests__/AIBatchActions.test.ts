@@ -1,4 +1,5 @@
 import {combineReducers, createStore} from 'redux';
+import axios from 'axios';
 import {store} from '../../../index';
 import {labelsReducer} from '../../../store/labels/reducer';
 import {aiReducer} from '../../../store/ai/reducer';
@@ -65,6 +66,7 @@ beforeEach(() => {
     mockedStore.dispatch.mockImplementation(testStore.dispatch);
     (TaskTracker.startTask as jest.Mock).mockReturnValue(task);
     jest.spyOn(DetectionAPIDetector, 'isEnabled').mockReturnValue(true);
+    jest.spyOn(DetectionAPIDetector, 'validateAnnotationTargets').mockResolvedValue();
     jest.spyOn(SegmentationAPIDetector, 'isEnabled').mockReturnValue(true);
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -305,4 +307,150 @@ it.each(['empty', 'cancel'] as const)('does not report success when browser segm
     expect(encode.mock.instances[0]).toMatchObject({width: 0, height: 0});
     expect(testStore.getState().ai.isFullImageInferenceInProgress).toBe(false);
     expect(testStore.getState().labels.imagesData[2].labelPolygons).toEqual([]);
+});
+
+it('runs a video session once, filters its targets, and reports completion for a two-frame video', async () => {
+    const images = makeImages(2);
+    useVideo(images, {sessionId: 'original-video-session'});
+    const cat: DetectionResult = {info: {id: 15, name: 'cat', confidence: 0.9}, bbox: [1, 2, 10, 20]};
+    const dog: DetectionResult = {info: {id: 16, name: 'dog', confidence: 0.8}, bbox: [1, 2, 10, 20]};
+    sessionStorage.setItem('opensight.annotation.targetClasses', '["cat"]');
+    const finished = jest.fn();
+    window.addEventListener('batchInferenceComplete', finished);
+    const stream = jest.spyOn(DetectSessionAPIService, 'streamDetectSession').mockImplementation((_params, callbacks) => {
+        queueMicrotask(() => {
+            callbacks.onFrame({frame_idx: 0, detections: [cat, dog]});
+            callbacks.onFrame({frame_idx: 1, detections: [dog]});
+            callbacks.onDone(2);
+        });
+        return new AbortController();
+    });
+    const single = jest.spyOn(DetectionAPIDetector, 'predictFromBlob');
+    try {
+        await AIDetectionActions.detectBatch(images);
+        expect(stream).toHaveBeenCalledTimes(1);
+        expect(stream.mock.calls[0][0]).toMatchObject({sessionId: 'original-video-session', start: 0, end: 2});
+        expect(FrameExtractorService.fetchFrameRange).not.toHaveBeenCalled();
+        expect(single).not.toHaveBeenCalled();
+        expect(testStore.getState().labels.imagesData.map(image => image.labelRects.length)).toEqual([1, 0]);
+        expect(finished).toHaveBeenCalledWith(expect.objectContaining({detail: {count: 2, failed: 0, total: 2, boxes: 1, cancelled: false}}));
+    } finally {
+        sessionStorage.removeItem('opensight.annotation.targetClasses');
+        window.removeEventListener('batchInferenceComplete', finished);
+    }
+});
+
+
+it('blocks an invalid mapping before video inference and reports the actual reason', async () => {
+    const images = makeImages(2);
+    images[0].labelRects = [rect('existing-ai', true), rect('manual', false)];
+    images[1].labelRects = [rect('existing-ai-2', true)];
+    useVideo(images, {sessionId: 'original-video-session'});
+    const reason = 'Invalid annotation class mapping';
+    (DetectionAPIDetector.validateAnnotationTargets as jest.Mock).mockRejectedValue(new Error(reason));
+    const stream = jest.spyOn(DetectSessionAPIService, 'streamDetectSession');
+    const finished = jest.fn();
+    window.addEventListener('batchInferenceComplete', finished);
+    try {
+        await AIDetectionActions.detectBatch(images);
+        expect(stream).not.toHaveBeenCalled();
+        expect(TaskTracker.startTask).not.toHaveBeenCalled();
+        expect(testStore.getState().ai.isFullImageInferenceInProgress).toBe(false);
+        expect(finished).toHaveBeenCalledWith(expect.objectContaining({detail: expect.objectContaining({count: 0, failed: 2, reason})}));
+        expect(testStore.getState().labels.imagesData).toEqual(images);
+    } finally {
+        window.removeEventListener('batchInferenceComplete', finished);
+    }
+});
+
+
+it('rejects an unmapped wolf with real preflight and preserves existing video labels', async () => {
+    const images = makeImages(2);
+    images[0].labelRects = [rect('existing-ai', true), rect('manual', false)];
+    useVideo(images, {sessionId: 'wolf-video'});
+    sessionStorage.setItem('opensight.annotation.targetClasses', '["wolf"]');
+    const config = DetectionAPIDetector.getConfig();
+    DetectionAPIDetector.setConfig({url: '/core_service/detect', enabled: true});
+    (DetectionAPIDetector.validateAnnotationTargets as jest.Mock).mockRestore();
+    jest.spyOn(axios, 'get').mockResolvedValue({data: {state: 'ready', model: 'yolov8n.pt', class_names: ['cat', 'dog']}});
+    const stream = jest.spyOn(DetectSessionAPIService, 'streamDetectSession');
+    const post = jest.spyOn(axios, 'post');
+    const before = testStore.getState().labels.imagesData.map(image => ({...image, labelRects: [...image.labelRects]}));
+    const finished = jest.fn();
+    window.addEventListener('batchInferenceComplete', finished);
+    try {
+        await AIDetectionActions.detectBatch(images);
+        expect(stream).not.toHaveBeenCalled();
+        expect(post).not.toHaveBeenCalled();
+        expect(FrameExtractorService.fetchFrameRange).not.toHaveBeenCalled();
+        expect(TaskTracker.startTask).not.toHaveBeenCalled();
+        expect(testStore.getState().labels.imagesData).toEqual(before);
+        expect(finished).toHaveBeenCalledWith(expect.objectContaining({detail: expect.objectContaining({
+            count: 0, boxes: 0, failed: 2, reason: expect.stringMatching(/yolov8n.pt.*wolf.*class_mapping/),
+        })}));
+    } finally {
+        DetectionAPIDetector.setConfig(config);
+        sessionStorage.removeItem('opensight.annotation.targetClasses');
+        window.removeEventListener('batchInferenceComplete', finished);
+    }
+});
+
+
+it('annotates video as wolf using dog boxes while keeping their original class', async () => {
+    const images = makeImages(2);
+    useVideo(images, {sessionId: 'prepared-video-session'});
+    sessionStorage.setItem('opensight.annotation.targetClasses', '["wolf"]');
+    sessionStorage.setItem('opensight.annotation.classMapping', '{"dog":"wolf"}');
+    const dog: DetectionResult = {info: {id: 16, name: 'dog', confidence: 0.85}, bbox: [1, 2, 31, 42]};
+    const stream = jest.spyOn(DetectSessionAPIService, 'streamDetectSession').mockImplementation((_params, callbacks) => {
+        queueMicrotask(() => {
+            callbacks.onFrame({frame_idx: 0, detections: [dog]});
+            callbacks.onFrame({frame_idx: 1, detections: [dog]});
+            callbacks.onDone(2);
+        });
+        return new AbortController();
+    });
+    try {
+        await AIDetectionActions.detectBatch(images);
+        expect(stream).toHaveBeenCalledTimes(1);
+        const label = testStore.getState().labels.labels.find(item => item.name === 'wolf');
+        expect(label).toBeDefined();
+        expect(testStore.getState().labels.imagesData.map(image => image.labelRects[0])).toEqual([
+            expect.objectContaining({labelId: label.id, rect: {x: 1, y: 2, width: 30, height: 40}, sourceClassName: 'dog', sourceClassId: 16}),
+            expect.objectContaining({labelId: label.id, sourceClassName: 'dog'}),
+        ]);
+    } finally {
+        sessionStorage.removeItem('opensight.annotation.targetClasses');
+        sessionStorage.removeItem('opensight.annotation.classMapping');
+    }
+});
+
+
+it('keeps only cats on scoped reruns and preserves manual work', async () => {
+    const images = makeImages(2);
+    images[0].labelRects = [rect('old-dog', true), rect('manual', false)];
+    images[1].labelRects = [rect('old-dog-empty-frame', true)];
+    useVideo(images, {sessionId: 'cats-only'});
+    sessionStorage.setItem('opensight.annotation.targetClasses', '["cat"]');
+    const cat: DetectionResult = {info: {id: 15, name: 'cat', confidence: 0.9}, bbox: [1, 2, 10, 20]};
+    const dog: DetectionResult = {info: {id: 16, name: 'dog', confidence: 0.95}, bbox: [1, 2, 40, 50]};
+    const stream = jest.spyOn(DetectSessionAPIService, 'streamDetectSession').mockImplementation((_params, callbacks) => {
+        queueMicrotask(() => {
+            callbacks.onFrame({frame_idx: 0, detections: [cat, dog]});
+            callbacks.onFrame({frame_idx: 1, detections: [dog]});
+            callbacks.onDone(2);
+        });
+        return new AbortController();
+    });
+    try {
+        await AIDetectionActions.detectBatch(images);
+        expect(stream).toHaveBeenCalledTimes(1);
+        const state = testStore.getState().labels;
+        const label = state.labels.find(item => item.name === 'cat');
+        expect(state.labels.some(item => item.name === 'dog')).toBe(false);
+        expect(state.imagesData[0].labelRects).toEqual([expect.objectContaining({id: 'manual'}), expect.objectContaining({labelId: label.id})]);
+        expect(state.imagesData[1].labelRects).toEqual([]);
+    } finally {
+        sessionStorage.removeItem('opensight.annotation.targetClasses');
+    }
 });

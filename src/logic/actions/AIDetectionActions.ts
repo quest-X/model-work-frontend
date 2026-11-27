@@ -103,6 +103,9 @@ export class AIDetectionActions {
 
         // 检查检测API是否可用
         if (!DetectionAPIDetector.isEnabled()) {
+            window.dispatchEvent(new CustomEvent('singleInferenceComplete', {
+                detail: {imageId: imageData.id, success: false, count: 0}
+            }));
             return;
         }
 
@@ -197,6 +200,9 @@ export class AIDetectionActions {
 
                     // 触发 canvas 重绘，显示检测结果
                     EditorActions.fullRender();
+                    window.dispatchEvent(new CustomEvent('singleInferenceComplete', {
+                        detail: {imageId: imageData.id, success: true, count: results.length}
+                    }));
                 },
                 // 失败回调
                 (error: Error) => {
@@ -221,6 +227,9 @@ export class AIDetectionActions {
                     // 添加失败的检测历史记录
                     // 检测失败，添加失败记录
                     store.dispatch(addInferenceHistory(imageData.id, 0, false, 'detection'));
+                    window.dispatchEvent(new CustomEvent('singleInferenceComplete', {
+                        detail: {imageId: imageData.id, success: false, count: 0}
+                    }));
                 }
             );
         }); // 移除不必要的延迟
@@ -265,6 +274,14 @@ export class AIDetectionActions {
         runs.push([runStart, prev + 1]);
 
         const params = DetectionAPIDetector.buildParamsDict();
+        const sigineReview = sessionStorage.getItem('opensight.annotation.sigineReview') === 'true'
+            || localStorage.getItem('opensight.sigineReview') === 'true';
+        const sigineInfra = localStorage.getItem('opensight.sigineInfra') === 'true';
+        const targetClasses = DetectionAPIDetector.getAnnotationTargets();
+        if (sigineReview || sigineInfra) {
+            sessionStorage.removeItem('opensight.annotation.sigineReviews');
+            window.dispatchEvent(new Event('sigineReviewReset'));
+        }
         const totalFrames = frameQueue.length;
         let done = 0;
         console.log('[BatchDetect] detect-session stream:', { runs: runs.length, totalFrames });
@@ -274,9 +291,20 @@ export class AIDetectionActions {
             // eslint-disable-next-line no-await-in-loop -- 区间必须顺序流式消费
             const ok = await new Promise<boolean>((resolve) => {
                 const controller = DetectSessionAPIService.streamDetectSession(
-                    { sessionId, start, end, params },
+                    { sessionId, start, end, params, sigineReview, sigineInfra, targetClasses },
                     {
                         onFrame: (f) => {
+                            if (f.review || f.review_error) {
+                                const reviews = JSON.parse(sessionStorage.getItem('opensight.annotation.sigineReviews') || '{}');
+                                reviews[f.frame_idx] = f.review || {error: f.review_error};
+                                sessionStorage.setItem('opensight.annotation.sigineReviews', JSON.stringify(reviews));
+                                window.dispatchEvent(new CustomEvent('sigineReviewResult', {detail: {frameIdx: f.frame_idx, ...reviews[f.frame_idx]}}));
+                                store.dispatch(submitNewNotification(NotificationUtil.createMessageNotification({
+                                    header: `Sigine 复审 · 第 ${f.frame_idx + 1} 帧`,
+                                    description: f.review_error || f.review?.reason || '',
+                                })));
+                                return;
+                            }
                             if (this.isCancelled()) {
                                 controller.abort();
                                 resolve(true);
@@ -289,10 +317,15 @@ export class AIDetectionActions {
                                 counters.fail++;
                                 store.dispatch(addInferenceHistory(img.id, 0, false, 'detection'));
                             } else {
-                                this.applySingleResult(img, f.detections, f.frame_idx);
-                                counters.objects += f.detections.length;
+                                const detections = DetectionAPIDetector.filterAnnotationTargets(f.detections);
+                                this.applySingleResult(img, detections, f.frame_idx);
+                                counters.objects += detections.length;
                                 counters.success++;
                             }
+                            window.dispatchEvent(new CustomEvent('batchInferenceProgress', {detail: {
+                                count: counters.success, failed: counters.fail, total: totalFrames,
+                                boxes: counters.objects,
+                            }}));
                             const pct = Math.round((done / totalFrames) * 100);
                             notify(2, `${t().aiInference.steps.inferring} (${done}/${totalFrames})`,
                                 `${pct}% — ${t().video.frame} ${f.frame_idx}`);
@@ -360,8 +393,27 @@ export class AIDetectionActions {
      * Image mode:
      *   4-way concurrent inference -> batch write
      */
+    private static async validateBatchRequest(images: ImageData[]): Promise<boolean> {
+        if (!DetectionAPIDetector.isEnabled() || images.length === 0) return false;
+        try {
+            await DetectionAPIDetector.validateAnnotationTargets();
+            return true;
+        } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            store.dispatch(updateFullImageInferenceStatus(false));
+            store.dispatch(submitNewNotification(NotificationUtil.createErrorNotification({
+                header: '无法开始推理', description: reason,
+            })));
+            window.dispatchEvent(new CustomEvent('batchInferenceComplete', {detail: {
+                count: 0, failed: images.length, total: images.length, boxes: 0, cancelled: false, reason,
+            }}));
+            return false;
+        }
+    }
+
     public static async detectBatch(imagesToDetect: ImageData[], isBatch: boolean = true): Promise<void> {
-        if (!DetectionAPIDetector.isEnabled() || imagesToDetect.length === 0) return;
+        if (!await this.validateBatchRequest(imagesToDetect)) return;
+        const replaceAI = DetectionAPIDetector.hasAnnotationTargets();
 
         const startTime = Date.now();
         const t = () => LanguageConfig[store.getState().general.language]; // 实时读语言
@@ -425,7 +477,7 @@ export class AIDetectionActions {
             // v2.6.3 起从"4 路并发 × N 次 /detect"改为"分块 × /batch_detect"。后端
             // batch_detect 走真正的 batched forward pass，5 图实测 22% 提速 + 单次
             // HTTP 往返。BATCH_SIZE 取 8 平衡推理速率和单次 timeout 风险。
-            const imageQueue = isBatch
+            const imageQueue = isBatch && !replaceAI
                 ? imagesToDetect.filter(img => !img.labelRects.some((r: LabelRect) => r.isCreatedByAI))
                 : imagesToDetect;
             successCount = total - imageQueue.length;
@@ -475,7 +527,7 @@ export class AIDetectionActions {
                 for (let frameIdx = 0; frameIdx < allImagesData.length; frameIdx++) {
                     const img = allImagesData[frameIdx];
                     if (!selectedIds.has(img.id)) continue;
-                    if (isBatch && img.labelRects.some((r: LabelRect) => r.isCreatedByAI)) continue;
+                    if (isBatch && !replaceAI && img.labelRects.some((r: LabelRect) => r.isCreatedByAI)) continue;
                     frameQueue.push({ frameIdx, imageData: img });
                 }
                 return frameQueue;
@@ -509,7 +561,7 @@ export class AIDetectionActions {
                     forceFlushPendingImageUpdates();
                     const latest = store.getState().labels.imagesData;
                     const doneIds = new Set(
-                        latest.filter(im => im.labelRects.some((r: LabelRect) => r.isCreatedByAI)).map(im => im.id)
+                        latest.filter(im => !replaceAI && im.labelRects.some((r: LabelRect) => r.isCreatedByAI)).map(im => im.id)
                     );
                     pending = frameQueue.filter(q => !doneIds.has(q.imageData.id));
                 }
@@ -669,9 +721,11 @@ export class AIDetectionActions {
             // Signal batch completion to EditorContainer for auto-showing statistics panel
             if (successCount > 2) {
                 EditorModel.lastBatchInferenceImageCount = successCount;
-                window.dispatchEvent(new CustomEvent('batchInferenceComplete', { detail: { count: successCount } }));
             }
 
+            window.dispatchEvent(new CustomEvent('batchInferenceComplete', {detail: {
+                count: successCount, failed: failCount, total, boxes: totalObjects, cancelled: wasCancelled,
+            }}));
             EditorActions.fullRender();
         };
         finishBatch();
@@ -687,12 +741,23 @@ export class AIDetectionActions {
     /**
      * 流式写入：单张图推理完成后立即写入 Redux 并刷新 UI
      */
+    private static publishVideoPreview(imageId: string, count: number, frameIdx?: number): void {
+        if (frameIdx === undefined) return;
+        window.dispatchEvent(new CustomEvent('videoInferenceFrame', {detail: {
+            videoId: store.getState().video.activeVideo?.id, imageId, count,
+        }}));
+    }
+
+    private static priorRects(rects: LabelRect[]): LabelRect[] {
+        return DetectionAPIDetector.hasAnnotationTargets() ? rects.filter(rect => !rect.isCreatedByAI) : rects;
+    }
+
     private static applySingleResult(
         imageData: ImageData,
         results: DetectionResult[],
         frameIdx?: number
     ): void {
-        if (!results || results.length === 0) return;
+        if (!results || (results.length === 0 && !DetectionAPIDetector.hasAnnotationTargets())) return;
 
         // 创建缺失标签
         this.createMissingLabelsIfNeeded(results);
@@ -726,17 +791,19 @@ export class AIDetectionActions {
                 isVisible: true,
                 status: LabelStatus.ACCEPTED,
                 suggestedLabel: labelId ? null : result.info.name,
-                confidence: result.info.confidence ?? 0
+                confidence: result.info.confidence ?? 0,
+                sourceClassName: result.info.sourceName,
+                sourceClassId: result.info.sourceId
             };
         });
 
-        if (newRects.length > 0) {
+        if (newRects.length > 0 || DetectionAPIDetector.hasAnnotationTargets()) {
             // 合并已挂起的更新（同帧多次推理叠加时不丢历史 rects）
             const pendingPrev = pendingImageUpdates.get(imageData.id);
             const baseRects = pendingPrev ? pendingPrev.labelRects : currentImg.labelRects;
             const updatedImg: ImageData = {
                 ...(pendingPrev || currentImg),
-                labelRects: [...baseRects, ...newRects]
+                labelRects: [...this.priorRects(baseRects), ...newRects]
             };
             pendingImageUpdates.set(imageData.id, updatedImg);
             scheduleFlush();
@@ -747,6 +814,7 @@ export class AIDetectionActions {
         const segResults = DetectionAPIDetector.convertToSegmentationFormat(results);
         store.dispatch(updateSegmentationResults(segResults, imageData.id));
         store.dispatch(addInferenceHistory(imageData.id, results.length, true, 'detection'));
+        this.publishVideoPreview(imageData.id, results.length, frameIdx);
 
         // 关键：设置 aiLabelsVisible = true，否则渲染引擎会跳过 AI 标签
         const aiState = store.getState().ai.imageAIStates.get(imageData.id);
@@ -813,7 +881,7 @@ export class AIDetectionActions {
         for (let i = 0; i < frameQueue.length; i++) {
             const results = inferenceResults[i];
             if (!results) { continue; }
-            if (results.length === 0) { continue; }
+            if (results.length === 0 && !DetectionAPIDetector.hasAnnotationTargets()) { continue; }
 
             const { imageData } = frameQueue[i];
             const arrIdx = idToIdx.get(imageData.id);
@@ -838,14 +906,16 @@ export class AIDetectionActions {
                     isVisible: true,
                     status: LabelStatus.ACCEPTED,
                     suggestedLabel: labelId ? null : result.info.name,
-                    confidence: result.info.confidence ?? 0
+                    confidence: result.info.confidence ?? 0,
+                    sourceClassName: result.info.sourceName,
+                    sourceClassId: result.info.sourceId
                 };
             });
 
-            if (newRects.length > 0) {
+            if (newRects.length > 0 || DetectionAPIDetector.hasAnnotationTargets()) {
                 currentImagesData[arrIdx] = {
                     ...currentImg,
-                    labelRects: [...currentImg.labelRects, ...newRects]
+                    labelRects: [...this.priorRects(currentImg.labelRects), ...newRects]
                 };
                 modified = true;
             }

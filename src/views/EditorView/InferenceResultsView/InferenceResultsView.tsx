@@ -1,3 +1,5 @@
+import {FrameExtractorService} from '../../../services/FrameExtractorService';
+import {store} from '../../../index';
 import React from 'react';
 import './InferenceResultsView.scss';
 import {connect, shallowEqual} from 'react-redux';
@@ -80,26 +82,25 @@ async function resolveThumbnailSource(
     imageData: ImageData,
     isCancelled: () => boolean
 ): Promise<CanvasImageSource | null> {
-    const fileData = imageData.fileData;
+    let fileData = imageData.fileData;
     if (!fileData) return null;
 
     const isVideo = fileData.type?.startsWith('video/') ||
         /\.(mp4|webm|mov|avi|mkv)$/i.test(fileData.name || '');
-    const isOnDemandFrame = fileData instanceof File &&
-        fileData.size === 0 &&
-        !!EditorModel.videoSessionId;
-
+    const isOnDemandFrame = fileData instanceof File && fileData.size === 0;
     if (isVideo || isOnDemandFrame) {
-        // Frame extraction and React state commit are asynchronous. Wait for the
-        // native-resolution source instead of permanently memoizing an early miss.
-        const waitForFrameSource = async (attempt: number): Promise<CanvasImageSource | null> => {
-            if (isCancelled() || attempt >= 20) return null;
-            const source = getReadyFrameSource();
-            if (source) return source;
-            await new Promise(resolve => setTimeout(resolve, 150));
-            return waitForFrameSource(attempt + 1);
-        };
-        return waitForFrameSource(0);
+        const state = store.getState();
+        const frameIndex = state.labels.imagesData.findIndex(frame => frame.id === imageData.id);
+        if (EditorModel.videoSessionId && frameIndex >= 0) {
+            try {
+                // Fetch the inferred frame without seeking the playing video.
+                fileData = (await FrameExtractorService.fetchFrameRange(EditorModel.videoSessionId, frameIndex, 1))[0];
+                if (!fileData || isCancelled()) return null;
+            } catch { return null; }
+        } else {
+            const activeId = state.labels.imagesData[state.labels.activeImageIndex]?.id;
+            return activeId === imageData.id ? getReadyFrameSource() : null;
+        }
     }
 
     return new Promise<CanvasImageSource | null>((resolve) => {
@@ -212,7 +213,10 @@ function renderThumbnail(
     return <div className="NoThumbnail"><span>📷</span></div>;
 }
 
+interface OwnProps { previewImageId?: string; }
+
 interface IProps {
+    previewFrameNumber?: number;
     language: Language;
     suggestedLabelList: string[];
     segmentationResults: SegmentationResult[];
@@ -223,7 +227,7 @@ interface IProps {
     updateActiveLabelId: (activeLabelId: string | null) => void;
 }
 
-const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, segmentationResults, activeImageData, labelNames, updateSegmentationResults, updateActiveLabelId}) => {
+const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, segmentationResults, activeImageData, labelNames, updateSegmentationResults, updateActiveLabelId, previewFrameNumber}) => {
     const currentTexts = LanguageConfig[language];
     const zh = language === Language.CHINESE;
 
@@ -470,9 +474,9 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
     }, [activeImageData, displayResults, imageId]);
 
     return (
-        <div className="InferenceResultsView">
+        <div className="InferenceResultsView" data-preview-frame={previewFrameNumber}>
             <div className="Header">
-                <div className="HeaderText">{currentTexts.aiInference.results.title}</div>
+                <div className="HeaderText">{currentTexts.aiInference.results.title}{previewFrameNumber ? ` · ${zh ? "帧" : "Frame"} ${previewFrameNumber}` : ""}</div>
             </div>
             {showTabs && (
                 <div className="TabBar">
@@ -571,20 +575,21 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
     );
 };
 
-const mapStateToProps = (state: AppState) => ({
-    language: state.general.language,
-    suggestedLabelList: state.ai.suggestedLabelList,
-    segmentationResults: (() => {
-        const imageId = state.labels.imagesData[state.labels.activeImageIndex]?.id;
-        if (imageId && state.ai.imageSegmentationResults.has(imageId)) {
-            return state.ai.imageSegmentationResults.get(imageId) ?? [];
-        }
-        return [];
-    })(),
-    activeImageData: state.labels.imagesData[state.labels.activeImageIndex] || null,
-    labelNames: state.labels.labels,
-    isVideoMode: state.video?.isVideoMode || false
-});
+const mapStateToProps = (state: AppState, ownProps: OwnProps) => {
+    const index = ownProps.previewImageId
+        ? state.labels.imagesData.findIndex(image => image.id === ownProps.previewImageId)
+        : state.labels.activeImageIndex;
+    const image = state.labels.imagesData[index] || null;
+    return {
+        language: state.general.language,
+        suggestedLabelList: state.ai.suggestedLabelList,
+        segmentationResults: image ? state.ai.imageSegmentationResults.get(image.id) ?? [] : [],
+        activeImageData: image,
+        labelNames: state.labels.labels,
+        isVideoMode: state.video?.isVideoMode || false,
+        previewFrameNumber: ownProps.previewImageId && index >= 0 ? index + 1 : undefined,
+    };
+};
 
 const mapDispatchToProps = {
     updateSegmentationResults: updateSegmentationResultsAction,

@@ -7,6 +7,7 @@ import {
 import {useAccountApprovalIdentity} from '../../services/ApprovalIdentityService';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
 import './AccountCenter.scss';
+import {PlatformLoginPanel} from './PlatformLoginPanel';
 
 interface IProps {
     user: AccountUser;
@@ -209,6 +210,7 @@ export const AccountCenter: React.FC<IProps> = ({user, zh, open = true, onClose,
                     <p>{zh ? '登录后自动加载授权身份；每次敏感操作仍需点击确认。' : 'Your approval identity loads after login; sensitive actions still require confirmation.'}</p>
                     <div className='AccountPermissionList'>{user.permissions.map(permission => <span key={permission} title={permission}>{permissionLabel(permission, zh)}</span>)}</div>
                     <details className='AccountIdentityDetails'><summary>{zh ? '授权详情' : 'Authorization details'}</summary><small className='AccountIdentity'>{user.approval.user_id}</small></details>
+                    {user.role === 'admin' && !user.password_change_required && <PlatformLoginPanel zh={zh}/>}
                 </article>
                 <article>
                     <h3>{zh ? '登录设备' : 'Signed-in devices'}</h3>

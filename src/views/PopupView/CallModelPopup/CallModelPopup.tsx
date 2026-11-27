@@ -69,6 +69,11 @@ export const CallModelPopup: React.FC<IProps> = ({
     const [availableModels, setAvailableModels] = useState<string[]>([]);
     // 后端同时在内存中的所有模型（多模型共存）
     const [loadedModels, setLoadedModels] = useState<string[]>([]);
+    const [sigineAvailable, setSigineAvailable] = useState(false);
+    const [sigineReview, setSigineReview] = useState(() => localStorage.getItem('opensight.sigineReview') === 'true');
+    const [sigineInfraAvailable, setSigineInfraAvailable] = useState(false);
+    const [sigineInfraModel, setSigineInfraModel] = useState<string | null>(null);
+    const [sigineInfra, setSigineInfra] = useState(() => localStorage.getItem('opensight.sigineInfra') === 'true');
 
     // 推理基础地址从已注册的引擎推导 —— 不再让用户在这个弹窗里填 URL。
     // Only the core engine owns inference capabilities. An active extension
@@ -92,6 +97,23 @@ export const CallModelPopup: React.FC<IProps> = ({
     };
 
     useEffect(() => {
+        fetch(`${derivedBaseUrl}/sigine-infra/status`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                const available = data?.available === true;
+                setSigineInfraAvailable(available);
+                setSigineInfraModel(typeof data?.model === 'string' ? data.model : null);
+                if (!available) { setSigineInfra(false); localStorage.removeItem('opensight.sigineInfra'); }
+            })
+            .catch(() => { setSigineInfraAvailable(false); setSigineInfra(false); localStorage.removeItem('opensight.sigineInfra'); });
+        fetch(`${derivedBaseUrl}/sigine-review/status`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                const available = data?.configured === true;
+                setSigineAvailable(available);
+                if (!available) { setSigineReview(false); localStorage.removeItem('opensight.sigineReview'); }
+            })
+            .catch(() => { setSigineAvailable(false); setSigineReview(false); localStorage.removeItem('opensight.sigineReview'); });
         fetch(`${derivedBaseUrl}/available-models`)
             .then(r => r.json())
             .then(data => {
@@ -249,6 +271,30 @@ export const CallModelPopup: React.FC<IProps> = ({
                                 alt={selectedId === 'ocr' ? 'checked' : 'unchecked'}
                             />
                             {zhTexts ? '文字识别 OCR' : 'Text Recognition OCR'}
+                        </div>
+                        <div className={`OptionsItem${sigineAvailable ? '' : ' disabled'}`}
+                             onClick={() => {
+                                 if (!sigineAvailable) return;
+                                 const next = !sigineReview;
+                                 setSigineReview(next);
+                                 localStorage.setItem('opensight.sigineReview', String(next));
+                             }}>
+                            <img draggable={false} src={sigineReview && sigineAvailable ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'}
+                                 alt={sigineReview && sigineAvailable ? 'checked' : 'unchecked'} />
+                            {zhTexts ? 'Sigine GPT 复审可疑帧' : 'Sigine GPT review for hard cases'}
+                            {!sigineAvailable && <span className='active-badge'>{zhTexts ? '未配置' : 'Not configured'}</span>}
+                        </div>
+                        <div className={`OptionsItem${sigineInfraAvailable ? '' : ' disabled'}`}
+                             onClick={() => {
+                                 if (!sigineInfraAvailable) return;
+                                 const next = !sigineInfra;
+                                 setSigineInfra(next);
+                                 localStorage.setItem('opensight.sigineInfra', String(next));
+                             }}>
+                            <img draggable={false} src={sigineInfra && sigineInfraAvailable ? 'ico/checkbox-checked.png' : 'ico/checkbox-unchecked.png'}
+                                 alt={sigineInfra && sigineInfraAvailable ? 'checked' : 'unchecked'} />
+                            {zhTexts ? 'Sigine INFRA 推理引擎' : 'Sigine INFRA Inference Engine'}
+                            <span className='active-badge'>{sigineInfraAvailable ? sigineInfraModel : (zhTexts ? '未连接' : 'Unavailable')}</span>
                         </div>
                     </div>
                 </div>

@@ -74,7 +74,7 @@ export type ComputeClusterNode = {
     role?: 'main' | 'node';
     agent_version: string;
     capabilities: string[];
-    control_transport?: 'lan' | 'tailscale' | null;
+    control_transport?: 'lan' | 'tailscale' | 'tailcat' | null;
     communication_state?: 'normal' | 'fault' | 'abnormal' | null;
     network: {
         provider: 'tailscale';

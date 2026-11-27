@@ -1790,7 +1790,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         const jetsonConnectCapable = Boolean(
             node.online && node.capabilities?.includes('control.jetson.connect.v1'),
         );
-        const remoteLan = node.control_transport === 'tailscale';
+        const remoteLan = node.control_transport === 'tailscale' || node.control_transport === 'tailcat';
         const hardwareModel = node.resources.hardware_model?.trim();
         const locationTag = (nodeRegions.get(node.node_id) || '').split(' / ')[0];
         const storedWorkArea = nodeTags[0] || '';
@@ -1870,7 +1870,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                     <div><span>{zh ? '设备型号' : 'Device model'}</span><strong title={hardwareModel}>{hardwareModel || (zh ? '未上报' : 'Not reported')}</strong><small>{hardwareModel ? (zh ? '节点上报' : 'reported by node') : (zh ? '等待节点上报' : 'waiting for node report')}</small></div>
                     <div><span>{zh ? '操作系统' : 'Operating system'}</span><strong>{node.resources.platform || '—'}</strong><small>{zh ? '设备系统' : 'device platform'}</small></div>
                     <div><span>{zh ? '处理器架构' : 'Processor architecture'}</span><strong>{node.resources.architecture || '—'}</strong><small>{zh ? '节点架构' : 'node architecture'}</small></div>
-                    <div><span>{zh ? '节点服务版本' : 'Node service version'}</span><strong>{node.agent_version && node.agent_version !== 'unknown' ? node.agent_version : '—'}</strong><small>{zh ? '计算群节点服务' : 'compute-cluster node service'}</small></div>
+                    <div><span>{zh ? '节点服务版本' : 'Node service version'}</span><strong>{node.agent_version && node.agent_version !== 'unknown' ? node.agent_version : '—'}{node.role ? `(${node.role === 'main' ? 'Main' : 'Node'})` : ''}</strong><small>{zh ? '计算群节点服务' : 'compute-cluster node service'}</small></div>
                 </div>
                 <div className='ControlSubsectionHeading'>
                     <strong>{zh ? '计算资源' : 'Compute resources'}</strong>
@@ -1887,6 +1887,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                 <div className='ControlSectionHeading'>
                     <div>
                         <h2>{zh ? '网络情况' : 'Network status'}</h2>
+                        {node.control_transport === 'tailcat' && <small>{zh ? 'tailcat v2 测试通道已连接' : 'tailcat v2 test route connected'}</small>}
                     </div>
                 </div>
                 <div className='ControlServiceGrid'>

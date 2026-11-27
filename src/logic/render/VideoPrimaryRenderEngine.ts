@@ -14,6 +14,11 @@ export class VideoPrimaryRenderEngine extends PrimaryEditorRenderEngine {
 
     public drawImage(image: HTMLImageElement, imageRect: IRect) {
         if (!imageRect) return;
+        const video = EditorModel.videoElement;
+        if (VideoSelector.isVideoPlaying() && video && !video.paused && video.readyState >= 2) {
+            this.canvas.getContext('2d')?.drawImage(video, imageRect.x, imageRect.y, imageRect.width, imageRect.height);
+            return;
+        }
         const src = VideoSelector.isVideoPlaying()
             ? (EditorModel.videoFrameImage || image)
             : image;

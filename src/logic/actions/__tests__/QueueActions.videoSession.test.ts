@@ -348,6 +348,7 @@ describe('QueueActions video session ownership', () => {
 
         expect(dispatched(Action.ADD_VIDEO_DATA)[0].payload.videoData?.sessionId)
             .toBe('session-a');
+        expect(dispatched(Action.UPDATE_PROJECT_DATA).at(-1)?.payload.projectData.name).toBe('video-a');
         expect(EditorModel.videoSessionId).toBe('session-a');
         expect(EditorModel.videoFrameFiles).toEqual([targetFrame]);
         expect(EditorModel.preloadedImageCache.size).toBe(0);

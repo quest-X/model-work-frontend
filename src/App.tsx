@@ -31,6 +31,7 @@ export const App: React.FC<IProps> = (
         roboflowAPIDetails
     }
 ) => {
+    const [startNewWork] = useState(() => new URLSearchParams(window.location.search).get('new_work') === '1');
     const [isRestoring, setIsRestoring] = useState(true);
     const [showRestorePrompt, setShowRestorePrompt] = useState(false);
     const [storedDataInfo, setStoredDataInfo] = useState<StoredDataInfo | null>(null);
@@ -38,7 +39,7 @@ export const App: React.FC<IProps> = (
     const [restoreStatus, setRestoreStatus] = useState<string>('正在加载...');
     const [storageUnavailable, setStorageUnavailable] = useState(false);
     const [platformMode, setPlatformMode] = useState<PlatformMode>(
-        () => currentAccountSession()?.user.role === 'admin' ? 'control' : 'annotation',
+        () => startNewWork ? 'annotation' : currentAccountSession()?.user.role === 'admin' ? 'control' : 'annotation',
     );
 
     const beforeOpenAnnotationResource = () => {
@@ -62,6 +63,19 @@ export const App: React.FC<IProps> = (
                 setStoredDataInfo({hasSettings: false, hasProject: false, lastSaved: 0});
                 setStorageUnavailable(true);
                 setRestoreError('恢复数据库被其他旧标签页占用。请关闭旧标签页，然后重试；现有恢复数据不会被清除。');
+                setIsRestoring(false);
+                return;
+            }
+
+            // An explicit new-work launch uses this tab's isolated workspace. Keep all
+            // recovery snapshots, but do not offer another workspace's project here.
+            if (startNewWork) {
+                await ProjectRestoreService.restoreSettings();
+                setStoredDataInfo({hasSettings: true, hasProject: false, lastSaved: 0});
+                AutoSaveService.resume();
+                const url = new URL(window.location.href);
+                url.searchParams.delete('new_work');
+                window.history.replaceState(window.history.state, '', url);
                 setIsRestoring(false);
                 return;
             }

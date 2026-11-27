@@ -254,8 +254,8 @@ it('bounds LL-HLS first-frame loading at 30 seconds', async () => {
 it('shows first-frame latency and protocol availability in the selector', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(0);
-    let resolveDirectory: (value: unknown) => void;
-    global.fetch = jest.fn(() => new Promise(resolve => { resolveDirectory = resolve; }));
+    let resolveDirectory: (value: Partial<Response>) => void;
+    global.fetch = jest.fn(() => new Promise<Response>(resolve => { resolveDirectory = value => resolve(value as Response); }));
     render(<ProgramLivePreview nodeId='node04' programId='dlk' name='DLK' path='/stream.mjpeg' zh/>);
     await act(async () => {
         resolveDirectory({

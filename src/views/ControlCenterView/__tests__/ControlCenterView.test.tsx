@@ -397,6 +397,15 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText('图形处理器')).not.toBeInTheDocument();
     });
 
+    it('labels an active tailcat control route as experimental', async () => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            node('试验节点', true, false, null, 'Windows', 'tailcat'),
+        ]);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await selectMachine('试验节点');
+        expect(screen.getByText('tailcat v2 测试通道已连接')).toBeInTheDocument();
+    });
+
     it('shows only camera connections below an AIPACK node', async () => {
         const aipack = node('AIPACK-05', true, true, 'NVIDIA Jetson AGX Orin');
         aipack.network.tailscale_ssh_available = false;
@@ -741,6 +750,17 @@ describe('ControlCenterView', () => {
         const information = await screen.findByLabelText('设备信息');
         expect(within(information).getByText('—')).toBeInTheDocument();
         expect(within(information).queryByText('unknown')).not.toBeInTheDocument();
+    });
+
+    it('shows the reported version and role together', async () => {
+        const machine = node('Main 节点', true);
+        machine.agent_version = '1.2.0';
+        machine.role = 'main';
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await selectMachine('Main 节点');
+        expect(within(screen.getByLabelText('设备信息')).getByText('1.2.0(Main)')).toBeInTheDocument();
     });
 
     it('recovers an uncertain node when bidirectional communication returns', async () => {

@@ -15,6 +15,7 @@ import { FrameExtractorService } from "../../../../services/FrameExtractorServic
 import './ImagePreview.scss';
 import { CSSHelper } from "../../../../logic/helpers/CSSHelper";
 import {getVideoThumbnailSize} from "../../../../utils/VideoThumbnailUtil";
+import {store} from "../../../../index";
 
 interface IProps {
     imageData: ImageData;
@@ -224,7 +225,9 @@ export class ImagePreview extends React.Component<IProps, IState> {
             this.discardLoadedImage(image);
             return;
         }
-        const updated = { ...imageData, loadStatus: true };
+        // Inference may have added annotations since this thumbnail request started.
+        const latest = store.getState().labels.imagesData.find(frame => frame.id === imageData.id) || this.props.imageData;
+        const updated = { ...latest, loadStatus: true };
         this.props.updateImageDataById(updated.id, updated);
         ImageRepository.storeImage(imageData.id, image);
         if (imageData.id === this.props.imageData.id) {
