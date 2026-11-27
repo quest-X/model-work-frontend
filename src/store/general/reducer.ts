@@ -12,6 +12,7 @@ const initialState: GeneralState = {
     activePopupNodeId: null,
     activePopupNodeName: null,
     activePopupNodeRemote: false,
+    activePopupCameraHost: null,
     customCursorStyle: CustomCursorStyle.DEFAULT,
     activeContext: null,
     preventCustomCursor: false,
@@ -92,6 +93,7 @@ export function generalReducer(
                 && state.activePopupNodeId === action.payload.activePopupNodeId
                 && state.activePopupNodeName === action.payload.activePopupNodeName
                 && state.activePopupNodeRemote === action.payload.activePopupNodeRemote
+                && state.activePopupCameraHost === action.payload.activePopupCameraHost
             ) return state;
             return {
                 ...state,
@@ -99,6 +101,7 @@ export function generalReducer(
                 activePopupNodeId: action.payload.activePopupNodeId,
                 activePopupNodeName: action.payload.activePopupNodeName,
                 activePopupNodeRemote: action.payload.activePopupNodeRemote,
+                activePopupCameraHost: action.payload.activePopupCameraHost,
             }
         }
         case Action.UPDATE_CUSTOM_CURSOR_STYLE: {

@@ -1705,13 +1705,14 @@ describe('ControlCenterView', () => {
         );
     });
 
-    it('keeps discovered LAN cameras visible when camera registration is missing', async () => {
+    it.each([true, false])('routes discovered LAN cameras to connection only when supported (%s)', async canConnect => {
         const main = {...node('baosight-01', true), role: 'main' as const};
         const aipack = {
             ...node('AIPACK-05', true, false, 'Jetson AGX Orin Developer Kit', 'Linux'),
             role: 'node' as const,
         };
         aipack.network.lan_address = '10.168.10.24';
+        if (canConnect) aipack.capabilities.push('task.camera.connect.v1');
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([main, aipack]);
         jest.mocked(ComputeClusterService.lanAssets).mockResolvedValue({
             version: 1,
@@ -1754,14 +1755,30 @@ describe('ControlCenterView', () => {
                 change_type: 'unchanged',
             }],
         });
-        render(<ControlCenterView language={Language.CHINESE}/>);
+        const updateActivePopupTypeAction = jest.fn();
+        render(<ControlCenterView language={Language.CHINESE}
+            updateActivePopupTypeAction={updateActivePopupTypeAction}/>);
 
         const list = screen.getByRole('complementary', {name: '机器列表'});
-        const camera = await within(list).findByRole('button', {name: '打开 （炉后）大炉口#02 实时画面'});
-        expect(camera).toBeDisabled();
+        const camera = await within(list).findByRole('button', {name: '连接 （炉后）大炉口#02 摄像头'});
+        if (canConnect) expect(camera).toBeEnabled();
+        else expect(camera).toBeDisabled();
         expect(camera).toHaveClass('camera-device', 'tree-depth-1');
         expect(camera).toHaveTextContent('已发现，未注册 · 0 通道');
-        expect(camera).toHaveAttribute('title', '此相机不支持实时画面（需要 camera.stream.v1）');
+        if (canConnect) {
+            fireEvent.click(camera);
+            expect(updateActivePopupTypeAction).toHaveBeenCalledWith(
+                PopupWindowType.CAMERA_CONNECT,
+                'AIPACK-05-id',
+                'AIPACK-05',
+                false,
+                '10.168.10.140',
+            );
+            expect(screen.queryByRole('dialog', {name: '相机实时画面'})).not.toBeInTheDocument();
+        } else {
+            expect(camera).toHaveAttribute('title', '此节点不支持连接相机（需要 task.camera.connect.v1）');
+            expect(updateActivePopupTypeAction).not.toHaveBeenCalled();
+        }
     });
 
     it('opens a registered camera with devices on the left and live view on the right', async () => {

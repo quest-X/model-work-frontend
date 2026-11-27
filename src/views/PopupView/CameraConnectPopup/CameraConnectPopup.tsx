@@ -26,6 +26,7 @@ interface IProps {
     nodeId?: string | null;
     nodeName?: string | null;
     remote?: boolean;
+    initialHost?: string | null;
 }
 
 const discoveryStorageKey = (nodeId: string | null): string =>
@@ -89,12 +90,12 @@ const loadDiscovery = (key: string): CameraDiscoveryResponse | null => {
 
 // eslint-disable-next-line complexity
 export const CameraConnectPopup: React.FC<IProps> = (
-    {language, imagesData, nodeId = null, nodeName = null, remote = false},
+    {language, imagesData, nodeId = null, nodeName = null, remote = false, initialHost = null},
 ) => {
     const chinese = language === Language.CHINESE;
     const storageKey = discoveryStorageKey(nodeId);
     const [scheme, setScheme] = useState<'http' | 'https'>('http');
-    const [host, setHost] = useState('');
+    const [host, setHost] = useState(initialHost || '');
     const [port, setPort] = useState('80');
     const [rtspPort, setRtspPort] = useState('554');
     const [username, setUsername] = useState('');
@@ -117,6 +118,8 @@ export const CameraConnectPopup: React.FC<IProps> = (
     const [savedResources, setSavedResources] = useState<CameraResource[]>([]);
     const [savedResource, setSavedResource] = useState<CameraResource | null>(null);
     const [loadingCredentials, setLoadingCredentials] = useState(false);
+
+    useEffect(() => setHost(initialHost || ''), [initialHost]);
 
     const showDiscovery = (nextDiscovery: CameraDiscoveryResponse) => {
         const visible = {

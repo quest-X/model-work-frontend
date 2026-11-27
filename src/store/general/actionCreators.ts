@@ -20,6 +20,7 @@ export function updateActivePopupType(
     activePopupNodeId: string | null = null,
     activePopupNodeName: string | null = null,
     activePopupNodeRemote = false,
+    activePopupCameraHost: string | null = null,
 ): GeneralActionTypes {
     return {
         type: Action.UPDATE_ACTIVE_POPUP_TYPE,
@@ -28,6 +29,7 @@ export function updateActivePopupType(
             activePopupNodeId,
             activePopupNodeName,
             activePopupNodeRemote,
+            activePopupCameraHost,
         }
     }
 }
