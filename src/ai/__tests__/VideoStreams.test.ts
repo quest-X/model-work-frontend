@@ -9,14 +9,17 @@ jest.mock('../../utils/DefaultBackendUrl', () => ({getEngineBaseUrl: () => '/cor
 it('sends Sigine INFRA as an explicit video review source', () => {
     const previousFetch = global.fetch;
     global.fetch = jest.fn(() => new Promise<Response>(() => undefined));
+    const selection = {source_id: 'fixture-account', model: 'MiniCPM'};
+    localStorage.setItem('opensight.sigineInfraSelection', JSON.stringify(selection));
     try {
         DetectSessionAPIService.streamDetectSession({sessionId: 'fixture', start: 0, end: 2,
             sigineInfra: true, targetClasses: ['dog']}, {onFrame: jest.fn(), onDone: jest.fn(), onError: jest.fn()});
         const [, options] = (global.fetch as jest.Mock).mock.calls[0];
-        expect(JSON.parse(options.body)).toMatchObject({sigine_infra: true, target_classes: ['dog']});
+        expect(JSON.parse(options.body)).toMatchObject({sigine_infra: true, target_classes: ['dog'], sigine_selection: selection});
         expect(JSON.parse(options.body)).not.toHaveProperty('sigine_review');
     } finally {
         global.fetch = previousFetch;
+        localStorage.removeItem('opensight.sigineInfraSelection');
     }
 });
 

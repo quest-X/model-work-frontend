@@ -51,31 +51,20 @@
       font-size: 12px;
       white-space: nowrap;
 
+      &:hover {
+        background: #343434;
+        color: #fff;
+      }
+
       &[aria-pressed='true'] {
-        background: #095e7b;
+        background: #454545;
         color: #fff;
       }
 
       &:focus-visible {
-        outline: 2px solid #00aeef;
+        outline: 2px solid #fff;
         outline-offset: -2px;
       }
-    }
-  }
-
-  .QueueHistoryPanel__refresh {
-    flex: 0 0 28px;
-    height: 28px;
-    padding: 0;
-    border: 0;
-    border-radius: 3px;
-    background: transparent;
-    color: #ccc;
-    cursor: pointer;
-    font-size: 18px;
-
-    &:hover, &:focus-visible {
-      background: #383838;
     }
   }
 
@@ -98,25 +87,6 @@
     }
   }
 
-  .SaveButtonBottom {
-    position: absolute;
-    bottom: 6px;
-    left: 50%;
-    transform: translateX(-50%);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 3px;
-    border-radius: 3px;
-    transition: background-color 0.2s ease;
-
-    &:hover {
-      background-color: rgba(255, 255, 255, 0.1);
-    }
-  }
-
-  // 镜像 SaveButtonBottom，用于右侧 sidebar 底部的 Task Manager 入口按钮。
   .TaskManagerButtonBottom {
     position: absolute;
     bottom: 6px;

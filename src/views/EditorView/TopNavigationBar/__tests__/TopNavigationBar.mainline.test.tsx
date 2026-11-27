@@ -7,6 +7,11 @@ import {TopNavigationBar} from '../TopNavigationBar';
 import {PopupWindowType} from '../../../../data/enums/PopupWindowType';
 import {version as appVersion} from '../../../../../package.json';
 
+beforeEach(() => {
+    // 默认按宽屏渲染，避免顶栏自适应收起影响菜单断言。
+    Object.defineProperty(window, 'innerWidth', {configurable: true, writable: true, value: 1440});
+});
+
 jest.mock('../../StateBar/StateBar', () => ({
     __esModule: true,
     default: function MockStateBar() {

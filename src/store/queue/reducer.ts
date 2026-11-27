@@ -1,6 +1,7 @@
 import {
     QueueActionTypes,
     QueueDataSyncStatus,
+    QueueItem,
     QueueState,
 } from './types';
 import { Action } from '../Actions';
@@ -21,6 +22,15 @@ const initialState: QueueState = {
     activeQueueItemId: null
 };
 
+const prependQueueItems = (incoming: QueueItem[], current: QueueItem[]): QueueItem[] => {
+    const items = new Map<string, QueueItem>();
+    for (const item of incoming) items.set(item.id, item);
+    for (const item of current) {
+        if (!items.has(item.id)) items.set(item.id, item);
+    }
+    return Array.from(items.values());
+};
+
 export function queueReducer(
     state = initialState,
     action: QueueActionTypes | AcceptVisualSearchBBoxAction | AcceptVisualSearchMaskAction
@@ -30,14 +40,14 @@ export function queueReducer(
             // Add to the beginning of the array (newest first)
             return {
                 ...state,
-                items: [action.payload.item, ...state.items]
+                items: prependQueueItems([action.payload.item], state.items)
             };
         }
         case Action.ADD_QUEUE_ITEMS: {
             // Add all items to the beginning (newest first)
             return {
                 ...state,
-                items: [...action.payload.items, ...state.items]
+                items: prependQueueItems(action.payload.items, state.items)
             };
         }
         case Action.REMOVE_QUEUE_ITEM: {

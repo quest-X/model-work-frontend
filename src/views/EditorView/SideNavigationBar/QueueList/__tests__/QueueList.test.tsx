@@ -4,7 +4,7 @@ import {Provider} from 'react-redux';
 import {createStore} from 'redux';
 import {rootReducer} from '../../../../../store';
 import {store} from '../../../../../index';
-import {addQueueItem, setActiveQueueItem} from '../../../../../store/queue/actionCreators';
+import {addQueueItem, addQueueItems, clearQueue, setActiveQueueItem} from '../../../../../store/queue/actionCreators';
 import {updateImageData} from '../../../../../store/labels/actionCreators';
 import {QueueItemStatus, QueueItemType} from '../../../../../store/queue/types';
 import {QueueActions} from '../../../../../logic/actions/QueueActions';
@@ -73,4 +73,38 @@ it('syncs the newest active annotations without subscribing the list to frame ch
         testStore.getState().queue.items.find(item => item.id === 'image'),
         testStore.getState().labels.imagesData, testStore.getState().labels.labels,
     );
+});
+
+it('shows one active card when the same video is restored repeatedly', () => {
+    const {testStore, view} = fixture();
+    const item = testStore.getState().queue.items.find(entry => entry.id === 'item-0');
+    act(() => {
+        testStore.dispatch(addQueueItems([item]));
+        testStore.dispatch(addQueueItems([item]));
+    });
+    expect(view.container.querySelectorAll('[data-queue-item-id="item-0"]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('.queue-item-card.active')).toHaveLength(1);
+});
+
+it('removes all legacy duplicate cards before showing the empty queue', () => {
+    const testStore = createStore(rootReducer);
+    jest.mocked(store.getState).mockImplementation(() => testStore.getState());
+    const item = {id: 'legacy', name: 'cat_7429360', type: QueueItemType.VIDEO,
+        status: QueueItemStatus.COMPLETED, uploadedAt: 1};
+    const state = testStore.getState();
+    const legacyStore = createStore(rootReducer, {...state,
+        queue: {items: [item, item, item], activeQueueItemId: item.id}});
+    jest.mocked(store.getState).mockImplementation(() => legacyStore.getState());
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const view = render(<Provider store={legacyStore}><QueueList/></Provider>);
+    expect(view.container.querySelectorAll('.queue-item-card')).toHaveLength(1);
+    expect(view.container.querySelectorAll('.queue-item-card.active')).toHaveLength(1);
+    // Duplicate React keys in an older render can leave unmanaged card nodes behind.
+    const ghost = document.createElement('div');
+    ghost.className = 'queue-item-card';
+    view.container.querySelector('.queue-list-scroll').appendChild(ghost);
+    act(() => { legacyStore.dispatch(clearQueue()); });
+    expect(view.container.querySelectorAll('.queue-item-card')).toHaveLength(0);
+    expect(view.container.querySelector('.queue-list-empty')).not.toBeNull();
+    errors.mockRestore();
 });

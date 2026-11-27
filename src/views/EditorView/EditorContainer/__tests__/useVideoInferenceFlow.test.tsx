@@ -3,6 +3,7 @@ import {act, render, screen} from '@testing-library/react';
 import configureStore from '../../../../configureStore';
 import {store} from '../../../../index';
 import {addVideoData, updateVideoCurrentFrame} from '../../../../store/video/actionCreators';
+import {updateActiveImageIndex} from '../../../../store/labels/actionCreators';
 import {EditorModel} from '../../../../staticModels/EditorModel';
 import {useVideoInferenceFlow} from '../useVideoInferenceFlow';
 
@@ -67,3 +68,22 @@ it.each([{count: 10, failed: 1, cancelled: false}, {count: 10, failed: 0, cancel
         expect(showStatistics).not.toHaveBeenCalled();
     }
 );
+
+it('keeps frame 825 and the video position during and after single-frame inference', () => {
+    state.dispatch(updateVideoCurrentFrame('video', 824, 824 / 30));
+    state.dispatch(updateActiveImageIndex(824));
+    const video = document.createElement('video');
+    video.currentTime = 824 / 30;
+    Object.defineProperty(video, 'readyState', {value: 4});
+    EditorModel.videoElement = video;
+    const view = render(<Harness running={false}/>);
+    view.rerender(<Harness running/>);
+    expect(state.getState().video.activeVideo.currentFrame).toBe(824);
+    expect(state.getState().labels.activeImageIndex).toBe(824);
+    expect(video.currentTime).toBe(824 / 30);
+    emit('videoInferenceFrame', {videoId: 'video', imageId: 'frame-825', count: 1});
+    view.rerender(<Harness running={false}/>);
+    expect(state.getState().video.activeVideo.currentFrame).toBe(824);
+    expect(state.getState().labels.activeImageIndex).toBe(824);
+    expect(video.currentTime).toBe(824 / 30);
+});

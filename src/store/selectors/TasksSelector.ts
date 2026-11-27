@@ -1,4 +1,4 @@
-import {store} from '../..';
+import {store} from '../../index';
 import {ManagedTask, TaskPriority} from '../tasks/types';
 
 export class TasksSelector {

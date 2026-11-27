@@ -5,10 +5,14 @@ export interface SegmentationResult {
     class_id: number;
     class_name: string;
     confidence: number;
+    modelSource?: string;
+    modelName?: string;
     info?: {
         id: number;
         name: string;
         confidence: number;
+        modelSource?: string;
+        modelName?: string;
     };
     bbox: {
         x1: number;

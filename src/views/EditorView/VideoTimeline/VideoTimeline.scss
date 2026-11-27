@@ -5,6 +5,8 @@
     display: flex;
     flex-direction: column;
     user-select: none;
+    // 供底部控制条按自身宽度做收起判断。
+    container-type: inline-size;
 
     .TimelineCanvas {
         width: 100%;
@@ -17,8 +19,9 @@
     }
 
     .TimelineControls {
-        display: flex;
-        justify-content: space-between;
+        // 三列网格：中间按钮列宽度自适应，左右两列等分留白，按钮始终处于正中。
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
         align-items: center;
         padding: 8px 15px;
         background-color: #252525;
@@ -26,34 +29,50 @@
         font-size: 11px;
         color: #999;
         position: relative;
+        overflow: hidden;
+        white-space: nowrap;
 
         .LeftInfo {
             display: flex;
+            grid-column: 1;
             gap: 20px;
-            flex: 1;
+            min-width: 0;
             align-items: center;
 
             span {
                 color: #ccc;
+                white-space: nowrap;
+                // 数字等宽，播放时帧号变化不再左右抖动。
+                font-variant-numeric: tabular-nums;
+
+                &.FrameCounter {
+                    display: inline-block;
+                    // 占位宽度右对齐：多余空间留在数字左侧，不会把“ / 总帧数”推远。
+                    text-align: right;
+                }
             }
         }
 
         .CenterControls {
             display: flex;
+            grid-column: 2;
             gap: 8px;
             align-items: center;
             justify-content: center;
-            flex: 1;
         }
 
         .RightInfo {
             display: flex;
-            flex: 1;
+            grid-column: 3;
+            min-width: 0;
             align-items: center;
             justify-content: flex-end;
         }
 
         .PlayPauseButton {
+            // 播放/暂停/重播文案宽度不同，固定按钮宽度避免播放时整组按钮左右跳动。
+            box-sizing: border-box;
+            width: 76px;
             background-color: rgba(255, 255, 255, 0.03);
             color: #aaa;
             border: 1px solid #444;
@@ -119,9 +138,23 @@
 
             span {
                 color: #888;
+                white-space: nowrap;
             }
 
         }
+    }
+
+    // 宽度不足时逐步收起：先去掉第二条快捷键提示，再隐藏整块快捷提示，最后隐藏帧信息；
+    // 播放/静音按钮始终保留且不换行。
+    @container (max-width: 480px) {
+        .TimelineControls .RightInfo .HelpText span:nth-child(2) { display: none; }
+        // 右侧只剩一条提示时，左侧也只保留帧数，保持左右对称。
+        .TimelineControls .LeftInfo span:first-child { display: none; }
+    }
+
+    @container (max-width: 420px) {
+        .TimelineControls .RightInfo { display: none; }
+        .TimelineControls .LeftInfo { display: none; }
     }
 }
 

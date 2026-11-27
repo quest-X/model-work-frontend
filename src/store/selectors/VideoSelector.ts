@@ -1,4 +1,4 @@
-import {store} from '../..';
+import {store} from '../../index';
 
 export class VideoSelector {
     public static getActiveVideo() {

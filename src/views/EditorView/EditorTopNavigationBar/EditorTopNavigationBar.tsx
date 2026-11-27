@@ -1,6 +1,9 @@
+import {getSigineSelection, SigineSelection, updateSigineSelection} from '../../../utils/SigineInfra';
+import SigineInfraChoice from '../SigineInfraChoice';
+import {requestedImageIndices} from '../../../utils/InferenceTargets';
 import { ContextType } from '../../../data/enums/ContextType';
 import './EditorTopNavigationBar.scss';
-import React, { useEffect, useMemo, useCallback, useState, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useCallback, useState, useRef } from 'react';
 import classNames from 'classnames';
 import { AppState } from '../../../store';
 import { store } from '../../../index';
@@ -31,7 +34,8 @@ import { ScriptStore } from '../../../ai/ScriptStore';
 import { PipelineStore } from '../../../ai/PipelineStore';
 import { SmartAnnotationActions } from '../../../logic/actions/SmartAnnotationActions';
 import { AIModelsSelector } from '../../../store/selectors/AIModelsSelector';
-import { YOLO_MODEL_FAMILIES, SEG_MODEL_FAMILIES } from '../../PopupView/CallModelPopup/CallModelPopup';
+import { YOLO_MODEL_FAMILIES, SEG_MODEL_FAMILIES, prepareModelLoad, YOLOModelFamily } from '../../PopupView/CallModelPopup/CallModelPopup';
+import { getHostSystem, showsTensorRTPlaceholder, supportsCoreML } from '../../../utils/HostSystem';
 import { EditorActions } from '../../../logic/actions/EditorActions';
 import { ObjectTrackingActions } from '../../../logic/actions/ObjectTrackingActions';
 import { submitNewNotification, deleteNotificationById } from '../../../store/notifications/actionCreators';
@@ -45,6 +49,12 @@ const imageHasLabels = (image: ImageData | null): boolean =>
 
 const BUTTON_SIZE: ISize = { width: 30, height: 30 };
 const BUTTON_PADDING: number = 10;
+
+// 顶栏宽度不足时按此顺序把按钮组收进“更多工具”菜单（先收次要的）。
+const TOOLBAR_GROUP_ORDER = ['accept-reject', 'annotation-tools', 'zoom', 'drawing-tools'] as const;
+type ToolbarGroupKey = typeof TOOLBAR_GROUP_ORDER[number];
+const TOOLBAR_GROUP_GAP = 11; // 组间距 + 右侧分隔线
+const TOOLBAR_OVERFLOW_WIDTH = 32;
 
 interface SimilarityVectorCollection {
     name: string;
@@ -81,6 +91,19 @@ interface SimilaritySearchConfig {
     dataVersion: number;
     datasetId?: string;
 }
+
+type InferenceChoice = {id: string; label: string} & (
+    {kind: 'model'; name: string}
+    | {kind: 'sigine'; selection?: SigineSelection}
+    | {kind: 'retrieval'; config: SimilaritySearchConfig}
+);
+
+const sortSimilarityCollections = (collections: SimilarityVectorCollection[]): SimilarityVectorCollection[] =>
+    [...collections].sort((left, right) => {
+        const leftLabel = left.display_name || left.target_name || left.name;
+        const rightLabel = right.display_name || right.target_name || right.name;
+        return leftLabel.localeCompare(rightLabel) || left.version - right.version;
+    });
 
 const StyledTooltip = styled(({ className, ...props }: TooltipProps) => (
     <Tooltip {...props} classes={{ popper: className }} />
@@ -184,6 +207,8 @@ function getLabelToggleState(imageCount: number, imageAIStates: IProps['imageAIS
 }
 
 function getInferenceTargets(imagesData: ImageData[], activeImageData: ImageData, range: FrameRange | null) {
+    const indices = requestedImageIndices(imagesData.length);
+    if (indices) return {isBatchMode: indices.length > 1, targets: indices.map(index => imagesData[index])};
     const selectedImages = imagesData.filter((img: ImageData) => img.isSelected);
     const targets = range
         ? imagesData.slice(range.startFrame, range.endFrame + 1)
@@ -198,6 +223,11 @@ function getSmartAnnotationTooltip(smartAnnotationActive: boolean, samNegativeMo
         : (language === 'zh' ? '正点模式（单击关闭/双击切负点）' : 'Positive mode (click off / dbl-click neg)'))
     : (language === 'zh' ? '智能标注（单击正点/双击负点）' : 'Smart Annotation (click pos / dbl-click neg)');
 }
+
+function inferenceUnavailable(noImages: boolean, multi: boolean, noModels: boolean, similar: boolean, sigine: boolean) {
+    return noImages || (multi && noModels && !similar && !sigine);
+}
+function hasInference(models: unknown[], sigine: boolean) { return models.length > 0 || sigine; }
 
 const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNavigationBarView(
     {
@@ -307,23 +337,94 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
         return () => window.removeEventListener('timelineRangeChange', handler);
     }, []);
 
+    // ── 顶栏自适应：空间不足时按优先级把按钮组收进“更多工具”菜单 ──
+    const withAI = (activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL)
+        && AISelector.isRoboflowAPIModelLoaded();
+    const toolbarRef = useRef<HTMLDivElement>(null);
+    const toolbarRightRef = useRef<HTMLDivElement>(null);
+    const toolbarGroupRefs = useRef<Partial<Record<ToolbarGroupKey, HTMLDivElement | null>>>({});
+    const toolbarGroupWidthsRef = useRef<Partial<Record<ToolbarGroupKey, number>>>({});
+    const toolbarOverflowRef = useRef<HTMLDivElement>(null);
+    const [collapsedToolbarGroups, setCollapsedToolbarGroups] = useState<ToolbarGroupKey[]>([]);
+    const [toolbarOverflowOpen, setToolbarOverflowOpen] = useState(false);
+
+    const measureToolbar = useCallback(() => {
+        const bar = toolbarRef.current;
+        if (!bar) return;
+        // 组被收进菜单后不再参与布局，记住上次量到的自然宽度即可继续计算。
+        (Object.keys(toolbarGroupRefs.current) as ToolbarGroupKey[]).forEach(key => {
+            const width = toolbarGroupRefs.current[key]?.getBoundingClientRect().width ?? 0;
+            if (width > 0) toolbarGroupWidthsRef.current[key] = width;
+        });
+        const present = TOOLBAR_GROUP_ORDER.filter(key => key !== 'accept-reject' || withAI);
+        const available = bar.clientWidth - BUTTON_PADDING;
+        let total = toolbarRightRef.current?.getBoundingClientRect().width ?? 0;
+        present.forEach(key => { total += (toolbarGroupWidthsRef.current[key] ?? 0) + TOOLBAR_GROUP_GAP; });
+        const next: ToolbarGroupKey[] = [];
+        if (total > available) {
+            let remaining = total;
+            for (const key of TOOLBAR_GROUP_ORDER) {
+                if (!present.includes(key)) continue;
+                remaining -= (toolbarGroupWidthsRef.current[key] ?? 0) + TOOLBAR_GROUP_GAP;
+                next.push(key);
+                if (remaining + TOOLBAR_OVERFLOW_WIDTH <= available) break;
+            }
+        }
+        setCollapsedToolbarGroups(prev =>
+            prev.length === next.length && prev.every((key, index) => key === next[index]) ? prev : next);
+        if (next.length === 0) setToolbarOverflowOpen(false);
+    }, [withAI]);
+
+    useLayoutEffect(() => { measureToolbar(); });
+
+    useEffect(() => {
+        const bar = toolbarRef.current;
+        if (!bar || typeof ResizeObserver === 'undefined') return undefined;
+        const observer = new ResizeObserver(() => measureToolbar());
+        observer.observe(bar);
+        return () => observer.disconnect();
+    }, [measureToolbar]);
+
+    useEffect(() => {
+        if (!toolbarOverflowOpen) return undefined;
+        const handlePointerDown = (event: MouseEvent) => {
+            if (!toolbarOverflowRef.current?.contains(event.target as Node)) setToolbarOverflowOpen(false);
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setToolbarOverflowOpen(false);
+        };
+        document.addEventListener('mousedown', handlePointerDown);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handlePointerDown);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [toolbarOverflowOpen]);
+
     // ── 推理下拉菜单 ──
     const [showInferenceMenu, setShowInferenceMenu] = useState(false);
     const inferenceMenuRef = useRef<HTMLDivElement>(null);
     const [selectedModelNames, setSelectedModelNames] = useState<string[]>([]);
     const [useModelMultiSelect, setUseModelMultiSelect] = useState(false);
-    const [sigineInfraAvailable, setSigineInfraAvailable] = useState(false);
-    const [sigineInfraModel, setSigineInfraModel] = useState<string | null>(null);
-    const [sigineInfraSelected, setSigineInfraSelected] = useState(() => localStorage.getItem('opensight.sigineInfra') === 'true');
+    const [sigineModelName, setSigineModelName] = useState(() =>
+        localStorage.getItem('opensight.sigineInfra') === 'true' ? (getSigineSelection()?.model || 'Sigine') : '');
+    const [sigineModelSelection, setSigineModelSelection] = useState(getSigineSelection);
+    const [sigineModelCount, setSigineModelCount] = useState<number | null>(null);
+    const onSigineModelChange = useCallback((model: string, selection?: SigineSelection) => {
+        setSigineModelName(model);
+        setSigineModelSelection(previous => previous?.source_id === selection?.source_id && previous?.model === selection?.model
+            ? previous : selection);
+    }, []);
+    const sigineInfraSelected = !!sigineModelName;
+    const [runningModelLabel, setRunningModelLabel] = useState('');
+    const sigineModelLabel = `Sigine INFRA(${sigineModelName})`;
     const [similaritySearchSelected, setSimilaritySearchSelected] = useState(false);
-    const [showSimilarityConfig, setShowSimilarityConfig] = useState(false);
     const [similarityCollections, setSimilarityCollections] = useState<SimilarityVectorCollection[]>([]);
     const [similarityJobs, setSimilarityJobs] = useState<SimilarityIngestJob[]>([]);
     const [similarityOptionsLoading, setSimilarityOptionsLoading] = useState(false);
     const [similarityOptionsError, setSimilarityOptionsError] = useState<string | null>(null);
-    const [similarityCollectionName, setSimilarityCollectionName] = useState('');
-    const [similarityMode, setSimilarityMode] = useState<SimilaritySearchMode>('dino');
     const [similaritySearchConfig, setSimilaritySearchConfig] = useState<SimilaritySearchConfig | null>(null);
+    const [retainedInferenceChoices, setRetainedInferenceChoices] = useState<InferenceChoice[]>([]);
     const multiInferenceCancelledRef = useRef(false);
     const pendingModelSwitchesRef = useRef<Map<string, Promise<boolean>>>(new Map());
     // 用于区分智能标注按钮的单击 vs 双击（延迟单击 200ms）
@@ -620,10 +721,10 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
     }, [language]);
 
     useEffect(() => {
-        if (showSimilarityConfig) {
+        if (showInferenceMenu) {
             void loadSimilaritySearchOptions();
         }
-    }, [showSimilarityConfig, loadSimilaritySearchOptions]);
+    }, [showInferenceMenu, loadSimilaritySearchOptions]);
 
     // 模型下拉选项（useMemo 避免重复计算）
     const modelDropdownEntries = useMemo(() => {
@@ -632,6 +733,13 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
         const isCustomName = (name: string) => !allBuiltins.includes(name.replace(/\.(pt|onnx)$/i, ''));
         const normalize = (name: string): string =>
             name.endsWith('.pt') || name.endsWith('.onnx') ? name : name + '.pt';
+        const toDisplayName = (name: string): string => {
+            const base = name.replace(/\.(pt|onnx)$/i, '');
+            const family = [...YOLO_MODEL_FAMILIES, ...SEG_MODEL_FAMILIES]
+                .find(candidate => candidate.variants.includes(base));
+            const owner = family?.name.split('/')[0];
+            return owner ? `${owner}/${base}` : name;
+        };
         type Cat = 'custom-seg' | 'builtin-seg' | 'custom-det' | 'builtin-det';
         const pickFor = (cat: Cat): string | null => {
             const slotName = cat.endsWith('seg') ? segSlotName : detSlotName;
@@ -663,6 +771,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
         const entries: Array<{
             name: string;
             label: string;
+            displayName: string;
             group: 'custom' | 'models';
             task: 'detect' | 'segment';
         }> = [];
@@ -673,6 +782,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                 entries.push({
                     name,
                     label,
+                    displayName: cat.startsWith('custom') ? name : toDisplayName(name),
                     group: cat.startsWith('custom') ? 'custom' : 'models',
                     task: cat.endsWith('seg') ? 'segment' : 'detect',
                 });
@@ -688,36 +798,39 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
         );
     }, [modelDropdownEntries]);
 
-    const activeModelEntry = modelDropdownEntries.find(e => e.name === activeModelName);
-    useEffect(() => {
-        if (!showInferenceMenu) return undefined;
-        let active = true;
-        fetch(`${getEngineBaseUrl()}/sigine-infra/status`)
-            .then(response => response.ok ? response.json() : null)
-            .then(status => {
-                if (!active) return;
-                const available = status?.available === true;
-                setSigineInfraAvailable(available);
-                setSigineInfraModel(typeof status?.model === 'string' ? status.model : null);
-                if (!available) {
-                    setSigineInfraSelected(false);
-                    localStorage.removeItem('opensight.sigineInfra');
-                }
-            })
-            .catch(() => {
-                if (!active) return;
-                setSigineInfraAvailable(false);
-                setSigineInfraSelected(false);
-                localStorage.removeItem('opensight.sigineInfra');
-            });
-        return () => { active = false; };
-    }, [showInferenceMenu]);
-    const effectiveSelectedModelNames = useModelMultiSelect
-        ? selectedModelNames
-        : activeModelEntry ? [activeModelEntry.name] : [];
-    const selectedModelEntries = modelDropdownEntries.filter(
-        entry => effectiveSelectedModelNames.includes(entry.name)
+    const availableBaseNames = useMemo(
+        () => new Set(availableModels.map(model => model.name.replace(/\.(pt|onnx|mlpackage|mlmodel)$/i, ''))),
+        [availableModels]
     );
+    const loadedBaseNames = useMemo(
+        () => new Set(loadedModels.map(name => name.replace(/\.(pt|onnx|mlpackage|mlmodel)$/i, ''))),
+        [loadedModels]
+    );
+    const loadedFamilyIds = new Set(modelDropdownEntries
+        .filter(entry => entry.group === 'models')
+        .map(entry => {
+            const base = entry.name.replace(/\.(pt|onnx|mlpackage|mlmodel)$/i, '');
+            return [...YOLO_MODEL_FAMILIES, ...SEG_MODEL_FAMILIES]
+                .find(family => family.variants.includes(base))?.id;
+        })
+        .filter((id): id is string => !!id));
+    const hostSystem = getHostSystem();
+    const canUseCoreML = supportsCoreML(hostSystem);
+    const showTensorRT = showsTensorRTPlaceholder(hostSystem);
+
+    const openModelLoader = (family: YOLOModelFamily | null, customExt: 'pt' | 'onnx' | 'mlpackage' | null) => {
+        prepareModelLoad(family, customExt, getEngineBaseUrl());
+        setShowInferenceMenu(false);
+        updateActivePopupTypeAction(PopupWindowType.LOAD_DETECTION_MODEL);
+    };
+
+    const activeModelEntry = modelDropdownEntries.find(e => e.name === activeModelName);
+    const effectiveSelectedModelNames = useMemo(() => useModelMultiSelect
+        ? selectedModelNames
+        : activeModelEntry ? [activeModelEntry.name] : [], [useModelMultiSelect, selectedModelNames, activeModelEntry]);
+    const selectedModelEntries = useMemo(() => modelDropdownEntries.filter(
+        entry => effectiveSelectedModelNames.includes(entry.name)
+    ), [modelDropdownEntries, effectiveSelectedModelNames]);
     const getSimilarityConfigSummary = () => (similaritySearchConfig
         ? `${similaritySearchConfig.mode === 'dino'
             ? (language === 'zh' ? '快速模式' : 'Fast Mode')
@@ -728,51 +841,22 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
 
     // 当前选中项的显示文本
 
-    const selectedOptionCount = selectedModelEntries.length + (similaritySearchSelected ? 1 : 0)
-        + (sigineInfraSelected ? 1 : 0);
+    const retrievalLabel = `${language === 'zh' ? '检索方案' : 'Retrieval plan'} (${similarityConfigSummary})`;
     const getModelButtonLabel = () => {
-        const activeModelLabel = activeModelEntry
-            ? `${activeModelEntry.label} (${activeModelEntry.name})`
-            : loadedModels.length === 0 ? (language === 'zh' ? '未加载模型' : 'No model') : activeModelName;
-        return useModelMultiSelect
-            ? selectedOptionCount === 0
-                ? (language === 'zh' ? '请选择模型' : 'Select models')
-                : selectedOptionCount === 1 && selectedModelEntries.length === 1
-                    ? `${selectedModelEntries[0].label} (${selectedModelEntries[0].name})`
-                    : selectedOptionCount === 1
-                        ? `${language === 'zh' ? '检索相似' : 'Similarity Search'} (${similarityConfigSummary})`
-                        : (language === 'zh'
-                            ? `已选 ${selectedOptionCount} 项`
-                            : `${selectedOptionCount} options selected`)
-            : activeModelLabel;
+        const nextModel = useModelMultiSelect ? selectedModelEntries[0] : activeModelEntry;
+        return runningModelLabel || (nextModel
+        ? (nextModel.group === 'custom' ? `${nextModel.label} (${nextModel.name})` : nextModel.displayName)
+        : sigineInfraSelected ? sigineModelLabel
+            : similaritySearchSelected ? retrievalLabel
+                : useModelMultiSelect ? (language === 'zh' ? '请选择模型' : 'Select models')
+                    : loadedModels.length === 0 ? (language === 'zh' ? '未加载模型' : 'No model') : activeModelName);
     };
     const modelButtonLabel = getModelButtonLabel();
 
-    const similaritySelectableCollections = useMemo(() => similarityCollections
-        .filter(collection => {
-            if (similarityMode === 'dino') {
-                return collection.compatible && collection.count > 0;
-            }
-            return similarityJobs.some(job =>
-                job.collection === collection.name
-                && job.state === 'completed'
-                && !!job.dataset_id
-            );
-        })
-        .sort((left, right) => {
-            const leftLabel = left.display_name || left.target_name || left.name;
-            const rightLabel = right.display_name || right.target_name || right.name;
-            return leftLabel.localeCompare(rightLabel) || right.version - left.version;
-        }), [similarityCollections, similarityJobs, similarityMode]);
-    const selectedSimilarityCollection = similaritySelectableCollections.find(
-        collection => collection.name === similarityCollectionName
-    ) || similaritySelectableCollections[0] || null;
-
-    const selectedSimilarityDatasetJob = useMemo(() => {
-        if (!selectedSimilarityCollection) return null;
+    const latestSimilarityJob = useCallback((collectionName: string): SimilarityIngestJob | null => {
         return similarityJobs
             .filter(job =>
-                job.collection === selectedSimilarityCollection.name
+                job.collection === collectionName
                 && job.state === 'completed'
                 && !!job.dataset_id
             )
@@ -783,70 +867,51 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                 const leftTime = Date.parse(left.finished_at || left.updated_at || '') || 0;
                 return rightTime - leftTime;
             })[0] || null;
-    }, [selectedSimilarityCollection, similarityJobs]);
+    }, [similarityJobs]);
 
-    useEffect(() => {
-        if (similaritySelectableCollections.length === 0) {
-            setSimilarityCollectionName('');
+    const fastSimilarityCollections = useMemo(
+        () => sortSimilarityCollections(similarityCollections.filter(
+            collection => collection.compatible && collection.count > 0
+        )),
+        [similarityCollections]
+    );
+    const preciseSimilarityCollections = useMemo(
+        () => sortSimilarityCollections(similarityCollections.filter(
+            collection => !!latestSimilarityJob(collection.name)
+        )),
+        [similarityCollections, latestSimilarityJob]
+    );
+
+    const toggleSimilarityCollection = useCallback((mode: SimilaritySearchMode, collection: SimilarityVectorCollection) => {
+        const isSelected = similaritySearchSelected
+            && similaritySearchConfig?.mode === mode
+            && similaritySearchConfig.collectionName === collection.name;
+        if (isSelected) {
+            setSimilaritySearchSelected(false);
+            setSimilaritySearchConfig(null);
             return;
         }
-        if (!similaritySelectableCollections.some(collection => collection.name === similarityCollectionName)) {
-            setSimilarityCollectionName(similaritySelectableCollections[0].name);
-        }
-    }, [similarityCollectionName, similaritySelectableCollections]);
-
-    const openSimilarityConfig = useCallback(() => {
-        if (similaritySearchConfig) {
-            setSimilarityCollectionName(similaritySearchConfig.collectionName);
-            setSimilarityMode(similaritySearchConfig.mode);
-        }
-        setShowSimilarityConfig(true);
-    }, [similaritySearchConfig]);
-
-    const saveSimilarityConfig = useCallback(() => {
-        if (!selectedSimilarityCollection) return;
-        if (similarityMode === 'dino' && (
-            !selectedSimilarityCollection.compatible || selectedSimilarityCollection.count === 0
-        )) return;
-        if (similarityMode === 'l2g' && !selectedSimilarityDatasetJob?.dataset_id) return;
-
-        const config: SimilaritySearchConfig = {
-            mode: similarityMode,
-            sceneId: selectedSimilarityCollection.scene_id,
-            sceneName: selectedSimilarityCollection.scene_name,
-            targetId: selectedSimilarityCollection.target_id,
-            targetName: selectedSimilarityCollection.target_name,
-            collectionName: selectedSimilarityCollection.name,
-            collectionVersion: selectedSimilarityCollection.version,
-            dataVersion: selectedSimilarityCollection.data_version
-                || selectedSimilarityDatasetJob?.data_version
-                || 0,
-            datasetId: selectedSimilarityDatasetJob?.dataset_id || undefined,
-        };
+        const datasetJob = mode === 'l2g' ? latestSimilarityJob(collection.name) : null;
+        if (mode === 'l2g' && !datasetJob?.dataset_id) return;
         if (!useModelMultiSelect) {
             setSelectedModelNames(activeModelEntry ? [activeModelEntry.name] : []);
         }
         setUseModelMultiSelect(true);
-        setSimilaritySearchConfig(config);
+        setSimilaritySearchConfig({
+            mode,
+            sceneId: collection.scene_id,
+            sceneName: collection.scene_name,
+            targetId: collection.target_id,
+            targetName: collection.target_name,
+            collectionName: collection.name,
+            collectionVersion: collection.version,
+            dataVersion: collection.data_version || datasetJob?.data_version || 0,
+            datasetId: datasetJob?.dataset_id || undefined,
+        });
         setSimilaritySearchSelected(true);
-        setShowSimilarityConfig(false);
-    }, [
-        activeModelEntry,
-        selectedSimilarityCollection,
-        selectedSimilarityDatasetJob,
-        similarityMode,
-        useModelMultiSelect,
-    ]);
-    const canSaveSimilarityConfig = () => {
-        return !!selectedSimilarityCollection
-            && (
-                similarityMode === 'dino'
-                    ? selectedSimilarityCollection.compatible && selectedSimilarityCollection.count > 0
-                    : !!selectedSimilarityDatasetJob?.dataset_id
-            );
+    }, [activeModelEntry, latestSimilarityJob, similaritySearchConfig, similaritySearchSelected, useModelMultiSelect]);
 
-    };
-    const similarityConfigCanSave = canSaveSimilarityConfig();    // 判断当前活跃模型是否为分割类型:
+    // 判断当前活跃模型是否为分割类型:
     // 1. 优先使用后端 model_tasks（精确，通过 model.task 属性获取）
     // 2. 回退到统一文件名 token 规则（含日期_SEG_项目_... 模型）
     const isSegModel = useMemo(
@@ -971,6 +1036,8 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
         for (const entry of inferencePlan) {
             if (multiInferenceCancelledRef.current) break;
 
+            const model = modelDropdownEntries.find(candidate => candidate.name === entry.name);
+            setRunningModelLabel(model ? `${model.label} (${entry.name})` : entry.name);
             updateFullImageInferenceStatus(true);
             const modelReady = await switchModel(entry.name);
             if (!modelReady) {
@@ -990,7 +1057,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
             } else {
                 // 单模型单帧沿用原来的轻量回调路径；多模型单帧改走可等待的
                 // detectBatch(false)，确保检测完成后再开始下一项推理。
-                if (inferencePlan.length === 1 && !isBatchMode && !similaritySearchSelected) {
+                if (inferencePlan.length === 1 && !isBatchMode && !similaritySearchSelected && !sigineInfraSelected) {
                     AIDetectionActions.detectObjects(targets[0]);
                 } else {
                     await AIDetectionActions.detectBatch(
@@ -999,6 +1066,13 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                     );
                 }
             }
+        }
+    };
+
+    const runSigineInference = async (targets: ImageData[]) => {
+        if (sigineInfraSelected && !multiInferenceCancelledRef.current) {
+            setRunningModelLabel(sigineModelLabel);
+            await AIDetectionActions.recognizeSigine(targets, () => multiInferenceCancelledRef.current);
         }
     };
 
@@ -1047,24 +1121,21 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                 name: activeModelName,
                 task: isSegModel ? 'segment' as const : 'detect' as const,
             }];
-        if (inferencePlan.length === 0) {
-            if (similaritySearchSelected) {
+        try {
+            if (hasInference(inferencePlan, sigineInfraSelected)) {
+                const {isBatchMode, targets} = getInferenceTargets(imagesData, activeImageData, getTimelineRange());
+                if (targets.length === 0) return;
+                await executeInferencePlan(inferencePlan, targets, isBatchMode);
+                await runSigineInference(targets);
+            }
+            if (similaritySearchSelected && !multiInferenceCancelledRef.current) {
+                setRunningModelLabel(retrievalLabel);
                 if (!await launchConfiguredSimilaritySearch()) {
                     setShowInferenceMenu(true);
-                    openSimilarityConfig();
                 }
             }
-            return;
-        }
-
-        const {isBatchMode, targets} = getInferenceTargets(imagesData, activeImageData, getTimelineRange());
-        if (targets.length === 0) return;
-        await executeInferencePlan(inferencePlan, targets, isBatchMode);
-        if (similaritySearchSelected && !multiInferenceCancelledRef.current) {
-            if (!await launchConfiguredSimilaritySearch()) {
-                setShowInferenceMenu(true);
-                openSimilarityConfig();
-            }
+        } finally {
+            setRunningModelLabel('');
         }
     }, [
         imagesData,
@@ -1077,14 +1148,17 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
         activeModelName,
         selectedModelEntries,
         similaritySearchSelected,
+        sigineInfraSelected,
+        sigineModelLabel,
+        retrievalLabel,
+        modelDropdownEntries,
         launchConfiguredSimilaritySearch,
-        openSimilarityConfig,
         switchModel,
         useModelMultiSelect,
     ]);
 
-    const renderDrawingTools = () => (
-        <div className='ButtonWrapper collapsible DrawingToolsWrapper'>
+    const renderDrawingTools = (groupRef?: React.Ref<HTMLDivElement>) => (
+        <div className='ButtonWrapper DrawingToolsWrapper' ref={groupRef}>
             {
                 getButtonWithTooltip(
                     'tool-all',
@@ -1146,120 +1220,114 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
         </div>
     );
 
-    const renderSimilarityCollection = () => (
-        <label style={{
-            display: 'block',
-            marginBottom: 10,
-        }}>
-            <span style={{ display: 'block', marginBottom: 4 }}>
-                {language === 'zh' ? '向量数据库' : 'Vector database'}
-            </span>
-            <select
-                value={selectedSimilarityCollection?.name || ''}
-                onChange={event => setSimilarityCollectionName(event.target.value)}
-                disabled={similaritySelectableCollections.length === 0}
-                style={{
-                    width: '100%',
-                    height: 26,
-                    padding: '0 6px',
-                    border: '1px solid #555',
-                    borderRadius: 3,
-                    background: '#202020',
-                    color: '#ddd',
-                    fontSize: 11,
-                }}
+    const toggleModel = (name: string) => {
+        setUseModelMultiSelect(true);
+        if (effectiveSelectedModelNames.includes(name)) {
+            setSelectedModelNames(effectiveSelectedModelNames.filter(selected => selected !== name));
+        } else {
+            setSelectedModelNames([...effectiveSelectedModelNames, name]);
+            void switchModel(name);
+        }
+    };
+
+    const renderModelRow = (e: (typeof modelDropdownEntries)[number]) => {
+        const isChecked = effectiveSelectedModelNames.includes(e.name);
+        return (
+            <label
+                key={e.name}
+                className="InferenceMenuRow"
+                data-selected={isChecked}
             >
-                {similaritySelectableCollections.length === 0 && (
-                    <option value=''>
-                        {language === 'zh' ? '当前方案暂无可用向量数据库' : 'No vector database for this plan'}
-                    </option>
-                )}
-                {similaritySelectableCollections.map(collection => {
-                    const displayName = collection.display_name
-                        || collection.target_name
-                        || collection.name;
-                    return <option key={collection.name} value={collection.name}>
-                        {displayName}{displayName === collection.name
-                            ? ''
-                            : ` (${collection.name})`}
-                    </option>;
-                })}
-            </select>
-            {selectedSimilarityCollection && <div style={{
-                marginTop: 4,
-                color: '#7fcf9a',
-            }}>
-                {language === 'zh'
-                    ? `共 ${selectedSimilarityCollection.count} 条向量`
-                    : `${selectedSimilarityCollection.count} vectors total`}
-            </div>}
-        </label>
+                <input type='checkbox' checked={isChecked} onChange={() => toggleModel(e.name)}/>
+                {e.displayName}
+            </label>
+        );
+    };
+
+    const gearIcon = (
+        <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor'
+             strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'
+             aria-hidden='true' style={{ flex: 'none' }}>
+            <circle cx='12' cy='12' r='3'/>
+            <path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/>
+        </svg>
     );
 
-    const renderSimilarityDatasetStatus = () => (
-        selectedSimilarityCollection && similarityMode === 'l2g'
+    const renderLoaderRow = (key: string, family: YOLOModelFamily | null,
+                             customExt: 'pt' | 'onnx' | 'mlpackage' | null,
+                             label: React.ReactNode, disabled = false) => (
+        <div key={key} className={`InferenceMenuRow${disabled ? ' disabled' : ''}`}
+             style={disabled ? { opacity: 0.4 } : undefined}
+             onClick={() => { if (!disabled) openModelLoader(family, customExt); }}>
+            {gearIcon}
+            {label}
+        </div>
     );
 
-    const renderSimilarityFields = () => (
+    const renderFamilyCatalogRow = (family: YOLOModelFamily) => {
+        const downloaded = family.variants.filter(variant => availableBaseNames.has(variant)).length;
+        const active = family.variants.filter(variant => loadedBaseNames.has(variant));
+        return renderLoaderRow(family.id, family, null, <>
+            {family.name}
+            {downloaded > 0 && <span style={{ opacity: 0.7 }}> ({downloaded}/{family.variants.length})</span>}
+            {active.map(variant => (
+                <span key={variant} style={{ marginLeft: 'auto', color: '#4da6ff', fontSize: 10 }}>✓ {variant}</span>
+            ))}
+        </>);
+    };
+
+    const renderCustomLoaderRows = () => (
         <>
-            <div style={{ marginBottom: 10 }}>
-                <div style={{ marginBottom: 5 }}>
-                    {language === 'zh' ? '检索方案' : 'Retrieval mode'}
-                </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                    {([
-                        ['dino', language === 'zh' ? '快速' : 'Fast'],
-                        ['l2g', language === 'zh' ? '高精度' : 'High-precision'],
-                    ] as Array<[SimilaritySearchMode, string]>).map(([mode, label]) => (
-                        <button
-                            key={mode}
-                            type='button'
-                            onClick={() => setSimilarityMode(mode)}
-                            style={{
-                                flex: 1,
-                                height: 28,
-                                border: `1px solid ${similarityMode === mode ? '#d32f2f' : '#555'}`,
-                                borderRadius: 3,
-                                background: similarityMode === mode ? '#c62828' : '#333',
-                                color: similarityMode === mode ? '#fff' : '#ccc',
-                                cursor: 'pointer',
-                                fontSize: 11,
-                            }}
-                        >
-                            {label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-            {renderSimilarityCollection()}
-            {renderSimilarityDatasetStatus() && (
-                <div style={{
-                    marginBottom: 9,
-                    color: selectedSimilarityDatasetJob?.dataset_id ? '#7fcf9a' : '#ff8a80',
-                }}>
-                    {selectedSimilarityDatasetJob?.dataset_id
-                        ? (language === 'zh' ? '高精度检索数据已就绪' : 'High-precision search dataset is ready')
-                        : (language === 'zh' ? '所选向量数据库暂无高精度检索数据' : 'No high-precision search data for the selected vector database')}
-                </div>
-            )}
+            {renderLoaderRow('custom-pt', null, 'pt',
+                language === 'zh' ? '模型 .pt 文件' : '.pt model file')}
+            {renderLoaderRow('custom-onnx', null, 'onnx',
+                language === 'zh' ? '模型 .onnx 文件' : '.onnx model file')}
+            {canUseCoreML && renderLoaderRow('custom-mlpackage', null, 'mlpackage',
+                language === 'zh' ? '模型 .mlpackage 文件（CoreML / ANE）' : '.mlpackage model file (CoreML / ANE)')}
+            {!canUseCoreML && showTensorRT && renderLoaderRow('custom-engine', null, null,
+                language === 'zh' ? '模型 .engine / .trt 文件（即将推出）' : '.engine / .trt model file (coming soon)', true)}
         </>
     );
 
-    const cannotSaveSimilarity = similarityOptionsLoading || !!similarityOptionsError || !similarityConfigCanSave;
+    const renderSimilarityGroup = (mode: SimilaritySearchMode, label: string,
+                                   collections: SimilarityVectorCollection[]) => {
+        const hasChecked = similaritySearchSelected && similaritySearchConfig?.mode === mode;
+        return <details open={hasChecked || undefined}>
+            <summary>{label}</summary>
+            {collections.map(collection => {
+                const isChecked = similaritySearchSelected
+                    && similaritySearchConfig?.mode === mode
+                    && similaritySearchConfig.collectionName === collection.name;
+                return (
+                    <label key={collection.name} className="InferenceMenuRow" data-selected={isChecked}>
+                        <input type='checkbox' checked={isChecked}
+                            onChange={() => toggleSimilarityCollection(mode, collection)}/>
+                        {collection.display_name || collection.name}
+                    </label>
+                );
+            })}
+            {!collections.length && (
+                <div className='InferenceMenuStatus'>
+                    {language === 'zh' ? '暂无可用向量库' : 'No vector stores'}
+                </div>
+            )}
+        </details>;
+    };
 
-    const renderSimilarityOptions = () => (
-        similarityOptionsLoading ? (
-            <div style={{ padding: '12px 0', color: '#aaa', textAlign: 'center' }}>
+    const renderSimilarityOptions = () => {
+        if (similarityOptionsLoading) {
+            return <div className='InferenceMenuStatus' role='status'>
                 {language === 'zh' ? '正在读取检索方案…' : 'Loading retrieval options…'}
-            </div>
-        ) : similarityOptionsError ? (
-            <div style={{ padding: '8px 0', color: '#ff8a80' }}>
+            </div>;
+        }
+        if (similarityOptionsError) {
+            return <div className='InferenceMenuStatus' role='status'>
                 <div>{similarityOptionsError}</div>
                 <button
                     type='button'
                     onClick={() => void loadSimilaritySearchOptions()}
                     style={{
-                        marginTop: 7,
+                        marginTop: 4,
                         border: '1px solid #666',
                         borderRadius: 3,
                         background: '#3a3a3a',
@@ -1270,243 +1338,124 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                 >
                     {language === 'zh' ? '重试' : 'Retry'}
                 </button>
-            </div>
-        ) : (
-            renderSimilarityFields()
-        )
-    );
+            </div>;
+        }
+        return <>
+            {renderSimilarityGroup('dino', language === 'zh' ? '快速向量' : 'Fast vector', fastSimilarityCollections)}
+            {renderSimilarityGroup('l2g', language === 'zh' ? '高精度向量' : 'High-precision vector', preciseSimilarityCollections)}
+        </>;
+    };
 
-    const renderSimilarityConfig = () => (
-        <div style={{ width: 330, color: '#ccc', fontSize: 11 }}>
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                height: 32,
-                padding: '0 10px',
-                borderBottom: '1px solid #555',
-                color: '#fff',
-                fontWeight: 600,
-            }}>
-                <button
-                    type='button'
-                    onClick={() => setShowSimilarityConfig(false)}
-                    title={language === 'zh' ? '返回' : 'Back'}
-                    style={{
-                        padding: 0,
-                        border: 0,
-                        background: 'transparent',
-                        color: '#ccc',
-                        cursor: 'pointer',
-                        fontSize: 16,
-                        lineHeight: 1,
-                    }}
-                >
-                    ←
-                </button>
-                {language === 'zh' ? '配置检索相似' : 'Configure Similarity Search'}
-            </div>
-            <div style={{ padding: 10 }}>
-                {renderSimilarityOptions()}
-            </div>
-            <div style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: 6,
-                padding: '8px 10px',
-                borderTop: '1px solid #555',
-            }}>
-                <button
-                    type='button'
-                    onClick={() => setShowSimilarityConfig(false)}
-                    style={{
-                        height: 26,
-                        padding: '0 12px',
-                        border: '1px solid #555',
-                        borderRadius: 3,
-                        background: '#333',
-                        color: '#ccc',
-                        cursor: 'pointer',
-                        fontSize: 11,
-                    }}
-                >
-                    {language === 'zh' ? '取消' : 'Cancel'}
-                </button>
-                <button
-                    type='button'
-                    disabled={cannotSaveSimilarity}
-                    onClick={saveSimilarityConfig}
-                    style={{
-                        height: 26,
-                        padding: '0 12px',
-                        border: '1px solid #b71c1c',
-                        borderRadius: 3,
-                        background: cannotSaveSimilarity ? '#4a2b2b' : '#c62828',
-                        color: cannotSaveSimilarity ? '#8f7777' : '#fff',
-                        cursor: cannotSaveSimilarity ? 'not-allowed' : 'pointer',
-                        fontSize: 11,
-                    }}
-                >
-                    {language === 'zh' ? '保存并勾选' : 'Save and select'}
-                </button>
-            </div>
-        </div>
-    );
+    const inferenceDisabled = inferenceUnavailable(imagesData.length === 0, useModelMultiSelect,
+        selectedModelEntries.length === 0, similaritySearchSelected, sigineInfraSelected);
 
-    const inferenceDisabled = imagesData.length === 0
-        || (useModelMultiSelect && selectedModelEntries.length === 0 && !similaritySearchSelected);
+    const builtinModelCount = new Set([
+        ...[...YOLO_MODEL_FAMILIES, ...SEG_MODEL_FAMILIES].flatMap(family => family.variants),
+        ...modelDropdownEntries.map(entry => entry.name.replace(/\.(pt|onnx|mlpackage|mlmodel)$/i, '')),
+    ]).size;
 
     const renderSigineInfraChoice = () => (
-        <div
-            onClick={() => {
-                if (!sigineInfraAvailable) return;
-                const selected = !sigineInfraSelected;
-                setSigineInfraSelected(selected);
-                localStorage.setItem('opensight.sigineInfra', String(selected));
-            }}
-            title={language === 'zh' ? '对 YOLO 疑难帧调用 Sigine INFRA 模型复审' : 'Review uncertain YOLO frames with Sigine INFRA'}
-            style={{padding: '5px 10px', fontSize: 11, cursor: sigineInfraAvailable ? 'default' : 'not-allowed',
-                color: sigineInfraAvailable ? '#ccc' : '#777', whiteSpace: 'nowrap'}}
-        >
-            <input type='checkbox' checked={sigineInfraSelected && sigineInfraAvailable} readOnly
-                style={{width: 12, height: 12, margin: '0 6px 0 0', verticalAlign: '-2px',
-                    accentColor: '#c62828', pointerEvents: 'none'}} />
-            {language === 'zh' ? 'Sigine INFRA 推理引擎' : 'Sigine INFRA Inference Engine'}
-            {!sigineInfraAvailable && ` · ${language === 'zh' ? '未连接' : 'Unavailable'}`}
-            {sigineInfraAvailable && sigineInfraModel && ` · ${sigineInfraModel}`}
-        </div>
+        <SigineInfraChoice baseUrl={getEngineBaseUrl()} zh={language === 'zh'} onChange={onSigineModelChange}
+            onCountChange={setSigineModelCount}/>
     );
+
+    const hasSelectedModel = effectiveSelectedModelNames.length > 0;
+    const hasSelectedSimilarity = similaritySearchSelected && !!similaritySearchConfig;
+    const hasBuiltinSelection = hasSelectedModel || hasSelectedSimilarity;
+    const hasCustomSelected = modelDropdownEntries.some(e => e.group === 'custom'
+        && effectiveSelectedModelNames.includes(e.name));
+    const hasDetectionSelected = modelDropdownEntries.some(e => e.group === 'models' && e.task === 'detect'
+        && effectiveSelectedModelNames.includes(e.name));
+    const hasSegmentationSelected = modelDropdownEntries.some(e => e.group === 'models' && e.task === 'segment'
+        && effectiveSelectedModelNames.includes(e.name));
+    const openWhen = (condition: boolean): true | undefined => condition ? true : undefined;
+    const selectedInferenceChoices = useMemo<InferenceChoice[]>(() => [
+        ...selectedModelEntries.map(entry => ({id: `model:${entry.name}`, label: entry.displayName, kind: 'model' as const, name: entry.name})),
+        ...(sigineInfraSelected ? [{id: `sigine:${JSON.stringify(sigineModelSelection) || sigineModelName}`,
+            label: sigineModelLabel, kind: 'sigine' as const, selection: sigineModelSelection}] : []),
+        ...(hasSelectedSimilarity ? [{id: `retrieval:${similaritySearchConfig.mode}:${similaritySearchConfig.collectionName}`,
+            label: retrievalLabel, kind: 'retrieval' as const, config: similaritySearchConfig}] : []),
+    ], [selectedModelEntries, sigineInfraSelected, sigineModelSelection, sigineModelName, sigineModelLabel,
+        hasSelectedSimilarity, similaritySearchConfig, retrievalLabel]);
+
+    useEffect(() => {
+        setRetainedInferenceChoices(previous => {
+            if (!showInferenceMenu) return previous.length ? [] : previous;
+            const next = [...new Map([...previous, ...selectedInferenceChoices].map(choice => [choice.id, choice])).values()];
+            return next.length === previous.length && next.every((choice, index) => choice === previous[index]) ? previous : next;
+        });
+    }, [showInferenceMenu, selectedInferenceChoices]);
+
+    const toggleInferenceChoice = (choice: InferenceChoice, checked: boolean) => {
+        if (choice.kind === 'model') {
+            toggleModel(choice.name);
+        } else if (choice.kind === 'sigine') {
+            updateSigineSelection(checked, choice.selection);
+        } else {
+            if (!useModelMultiSelect) setSelectedModelNames(effectiveSelectedModelNames);
+            setUseModelMultiSelect(true);
+            setSimilaritySearchSelected(checked);
+            setSimilaritySearchConfig(checked ? choice.config : null);
+        }
+    };
+
+    const summaryChoices = [...new Map([...retainedInferenceChoices, ...selectedInferenceChoices].map(choice => [choice.id, choice])).values()];
 
     const renderInferenceChoices = () => (
         <>
-            {modelDropdownEntries.map((e, index) => {
-                const previousEntry = modelDropdownEntries[index - 1];
-                const startsModelGroup = index > 0 && e.group === 'models' && previousEntry.group === 'custom';
-                const isChecked = effectiveSelectedModelNames.includes(e.name);
-                return (
-                    <React.Fragment key={e.name}>
-                        {startsModelGroup && <div style={{ height: 1, background: '#555' }} />}
-                        <div
-                            onClick={() => {
-                                const baseSelection = useModelMultiSelect
-                                    ? selectedModelNames
-                                    : activeModelEntry ? [activeModelEntry.name] : [];
-                                setUseModelMultiSelect(true);
-                                if (isChecked) {
-                                    setSelectedModelNames(baseSelection.filter(name => name !== e.name));
-                                } else {
-                                    setSelectedModelNames([...baseSelection, e.name]);
-                                    void switchModel(e.name);
-                                }
-                            }}
-                            style={{
-                                padding: '5px 10px',
-                                fontSize: 11,
-                                cursor: 'default',
-                                color: e.name === activeModelName ? '#fff' : '#ccc',
-                                background: e.name === activeModelName ? '#c62828' : 'transparent',
-                                whiteSpace: 'nowrap',
-                            }}
-                            onMouseEnter={ev => { if (e.name !== activeModelName) (ev.currentTarget as HTMLDivElement).style.background = '#3a3a3a'; }}
-                            onMouseLeave={ev => { if (e.name !== activeModelName) (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-                        >
-                            <input
-                                type='checkbox'
-                                checked={isChecked}
-                                readOnly
-                                style={{
-                                    width: 12,
-                                    height: 12,
-                                    margin: '0 6px 0 0',
-                                    verticalAlign: '-2px',
-                                    accentColor: '#c62828',
-                                    pointerEvents: 'none',
-                                }}
-                            />
-                            {e.label} ({e.name})
-                        </div>
-                    </React.Fragment>
-                );
-            })}
-            <div style={{ height: 1, background: '#555' }} />
-            {renderSigineInfraChoice()}
-            <div style={{ height: 1, background: '#555' }} />
-            <div
-                title={similarityConfigSummary || (language === 'zh' ? '配置后启用检索相似' : 'Configure before enabling similarity search')}
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '5px 10px',
-                    fontSize: 11,
-                    cursor: 'default',
-                    color: '#ccc',
-                    background: 'transparent',
-                    whiteSpace: 'nowrap',
-                }}
-                onMouseEnter={ev => { (ev.currentTarget as HTMLDivElement).style.background = '#3a3a3a'; }}
-                onMouseLeave={ev => { (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-            >
-                <label
-                    style={{
-                        display: 'flex',
-                        flex: 1,
-                        alignItems: 'center',
-                        minWidth: 0,
-                        cursor: similaritySearchConfig ? 'pointer' : 'not-allowed',
-                    }}
-                >
-                    <input
-                        type='checkbox'
-                        checked={similaritySearchSelected}
-                        disabled={!similaritySearchConfig}
-                        onChange={() => {
-                            if (!similaritySearchConfig) return;
-                            if (!useModelMultiSelect) {
-                                setSelectedModelNames(activeModelEntry ? [activeModelEntry.name] : []);
-                            }
-                            setUseModelMultiSelect(true);
-                            setSimilaritySearchSelected(current => !current);
-                        }}
-                        style={{
-                            width: 12,
-                            height: 12,
-                            margin: '0 6px 0 0',
-                            accentColor: '#c62828',
-                        }}
-                    />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {language === 'zh' ? '检索相似' : 'Similarity Search'}
-                        {similaritySearchConfig && (
-                            <>
-                                {' ('}{similarityConfigSummary}{')'}
-                            </>
-                        )}
-                    </span>
-                </label>
-                <button
-                    type='button'
-                    onClick={openSimilarityConfig}
-                    title={language === 'zh' ? '配置检索方案' : 'Configure retrieval plan'}
-                    style={{
-                        marginLeft: 8,
-                        padding: '2px 4px',
-                        border: 0,
-                        background: 'transparent',
-                        color: '#aaa',
-                        cursor: 'pointer',
-                        fontSize: 10,
-                        lineHeight: 1,
-                        whiteSpace: 'nowrap',
-                    }}
-                >
-                    {language === 'zh' ? '配置' : 'Configure'} ⚙
-                </button>
-            </div>
+            <details open>
+                <summary>{language === 'zh' ? '已选模型' : 'Selected models'} ({selectedInferenceChoices.length})</summary>
+                {summaryChoices.length > 0
+                    ? summaryChoices.map(choice => {
+                        const checked = selectedInferenceChoices.some(selected => selected.id === choice.id);
+                        return <label key={choice.id} className='InferenceMenuRow' data-selected={checked}>
+                            <input type='checkbox' checked={checked}
+                                data-source-id={choice.kind === 'sigine' ? choice.selection?.source_id : undefined}
+                                data-model-id={choice.kind === 'sigine' ? choice.selection?.model : undefined}
+                                onChange={event => toggleInferenceChoice(choice, event.target.checked)}/>
+                            {choice.label}
+                        </label>;
+                    })
+                    : <div className='InferenceMenuStatus'>{language === 'zh' ? '暂未选择模型' : 'No models selected'}</div>}
+            </details>
+            <details open={openWhen(hasBuiltinSelection)}>
+                <summary>{language === 'zh' ? '内置模型' : 'Built-in models'} ({builtinModelCount})</summary>
+                <details open={openWhen(hasSelectedModel)}>
+                    <summary>{language === 'zh' ? '开源模型' : 'Open-source models'}</summary>
+                    <details open={openWhen(hasCustomSelected)}>
+                        <summary>{language === 'zh' ? '自定义' : 'Custom'}</summary>
+                        {renderCustomLoaderRows()}
+                        {modelDropdownEntries.filter(e => e.group === 'custom').map(renderModelRow)}
+                    </details>
+                    <details open={openWhen(hasDetectionSelected)}>
+                        <summary>{language === 'zh' ? '检测模型' : 'Detection models'}</summary>
+                        {modelDropdownEntries.filter(e => e.group === 'models' && e.task === 'detect').map(renderModelRow)}
+                        {YOLO_MODEL_FAMILIES.filter(family => !loadedFamilyIds.has(family.id)).map(renderFamilyCatalogRow)}
+                    </details>
+                    <details open={openWhen(hasSegmentationSelected)}>
+                        <summary>{language === 'zh' ? '分割模型' : 'Segmentation models'}</summary>
+                        {modelDropdownEntries.filter(e => e.group === 'models' && e.task === 'segment').map(renderModelRow)}
+                        {SEG_MODEL_FAMILIES.filter(family => !loadedFamilyIds.has(family.id)).map(renderFamilyCatalogRow)}
+                    </details>
+                </details>
+                <details open={openWhen(hasSelectedSimilarity)}>
+                    <summary>
+                        {language === 'zh' ? '检索方案' : 'Retrieval plan'}
+                        {similarityConfigSummary && ` (${similarityConfigSummary})`}
+                    </summary>
+                    {renderSimilarityOptions()}
+                </details>
+            </details>
+            <details open={openWhen(sigineInfraSelected)}>
+                <summary>{language === 'zh' ? '外部模型' : 'External models'} ({sigineModelCount ?? '—'})</summary>
+                {renderSigineInfraChoice()}
+            </details>
         </>
     );
 
     const renderInferenceButton = () => (
         <button
+            data-action='run-inference'
             disabled={inferenceDisabled}
             onClick={() => {
                 if (isFullImageInferenceInProgress) {
@@ -1552,9 +1501,36 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
         </button>
     );
 
+    useEffect(() => {
+        if (!showInferenceMenu) return undefined;
+        const anchor = inferenceMenuRef.current;
+        const menu = anchor?.querySelector<HTMLElement>('.InferenceModelMenu');
+        if (!menu) return undefined;
+        const fitViewport = () => {
+            const anchorRect = anchor.getBoundingClientRect();
+            const right = document.documentElement.clientWidth - 8;
+            menu.style.left = `${Math.max(8 - anchorRect.left, Math.min(0, right - anchorRect.left - menu.offsetWidth))}px`;
+            menu.style.maxHeight = `${Math.max(160, window.innerHeight - anchorRect.bottom - 10)}px`;
+        };
+        fitViewport();
+        const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(fitViewport) : null;
+        observer?.observe(menu);
+        observer?.observe(anchor);
+        window.addEventListener('resize', fitViewport);
+        return () => {
+            observer?.disconnect();
+            window.removeEventListener('resize', fitViewport);
+        };
+    }, [showInferenceMenu]);
+
     const renderModelSelector = () => (
-        <div ref={inferenceMenuRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+        <div ref={inferenceMenuRef} style={{
+            position: 'relative', display: 'flex', alignItems: 'center',
+            width: 186, maxWidth: '100%', minWidth: 0,
+        }}>
             <button
+                title={modelButtonLabel}
+                data-action='select-inference-model'
                 disabled={isFullImageInferenceInProgress}
                 onClick={() => setShowInferenceMenu(v => !v)}
                 style={{
@@ -1568,10 +1544,9 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                     padding: '0 20px 0 6px',
                     cursor: 'default',
                     outline: 'none',
-                    width: 186,
-                    minWidth: 186,
+                    width: '100%',
+                    minWidth: 92,
                     maxWidth: 186,
-                    flexShrink: 0,
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -1586,7 +1561,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                 <span style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 9, pointerEvents: 'none' }}>▼</span>
             </button>
             {showInferenceMenu && (
-                <div style={{
+                <div className="InferenceModelMenu" style={{
                     position: 'absolute',
                     top: 'calc(100% + 2px)',
                     left: 0,
@@ -1594,158 +1569,200 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                     background: '#2a2a2a',
                     border: '1px solid #555',
                     borderRadius: 4,
-                    minWidth: '100%',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                    overflow: 'hidden',
+                    overflow: 'auto',
                 }}>
-                    {showSimilarityConfig ? (
-                        renderSimilarityConfig()
-                    ) : (
-                        renderInferenceChoices()
-                    )}
+                    {renderInferenceChoices()}
                 </div>
             )}
         </div>
     );
 
-    const withAI = (
-        (activeLabelType === LabelType.RECT || activeLabelType === LabelType.ALL) && AISelector.isRoboflowAPIModelLoaded()
-    )
+    const annotationToolButtons = useMemo(() => {
+        if (imagesData.length === 0) return null;
+        const activeImageData = LabelsSelector.getActiveImageData();
+        const hasAnyLabel = imagesData.length > 0 && (
+            imageHasLabels(activeImageData)
+        );
 
-    return (
-        <div className={getClassName()}>
-            <div className='ButtonWrapper collapsible'>
-                {
-                    getButtonWithTooltip(
-                        'zoom-in',
-                        currentTexts.editorTopNavBar.zoomIn,
-                        'ico/zoom-in.png',
-                        'zoom-in',
-                        false,
-                        undefined,
-                        () => ViewPortActions.zoomIn()
-                    )
-                }
-                {
-                    getButtonWithTooltip(
-                        'zoom-out',
-                        currentTexts.editorTopNavBar.zoomOut,
-                        'ico/zoom-out.png',
-                        'zoom-out',
-                        false,
-                        undefined,
-                        () => ViewPortActions.zoomOut()
-                    )
-                }
-                {
-                    getButtonWithTooltip(
-                        'zoom-max',
-                        currentTexts.editorTopNavBar.maxZoom,
-                        'ico/zoom-max.png',
-                        'zoom-max',
-                        false,
-                        undefined,
-                        () => ViewPortActions.setOneForOneZoom()
-                    )
-                }
-                {
-                    getButtonWithTooltip(
-                        'zoom-fit',
-                        currentTexts.editorTopNavBar.fitImage,
-                        'ico/zoom-fit.png',
-                        'zoom-fit',
-                        false,
-                        undefined,
-                        () => ViewPortActions.setDefaultZoom()
-                    )
-                }
-            </div>
-            {renderDrawingTools()}
-            <div className='ButtonWrapper'>
-                {(() => {
-                    const {anyVisible, isDisabled, icon} = getLabelToggleState(imagesData.length, imageAIStates);
-                    return getButtonWithTooltip(
-                        'toggle-ai-labels',
-                        anyVisible ? '隐藏标签' : '显示标签',
-                        icon,
-                        'toggle-ai-labels',
-                        !isDisabled && anyVisible,
-                        undefined,
-                        isDisabled ? undefined : toggleAILabelsOnClick,
-                        isDisabled
-                    );
-                })()}
-            {useMemo(() => {
-                if (imagesData.length === 0) return null;
-                const activeImageData = LabelsSelector.getActiveImageData();
-                const hasAnyLabel = imagesData.length > 0 && (
-                    imageHasLabels(activeImageData)
+        return <>
+            {isSAMLoaded && getButtonWithTooltip(
+                'smart-annotation',
+                getSmartAnnotationTooltip(smartAnnotationActive, samNegativeMode, language),
+                'ico/cross-hair.png',
+                'smart-annotation',
+                smartAnnotationActive && !eraserMode,
+                undefined,
+                smartAnnotationOnClick,
+                false,
+                smartAnnotationOnDoubleClick,
+                smartAnnotationActive && samNegativeMode ? 'active-negative' : undefined,
+            )}
+            {isTrackingModelLoaded && getButtonWithTooltip(
+                'object-tracking',
+                language === 'zh' ? '检索' : 'Retrieve',
+                'ico/tracking.png',
+                'object-tracking',
+                trackingMode && !eraserMode,
+                undefined,
+                trackingOnClick,
+            )}
+            {hasAnyLabel && getButtonWithTooltip(
+                'eraser',
+                language === 'zh'
+                    ? (eraserFineMode ? '局部擦除' : '整体擦除')
+                    : (eraserFineMode ? 'Local erase' : 'Whole erase'),
+                eraserFineMode ? 'ico/eraser.png' : 'ico/eraser-fine.png',
+                'eraser',
+                eraserMode,
+                undefined,
+                eraserOnClick
+            )}
+        </>;
+    }, [imagesData, activeImageIndex, isSAMLoaded, smartAnnotationActive, samNegativeMode, smartAnnotationOnClick, smartAnnotationOnDoubleClick, isTrackingModelLoaded, trackingOnClick, trackingMode, trackingInProgress, currentTexts, eraserMode, eraserFineMode, eraserOnClick, language]);
+
+    const renderZoomGroup = (groupRef?: React.Ref<HTMLDivElement>) => (
+        <div className='ButtonWrapper' ref={groupRef}>
+            {
+                getButtonWithTooltip(
+                    'zoom-in',
+                    currentTexts.editorTopNavBar.zoomIn,
+                    'ico/zoom-in.png',
+                    'zoom-in',
+                    false,
+                    undefined,
+                    () => ViewPortActions.zoomIn()
+                )
+            }
+            {
+                getButtonWithTooltip(
+                    'zoom-out',
+                    currentTexts.editorTopNavBar.zoomOut,
+                    'ico/zoom-out.png',
+                    'zoom-out',
+                    false,
+                    undefined,
+                    () => ViewPortActions.zoomOut()
+                )
+            }
+            {
+                getButtonWithTooltip(
+                    'zoom-max',
+                    currentTexts.editorTopNavBar.maxZoom,
+                    'ico/zoom-max.png',
+                    'zoom-max',
+                    false,
+                    undefined,
+                    () => ViewPortActions.setOneForOneZoom()
+                )
+            }
+            {
+                getButtonWithTooltip(
+                    'zoom-fit',
+                    currentTexts.editorTopNavBar.fitImage,
+                    'ico/zoom-fit.png',
+                    'zoom-fit',
+                    false,
+                    undefined,
+                    () => ViewPortActions.setDefaultZoom()
+                )
+            }
+        </div>
+    );
+
+    const renderAnnotationTools = (groupRef?: React.Ref<HTMLDivElement>) => (
+        <div className='ButtonWrapper' ref={groupRef}>
+            {(() => {
+                const {anyVisible, isDisabled, icon} = getLabelToggleState(imagesData.length, imageAIStates);
+                return getButtonWithTooltip(
+                    'toggle-ai-labels',
+                    anyVisible ? '隐藏标签' : '显示标签',
+                    icon,
+                    'toggle-ai-labels',
+                    !isDisabled && anyVisible,
+                    undefined,
+                    isDisabled ? undefined : toggleAILabelsOnClick,
+                    isDisabled
                 );
+            })()}
+            {annotationToolButtons}
+        </div>
+    );
 
-                return <>
-                    {isSAMLoaded && getButtonWithTooltip(
-                        'smart-annotation',
-                        getSmartAnnotationTooltip(smartAnnotationActive, samNegativeMode, language),
-                        'ico/cross-hair.png',
-                        'smart-annotation',
-                        smartAnnotationActive && !eraserMode,
-                        undefined,
-                        smartAnnotationOnClick,
-                        false,
-                        smartAnnotationOnDoubleClick,
-                        smartAnnotationActive && samNegativeMode ? 'active-negative' : undefined,
-                    )}
-                    {isTrackingModelLoaded && getButtonWithTooltip(
-                        'object-tracking',
-                        language === 'zh' ? '检索' : 'Retrieve',
-                        'ico/tracking.png',
-                        'object-tracking',
-                        trackingMode && !eraserMode,
-                        undefined,
-                        trackingOnClick,
-                    )}
-                    {hasAnyLabel && getButtonWithTooltip(
-                        'eraser',
-                        language === 'zh'
-                            ? (eraserFineMode ? '局部擦除' : '整体擦除')
-                            : (eraserFineMode ? 'Local erase' : 'Whole erase'),
-                        eraserFineMode ? 'ico/eraser.png' : 'ico/eraser-fine.png',
-                        'eraser',
-                        eraserMode,
-                        undefined,
-                        eraserOnClick
-                    )}
-                </>;
-            }, [imagesData, activeImageIndex, isSAMLoaded, smartAnnotationActive, samNegativeMode, smartAnnotationOnClick, smartAnnotationOnDoubleClick, isTrackingModelLoaded, trackingOnClick, trackingMode, trackingInProgress, currentTexts, eraserMode, eraserFineMode, eraserOnClick, language])}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', gap: 6, height: '100%' }}>
+    const renderAcceptReject = (groupRef?: React.Ref<HTMLDivElement>) => withAI ? (
+        <div className='ButtonWrapper' ref={groupRef}>
+            {
+                getButtonWithTooltip(
+                    'accept-all',
+                    currentTexts.editorTopNavBar.acceptAllDetections,
+                    'ico/accept-all.png',
+                    'accept-all',
+                    false,
+                    undefined,
+                    () => AIActions.acceptAllSuggestedLabels(LabelsSelector.getActiveImageData())
+                )
+            }
+            {
+                getButtonWithTooltip(
+                    'reject-all',
+                    currentTexts.editorTopNavBar.rejectAllDetections,
+                    'ico/reject-all.png',
+                    'reject-all',
+                    false,
+                    undefined,
+                    () => AIActions.rejectAllSuggestedLabels(LabelsSelector.getActiveImageData())
+                )
+            }
+        </div>
+    ) : null;
+
+    const bindGroupRef = (key: ToolbarGroupKey) => (el: HTMLDivElement | null) => {
+        toolbarGroupRefs.current[key] = el;
+    };
+
+    const renderToolbarOverflow = () => collapsedToolbarGroups.length === 0 ? null : (
+        <div className='ToolbarOverflow' ref={toolbarOverflowRef}>
+            <button
+                type='button'
+                className='ToolbarOverflowButton'
+                aria-label={language === 'zh' ? '更多工具' : 'More tools'}
+                title={language === 'zh' ? '更多工具' : 'More tools'}
+                aria-expanded={toolbarOverflowOpen}
+                onClick={() => setToolbarOverflowOpen(open => !open)}
+            >
+                <span aria-hidden='true'>···</span>
+            </button>
+            {toolbarOverflowOpen && (
+                <div
+                    className='ToolbarOverflowMenu'
+                    onClick={() => setToolbarOverflowOpen(false)}
+                >
+                    {collapsedToolbarGroups.includes('accept-reject') && renderAcceptReject()}
+                    {collapsedToolbarGroups.includes('annotation-tools') && renderAnnotationTools()}
+                    {collapsedToolbarGroups.includes('zoom') && renderZoomGroup()}
+                    {collapsedToolbarGroups.includes('drawing-tools') && renderDrawingTools()}
+                </div>
+            )}
+        </div>
+    );
+
+    const renderToolbarContent = () => (
+        <>
+            {renderToolbarOverflow()}
+            {!collapsedToolbarGroups.includes('zoom') && renderZoomGroup(bindGroupRef('zoom'))}
+            {!collapsedToolbarGroups.includes('drawing-tools') && renderDrawingTools(bindGroupRef('drawing-tools'))}
+            {!collapsedToolbarGroups.includes('annotation-tools') && renderAnnotationTools(bindGroupRef('annotation-tools'))}
+            <div className='ToolbarRightGroup' ref={toolbarRightRef}>
                 {renderModelSelector()}
                 {renderInferenceButton()}
             </div>
-            {withAI && <div className='ButtonWrapper'>
-                    {
-                        getButtonWithTooltip(
-                            'accept-all',
-                            currentTexts.editorTopNavBar.acceptAllDetections,
-                            'ico/accept-all.png',
-                            'accept-all',
-                            false,
-                            undefined,
-                            () => AIActions.acceptAllSuggestedLabels(LabelsSelector.getActiveImageData())
-                        )
-                    }
-                    {
-                        getButtonWithTooltip(
-                            'reject-all',
-                            currentTexts.editorTopNavBar.rejectAllDetections,
-                            'ico/reject-all.png',
-                            'reject-all',
-                            false,
-                            undefined,
-                            () => AIActions.rejectAllSuggestedLabels(LabelsSelector.getActiveImageData())
-                        )
-                    }
-                </div>}
+            {!collapsedToolbarGroups.includes('accept-reject') && renderAcceptReject(bindGroupRef('accept-reject'))}
+        </>
+    );
+
+    return (
+        <div className={getClassName()} ref={toolbarRef}>
+            {renderToolbarContent()}
         </div>
     );
 });

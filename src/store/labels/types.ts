@@ -15,6 +15,9 @@ export type Annotation = {
 export type LabelRect = Annotation & {
     sourceClassName?: string;
     sourceClassId?: number;
+    /** Provider label and exact model that produced an external-model box. */
+    annotationSource?: string;
+    annotationModel?: string;
     rect: IRect;
     isCreatedByAI: boolean;
     status: LabelStatus;
@@ -39,6 +42,8 @@ export type LabelPolygon = Annotation & {
     status: LabelStatus;
     suggestedLabel: string;
     confidence?: number; // AI 分割置信度 (0-1)
+    annotationSource?: string;
+    annotationModel?: string;
     trackingGroupId?: string; // 同一次目标跟踪产出的所有帧 polygon 共享此 ID
     extra?: Record<string, unknown>; // 自定义后处理脚本注入的字段（含 overlays 等）
 }

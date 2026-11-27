@@ -23,6 +23,8 @@ const config: Config.InitialOptions = {
     ],
   },
   "moduleNameMapper": {
+    // 应用入口启动 React 和 Vite HMR（import.meta），Jest 里换成只导出 store 的桩。
+    "^(\\.\\./)+index$": "<rootDir>/src/testUtils/storeStub.ts",
     "\\.(css|scss|less)$": "identity-obj-proxy"
   },
   extensionsToTreatAsEsm: [".ts", ".tsx"],

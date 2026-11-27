@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useRef} from 'react';
+import React, {useState, useEffect, useMemo, useRef} from 'react';
 import './TopNavigationBar.scss';
 import StateBar from '../StateBar/StateBar';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
@@ -71,6 +71,58 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
     );
     const [account, setAccount] = useState<AccountUser | null>(() => currentAccountSession()?.user || null);
     const [activeServicesDropdown, setActiveServicesDropdown] = useState<ServicesDropdown>(null);
+    const [servicesOverflowOpen, setServicesOverflowOpen] = useState(false);
+    const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+    useEffect(() => {
+        const handleResize = () => {
+            setViewportWidth(window.innerWidth);
+            // 菜单可能在收起/展开过程中失联，统一关闭。
+            setActiveServicesDropdown(null);
+            setServicesOverflowOpen(false);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+    // 与样式断点保持一致：窄窗口下把这些服务入口收进“更多服务”。
+    const hiddenServices = useMemo(() => {
+        const hidden: Array<'core' | 'extension' | 'annotation'> = [];
+        if (props.hasAnnotationEngine && viewportWidth <= 1280) hidden.push('annotation');
+        if (props.hasExtensionEngine && viewportWidth <= 1200) hidden.push('extension');
+        if (props.hasCoreEngine && viewportWidth <= 1120) hidden.push('core');
+        return hidden;
+    }, [viewportWidth, props.hasAnnotationEngine, props.hasExtensionEngine, props.hasCoreEngine]);
+    // 按实际剩余空间决定“操作/语言”是否放得下：品牌、已显示的服务入口和居中项目名占位都要计入。
+    const TOP_BAR_BRAND_WIDTH = 165;
+    const TOP_BAR_SERVICE_WIDTH = 90;
+    const TOP_BAR_ACTIONS_WIDTH = 64;
+    const TOP_BAR_LANGUAGE_WIDTH = 60;
+    const TOP_BAR_AVATAR_WIDTH = 34;
+    const TOP_BAR_PADDING = 29;
+    const TOP_BAR_PROJECT_WIDTH = 170;
+    const projectVisible = viewportWidth > 760;
+    // 服务入口被收起时保留“更多”，但如果连“品牌+更多+头像”都放不下，就让位给头像。
+    const hasServicesOverflow = hiddenServices.length > 0
+        && TOP_BAR_BRAND_WIDTH + TOP_BAR_SERVICE_WIDTH
+            + TOP_BAR_AVATAR_WIDTH + TOP_BAR_PADDING <= viewportWidth;
+    const visibleServiceCount = (['core', 'extension', 'annotation'] as const)
+        .filter(key => !hiddenServices.includes(key) && (
+            key === 'core' ? props.hasCoreEngine
+                : key === 'extension' ? props.hasExtensionEngine
+                    : props.hasAnnotationEngine
+        )).length;
+    const leftBaseWidth = TOP_BAR_BRAND_WIDTH
+        + visibleServiceCount * TOP_BAR_SERVICE_WIDTH
+        + (hasServicesOverflow ? TOP_BAR_SERVICE_WIDTH : 0);
+    const topBarFits = (withActions: boolean, withLanguage: boolean): boolean => {
+        const left = leftBaseWidth + (withActions ? TOP_BAR_ACTIONS_WIDTH : 0);
+        const right = TOP_BAR_AVATAR_WIDTH + (withLanguage ? TOP_BAR_LANGUAGE_WIDTH : 0);
+        if (!projectVisible) return left + right + TOP_BAR_PADDING <= viewportWidth;
+        const half = (viewportWidth - TOP_BAR_PADDING - TOP_BAR_PROJECT_WIDTH) / 2;
+        return left <= half && right <= half;
+    };
+    // 优先级：先保语言，再保“操作”；项目名称都不显示的窄窗口里也不显示“操作”。
+    const showActionsButton = projectVisible && topBarFits(true, true);
+    const showLanguageToggle = topBarFits(showActionsButton, true);
     const [cameraConnectAvailable, setCameraConnectAvailable] = useState(false);
     const [computeClusterAvailable, setComputeClusterAvailable] = useState(false);
     const extensionEngineBaseUrl = getExtensionEngineBaseUrl();
@@ -267,19 +319,20 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             const target = event.target as Element;
-            if (!target.closest('.ServicesDropdownContainer')) {
+            if (!target.closest('.ServicesDropdownContainer') && !target.closest('.ServicesOverflow')) {
                 setActiveServicesDropdown(null);
+                setServicesOverflowOpen(false);
             }
         };
 
-        if (activeServicesDropdown) {
+        if (activeServicesDropdown || servicesOverflowOpen) {
             document.addEventListener('mousedown', handleClickOutside);
         }
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [activeServicesDropdown]);
+    }, [activeServicesDropdown, servicesOverflowOpen]);
 
     useEffect(() => {
         const closeAccountDropdown = (event: MouseEvent | KeyboardEvent) => {
@@ -303,6 +356,133 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
         };
     }, [showAccountDropdown]);
 
+    const renderCoreServiceOptions = () => (<>
+        <button type='button'
+            {...serviceButtonProps(PopupWindowType.DATA_CENTER)}
+            onClick={openDataCenter}>
+            <div className='Marker'/>
+            <img src='ico/api.png' alt='data-center'/>
+            <span className='ServicesOptionLabel'>
+                {currentTexts.modelManagement.dataCenter}
+            </span>
+            {localChangeCount > 0 && (
+                <span
+                    className='ServicesOptionChangeBadge'
+                    role='status'
+                    aria-label={localChangeDescription}
+                    title={localChangeDescription}
+                >
+                    {localChangeCount}
+                </span>
+            )}
+        </button>
+        <button type='button'
+            {...serviceButtonProps(PopupWindowType.CALL_MODEL)}
+            onClick={openLocalModelManager}>
+            <div className='Marker'/>
+            <img src='ico/ai.png' alt='local-models'/>
+            {currentTexts.modelManagement.callModels}
+        </button>
+        <button type='button'
+            {...serviceButtonProps(PopupWindowType.TRAINING_TASK)}
+            onClick={openTrainingTask}>
+            <div className='Marker'/>
+            <img src='ico/ai.png' alt='training-task'/>
+            {currentTexts.modelManagement.trainingTask}
+        </button>
+        <button type='button'
+            {...serviceButtonProps(PopupWindowType.TASK_CENTER)}
+            onClick={openTaskCenter}>
+            <div className='Marker'/>
+            <img src='ico/tasks.png' alt='task-center'/>
+            {currentTexts.modelManagement.taskCenter}
+        </button>
+    </>);
+
+    const renderExtensionServiceOptions = () => (<>
+        <button type='button'
+            {...serviceButtonProps(PopupWindowType.VECTOR_DB)}
+            onClick={openVectorDb}>
+            <div className='Marker'/>
+            <img src='ico/api.png' alt='vector-db'/>
+            {currentTexts.modelManagement.vectorDb}
+        </button>
+        <button type='button'
+            {...serviceButtonProps(PopupWindowType.L2G_RETRIEVAL)}
+            onClick={openL2gRetrieval}>
+            <div className='Marker'/>
+            <img src='ico/ai.png' alt='l2g-retrieval'/>
+            {currentTexts.modelManagement.l2gRetrieval}
+        </button>
+        <button type='button'
+            {...serviceButtonProps(PopupWindowType.MODEL_INSPECTOR, cameraConnectAvailable || computeClusterAvailable)}
+            onClick={openModelInspector}>
+            <div className='Marker'/>
+            <img src='ico/eye.png' alt='model-inspector'/>
+            {currentTexts.modelManagement.modelInspector}
+        </button>
+        {cameraConnectAvailable && <button type='button'
+            className='DropDownMenuContentOption active'
+            onClick={openCameraConnect}>
+            <div className='Marker'/>
+            <img src='ico/camera.png' alt='camera-connect'/>
+            {currentTexts.modelManagement.cameraConnect}
+        </button>}
+        {computeClusterAvailable && <button type='button'
+            className='DropDownMenuContentOption active'
+            onClick={openComputeCluster}>
+            <div className='Marker'/>
+            <img src='ico/tasks.png' alt='compute-cluster'/>
+            {currentTexts.modelManagement.computeCluster}
+        </button>}
+    </>);
+
+    const renderAnnotationServiceOptions = () => (
+        <div className='DropDownMenuContentOption active'
+            onClick={openLocalModelManager}>
+            <div className='Marker'/>
+            <img src='ico/ai.png' alt='annotation-review'/>
+            {props.language === Language.CHINESE ? '自动标注复审' : 'Auto Annotation Review'}
+        </div>
+    );
+
+    const renderServicesOverflow = () => (hiddenServices.length === 0 || !hasServicesOverflow) ? null : (
+        <div className='ServicesOverflow'>
+            <TextButton
+                label={`${props.language === Language.CHINESE ? '更多' : 'More'} ▾`}
+                onClick={() => setServicesOverflowOpen(open => !open)}
+                externalClassName={'services-button services-overflow-button'}
+            />
+            {servicesOverflowOpen && (
+                <div
+                    className='DropDownMenuContent ServicesDropdown ServicesOverflowMenu'
+                    onClick={() => setServicesOverflowOpen(false)}
+                >
+                    {hiddenServices.includes('core') && (
+                        <div className='ServicesOverflowSection'>
+                            <div className='ServicesOverflowTitle'>{currentTexts.modelManagement.coreServices}</div>
+                            {renderCoreServiceOptions()}
+                        </div>
+                    )}
+                    {hiddenServices.includes('extension') && (
+                        <div className='ServicesOverflowSection'>
+                            <div className='ServicesOverflowTitle'>{currentTexts.modelManagement.extensionServices}</div>
+                            {renderExtensionServiceOptions()}
+                        </div>
+                    )}
+                    {hiddenServices.includes('annotation') && (
+                        <div className='ServicesOverflowSection'>
+                            <div className='ServicesOverflowTitle'>
+                                {props.language === Language.CHINESE ? '自动标注' : 'Auto Annotation'}
+                            </div>
+                            {renderAnnotationServiceOptions()}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+
     return (
         <div className='TopNavigationBar'>
             <StateBar/>
@@ -319,7 +499,7 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                         />
                         {currentTexts.makeSense}
                     </div>
-                    <div className='ActionsDropdownContainer'>
+                    {showActionsButton && <div className='ActionsDropdownContainer'>
                         <TextButton
                             label={currentTexts.actions.title}
                             onClick={toggleActionsDropdown}
@@ -331,9 +511,9 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             forceDisabled={commercialRestricted}
                             allowEngineManagement={commercialRestricted}
                         />}
-                    </div>
-                    {props.hasCoreEngine && (
-                        <div className='ServicesDropdownContainer'>
+                    </div>}
+                    {props.hasCoreEngine && !hiddenServices.includes('core') && (
+                        <div className='ServicesDropdownContainer services-core'>
                             <TextButton
                                 label={currentTexts.modelManagement.coreServices}
                                 onClick={() => toggleServicesDropdown('core')}
@@ -351,52 +531,13 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             )}
                             {activeServicesDropdown === 'core' && (
                                 <div className='DropDownMenuContent ServicesDropdown'>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.DATA_CENTER)}
-                                        onClick={openDataCenter}>
-                                        <div className='Marker'/>
-                                        <img src='ico/api.png' alt='data-center'/>
-                                        <span className='ServicesOptionLabel'>
-                                            {currentTexts.modelManagement.dataCenter}
-                                        </span>
-                                        {localChangeCount > 0 && (
-                                            <span
-                                                className='ServicesOptionChangeBadge'
-                                                role='status'
-                                                aria-label={localChangeDescription}
-                                                title={localChangeDescription}
-                                            >
-                                                {localChangeCount}
-                                            </span>
-                                        )}
-                                    </button>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.CALL_MODEL)}
-                                        onClick={openLocalModelManager}>
-                                        <div className='Marker'/>
-                                        <img src='ico/ai.png' alt='local-models'/>
-                                        {currentTexts.modelManagement.callModels}
-                                    </button>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.TRAINING_TASK)}
-                                        onClick={openTrainingTask}>
-                                        <div className='Marker'/>
-                                        <img src='ico/ai.png' alt='training-task'/>
-                                        {currentTexts.modelManagement.trainingTask}
-                                    </button>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.TASK_CENTER)}
-                                        onClick={openTaskCenter}>
-                                        <div className='Marker'/>
-                                        <img src='ico/tasks.png' alt='task-center'/>
-                                        {currentTexts.modelManagement.taskCenter}
-                                    </button>
+                                    {renderCoreServiceOptions()}
                                 </div>
                             )}
                         </div>
                     )}
-                    {props.hasExtensionEngine && (
-                        <div className='ServicesDropdownContainer'>
+                    {props.hasExtensionEngine && !hiddenServices.includes('extension') && (
+                        <div className='ServicesDropdownContainer services-extension'>
                             <TextButton
                                 label={currentTexts.modelManagement.extensionServices}
                                 onClick={() => toggleServicesDropdown('extension')}
@@ -404,47 +545,13 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             />
                             {activeServicesDropdown === 'extension' && (
                                 <div className='DropDownMenuContent ServicesDropdown'>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.VECTOR_DB)}
-                                        onClick={openVectorDb}>
-                                        <div className='Marker'/>
-                                        <img src='ico/api.png' alt='vector-db'/>
-                                        {currentTexts.modelManagement.vectorDb}
-                                    </button>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.L2G_RETRIEVAL)}
-                                        onClick={openL2gRetrieval}>
-                                        <div className='Marker'/>
-                                        <img src='ico/ai.png' alt='l2g-retrieval'/>
-                                        {currentTexts.modelManagement.l2gRetrieval}
-                                    </button>
-                                    <button type='button'
-                                        {...serviceButtonProps(PopupWindowType.MODEL_INSPECTOR, cameraConnectAvailable || computeClusterAvailable)}
-                                        onClick={openModelInspector}>
-                                        <div className='Marker'/>
-                                        <img src='ico/eye.png' alt='model-inspector'/>
-                                        {currentTexts.modelManagement.modelInspector}
-                                    </button>
-                                    {cameraConnectAvailable && <button type='button'
-                                        className='DropDownMenuContentOption active'
-                                        onClick={openCameraConnect}>
-                                        <div className='Marker'/>
-                                        <img src='ico/camera.png' alt='camera-connect'/>
-                                        {currentTexts.modelManagement.cameraConnect}
-                                    </button>}
-                                    {computeClusterAvailable && <button type='button'
-                                        className='DropDownMenuContentOption active'
-                                        onClick={openComputeCluster}>
-                                        <div className='Marker'/>
-                                        <img src='ico/tasks.png' alt='compute-cluster'/>
-                                        {currentTexts.modelManagement.computeCluster}
-                                    </button>}
+                                    {renderExtensionServiceOptions()}
                                 </div>
                             )}
                         </div>
                     )}
-                    {props.hasAnnotationEngine && (
-                        <div className='ServicesDropdownContainer'>
+                    {props.hasAnnotationEngine && !hiddenServices.includes('annotation') && (
+                        <div className='ServicesDropdownContainer services-annotation'>
                             <TextButton
                                 label={props.language === Language.CHINESE ? '自动标注' : 'Auto Annotation'}
                                 onClick={() => toggleServicesDropdown('annotation')}
@@ -452,16 +559,12 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             />
                             {activeServicesDropdown === 'annotation' && (
                                 <div className='DropDownMenuContent ServicesDropdown'>
-                                    <div className='DropDownMenuContentOption active'
-                                        onClick={openLocalModelManager}>
-                                        <div className='Marker'/>
-                                        <img src='ico/ai.png' alt='annotation-review'/>
-                                        {props.language === Language.CHINESE ? '自动标注复审' : 'Auto Annotation Review'}
-                                    </div>
+                                    {renderAnnotationServiceOptions()}
                                 </div>
                             )}
                         </div>
                     )}
+                    {renderServicesOverflow()}
                 </div>
                 <div
                     className='ProjectNameContainer'
@@ -482,11 +585,11 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                     </div>
                 </div>
                 <div className='NavigationBarGroupWrapper right'>
-                    <TextButton
+                    {showLanguageToggle && <TextButton
                         label={currentTexts.languageToggle}
                         onClick={toggleLanguage}
                         externalClassName={'language-toggle-button'}
-                    />
+                    />}
                     <div className='AccountDropdownContainer'>
                         <button
                             type='button'

@@ -89,6 +89,83 @@ function forceFlushPendingImageUpdates(): void {
 
 export class AIDetectionActions {
 
+    public static async recognizeSigine(images: ImageData[], cancelled: () => boolean): Promise<void> {
+        store.dispatch(updateFullImageInferenceStatus(true));
+        let count = 0;
+        const video = EditorModel.videoElement;
+        const originalTime = video?.currentTime;
+        let lastCapturedTime: number | undefined;
+        const processed: string[] = [];
+        let failure: string | undefined;
+        try {
+            for (const requested of images) {
+                if (cancelled()) break;
+                forceFlushPendingImageUpdates();
+                const image = store.getState().labels.imagesData.find(item => item.id === requested.id);
+                if (!image) throw new Error('The requested image is no longer in this workspace.');
+                const before = JSON.stringify(image.labelRects);
+                let blob: Blob | undefined;
+                if (image.fileData.type.startsWith('video/') && video) {
+                    const state = store.getState();
+                    const active = state.video.activeVideo;
+                    const index = state.labels.imagesData.findIndex(item => item.id === image.id);
+                    const captured = await captureBrowserVideoFrames(video, [index], active?.fps || 30, cancelled, () => undefined);
+                    lastCapturedTime = video.currentTime;
+                    blob = captured[0] || undefined;
+                    if (!blob) throw new Error('Video frame capture failed');
+                }
+                const results = await DetectionAPIDetector.recognizeSigine(image, blob);
+                if (cancelled()) break;
+                this.verifyFrameUnchanged(image, before);
+                this.applySingleResult(image, results, undefined, true);
+                forceFlushPendingImageUpdates();
+                count += results.length;
+                processed.push(image.id);
+            }
+            store.dispatch(submitNewNotification(NotificationUtil.createSuccessNotification({
+                header: 'Sigine', description: store.getState().general.language === 'zh' ? `新增 ${count} 个标注框` : `${count} new boxes`,
+            })));
+        } catch (error) {
+            failure = error instanceof Error ? error.message : String(error);
+            store.dispatch(submitNewNotification(NotificationUtil.createErrorNotification({
+                header: 'Sigine', description: error instanceof Error ? error.message : String(error),
+            })));
+        } finally {
+            this.restoreCapturedVideo(video, originalTime, lastCapturedTime);
+            forceFlushPendingImageUpdates();
+            store.dispatch(updateFullImageInferenceStatus(false));
+            this.publishSigineCompletion(processed, images.length, count, failure);
+        }
+    }
+
+    private static verifyFrameUnchanged(image: ImageData, before: string): void {
+        const current = store.getState().labels.imagesData.find(item => item.id === image.id);
+        if (!current || current.fileData !== image.fileData || JSON.stringify(current.labelRects) !== before) {
+            throw new Error('The image or its annotations changed during inference; run again on the current version.');
+        }
+    }
+
+    private static publishSigineCompletion(processed: string[], total: number, count: number, failure?: string): void {
+        window.dispatchEvent(new CustomEvent('sigineInferenceComplete', {detail: {
+            status: failure ? (processed.length ? 'partial' : 'incomplete')
+                : processed.length === total ? 'collected' : 'cancelled',
+            image_ids: processed, images_processed: processed.length, images_total: total,
+            boxes_added: count, error: failure,
+            annotations: processed.map(id => {
+                const image = store.getState().labels.imagesData.find(item => item.id === id);
+                return {id, rects: image?.labelRects.map(box => [box.id, box.labelId,
+                    box.rect.x, box.rect.y, box.rect.width, box.rect.height])};
+            }),
+        }}));
+    }
+
+    private static restoreCapturedVideo(video: HTMLVideoElement, originalTime: number, capturedTime?: number): void {
+        if (video && video === EditorModel.videoElement && capturedTime !== undefined
+            && video.currentTime === capturedTime && Math.abs(video.currentTime - originalTime) > 0.001) {
+            video.currentTime = originalTime;
+        }
+    }
+
     /** Flush hook for callers that finish a streaming batch. */
     public static flushPendingImageUpdates(): void {
         forceFlushPendingImageUpdates();
@@ -276,7 +353,7 @@ export class AIDetectionActions {
         const params = DetectionAPIDetector.buildParamsDict();
         const sigineReview = sessionStorage.getItem('opensight.annotation.sigineReview') === 'true'
             || localStorage.getItem('opensight.sigineReview') === 'true';
-        const sigineInfra = localStorage.getItem('opensight.sigineInfra') === 'true';
+        const sigineInfra = false;
         const targetClasses = DetectionAPIDetector.getAnnotationTargets();
         if (sigineReview || sigineInfra) {
             sessionStorage.removeItem('opensight.annotation.sigineReviews');
@@ -752,10 +829,15 @@ export class AIDetectionActions {
         return DetectionAPIDetector.hasAnnotationTargets() ? rects.filter(rect => !rect.isCreatedByAI) : rects;
     }
 
+    private static rectsBeforeInference(rects: LabelRect[], preserve: boolean): LabelRect[] {
+        return preserve ? rects : this.priorRects(rects);
+    }
+
     private static applySingleResult(
         imageData: ImageData,
         results: DetectionResult[],
-        frameIdx?: number
+        frameIdx?: number,
+        preserveExisting = false
     ): void {
         if (!results || (results.length === 0 && !DetectionAPIDetector.hasAnnotationTargets())) return;
 
@@ -791,9 +873,11 @@ export class AIDetectionActions {
                 isVisible: true,
                 status: LabelStatus.ACCEPTED,
                 suggestedLabel: labelId ? null : result.info.name,
-                confidence: result.info.confidence ?? 0,
+                confidence: result.info.confidence,
                 sourceClassName: result.info.sourceName,
-                sourceClassId: result.info.sourceId
+                sourceClassId: result.info.sourceId,
+                annotationSource: result.info.modelSource,
+                annotationModel: result.info.modelName
             };
         });
 
@@ -803,7 +887,7 @@ export class AIDetectionActions {
             const baseRects = pendingPrev ? pendingPrev.labelRects : currentImg.labelRects;
             const updatedImg: ImageData = {
                 ...(pendingPrev || currentImg),
-                labelRects: [...this.priorRects(baseRects), ...newRects]
+                labelRects: [...this.rectsBeforeInference(baseRects, preserveExisting), ...newRects]
             };
             pendingImageUpdates.set(imageData.id, updatedImg);
             scheduleFlush();
@@ -908,7 +992,9 @@ export class AIDetectionActions {
                     suggestedLabel: labelId ? null : result.info.name,
                     confidence: result.info.confidence ?? 0,
                     sourceClassName: result.info.sourceName,
-                    sourceClassId: result.info.sourceId
+                    sourceClassId: result.info.sourceId,
+                    annotationSource: result.info.modelSource,
+                    annotationModel: result.info.modelName
                 };
             });
 

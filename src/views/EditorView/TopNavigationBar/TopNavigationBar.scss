@@ -19,6 +19,7 @@
     color: white;
     align-self: stretch;
     flex: 1;
+    min-width: 0;
     height: calc(#{$topNavigationBarHeight} - #{$stateBarHeight});
     display: flex;
     align-items: center;
@@ -32,6 +33,9 @@
       align-items: center;
 
       &.right {
+        // 语言/头像始终保留，并压在其他元素之上，避免被挤出的内容遮挡。
+        position: relative;
+        z-index: 2;
         margin-left: auto;
       }
     }
@@ -273,6 +277,33 @@
           opacity: 0.42;
         }
       }
+    }
+
+    .ServicesOverflow {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .ServicesOverflowMenu {
+      width: 264px;
+      max-height: min(70vh, 420px);
+      overflow-y: auto;
+    }
+
+    .ServicesOverflowSection {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ServicesOverflowSection + .ServicesOverflowSection {
+      border-top: 1px solid $darkThemeFirstColor;
+    }
+
+    .ServicesOverflowTitle {
+      padding: 10px 20px 4px;
+      color: #9a9a9a;
+      font-size: 11px;
     }
 
     .actions-button,
@@ -522,19 +553,12 @@
   }
 }
 
-@media (max-width: 1000px) {
-  .TopNavigationBar .TopNavigationBarWrapper {
-    .ProjectNameContainer {
-      position: static;
-      min-width: 0;
-      flex: 1;
-      justify-content: flex-start;
-      overflow: hidden;
-      margin-left: 12px;
-    }
+// 服务入口、“操作”和语言切换的收起由 TopNavigationBar 按窗口宽度控制（见 hiddenServices）。
 
-    .ProjectName { flex: 0 0 auto; }
-    .ProjectNameInputWrapper { max-width: 100%; overflow: hidden; }
+// 项目名称始终保持窗口居中；窄到会与左右内容相撞时再隐藏。
+@media (max-width: 760px) {
+  .TopNavigationBar .TopNavigationBarWrapper .ProjectNameContainer {
+    display: none;
   }
 }
 

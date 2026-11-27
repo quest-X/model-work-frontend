@@ -35,9 +35,6 @@ jest.mock('../views/PopupView/PopupView', () => ({
 }));
 jest.mock('../views/NotificationsView/NotificationsView', () => ({__esModule: true, default: () => null}));
 jest.mock('../views/MobileMainView/MobileMainView', () => ({__esModule: true, default: () => null}));
-jest.mock('../views/SizeItUpView/SizeItUpView', () => ({
-    SizeItUpView: ({minimumWidth = 900}: {minimumWidth?: number}) => <p>Minimum width {minimumWidth}</p>,
-}));
 jest.mock('../staticModels/PlatformModel', () => ({
     PlatformModel: {mobileDeviceData: {manufacturer: '', os: ''}},
 }));
@@ -61,7 +58,6 @@ const autoSave = AutoSaveService as jest.Mocked<typeof AutoSaveService>;
 const restore = ProjectRestoreService as jest.Mocked<typeof ProjectRestoreService>;
 const props = {
     projectType: ProjectType.OBJECT_DETECTION,
-    windowSize: {width: 1920, height: 1080},
     roboflowAPIDetails: {status: false, model: '', key: ''},
 };
 
@@ -73,6 +69,13 @@ describe('App restore prompt scope', () => {
         autoSave.initialize.mockResolvedValue();
         restore.restoreSettings.mockResolvedValue(true);
         restore.checkForStoredData.mockResolvedValue({hasSettings: false, hasProject: false, lastSaved: 0});
+    });
+
+    it('initializes recovery once when React replays mount effects', async () => {
+        render(<React.StrictMode><App {...props}/></React.StrictMode>);
+        expect(await screen.findByText('control')).toBeInTheDocument();
+        expect(autoSave.initialize).toHaveBeenCalledTimes(1);
+        expect(restore.checkForStoredData).toHaveBeenCalledTimes(1);
     });
 
     it.each([
@@ -187,20 +190,6 @@ describe('App restore prompt scope', () => {
         fireEvent.click(screen.getByRole('button', {name: '使用资源'}));
         expect(await screen.findByText('annotation')).toBeInTheDocument();
         expect(mockResourceLoad).toHaveBeenCalledTimes(1);
-    });
-
-    it('allows the device workspace at 720px and keeps the annotation limit at 900px', async () => {
-        render(<App {...props} windowSize={{width: 720, height: 900}}/>);
-        expect(await screen.findByText('control')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', {name: '切换平台'}));
-        expect(screen.getByText('Minimum width 900')).toBeInTheDocument();
-        expect(screen.queryByText('annotation')).not.toBeInTheDocument();
-    });
-
-    it('shows the device workspace minimum below 720px', async () => {
-        render(<App {...props} windowSize={{width: 719, height: 900}}/>);
-        expect(await screen.findByText('Minimum width 720')).toBeInTheDocument();
-        expect(screen.queryByText('control')).not.toBeInTheDocument();
     });
 
     it.each(['stored-project', 'storage-error'])('protects existing work before resource loading: %s', async condition => {

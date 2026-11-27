@@ -1,59 +1,36 @@
-import React from 'react';
+import React, {useMemo} from 'react';
 import './StateBar.scss';
-import {ImageData} from "../../../store/labels/types";
-import {AppState} from "../../../store";
-import {connect} from "react-redux";
-import {LabelType} from "../../../data/enums/LabelType";
+import {ImageData} from '../../../store/labels/types';
+import {AppState} from '../../../store';
+import {connect} from 'react-redux';
+import {computeAnnotationProgress} from './annotationProgress';
 
 interface IProps {
     imagesData: ImageData[];
-    activeLabelType: LabelType;
+    activeImageIndex: number;
 }
 
-const StateBar: React.FC<IProps> = ({imagesData, activeLabelType}) => {
-
-    const pointLabeledImages = imagesData.reduce((currentCount: number, currentImage: ImageData) => {
-        return currentCount + (currentImage.labelPoints.length > 0 ? 1 : 0);
-    }, 0);
-
-    const rectLabeledImages = imagesData.reduce((currentCount: number, currentImage: ImageData) => {
-        return currentCount + (currentImage.labelRects.length > 0 ? 1 : 0);
-    }, 0);
-
-    const polygonLabeledImages = imagesData.reduce((currentCount: number, currentImage: ImageData) => {
-        return currentCount + (currentImage.labelPolygons.length > 0 ? 1 : 0);
-    }, 0);
-
-    const lineLabeledImages = imagesData.reduce((currentCount: number, currentImage: ImageData) => {
-        return currentCount + (currentImage.labelLines.length > 0 ? 1 : 0);
-    }, 0);
-
-    const tagLabeledImages = imagesData.reduce((currentCount: number, currentImage: ImageData) => {
-        return currentCount + (currentImage.labelNameIds.length !== 0 ? 1 : 0);
-    }, 0);
-
-    const getProgress = () => {
-        switch (activeLabelType) {
-            case LabelType.POINT:
-                return (100 * pointLabeledImages) / imagesData.length;
-            case LabelType.RECT:
-                return (100 * rectLabeledImages) / imagesData.length;
-            case LabelType.POLYGON:
-                return (100 * polygonLabeledImages) / imagesData.length;
-            case LabelType.LINE:
-                return (100 * lineLabeledImages) / imagesData.length;
-            case LabelType.IMAGE_RECOGNITION:
-                return (100 * tagLabeledImages) / imagesData.length;
-            default:
-                return 0;
-        }
-    };
+export const StateBar: React.FC<IProps> = ({imagesData, activeImageIndex}) => {
+    // 进度针对当前这张图：前半段表示是否已有标注，后半段表示标注是否都给了标签。
+    const progress = useMemo(() => {
+        const activeImage = imagesData[activeImageIndex];
+        return computeAnnotationProgress(activeImage ? [activeImage] : []);
+    }, [imagesData, activeImageIndex]);
+    const label = progress.totalImages === 0
+        ? '暂无图片'
+        : `${Math.round(progress.percent)}% · ${progress.labeledShapes}/${progress.totalShapes} 个标签`
+            + (progress.complete ? ' · 已完成' : '');
 
     return (
-        <div className="StateBar">
+        <div className='StateBar' role='progressbar'
+            aria-valuemin={0} aria-valuemax={100}
+            aria-valuenow={Math.round(progress.percent)}
+            aria-label={label}
+            title={label}
+        >
             <div
-                style={{width: getProgress() + "%"}}
-                className="done"
+                className={progress.complete ? 'done complete' : 'done'}
+                style={{width: `${progress.percent}%`}}
             />
         </div>
     );
@@ -63,7 +40,7 @@ const mapDispatchToProps = {};
 
 const mapStateToProps = (state: AppState) => ({
     imagesData: state.labels.imagesData,
-    activeLabelType: state.labels.activeLabelType
+    activeImageIndex: state.labels.activeImageIndex,
 });
 
 export default connect(

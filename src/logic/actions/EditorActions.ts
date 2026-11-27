@@ -74,6 +74,7 @@ export class EditorActions {
     // =================================================================================================================
 
     public static fullRender() {
+        if (!EditorModel.canvas || !EditorModel.primaryRenderingEngine) return;
         DrawUtil.clearCanvas(EditorModel.canvas);
         // Cache EditorData so it's computed once per render, not once per engine
         const data = EditorActions.getEditorData();
@@ -147,8 +148,12 @@ export class EditorActions {
         const mousePositionOverViewPort: IPoint = PointUtil.subtract(mousePositionOverViewPortContent, viewPortContentScrollPosition);
         const isMouseOverImage: boolean = RectUtil.isPointInside(viewPortContentImageRect, mousePositionOverViewPortContent);
         const isMouseOverViewPort: boolean = RectUtil.isPointInside({x: 0, y: 0, ...EditorModel.viewPortSize}, mousePositionOverViewPort);
+        const preventCustomCursor = GeneralSelector.getPreventCustomCursorStatus();
 
-        if (isMouseOverViewPort && !GeneralSelector.getPreventCustomCursorStatus()) {
+        // 自定义光标被抑制时恢复系统光标，避免画布上“自定义光标 + 原生光标”同时消失。
+        EditorModel.canvas.style.cursor = preventCustomCursor ? 'default' : '';
+
+        if (isMouseOverViewPort && !preventCustomCursor) {
             EditorModel.cursor.style.left = mousePositionOverViewPort.x + "px";
             EditorModel.cursor.style.top = mousePositionOverViewPort.y + "px";
             EditorModel.cursor.style.display = "block";

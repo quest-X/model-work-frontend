@@ -16,6 +16,7 @@ import {VerticalEditorButton} from '../VerticalEditorButton/VerticalEditorButton
 import './EditorContainer.scss';
 import {ContextManager} from '../../../logic/hotkey/ContextManager';
 import {ContextType} from '../../../data/enums/ContextType';
+import {GeneralSelector} from '../../../store/selectors/GeneralSelector';
 import EditorTopNavigationBar from '../EditorTopNavigationBar/EditorTopNavigationBar';
 import {ProjectType} from '../../../data/enums/ProjectType';
 import {useDropzone, DropzoneOptions} from 'react-dropzone';
@@ -42,6 +43,7 @@ import {createDroppedMediaQueueItems, VideoImportProgress} from './EditorFileImp
 import {version as appVersion} from '../../../../package.json';
 
 import {appEdition} from '../../../utils/AppEdition';
+import {SidePanelOpenState, useAutoCollapseSidePanels} from './useAutoCollapseSidePanels';
 
 interface IProps {
     windowSize: ISize;
@@ -82,7 +84,6 @@ const EditorContainer: React.FC<IProps> = (
     const [showInferenceResults, setShowInferenceResults] = useState<boolean>(false);
     const [showBatchStatistics, setShowBatchStatistics] = useState<boolean>(false);
     const [leftPanel, setLeftPanel] = useState<'images' | 'queue' | 'history'>('images');
-    const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
     const previewImageId = useVideoInferenceFlow(activeVideo?.id, inferenceInProgress,
         () => { setLeftTabStatus(true); setLeftPanel('images'); setRightTabStatus(true);
             setShowBatchStatistics(false); setShowInferenceResults(true); },
@@ -95,6 +96,27 @@ const EditorContainer: React.FC<IProps> = (
     const [taskPanelPinned, setTaskPanelPinned] = useState(false);
     const taskButtonRef = useRef<HTMLDivElement>(null);
     const taskClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // 画布被挤到不可用时自动收起左右内容侧栏，空间恢复后重新展开此前被自动折叠的面板。
+    const applyAutoSidePanelState = (next: SidePanelOpenState, previous: SidePanelOpenState) => {
+        setLeftTabStatus(next.leftTabStatus);
+        setRightTabStatus(next.rightTabStatus);
+        const closedPanel = (previous.leftTabStatus && !next.leftTabStatus)
+            || (previous.rightTabStatus && !next.rightTabStatus);
+        if (!closedPanel) return;
+        // 侧栏各自压过一层上下文历史，回退到编辑器上下文，避免快捷键继续被侧栏拦截。
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const active = GeneralSelector.getActiveContext();
+            if (active !== ContextType.LEFT_NAVBAR && active !== ContextType.RIGHT_NAVBAR) break;
+            ContextManager.restoreCtx();
+            if (GeneralSelector.getActiveContext() === active) break;
+        }
+    };
+    useAutoCollapseSidePanels(
+        windowSize?.width,
+        {leftTabStatus, rightTabStatus},
+        applyAutoSidePanelState
+    );
 
     useDatasetDirtyTracking({
         activeQueueItemId,
@@ -121,41 +143,6 @@ const EditorContainer: React.FC<IProps> = (
             }, 220);
         }
     }, []);
-
-    // 手动保存
-    const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
-
-    const triggerSaveFlash = useCallback(() => {
-        setLastSavedTime(new Date());
-        setIsSaving(true);
-        setTimeout(() => setIsSaving(false), 800);
-    }, []);
-
-    const handleSave = useCallback(() => {
-        AutoSaveService.saveCurrentState(true);
-    }, []);
-
-    useEffect(() => {
-        AutoSaveService.onSaveComplete = triggerSaveFlash;
-        return () => { AutoSaveService.onSaveComplete = null; };
-    }, [triggerSaveFlash]);
-
-    const formatSavedTime = (d: Date): string => {
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const h = d.getHours();
-        const min = String(d.getMinutes()).padStart(2, '0');
-        const sec = String(d.getSeconds()).padStart(2, '0');
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        const h12 = h % 12 || 12;
-        return `${yyyy}/${mm}/${dd} ${h12}:${min}:${sec} ${ampm}`;
-    };
-
-    const saveTooltip = language === Language.CHINESE
-        ? `保存标注 (Ctrl+S)\n${lastSavedTime ? '上次保存: ' + formatSavedTime(lastSavedTime) : '尚未保存'}`
-        : `Save (Ctrl+S)\n${lastSavedTime ? 'Last saved: ' + formatSavedTime(lastSavedTime) : 'Not saved yet'}`;
 
     // 监听 window 级别的拖拽，确保 canvas/Scrollbars 不会阻断 drop 事件
     useEffect(() => {
@@ -334,23 +321,6 @@ const EditorContainer: React.FC<IProps> = (
             <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>
                 v{appVersion}({appEdition})
             </div>
-            <div
-                className='SaveButtonBottom'
-                onClick={handleSave}
-                title={saveTooltip}
-            >
-                <img
-                    draggable={false}
-                    alt='save'
-                    src='ico/shield.png'
-                    style={{
-                        width: 14, height: 14,
-                        filter: 'brightness(0) invert(1)',
-                        opacity: isSaving ? 1 : 0.6,
-                        transition: 'filter 0.4s ease, opacity 0.4s ease',
-                    }}
-                />
-            </div>
         </>
     };
 
@@ -369,12 +339,9 @@ const EditorContainer: React.FC<IProps> = (
                         {language === Language.CHINESE ? '历史任务' : 'Task History'}
                     </button>
                 </div>
-                {leftPanel === 'history' && <button className='QueueHistoryPanel__refresh' type='button'
-                    onClick={() => setHistoryRefreshToken(value => value + 1)}
-                    aria-label={language === Language.CHINESE ? '刷新历史任务' : 'Refresh task history'}>↻</button>}
             </div>
             {leftPanel === 'queue' ? <QueueList/> :
-                <HistoryTasks language={language} embedded refreshToken={historyRefreshToken}/>}
+                <HistoryTasks language={language} embedded/>}
         </div>;
     };
 

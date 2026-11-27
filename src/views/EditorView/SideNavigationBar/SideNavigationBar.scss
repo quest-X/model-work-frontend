@@ -26,8 +26,9 @@
 
   .NavigationBarContentWrapper {
     align-self: stretch;
-    min-width: $sideNavigationBarContentWidth;
-    width: $sideNavigationBarContentWidth;
+    // 窄窗口下让侧栏收窄，给中间画布留出可操作空间。
+    min-width: 0;
+    width: min(#{$sideNavigationBarContentWidth}, 30vw);
     flex-direction: column;
     display: flex;
     flex-wrap: nowrap;

@@ -46,11 +46,15 @@ function polygonsToDisplay(polys: LabelPolygon[], labelNames: LabelName[]): Disp
             area += ax * by - bx * ay;
         }
         area = Math.abs(area) / 2;
+        const confidence = typeof p.confidence === 'number' && Number.isFinite(p.confidence)
+            ? p.confidence : NaN;
         return {
             class_id: idx,
             class_name: name,
-            confidence: p.confidence || 0,
-            info: { id: idx, name, confidence: p.confidence || 0 },
+            confidence,
+            modelSource: p.annotationSource,
+            modelName: p.annotationModel,
+            info: { id: idx, name, confidence, modelSource: p.annotationSource, modelName: p.annotationModel },
             bbox: { x1, y1, x2, y2, width: x2 - x1, height: y2 - y1 },
             mask: { area, mask_data: maskData },
             _labelPolygonId: p.id,
@@ -339,6 +343,30 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         return 'rgba(220, 53, 69, 0.2)';
     };
 
+    const getConfidenceBadge = (result: DisplayResult) => {
+        const confidence = result.info?.confidence ?? result.confidence;
+        const modelName = result.info?.modelName || result.modelName;
+        const modelSource = result.info?.modelSource || result.modelSource;
+        const modelLabel = modelName || modelSource;
+        if (Number.isFinite(confidence)) {
+            return {
+                text: `${((confidence as number) * 100).toFixed(1)}%`,
+                title: modelName || undefined,
+                style: {
+                    color: getConfidenceColor(confidence as number),
+                    backgroundColor: getConfidenceBackgroundColor(confidence as number),
+                },
+            };
+        }
+        return {
+            text: modelLabel || '--',
+            title: modelName || undefined,
+            style: modelLabel
+                ? {color: '#8ab4f8', backgroundColor: 'rgba(138, 180, 248, 0.16)'}
+                : {color: '#666', backgroundColor: 'rgba(102, 102, 102, 0.15)'},
+        };
+    };
+
     const currentLabelIds = React.useMemo(
         () => new Set(labelNames.map(labelName => labelName.id)),
         [labelNames]
@@ -361,11 +389,15 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
         );
         return aiRects.map((rect, idx) => {
             const name = labelNames.find(ln => ln.id === rect.labelId)?.name || rect.suggestedLabel || 'unknown';
+            const confidence = typeof rect.confidence === 'number' && Number.isFinite(rect.confidence)
+                ? rect.confidence : NaN;
             return {
                 class_id: idx,
                 class_name: name,
-                confidence: rect.confidence || 0,
-                info: { id: idx, name, confidence: rect.confidence || 0 },
+                confidence,
+                modelSource: rect.annotationSource,
+                modelName: rect.annotationModel,
+                info: { id: idx, name, confidence, modelSource: rect.annotationSource, modelName: rect.annotationModel },
                 bbox: { x1: rect.rect.x, y1: rect.rect.y, x2: rect.rect.x + rect.rect.width, y2: rect.rect.y + rect.rect.height, width: rect.rect.width, height: rect.rect.height },
                 mask: null,
                 _labelRectId: rect.id,
@@ -499,6 +531,7 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
                             const thumbnailKey = imageId ? getThumbnailKey(imageId, displayResult) : '';
                             const thumbnailUrl = thumbnails[thumbnailKey];
                             const thumbnailFailed = failedThumbnailKeys[thumbnailKey];
+                            const badge = getConfidenceBadge(displayResult);
                             return (
                             <div key={`${thumbnailKey}:${index}`} className="SegmentationResultItem"
                                 onClick={() => handleClickSegmentationResult(result)}
@@ -512,11 +545,8 @@ const InferenceResultsView: React.FC<IProps> = ({language, suggestedLabelList, s
                                     <div className="ClassName" style={{color: getLabelColor(result.info?.name || result.class_name)}}>
                                         {result.info?.name || result.class_name}
                                     </div>
-                                    <div className="Confidence" style={{
-                                        color: getConfidenceColor(result.info?.confidence || result.confidence || 0),
-                                        backgroundColor: getConfidenceBackgroundColor(result.info?.confidence || result.confidence || 0)
-                                    }}>
-                                        {(((result.info?.confidence ?? result.confidence ?? 0) || 0) * 100).toFixed(1)}%
+                                    <div className="Confidence" title={badge.title} style={badge.style}>
+                                        {badge.text}
                                     </div>
                                 </div>
                                 <div className="ResultContent">

@@ -1,4 +1,4 @@
-import {store} from '../..';
+import {store} from '../../index';
 import {ImageData, LabelLine, LabelName, LabelPoint, LabelPolygon, LabelRect} from '../labels/types';
 import {find} from 'lodash';
 import {LabelType} from '../../data/enums/LabelType';

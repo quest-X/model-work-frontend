@@ -85,6 +85,29 @@ it.each(['All', 'Detection'])('deletes a detection in the %s tab without removin
     expect(testStore.getState().labels.imagesData[0].labelPolygons.map(p => p.id)).toEqual(['segment']);
 });
 
+it('shows unrecorded confidence instead of 0% for an AI detection without a score', () => {
+    const rect = {...LabelUtil.createLabelRect('person', {x: 30, y: 0, width: 10, height: 10}),
+        id: 'rect-without-score', isCreatedByAI: true, confidence: undefined};
+    testStore.dispatch(updateImageData([{...image(), labelRects: [rect]}]));
+    render(<Provider store={testStore}><InferenceResultsView/></Provider>);
+
+    expect(screen.getAllByText('--')).toHaveLength(1);
+    expect(screen.queryByText('0.0%')).not.toBeInTheDocument();
+});
+
+it('shows the external model source when an AI detection has no confidence', () => {
+    const rect = {...LabelUtil.createLabelRect('person', {x: 30, y: 0, width: 10, height: 10}),
+        id: 'rect-with-source', isCreatedByAI: true, confidence: undefined,
+        annotationSource: 'DeepSeek', annotationModel: 'deepseek-v4.1-flash-1017'};
+    testStore.dispatch(updateImageData([{...image(), labelRects: [rect]}]));
+    render(<Provider store={testStore}><InferenceResultsView/></Provider>);
+
+    expect(screen.getByText('deepseek-v4.1-flash-1017')).toBeInTheDocument();
+    expect(screen.queryByText('DeepSeek')).not.toBeInTheDocument();
+    expect(screen.queryByText('--')).not.toBeInTheDocument();
+    expect(screen.getByTitle('deepseek-v4.1-flash-1017')).toBeInTheDocument();
+});
+
 it('deletes the exact fallback polygon when two annotations have the same class and center', () => {
     const active = {...image(), labelPolygons: [polygon('first'), polygon('second')]};
     const cached = [result('removed-class')];

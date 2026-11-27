@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { connect } from 'react-redux';
 import classNames from 'classnames';
 import { useDropzone } from 'react-dropzone';
@@ -149,6 +149,16 @@ const QueueList: React.FC<IProps> = ({
 }) => {
     const texts = LanguageConfig[language];
 
+    // Existing browser state may still contain IDs duplicated by an earlier restore.
+    const visibleItems = useMemo(() => {
+        const ids = new Set<string>();
+        return items.filter(item => {
+            if (ids.has(item.id)) return false;
+            ids.add(item.id);
+            return true;
+        });
+    }, [items]);
+
     const onDrop = useCallback((files: File[]) => {
         if (files.length === 0) return;
         window.dispatchEvent(new CustomEvent('opensight:drop-files', { detail: files }));
@@ -202,15 +212,15 @@ const QueueList: React.FC<IProps> = ({
                     <p>{texts.queueEmptyHint}</p>
                 </div>
             )}
-            {!isDragActive && items.length === 0 ? (
-                <div className='queue-list-empty'>
+            {!isDragActive && visibleItems.length === 0 ? (
+                <div key='queue-empty' className='queue-list-empty'>
                     <img src='/ico/box-opened.png' alt='empty' draggable={false} />
                     <p>{texts.queueEmpty}</p>
                     <p className='queue-list-empty-hint'>{texts.queueEmptyHint}</p>
                 </div>
             ) : !isDragActive ? (
-                <div className='queue-list-scroll'>
-                    {items.map(item => (
+                <div key='queue-items' className='queue-list-scroll'>
+                    {visibleItems.map(item => (
                         <QueueItemCard
                             key={item.id}
                             item={item}

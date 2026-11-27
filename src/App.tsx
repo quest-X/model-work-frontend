@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './App.scss';
 import EditorView, {PlatformMode} from './views/EditorView/EditorView';
 import {ProjectType} from './data/enums/ProjectType';
@@ -6,9 +6,6 @@ import {AppState} from './store';
 import {connect} from 'react-redux';
 import PopupView from './views/PopupView/PopupView';
 import MobileMainView from './views/MobileMainView/MobileMainView';
-import {ISize} from './interfaces/ISize';
-import {Settings} from './settings/Settings';
-import {SizeItUpView} from './views/SizeItUpView/SizeItUpView';
 import {PlatformModel} from './staticModels/PlatformModel';
 import classNames from 'classnames';
 import NotificationsView from './views/NotificationsView/NotificationsView';
@@ -22,13 +19,11 @@ import {RestorePrompt, StoredDataInfo} from './views/Common/RestorePrompt';
 
 interface IProps {
     projectType: ProjectType;
-    windowSize: ISize;
     roboflowAPIDetails: RoboflowAPIDetails;
 }
 
 export const App: React.FC<IProps> = (
     {
-        windowSize,
         roboflowAPIDetails
     }
 ) => {
@@ -116,8 +111,11 @@ export const App: React.FC<IProps> = (
         }
     };
 
-
+    const initializationStarted = useRef(false);
     useEffect(() => {
+        // Fast Refresh replays effects; do not rediscover snapshots over an open workspace.
+        if (initializationStarted.current) return;
+        initializationStarted.current = true;
         initializeApp();
     }, []);
 
@@ -257,15 +255,10 @@ export const App: React.FC<IProps> = (
             return <MobileMainView/>;
 
         // 直接进入EditorView，跳过MainView和项目类型选择
-        const minimumWidth = platformMode === 'control' ? Settings.CONTROL_MIN_WIDTH : Settings.EDITOR_MIN_WIDTH;
-        if (windowSize.height < Settings.EDITOR_MIN_HEIGHT || windowSize.width < minimumWidth) {
-            return <SizeItUpView minimumWidth={minimumWidth}/>;
-        } else {
-            return <EditorView
-                platformMode={platformMode}
-                onPlatformSwitch={() => setPlatformMode(mode => mode === 'annotation' ? 'control' : 'annotation')}
-            />;
-        }
+        return <EditorView
+            platformMode={platformMode}
+            onPlatformSwitch={() => setPlatformMode(mode => mode === 'annotation' ? 'control' : 'annotation')}
+        />;
     };
 
     const isAILoaded = (roboflowAPIDetails.model !== '' && roboflowAPIDetails.key !== '' && roboflowAPIDetails.status)
@@ -286,7 +279,6 @@ export const App: React.FC<IProps> = (
 
 const mapStateToProps = (state: AppState) => ({
     projectType: state.general.projectData.type,
-    windowSize: state.general.windowSize,
     roboflowAPIDetails: state.ai.roboflowAPIDetails
 });
 

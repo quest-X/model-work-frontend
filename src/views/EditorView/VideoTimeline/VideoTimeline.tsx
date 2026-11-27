@@ -193,6 +193,8 @@ export const VideoTimeline: React.FC<IProps> = ({
         const ctx = canvas?.getContext('2d');
         if (!canvas || !ctx) return;
         const {width, height} = canvas;
+        // 极窄布局下容器可能先量到 0 宽，此时 0 尺寸画布无法作为 drawImage 源。
+        if (width === 0 || height === 0) return;
         let background = backgroundRef.current;
         if (!background || background.draw !== drawBackground ||
             background.canvas.width !== width || background.canvas.height !== height) {
@@ -474,7 +476,17 @@ export const VideoTimeline: React.FC<IProps> = ({
             <div className="TimelineControls">
                 <div className="LeftInfo">
                     <span data-video-fps={fps}>{language === 'zh' ? '帧率' : 'FPS'}: {Math.round(fps)}</span>
-                    <span>{texts.video.frame + ': '}{currentFrame + 1} / {frames}</span>
+                    {/* 当前帧号用固定宽度顶住，播放时后面的“/ 总帧数”不会跟着左右移动。 */}
+                    <span>
+                        {texts.video.frame + ': '}
+                        <span
+                            className='FrameCounter'
+                            style={{minWidth: `${String(frames).length}ch`}}
+                        >
+                            {currentFrame + 1}
+                        </span>
+                        {' / '}{frames}
+                    </span>
                 </div>
 
                 {/* 播放和静音按钮 - 居中显示 */}

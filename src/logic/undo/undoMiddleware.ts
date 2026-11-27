@@ -1,4 +1,5 @@
 import {Action as ReduxAction, Middleware} from 'redux';
+import {isEqual} from 'lodash';
 import {Action} from '../../store/Actions';
 import {UndoStack, RestoreFlag, UndoSnapshot} from './UndoStack';
 import {AppState} from '../../store';
@@ -265,18 +266,7 @@ function cloneImageData(list: ImageData[]): ImageData[] {
     }));
 }
 
-// Cached deep-clone of the most recent clean state. Because render engines mutate
-// ImageData in place before dispatching, we cannot snapshot inside the middleware
-// at dispatch time — state is already dirty. Instead, after every label-state
-// change we cache a deep clone; on the next mutation we push that clean cache.
-let lastSnapshot: UndoSnapshot | null = null;
-
-// Throttle snapshots: structuredClone of 15k+ ImageData entries costs ~50-100ms.
-// During playback, UPDATE_IMAGE_DATA_BY_ID fires on every frame (25+ times/sec),
-// causing >2.5s of cloning overhead per 16s of playback. Throttle to at most
-// one snapshot every 300ms — still captures undo points for interactive edits,
-// while eliminating 90%+ of cloning during rapid-fire dispatches.
-let lastSnapshotTime = 0;
+// Throttle pixel-cache snapshots during playback; real edits must refresh immediately.
 const SNAPSHOT_MIN_INTERVAL_MS = 300;
 
 function takeSnapshot(state: AppState): UndoSnapshot {
@@ -286,35 +276,53 @@ function takeSnapshot(state: AppState): UndoSnapshot {
     };
 }
 
-export const undoMiddleware: Middleware<Record<string, never>, AppState> =
-store => next => (action: ReduxAction) => {
-    if (action?.type === Action.ACCEPT_VISUAL_SEARCH_BBOX ||
-        action?.type === Action.ACCEPT_VISUAL_SEARCH_MASK) {
-        const before = store.getState();
-        assertVisualSearchAcceptanceCAS(before, action as AcceptVisualSearchAction);
-        if (!RestoreFlag.get()) UndoStack.push(takeSnapshot(before));
-        const result = next(action);
-        lastSnapshot = takeSnapshot(store.getState());
-        lastSnapshotTime = performance.now();
-        return result;
+const sameUndoImage = (left: ImageData | undefined, right: ImageData): boolean =>
+    Boolean(left && isEqual(
+        [left.id, left.labelRects, left.labelPoints, left.labelLines, left.labelPolygons,
+            left.labelNameIds, left.isSelected, left.isVisitedByRoboflowAPI],
+        [right.id, right.labelRects, right.labelPoints, right.labelLines, right.labelPolygons,
+            right.labelNameIds, right.isSelected, right.isVisitedByRoboflowAPI],
+    ));
+
+const changesUndoState = (action: LabelsActionTypes, snapshot: UndoSnapshot): boolean => {
+    if (action.type === Action.UPDATE_IMAGE_DATA_BY_ID) {
+        return !sameUndoImage(snapshot.imagesData.find(image => image.id === action.payload.id),
+            action.payload.newImageData);
     }
-    const restoring = RestoreFlag.get();
-    if (!restoring && action && SNAPSHOT_ACTIONS.has(action.type) && lastSnapshot) {
-        UndoStack.push(lastSnapshot);
+    if (action.type === Action.UPDATE_IMAGES_DATA) {
+        return snapshot.imagesData.length !== action.payload.imageData.length ||
+            action.payload.imageData.some((image, index) => !sameUndoImage(snapshot.imagesData[index], image));
     }
-    const result = next(action);
-    if (action && LABEL_STATE_ACTIONS.has(action.type)) {
-        const now = performance.now();
-        // Restore actions must replace the cache immediately. Otherwise an undo
-        // followed within 300 ms by a normal edit can push the pre-undo state and
-        // resurrect the accepted visual-search result on the next undo.
-        if (restoring || now - lastSnapshotTime >= SNAPSHOT_MIN_INTERVAL_MS) {
+    return SNAPSHOT_ACTIONS.has(action.type);
+};
+
+export const undoMiddleware: Middleware<Record<string, never>, AppState> = store => {
+    // Render engines mutate annotations before dispatch, so seed and retain a clean copy per store.
+    let lastSnapshot = takeSnapshot(store.getState());
+    let lastSnapshotTime = 0;
+    return next => (action: ReduxAction) => {
+        if (action?.type === Action.ACCEPT_VISUAL_SEARCH_BBOX ||
+            action?.type === Action.ACCEPT_VISUAL_SEARCH_MASK) {
+            const before = store.getState();
+            assertVisualSearchAcceptanceCAS(before, action as AcceptVisualSearchAction);
+            if (!RestoreFlag.get()) UndoStack.push(takeSnapshot(before));
+            const result = next(action);
             lastSnapshot = takeSnapshot(store.getState());
-            lastSnapshotTime = now;
+            lastSnapshotTime = performance.now();
+            return result;
         }
-    } else if (lastSnapshot === null && action) {
-        // First dispatch after boot — seed the snapshot so the first mutation is undoable
-        lastSnapshot = takeSnapshot(store.getState());
-    }
-    return result;
+        const restoring = RestoreFlag.get();
+        const changed = action && changesUndoState(action as LabelsActionTypes, lastSnapshot);
+        if (!restoring && changed) UndoStack.push(lastSnapshot);
+        const result = next(action);
+        if (action && LABEL_STATE_ACTIONS.has(action.type)) {
+            const now = performance.now();
+            if (restoring || changed || action.type === Action.UPDATE_LABEL_NAMES ||
+                action.type === Action.ADD_IMAGES_DATA || now - lastSnapshotTime >= SNAPSHOT_MIN_INTERVAL_MS) {
+                lastSnapshot = takeSnapshot(store.getState());
+                lastSnapshotTime = now;
+            }
+        }
+        return result;
+    };
 };

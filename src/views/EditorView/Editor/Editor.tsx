@@ -434,13 +434,18 @@ export class Editor extends React.Component<IProps, IState> {
     };
 
     private onRectLabelChange = (rectId: string, labelId: string) => {
-        const selectedLabel = this.props.labelNames?.find(labelName => labelName.id === labelId);
-        if (!selectedLabel) return;
+        if (labelId) {
+            const selectedLabel = this.props.labelNames?.find(labelName => labelName.id === labelId);
+            if (!selectedLabel) return;
+        }
 
         const newImageData: ImageData = {
             ...this.props.imageData,
+            // labelId 为空表示选择 none：清除已指定标签和 AI 建议标签。
             labelRects: this.props.imageData.labelRects.map(labelRect =>
-                labelRect.id === rectId ? {...labelRect, labelId, suggestedLabel: null} : labelRect
+                labelRect.id === rectId
+                    ? {...labelRect, labelId: labelId || null, suggestedLabel: null}
+                    : labelRect
             )
         };
         this.props.updateImageDataById(this.props.imageData.id, newImageData);

@@ -5,6 +5,8 @@ import {LabelStatus} from '../../../../data/enums/LabelStatus';
 import {EditorData} from '../../../../data/EditorData';
 import {publishRectLabelOverlayPosition} from '../../../../utils/RectLabelOverlayPositionBus';
 
+jest.mock('../../../../index', () => ({store: {dispatch: jest.fn(), getState: jest.fn()}}));
+
 const editorData: EditorData = {
     viewPortContentSize: {width: 400, height: 300},
     mousePositionOnViewPortContent: {x: 0, y: 0},
@@ -83,8 +85,28 @@ describe('RectLabelSelectOverlay', () => {
         expect(screen.getByRole('listbox', {name: '选择标注标签'})).toBeInTheDocument();
         expect(screen.getByRole('option', {name: 'bird'})).toHaveAttribute('aria-selected', 'true');
 
+        // 展开时把框线和 8 个锚点画在菜单上层，菜单贴角也不会遮住它们。
+        const outline = dropdown.querySelector('.RectLabelDropdown__outline');
+        expect(outline).not.toBeNull();
+        expect(outline.querySelectorAll('rect')).toHaveLength(9);
+
         fireEvent.click(screen.getByRole('option', {name: 'dog'}));
         expect(onChange).toHaveBeenCalledWith('rect-1', 'dog-id');
+        expect(dropdown.querySelector('.RectLabelDropdown__outline')).toBeNull();
+    });
+
+    it('shows the external model source when the box has no confidence', () => {
+        const {container} = render(<RectLabelSelectOverlay editorData={editorData}
+            labelRects={[{id: 'source', labelId: 'bird-id',
+                rect: {x: 100, y: 50, width: 40, height: 20}, isCreatedByAI: true,
+                isVisible: true, status: LabelStatus.ACCEPTED, suggestedLabel: null,
+                annotationSource: 'DeepSeek', annotationModel: 'deepseek-v4.1-flash-1017'}]}
+            labelNames={labelNames} visible={true} onChange={jest.fn()} onActivate={jest.fn()}
+            onInteractionChange={jest.fn()}/>);
+
+        const value = container.querySelector('.RectLabelDropdown__confidence');
+        expect(value).toHaveTextContent('deepseek-v4.1-flash-1017');
+        expect(value).toHaveAttribute('title', 'deepseek-v4.1-flash-1017');
     });
 
     it('keeps style 1 available while preserving the dropdown interaction', () => {

@@ -42,6 +42,35 @@ it('pauses and seeks the exact fractional-rate video frame when selecting a stat
     expect(select).toHaveBeenCalledWith(1);
 });
 
+it('shows unrecorded confidence instead of a misleading 0% for external model boxes', () => {
+    const image = ImageDataUtil.createImageDataFromFileData(new File(['frame'], 'frame_000516.jpg'));
+    image.labelRects = [{...LabelUtil.createLabelRect(null, {x: 0, y: 0, width: 10, height: 10}),
+        isCreatedByAI: true, confidence: undefined, annotationSource: 'DeepSeek',
+        annotationModel: 'deepseek-v4.1-flash-1017'}];
+    render(<BatchStatisticsView language={Language.CHINESE} imagesData={[image]} activeImageIndex={0}
+        updateActiveImageIndex={jest.fn()}/>);
+
+    expect(screen.getByText('deepseek-v4.1-flash-1017')).toBeInTheDocument();
+    expect(screen.getAllByText('--').length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByText('0.0%')).not.toBeInTheDocument();
+});
+
+it('averages only recorded confidence values when some boxes have none', () => {
+    const recorded = ImageDataUtil.createImageDataFromFileData(new File(['recorded'], 'recorded.png'));
+    const missing = ImageDataUtil.createImageDataFromFileData(new File(['missing'], 'missing.png'));
+    recorded.labelRects = [{...LabelUtil.createLabelRect(null, {x: 0, y: 0, width: 10, height: 10}),
+        isCreatedByAI: true, confidence: 0.8}];
+    missing.labelRects = [{...LabelUtil.createLabelRect(null, {x: 0, y: 0, width: 10, height: 10}),
+        isCreatedByAI: true, confidence: undefined, annotationSource: 'GLM',
+        annotationModel: 'glm-5.3-flash'}];
+    render(<BatchStatisticsView language={Language.CHINESE} imagesData={[recorded, missing]} activeImageIndex={0}
+        updateActiveImageIndex={jest.fn()}/>);
+
+    expect(screen.getAllByText('80.0%').length).toBeGreaterThanOrEqual(4);
+    expect(screen.queryByText('40.0%')).not.toBeInTheDocument();
+    expect(screen.getByText('glm-5.3-flash')).toBeInTheDocument();
+});
+
 it('hides Sigine review guidance while keeping its stored results', () => {
     const image = ImageDataUtil.createImageDataFromFileData(new File(['frame'], 'frame_000000.jpg'));
     const select = jest.fn();

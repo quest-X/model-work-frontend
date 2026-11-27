@@ -100,6 +100,8 @@ it('keeps the mounted editor and resumes saving when the selected task fails to 
         expect(database.cancelPendingRestore).toHaveBeenCalled();
         expect(database.activateWorkspace).not.toHaveBeenCalled();
         expect(screen.getByTitle('在当前页面打开此任务')).toBeEnabled();
+        await act(async () => { fireEvent.focus(window); });
+        expect(screen.getByRole('alert')).toHaveTextContent('视频源不可用');
     } finally {
         clock.mockRestore();
     }
@@ -117,20 +119,86 @@ it('shows the same video title as the file queue', async () => {
     expect(screen.getByText('880/900 帧已标注')).toBeInTheDocument();
 });
 
-it('refreshes embedded history from the shared sidebar without adding a second header', async () => {
+it('refreshes history automatically without replacing the visible list or overlapping requests', async () => {
+    jest.useFakeTimers();
     const database = IndexedDBManager as jest.Mocked<typeof IndexedDBManager>;
     const task = {workspaceId: 'saved', projectName: 'before', imageCount: 2,
         validImageCount: 2, labelCount: 1, isVideoProject: false,
         hasRecoverableProject: true, lastModified: 1};
+    let finish: (entries: typeof task[]) => void;
+    const pending = new Promise<typeof task[]>(resolve => { finish = resolve; });
     database.listAnnotatedProjects.mockReset()
         .mockResolvedValueOnce([task])
-        .mockResolvedValueOnce([{...task, projectName: 'after'}]);
-    const {rerender} = render(<HistoryTasks language={Language.CHINESE} embedded refreshToken={0}/>);
-    expect(await screen.findByText('before')).toBeInTheDocument();
-    expect(screen.queryByRole('button', {name: '刷新历史任务'})).not.toBeInTheDocument();
-    rerender(<HistoryTasks language={Language.CHINESE} embedded refreshToken={1}/>);
-    expect(await screen.findByText('after')).toBeInTheDocument();
-    expect(database.listAnnotatedProjects).toHaveBeenCalledTimes(2);
+        .mockReturnValueOnce(pending);
+    try {
+        const {container, unmount} = render(<HistoryTasks language={Language.CHINESE} embedded/>);
+        await act(async () => undefined);
+        expect(screen.getByText('before')).toBeInTheDocument();
+        expect(container.querySelector('.HistoryTasks__header')).toBeNull();
+        expect(screen.queryByRole('button', {name: '刷新历史任务'})).not.toBeInTheDocument();
+        const list = container.querySelector('.HistoryTasks__list');
+        list.scrollTop = 50;
+        await act(async () => { jest.advanceTimersByTime(5000); });
+        expect(screen.getByText('before')).toBeInTheDocument();
+        expect(screen.queryByRole('status')).not.toBeInTheDocument();
+        await act(async () => { jest.advanceTimersByTime(10000); });
+        expect(database.listAnnotatedProjects).toHaveBeenCalledTimes(2);
+        await act(async () => { finish([{...task, projectName: 'after', labelCount: 2}]); });
+        expect(screen.getByText('after')).toBeInTheDocument();
+        expect(screen.getByText('2/2 张已标注')).toBeInTheDocument();
+        expect(container.querySelector('.HistoryTasks__list')).toBe(list);
+        expect(list.scrollTop).toBe(50);
+        unmount();
+        await act(async () => { jest.advanceTimersByTime(10000); fireEvent.focus(window); });
+        expect(database.listAnnotatedProjects).toHaveBeenCalledTimes(2);
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+it('refreshes on focus and visibility changes and pauses polling while the page is hidden', async () => {
+    jest.useFakeTimers();
+    let visibility: DocumentVisibilityState = 'visible';
+    const visible = jest.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
+    const database = jest.mocked(IndexedDBManager);
+    database.listAnnotatedProjects.mockReset().mockResolvedValue([]);
+    try {
+        const {unmount} = render(<HistoryTasks language={Language.ENGLISH}/>);
+        await act(async () => undefined);
+        expect(screen.queryByRole('button', {name: 'Refresh task history'})).not.toBeInTheDocument();
+        await act(async () => { fireEvent.focus(window); });
+        expect(database.listAnnotatedProjects).toHaveBeenCalledTimes(2);
+        visibility = 'hidden';
+        await act(async () => { fireEvent(document, new Event('visibilitychange')); jest.advanceTimersByTime(10000); });
+        expect(database.listAnnotatedProjects).toHaveBeenCalledTimes(2);
+        visibility = 'visible';
+        await act(async () => { fireEvent(document, new Event('visibilitychange')); });
+        expect(database.listAnnotatedProjects).toHaveBeenCalledTimes(3);
+        unmount();
+        await act(async () => { fireEvent(document, new Event('visibilitychange')); });
+        expect(database.listAnnotatedProjects).toHaveBeenCalledTimes(3);
+    } finally {
+        visible.mockRestore();
+        jest.useRealTimers();
+    }
+});
+
+it('recovers from a failed history read automatically', async () => {
+    jest.useFakeTimers();
+    const database = jest.mocked(IndexedDBManager);
+    database.listAnnotatedProjects.mockReset()
+        .mockRejectedValueOnce(new Error('History temporarily unavailable'))
+        .mockResolvedValue([]);
+    try {
+        render(<HistoryTasks language={Language.ENGLISH}/>);
+        await act(async () => undefined);
+        expect(screen.getByRole('alert')).toHaveTextContent('History temporarily unavailable');
+        await act(async () => { jest.advanceTimersByTime(5000); });
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.getByText('No saved annotation tasks yet')).toBeInTheDocument();
+    } finally {
+        jest.useRealTimers();
+    }
 });
 
 it('keeps the current editor open when its recovery snapshot could not be saved', async () => {

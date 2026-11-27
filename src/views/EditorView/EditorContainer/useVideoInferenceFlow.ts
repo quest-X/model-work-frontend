@@ -9,6 +9,7 @@ export function useVideoInferenceFlow(videoId: string | undefined, inProgress: b
     showResults: () => void, showStatistics: () => void, fps = 30): string | undefined {
     const [previewImageId, setPreviewImageId] = useState<string>();
     const running = useRef(false);
+    const batchPreviewStarted = useRef(false);
     const sequenceVideo = useRef<string>();
     const completed = useRef(false);
     const startedPlaying = useRef(false);
@@ -23,6 +24,7 @@ export function useVideoInferenceFlow(videoId: string | undefined, inProgress: b
         if (!videoId || (sequenceVideo.current && sequenceVideo.current !== videoId)) return undefined;
         sequenceVideo.current = videoId;
         running.current = true;
+        batchPreviewStarted.current = false;
         completed.current = false;
         startedPlaying.current = false;
         waitingForFrames.current = false;
@@ -31,9 +33,6 @@ export function useVideoInferenceFlow(videoId: string | undefined, inProgress: b
         setPreviewImageId(undefined);
         callbacks.current.showResults();
         store.dispatch(updateVideoPlayingStatus(videoId, false));
-        if (EditorModel.videoElement?.readyState >= 1) EditorModel.videoElement.currentTime = 0;
-        store.dispatch(updateVideoCurrentFrame(videoId, 0, 0));
-        store.dispatch(updateActiveImageIndex(0));
         const timer = setInterval(() => {
             if (latestResult.current) setPreviewImageId(latestResult.current);
         }, 250);
@@ -53,6 +52,13 @@ export function useVideoInferenceFlow(videoId: string | undefined, inProgress: b
         const advance = (event: Event) => {
             if (!running.current || !videoId) return;
             const detail = (event as CustomEvent).detail;
+            // A busy flag also covers single-frame calls; only batch progress starts playback.
+            if (!batchPreviewStarted.current) {
+                batchPreviewStarted.current = true;
+                if (EditorModel.videoElement?.readyState >= 1) EditorModel.videoElement.currentTime = 0;
+                store.dispatch(updateVideoCurrentFrame(videoId, 0, 0));
+                store.dispatch(updateActiveImageIndex(0));
+            }
             progress.current = {processed: detail.count + (detail.failed || 0), total: detail.total};
             const currentFrame = store.getState().video.activeVideo?.currentFrame || 0;
             const lead = Math.min(detail.total, Math.max(1, Math.ceil(callbacks.current.fps * 0.5)));

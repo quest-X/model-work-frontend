@@ -1,3 +1,4 @@
+import {getSigineSelection, modelSourceLabel} from '../utils/SigineInfra';
 import axios from 'axios';
 import {IRect} from '../interfaces/IRect';
 import {ImageData} from '../store/labels/types';
@@ -129,6 +130,8 @@ export interface DetectionBbox {
 export interface DetectionObjectInfo {
     sourceName?: string;
     sourceId?: number;
+    modelSource?: string;
+    modelName?: string;
     id: number;
     name: string;
     confidence: number;
@@ -308,10 +311,7 @@ export class DetectionAPIDetector {
             formData.append('sigine_review', 'true');
             formData.append('target_classes', this.getAnnotationTargets().join(','));
         }
-        if (localStorage.getItem('opensight.sigineInfra') === 'true') {
-            formData.append('sigine_infra', 'true');
-            if (!formData.has('target_classes')) formData.append('target_classes', this.getAnnotationTargets().join(','));
-        }
+
     }
 
     private static recordSigineReview(filename: string, review?: DetectionAPIResponse['review'], error?: string): void {
@@ -379,6 +379,34 @@ export class DetectionAPIDetector {
             throw new Error('No image file data available');
         }
 
+    }
+
+    public static async recognizeSigine(imageData: ImageData, blob?: Blob): Promise<DetectionResult[]> {
+        const selection = getSigineSelection();
+        if (!selection) throw new Error('请选择 Sigine 来源和模型');
+        const form = new FormData();
+        if (blob) form.append('file', blob, 'frame.jpg');
+        else if (imageData.fileData.size > 0 && imageData.fileData.type.startsWith('image/')) {
+            form.append('file', imageData.fileData);
+        } else await this.appendImageSource(form, imageData);
+        form.append('selection', JSON.stringify(selection));
+        form.append('target_classes', this.getAnnotationTargets().join(','));
+        try {
+            const response = await axios.post(`${getEngineBaseUrl()}/sigine-infra/detect`, form, {timeout: 180000});
+            if (!Array.isArray(response.data.boxes) || response.data.boxes.some(box =>
+                typeof box.label !== 'string' || !box.label.trim() || !Array.isArray(box.bbox)
+                || box.bbox.length !== 4 || box.bbox.some(value => !Number.isFinite(value) || value < 0)
+                || box.bbox[0] >= box.bbox[2] || box.bbox[1] >= box.bbox[3])) {
+                throw new Error('Invalid model annotation boxes');
+            }
+            return response.data.boxes.map((box: {label: string; bbox: DetectionResult['bbox']}, index: number) => ({
+                info: {id: index, name: box.label, confidence: undefined,
+                    modelSource: modelSourceLabel(selection.model), modelName: selection.model}, bbox: box.bbox,
+            }));
+        } catch (error) {
+            const detail = axios.isAxiosError(error) ? error.response?.data?.detail : undefined;
+            throw new Error(typeof detail === 'string' ? detail : this.requestErrorMessage(error));
+        }
     }
 
     private static requestErrorMessage(error: unknown): string {

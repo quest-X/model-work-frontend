@@ -1,3 +1,4 @@
+import {getSigineSelection} from '../utils/SigineInfra';
 /**
  * DetectSessionAPIService — streams per-frame detections from backend
  * POST /detect-session/{sessionId} (NDJSON over HTTP).
@@ -96,7 +97,7 @@ export class DetectSessionAPIService {
                         ...(p.params ? { params: p.params } : {}),
                         ...(p.batchSize ? { batch_size: p.batchSize } : {}),
                         ...(p.sigineReview ? { sigine_review: true, target_classes: p.targetClasses || [] } : {}),
-                        ...(p.sigineInfra ? { sigine_infra: true, target_classes: p.targetClasses || [] } : {}),
+                        ...(p.sigineInfra ? { sigine_infra: true, sigine_selection: getSigineSelection(), target_classes: p.targetClasses || [] } : {}),
                     }),
                 });
             } catch (e) {

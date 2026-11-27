@@ -20,9 +20,27 @@ it('paints accepted labels and confidence with the decoded frame and restores DO
     const label = {...LabelUtil.createLabelRect('dog', rect), status: LabelStatus.ACCEPTED, confidence: 0.85};
     engine['drawLabelText'](label, rect);
     expect(drawText).toHaveBeenCalledWith(expect.any(HTMLCanvasElement), 'Dog 85.0%', 12,
-        expect.any(Object), '#000000', true, 'center');
+        expect.any(Object), '#000000', true, 'left');
     drawText.mockClear();
     playing.mockReturnValue(false);
     engine['drawLabelText'](label, rect);
     expect(drawText).not.toHaveBeenCalled();
+});
+
+it('uses the external model source when playback has no confidence', () => {
+    jest.spyOn(VideoSelector, 'isVideoPlaying').mockReturnValue(true);
+    jest.spyOn(LabelsSelector, 'getLabelNameById').mockReturnValue({id: 'cat', name: 'Cat', color: '#fff'});
+    jest.spyOn(GeneralSelector, 'getEnablePerClassColorationStatus').mockReturnValue(false);
+    jest.spyOn(DrawUtil, 'drawRectWithFill').mockImplementation(() => undefined);
+    const drawText = jest.spyOn(DrawUtil, 'drawText').mockImplementation(() => undefined);
+    const engine = new RectRenderEngine(document.createElement('canvas'));
+    const rect = {x: 1, y: 2, width: 10, height: 20};
+    const label = {...LabelUtil.createLabelRect('cat', rect), status: LabelStatus.ACCEPTED,
+        annotationSource: 'DeepSeek', annotationModel: 'deepseek-v4.1-flash-1017'};
+
+    engine['drawLabelText'](label, rect);
+
+    expect(drawText).toHaveBeenCalledWith(expect.any(HTMLCanvasElement),
+        'Cat deepseek-v4.1-flash-1017', 12,
+        expect.any(Object), '#000000', true, 'left');
 });

@@ -13,8 +13,9 @@ interface ImageStat {
     index: number;
     name: string;
     detCount: number;
-    avgConf: number;      // 0-1, NaN if no detections
+    avgConf: number;      // 0-1, NaN if no recorded confidence
     confidences: number[];
+    modelLabels: string[];
 }
 
 interface IProps {
@@ -115,9 +116,13 @@ export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, act
         return imagesData.map((img, idx) => {
             const aiRects = img.labelRects.filter(r => r.isCreatedByAI);
             const aiPolygons = img.labelPolygons.filter(p => p.isCreatedByAI);
-            const rectConfs = aiRects.map(r => r.confidence ?? 0);
-            const polyConfs = aiPolygons.map(p => p.confidence ?? 0);
-            const confidences = [...rectConfs, ...polyConfs];
+            // 外部模型可能不返回置信度；不能用 0 顶替，否则会被误读成 0% 低置信度。
+            const confidences = [...aiRects, ...aiPolygons]
+                .map(item => item.confidence)
+                .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+            const modelLabels = [...new Set([...aiRects, ...aiPolygons]
+                .map(item => item.annotationModel || item.annotationSource)
+                .filter((value): value is string => !!value))];
             const detCount = aiRects.length + aiPolygons.length;
             const avg = confidences.length > 0
                 ? confidences.reduce((a, b) => a + b, 0) / confidences.length
@@ -128,6 +133,7 @@ export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, act
                 detCount,
                 avgConf: avg,
                 confidences,
+                modelLabels,
             };
         });
     }, [imagesData]);
@@ -207,7 +213,9 @@ export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, act
                     </div>
                     {imageStats.map(stat => {
                         const hasDetection = stat.detCount > 0;
-                        const conf = hasDetection ? stat.avgConf : 0;
+                        const conf = hasDetection ? stat.avgConf : NaN;
+                        const hasConfidence = Number.isFinite(conf);
+                        const modelLabel = stat.modelLabels.join('/');
                         const isActive = stat.index === activeImageIndex;
                         return (
                             <div
@@ -234,14 +242,15 @@ export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, act
                                         <div
                                             className="Bar"
                                             style={{
-                                                width: `${conf * 100}%`,
-                                                backgroundColor: getConfColor(conf),
+                                                width: hasConfidence ? `${conf * 100}%` : '0%',
+                                                backgroundColor: hasConfidence ? getConfColor(conf) : '#666',
                                             }}
                                         />
                                     )}
                                 </div>
-                                <span className="ConfText" style={{color: hasDetection ? getConfColor(conf) : undefined}}>
-                                    {hasDetection ? pct(conf) : '--'}
+                                <span className="ConfText" title={modelLabel || undefined}
+                                    style={{color: hasConfidence ? getConfColor(conf) : modelLabel ? '#8ab4f8' : '#666'}}>
+                                    {hasConfidence ? pct(conf) : modelLabel || '--'}
                                 </span>
                             </div>
                         );

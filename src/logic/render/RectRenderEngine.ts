@@ -2,7 +2,7 @@ import {IPoint} from '../../interfaces/IPoint';
 import {IRect} from '../../interfaces/IRect';
 import {RectUtil} from '../../utils/RectUtil';
 import {DrawUtil} from '../../utils/DrawUtil';
-import {store} from '../..';
+import {store} from '../../index';
 import {ImageData, LabelPolygon, LabelRect} from '../../store/labels/types';
 import {
     updateActiveLabelId,
@@ -852,7 +852,15 @@ export class RectRenderEngine extends BaseRenderEngine {
     // =================================================================================================================
     // AI LABEL TEXT DRAWING
     // =================================================================================================================
-    
+
+    private playbackSuffix(labelRect: LabelRect): string {
+        if (Number.isFinite(labelRect.confidence)) {
+            return ` ${(labelRect.confidence * 100).toFixed(1)}%`;
+        }
+        const model = labelRect.annotationModel || labelRect.annotationSource;
+        return model ? ` ${model}` : '';
+    }
+
     private drawLabelText(labelRect: LabelRect, rectOnImage: IRect): void {
         // Playback labels follow decoded frames; paused editing uses the DOM dropdown.
         const playing = VideoSelector.isVideoPlaying();
@@ -870,9 +878,7 @@ export class RectRenderEngine extends BaseRenderEngine {
         }
         
         if (!labelText) return;
-        if (playing && Number.isFinite(labelRect.confidence)) {
-            labelText += ` ${(labelRect.confidence * 100).toFixed(1)}%`;
-        }
+        if (playing) labelText += this.playbackSuffix(labelRect);
         const labelPosition: IPoint = {
             x: rectOnImage.x,
             y: rectOnImage.y + 12  // 标签在标注框内部，上边缘对齐
@@ -903,9 +909,9 @@ export class RectRenderEngine extends BaseRenderEngine {
 
         DrawUtil.drawRectWithFill(this.canvas, labelBg, bgColor);
 
-        // 绘制标签文字（在背景内完全居中）
+        // 绘制标签文字（左对齐，长模型名可以向右延伸）
         const textPosition: IPoint = {
-            x: labelBg.x + labelBg.width / 2,
+            x: labelBg.x + 4,
             y: labelBg.y + labelBg.height / 2
         };
         DrawUtil.drawText(
@@ -915,13 +921,14 @@ export class RectRenderEngine extends BaseRenderEngine {
             textPosition,
             perClassColor ? '#FFFFFF' : '#000000',
             true,
-            'center'
+            'left'
         );
     }
     
     private estimateTextWidth(text: string, fontSize: number): number {
-        // 简单的文字宽度估算
-        return text.length * fontSize * 0.6;
+        // CJK 字形为全角，按 1em 计；拉丁字符约 0.6em。
+        return Array.from(text).reduce((width, char) =>
+            width + (char.charCodeAt(0) > 0xff ? fontSize : fontSize * 0.6), 0);
     }
 
     // =================================================================================================================

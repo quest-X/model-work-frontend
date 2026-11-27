@@ -14,7 +14,6 @@ import './HistoryTasks.scss';
 interface Props {
     language: Language;
     embedded?: boolean;
-    refreshToken?: number;
 }
 
 const HistoryThumbnail: React.FC<{task: AnnotatedProjectHistoryEntry; name: string; zh: boolean}> =
@@ -37,11 +36,12 @@ const HistoryThumbnail: React.FC<{task: AnnotatedProjectHistoryEntry; name: stri
         </span>;
     };
 
-export const HistoryTasks: React.FC<Props> = ({language, embedded = false, refreshToken = 0}) => {
+export const HistoryTasks: React.FC<Props> = ({language, embedded = false}) => {
     const zh = language === Language.CHINESE;
     const [tasks, setTasks] = useState<AnnotatedProjectHistoryEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [refresh, setRefresh] = useState(0);
     const [openingId, setOpeningId] = useState<string | null>(null);
     const [openedId, setOpenedId] = useState<string | null>(null);
@@ -62,17 +62,34 @@ export const HistoryTasks: React.FC<Props> = ({language, embedded = false, refre
 
     useEffect(() => {
         let active = true;
-        setLoading(true);
-        setError(null);
-        IndexedDBManager.listAnnotatedProjects().then(entries => {
-            if (active) setTasks(entries);
-        }).catch(cause => {
-            if (active) setError(cause instanceof Error ? cause.message : String(cause));
-        }).finally(() => {
-            if (active) setLoading(false);
-        });
-        return () => { active = false; };
-    }, [refresh, refreshToken]);
+        let inFlight = false;
+        const updateHistory = async () => {
+            if (!active || inFlight || document.visibilityState === 'hidden') return;
+            inFlight = true;
+            try {
+                const entries = await IndexedDBManager.listAnnotatedProjects();
+                if (active) {
+                    setTasks(entries);
+                    setLoadError(null);
+                }
+            } catch (cause) {
+                if (active) setLoadError(cause instanceof Error ? cause.message : String(cause));
+            } finally {
+                inFlight = false;
+                if (active) setLoading(false);
+            }
+        };
+        void updateHistory();
+        const timer = window.setInterval(updateHistory, 5000);
+        window.addEventListener('focus', updateHistory);
+        document.addEventListener('visibilitychange', updateHistory);
+        return () => {
+            active = false;
+            window.clearInterval(timer);
+            window.removeEventListener('focus', updateHistory);
+            document.removeEventListener('visibilitychange', updateHistory);
+        };
+    }, [refresh]);
 
     const saveCurrentTask = async () => {
         const saveStartedAt = Date.now();
@@ -95,7 +112,7 @@ export const HistoryTasks: React.FC<Props> = ({language, embedded = false, refre
             await AutoSaveService.drain();
             const selected = await IndexedDBManager.getProjectMeta(task.workspaceId);
             if (!selected?.hasRecoverableProject) {
-                throw new Error(zh ? '该历史任务已不可恢复，请刷新列表' : 'This task is no longer available; refresh the list');
+                throw new Error(zh ? '该历史任务已不可恢复，请稍后重试' : 'This task is no longer available; try again later');
             }
             const restored = await ProjectRestoreService.restoreProject(undefined, {
                 replaceCurrent: true,
@@ -154,8 +171,8 @@ export const HistoryTasks: React.FC<Props> = ({language, embedded = false, refre
             }
             await saveCurrentTask();
             if (!await IndexedDBManager.deleteAnnotatedProject(task.workspaceId, task.lastModified)) {
-                throw new Error(zh ? '删除失败，任务可能已更新；请刷新列表重试' :
-                    'Could not delete this task; refresh the list and try again');
+                throw new Error(zh ? '删除失败，任务可能已更新；请稍后重试' :
+                    'Could not delete this task; try again shortly');
             }
             setRefresh(value => value + 1);
         } catch (cause) {
@@ -165,15 +182,14 @@ export const HistoryTasks: React.FC<Props> = ({language, embedded = false, refre
         }
     };
 
+    const displayedError = error || loadError;
     return <section ref={historyRef} className='HistoryTasks' aria-label={zh ? '历史任务' : 'Task History'}>
         {!embedded && <div className='HistoryTasks__header'>
             <strong>{zh ? '历史任务' : 'Task History'}</strong>
-            <button type='button' onClick={() => setRefresh(value => value + 1)}
-                aria-label={zh ? '刷新历史任务' : 'Refresh task history'}>↻</button>
         </div>}
         {loading && <p className='HistoryTasks__state' role='status'>{zh ? '正在读取历史任务…' : 'Loading tasks…'}</p>}
-        {error && <p className='HistoryTasks__state HistoryTasks__error' role='alert'>{error}</p>}
-        {!loading && !error && tasks.length === 0 &&
+        {displayedError && <p className='HistoryTasks__state HistoryTasks__error' role='alert'>{displayedError}</p>}
+        {!loading && !displayedError && tasks.length === 0 &&
             <p className='HistoryTasks__state'>{zh ? '还没有已保存的标注任务' : 'No saved annotation tasks yet'}</p>}
         {!loading && tasks.length > 0 && <div className='HistoryTasks__list'>
             {tasks.map(task => {

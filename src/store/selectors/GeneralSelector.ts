@@ -1,4 +1,4 @@
-import {store} from '../..';
+import {store} from '../../index';
 import {PopupWindowType} from '../../data/enums/PopupWindowType';
 import {ContextType} from '../../data/enums/ContextType';
 import {CustomCursorStyle} from '../../data/enums/CustomCursorStyle';

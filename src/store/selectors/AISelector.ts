@@ -1,4 +1,4 @@
-import {store} from '../..';
+import {store} from '../../index';
 import { RoboflowAPIDetails } from '../ai/types';
 
 export class AISelector {

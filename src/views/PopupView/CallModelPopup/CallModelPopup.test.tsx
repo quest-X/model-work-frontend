@@ -64,7 +64,7 @@ describe('CallModelPopup inference capabilities', () => {
         expect(screen.getByRole('heading', {name: '推理系统'})).toBeInTheDocument();
         await waitFor(() => expect(fetch).toHaveBeenCalledTimes(4));
         expect(fetch).toHaveBeenCalledWith('https://core.test/core_service/sigine-review/status');
-        expect(fetch).toHaveBeenCalledWith('https://core.test/core_service/sigine-infra/status');
+        expect(fetch).toHaveBeenCalledWith('https://core.test/core_service/sigine-infra/catalog');
         fireEvent.click(screen.getByText('文字识别 OCR'));
         fireEvent.click(screen.getByRole('button', {name: '进入'}));
         expect(updatePopup).toHaveBeenCalledWith(PopupWindowType.OCR);
@@ -91,7 +91,7 @@ describe('CallModelPopup inference capabilities', () => {
             aiModels={[{id: 'core', name: '核心引擎', url: 'https://core.test', modelType: 'core',
                 createdAt: new Date('2026-09-06T00:00:00Z'), isActive: true}]} activeAIModelId='core'/>);
         await waitFor(() => expect(screen.getByText('gpt-4o')).toBeInTheDocument());
-        fireEvent.click(screen.getByText('Sigine INFRA 推理引擎'));
+        fireEvent.click(screen.getByText('gpt-4o'));
         expect(localStorage.getItem('opensight.sigineInfra')).toBe('true');
         expect(localStorage.getItem('opensight.sigineReview')).not.toBe('true');
     });

@@ -4,6 +4,7 @@
   align-self: stretch;
   height: $stateBarHeight;
   background-color: $darkThemeFirstColor;
+  position: relative;
 
   display: flex;
   flex-direction: row;
@@ -17,5 +18,23 @@
     background-color: $secondaryColor; // fallback if new css variables are not supported by browser
     background-color: var(--leading-color);
     transition: width 0.4s ease-out;
+
+    // 所有图片都有标注且不存在未指定标签的标注。
+    &.complete {
+      background-color: #4caf50;
+      box-shadow: 0 0 6px rgba(76, 175, 80, 0.6);
+    }
+  }
+
+  // 前半段=标注覆盖率，后半段=标签完成度。
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.16);
+    pointer-events: none;
   }
 }
