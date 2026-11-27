@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {Language} from '../../../../data/LanguageConfig';
 import {AutoSaveService} from '../../../../services/AutoSaveService';
 import {IndexedDBManager} from '../../../../utils/IndexedDBManager';
@@ -20,13 +20,7 @@ jest.mock('../../../../utils/IndexedDBManager', () => ({
     },
 }));
 
-beforeEach(() => {
-    jest.clearAllMocks();
-    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {configurable: true,
-        value: function(this: HTMLDialogElement) { this.setAttribute('open', ''); }});
-    Object.defineProperty(HTMLDialogElement.prototype, 'close', {configurable: true,
-        value: function(this: HTMLDialogElement) { this.removeAttribute('open'); }});
-});
+beforeEach(() => { jest.clearAllMocks(); });
 
 it('opens history inside the mounted page and returns the writer to the selected task', async () => {
     const database = jest.mocked(IndexedDBManager);
@@ -48,7 +42,7 @@ it('opens history inside the mounted page and returns the writer to the selected
         fireEvent.click(await screen.findByTitle('在当前页面打开此任务'));
         await waitFor(() => expect(AutoSaveService.resume).toHaveBeenCalled());
         expect(database.activateWorkspace).toHaveBeenCalledWith('saved', 10);
-        expect(ProjectRestoreService.restoreProject).toHaveBeenCalledWith(expect.any(Function),
+        expect(ProjectRestoreService.restoreProject).toHaveBeenCalledWith(undefined,
             {replaceCurrent: true, beforeCommit: expect.any(Function)});
         expect(view.container.firstElementChild).toBe(sidebar);
         expect(screen.getByTitle('在当前页面打开此任务')).toBeEnabled();
@@ -59,6 +53,31 @@ it('opens history inside the mounted page and returns the writer to the selected
     } finally {
         clock.mockRestore();
         replace.mockRestore();
+    }
+});
+
+it('keeps the canvas unobstructed while preventing edits until the task switch completes', async () => {
+    const database = jest.mocked(IndexedDBManager);
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(100);
+    database.getWorkspaceId.mockReturnValue('current-workspace');
+    database.getWorkspaceSaveTime.mockResolvedValue(100);
+    database.getProjectMeta.mockResolvedValue({hasRecoverableProject: true} as never);
+    database.listAnnotatedProjects.mockResolvedValue([{workspaceId: 'saved', projectName: 'saved',
+        imageCount: 1, labelCount: 1, lastModified: 10} as never]);
+    let finish: (restored: boolean) => void;
+    jest.mocked(ProjectRestoreService.restoreProject).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    try {
+        const {container} = render(<div className='EditorView'><HistoryTasks language={Language.CHINESE}/></div>);
+        fireEvent.click(await screen.findByTitle('在当前页面打开此任务'));
+        await waitFor(() => expect(ProjectRestoreService.restoreProject).toHaveBeenCalled());
+        expect(container.querySelector('dialog')).toBeNull();
+        expect(screen.queryByText('正在切换任务')).not.toBeInTheDocument();
+        expect(container.firstElementChild).toHaveAttribute('inert');
+        await act(async () => { finish(true); });
+        expect(container.firstElementChild).not.toHaveAttribute('inert');
+        expect(screen.getByTitle('在当前页面打开此任务')).toBeEnabled();
+    } finally {
+        clock.mockRestore();
     }
 });
 

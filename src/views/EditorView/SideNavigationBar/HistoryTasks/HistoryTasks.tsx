@@ -45,17 +45,17 @@ export const HistoryTasks: React.FC<Props> = ({language, embedded = false, refre
     const [refresh, setRefresh] = useState(0);
     const [openingId, setOpeningId] = useState<string | null>(null);
     const [openedId, setOpenedId] = useState<string | null>(null);
-    const [openingStatus, setOpeningStatus] = useState('');
-    const openingDialog = useRef<HTMLDialogElement>(null);
+    const historyRef = useRef<HTMLElement>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
     useEffect(() => {
         if (!openingId) return undefined;
-        const dialog = openingDialog.current;
+        const editor = historyRef.current?.closest('.EditorView');
+        const wasInert = editor?.hasAttribute('inert');
+        editor?.setAttribute('inert', '');
         ContextManager.switchCtx(ContextType.POPUP);
-        dialog?.showModal();
         return () => {
-            dialog?.close();
+            if (!wasInert) editor?.removeAttribute('inert');
             ContextManager.restoreCtx();
         };
     }, [openingId]);
@@ -86,7 +86,6 @@ export const HistoryTasks: React.FC<Props> = ({language, embedded = false, refre
     const openTask = async (task: AnnotatedProjectHistoryEntry) => {
         if (openingId || deletingId) return;
         setOpeningId(task.workspaceId);
-        setOpeningStatus(zh ? '正在保存当前任务…' : 'Saving the current task…');
         setError(null);
         let suspended = false;
         try {
@@ -98,7 +97,7 @@ export const HistoryTasks: React.FC<Props> = ({language, embedded = false, refre
             if (!selected?.hasRecoverableProject) {
                 throw new Error(zh ? '该历史任务已不可恢复，请刷新列表' : 'This task is no longer available; refresh the list');
             }
-            const restored = await ProjectRestoreService.restoreProject(setOpeningStatus, {
+            const restored = await ProjectRestoreService.restoreProject(undefined, {
                 replaceCurrent: true,
                 beforeCommit: project => IndexedDBManager.activateWorkspace(task.workspaceId, project.lastModified),
             });
@@ -166,11 +165,7 @@ export const HistoryTasks: React.FC<Props> = ({language, embedded = false, refre
         }
     };
 
-    return <section className='HistoryTasks' aria-label={zh ? '历史任务' : 'Task History'}>
-        <dialog ref={openingDialog} className='HistoryTasks__opening' onCancel={event => event.preventDefault()}>
-            <p role='status'>{zh ? '正在切换任务' : 'Opening task'}</p>
-            <p>{openingStatus}</p>
-        </dialog>
+    return <section ref={historyRef} className='HistoryTasks' aria-label={zh ? '历史任务' : 'Task History'}>
         {!embedded && <div className='HistoryTasks__header'>
             <strong>{zh ? '历史任务' : 'Task History'}</strong>
             <button type='button' onClick={() => setRefresh(value => value + 1)}
