@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useMemo, useRef} from 'react';
 import {connect} from 'react-redux';
 import {AppState} from '../../../store';
 import {ImageData} from '../../../store/labels/types';
@@ -16,9 +16,6 @@ interface ImageStat {
     avgConf: number;      // 0-1, NaN if no detections
     confidences: number[];
 }
-
-type SigineReview = {needs_correction?: boolean; reason?: string;
-    suggested_boxes?: Array<{label: string; bbox: number[]}>; error?: string};
 
 interface IProps {
     language: Language;
@@ -105,20 +102,6 @@ export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, act
     activeVideo, updateVideoCurrentFrame, updateVideoPlayingStatus}) => {
     const zh = language === 'zh';
     const rootRef = useRef<HTMLDivElement>(null);
-    const [reviews, setReviews] = useState<Record<string, SigineReview>>(() => {
-        try { return JSON.parse(sessionStorage.getItem('opensight.annotation.sigineReviews') || '{}'); }
-        catch { return {}; }
-    });
-    useEffect(() => {
-        const reset = () => setReviews({});
-        const update = () => {
-            try { setReviews(JSON.parse(sessionStorage.getItem('opensight.annotation.sigineReviews') || '{}')); }
-            catch { setReviews({}); }
-        };
-        window.addEventListener('sigineReviewReset', reset);
-        window.addEventListener('sigineReviewResult', update);
-        return () => { window.removeEventListener('sigineReviewReset', reset); window.removeEventListener('sigineReviewResult', update); };
-    }, []);
     const selectImage = (index: number) => {
         if (activeVideo) {
             updateVideoPlayingStatus?.(activeVideo.id, false);
@@ -183,24 +166,11 @@ export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, act
         return best;
     }, [imageStats]);
 
-    const reviewList = Object.entries(reviews).length > 0 && <div className="SummarySection">
-        <div className="SummaryTitle">{zh ? 'Sigine GPT 复审建议（未自动应用）' : 'Sigine GPT review (not applied)'}</div>
-        {Object.entries(reviews).map(([frame, review]) => <div key={frame} className="ImageRow"
-            role="button" tabIndex={0} onClick={() => selectImage(Number(frame))}
-            onKeyDown={event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); selectImage(Number(frame)); } }}>
-            {zh ? `第 ${Number(frame) + 1} 帧` : `Frame ${Number(frame) + 1}`} · {review.error
-                ? `${zh ? '复审失败' : 'Review failed'}: ${review.error}`
-                : `${review.needs_correction ? (zh ? '需复核' : 'Needs checking') : (zh ? '暂未发现问题' : 'No issue found')} · ${review.reason || ''} · ${(review.suggested_boxes || []).map(box => `${box.label} [${box.bbox.join(', ')}]`).join('; ')}`}
-        </div>)}
-    </div>;
-
-
     if (totalDetections === 0) {
         return (
             <div className="BatchStatisticsView">
                 <div className="Header">{zh ? '统计' : 'Statistics'}</div>
                 <div className="Content">
-                    {reviewList}
                     <div className="EmptyResults">
                         <img src="/ico/brain.png" alt="AI" className="EmptyIcon"/>
                         <div className="EmptyText">{zh ? '暂无推理结果' : 'No inference results yet'}</div>
@@ -214,7 +184,6 @@ export const BatchStatisticsView: React.FC<IProps> = ({language, imagesData, act
         <div className="BatchStatisticsView" ref={rootRef}>
             <div className="Header">{zh ? '统计' : 'Statistics'}</div>
             <div className="Content">
-                {reviewList}
                 {/* Detection rate */}
                 <DetectionOverview zh={zh} detectionRate={detectionRate} detectedImages={detectedImages}
                     totalImages={totalImages} totalDetections={totalDetections}/>

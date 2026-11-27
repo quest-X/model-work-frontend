@@ -185,14 +185,10 @@ function getLabelToggleState(imageCount: number, imageAIStates: IProps['imageAIS
 
 function getInferenceTargets(imagesData: ImageData[], activeImageData: ImageData, range: FrameRange | null) {
     const selectedImages = imagesData.filter((img: ImageData) => img.isSelected);
-    const isTimelineBatch = range !== null;
-    const isSelectionBatch = selectedImages.length > 1;
-    const isVideo = store.getState().video.isVideoMode;
-    const isBatchMode = isTimelineBatch || isSelectionBatch || isVideo;
     const targets = range
         ? imagesData.slice(range.startFrame, range.endFrame + 1)
-        : isSelectionBatch ? selectedImages : isVideo ? imagesData : [activeImageData];
-    return {isBatchMode, targets};
+        : selectedImages.length > 0 ? selectedImages : [activeImageData];
+    return {isBatchMode: targets.length > 1, targets};
 }
 
 function getSmartAnnotationTooltip(smartAnnotationActive: boolean, samNegativeMode: boolean, language: Language): string {
@@ -967,7 +963,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
 
     const executeInferencePlan = async (
         inferencePlan: Array<{ name: string; task: string }>, targets: ImageData[],
-        isBatchMode: boolean, activeImageData: ImageData,
+        isBatchMode: boolean,
     ) => {
         const detectionModelCount = inferencePlan.filter(entry => entry.task === 'detect').length;
         const segmentationModelCount = inferencePlan.filter(entry => entry.task === 'segment').length;
@@ -995,7 +991,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                 // 单模型单帧沿用原来的轻量回调路径；多模型单帧改走可等待的
                 // detectBatch(false)，确保检测完成后再开始下一项推理。
                 if (inferencePlan.length === 1 && !isBatchMode && !similaritySearchSelected) {
-                    AIDetectionActions.detectObjects(activeImageData);
+                    AIDetectionActions.detectObjects(targets[0]);
                 } else {
                     await AIDetectionActions.detectBatch(
                         targets,
@@ -1063,7 +1059,7 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
 
         const {isBatchMode, targets} = getInferenceTargets(imagesData, activeImageData, getTimelineRange());
         if (targets.length === 0) return;
-        await executeInferencePlan(inferencePlan, targets, isBatchMode, activeImageData);
+        await executeInferencePlan(inferencePlan, targets, isBatchMode);
         if (similaritySearchSelected && !multiInferenceCancelledRef.current) {
             if (!await launchConfiguredSimilaritySearch()) {
                 setShowInferenceMenu(true);
@@ -1547,14 +1543,11 @@ const EditorTopNavigationBar: React.FC<IProps> = React.memo(function EditorTopNa
                     // 时间轴选区优先显示帧数
                     if (timelineRange) {
                         const rangeCount = timelineRange.endFrame - timelineRange.startFrame + 1;
-                        return `${label} x${rangeCount}${language === 'zh' ? '帧' : 'f'}`;
+                        return `${label} x${rangeCount}`;
                     }
                     const selected = imagesData.filter((img: ImageData) => img.isSelected);
-                    if (store.getState().video.isVideoMode && selected.length <= 1 && !trackingMode && !smartAnnotationActive) {
-                        return language === 'zh' ? '视频推理' : 'Infer video';
-                    }
-                    const count = selected.length > 1 ? selected.length : imagesData.length > 0 ? 1 : 0;
-                    return count > 1 ? `${label} x${count}` : label;
+                    const count = selected.length > 0 ? selected.length : imagesData.length > 0 ? 1 : 0;
+                    return `${label} x${count}`;
                 })()}
         </button>
     );

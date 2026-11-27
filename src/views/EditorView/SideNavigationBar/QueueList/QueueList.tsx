@@ -15,7 +15,8 @@ import { updateImageData } from '../../../../store/labels/actionCreators';
 import { QueueActions } from '../../../../logic/actions/QueueActions';
 import { ImageRepository } from '../../../../logic/imageRepository/ImageRepository';
 import {LabelsSelector} from '../../../../store/selectors/LabelsSelector';
-import {Language, LanguageConfig, LanguageTexts} from '../../../../data/LanguageConfig';
+import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
+import {getQueueItemDisplayName} from '../../../../utils/QueueDisplayNameUtil';
 import {DataBatchSyncService} from '../../../../services/DataBatchSyncService';
 import './QueueList.scss';
 
@@ -37,27 +38,9 @@ const typeIconMap: Record<QueueItemType, string> = {
     [QueueItemType.CAMERA]: '/ico/camera.png',
 };
 
-// Strip legacy metadata suffix baked into item.name (e.g. " (174 帧 @ 30fps)" or " (174张图像)")
-const stripMetaSuffix = (name: string): string => name.replace(/\s*\([\d]+(张图像| 帧 @ [\d.]+fps| frames @ [\d.]+fps| images)\)$/, '');
-
-const getDisplayName = (item: QueueItem, texts: LanguageTexts): string => {
-    const baseName = stripMetaSuffix(item.name);
-    if (item.type === QueueItemType.VIDEO && item.extractionMetadata) {
-        const meta = texts.videoMeta
-            .replace('{frames}', String(item.extractionMetadata.totalFrames))
-            .replace('{fps}', String(Math.round(item.extractionMetadata.fps)));
-        return `${baseName} (${meta})`;
-    }
-    if (item.type === QueueItemType.FOLDER && item.files) {
-        const meta = texts.folderMeta.replace('{count}', String(item.files.length));
-        return `${baseName} (${meta})`;
-    }
-    return baseName;
-};
-
 const QueueItemCard: React.FC<CardProps> = ({ item, isActive, language, onSelect, onDelete, onSync }) => {
     const texts = LanguageConfig[language];
-    const displayName = getDisplayName(item, texts);
+    const displayName = getQueueItemDisplayName(item, texts);
     const statusLabels: Record<QueueItemStatus, { className: string; label: string }> = {
         [QueueItemStatus.PENDING]:    { className: 'status-pending',    label: texts.queueStatus.pending },
         [QueueItemStatus.PROCESSING]: { className: 'status-processing', label: texts.queueStatus.processing },

@@ -1,5 +1,6 @@
 import { ImageData, LabelName } from '../store/labels/types';
 import { QueueItem, QueueItemType } from '../store/queue/types';
+import type {QueueDisplayMetadata} from './QueueDisplayNameUtil';
 import type {SegmentationResult} from '../store/ai/types';
 
 export interface StoredExtractionMetadata {
@@ -85,6 +86,7 @@ export interface StoredQueueAnnotationSnapshot {
 export interface StoredProjectMeta {
     projectName?: string;
     thumbnail?: string;
+    queueDisplay?: QueueDisplayMetadata;
     imageCount: number;
     validImageCount: number;
     labelCount: number;
@@ -588,6 +590,29 @@ export class IndexedDBManager {
         return this.initializePromise;
     }
 
+    private static getQueueDisplayMetadata(
+        projectData: StoredProjectData, isVideoProject: boolean,
+    ): QueueDisplayMetadata | undefined {
+        const item = projectData.queueItems?.find(queueItem =>
+            queueItem.id === projectData.activeQueueItemId) || projectData.queueItems?.[0];
+        const videoMeta = item?.extractionMetadata || projectData.videoRecovery?.metadata
+            || projectData.extractionMetadata;
+        if (item) return {
+            name: item.name,
+            type: item.type,
+            totalFrames: item.type === QueueItemType.VIDEO ? videoMeta?.totalFrames : undefined,
+            fps: item.type === QueueItemType.VIDEO ? videoMeta?.fps : undefined,
+            fileCount: item.type === QueueItemType.FOLDER ? item.files?.length : undefined,
+        };
+        if (isVideoProject && projectData.projectName) return {
+            name: projectData.projectName,
+            type: QueueItemType.VIDEO,
+            totalFrames: videoMeta?.totalFrames,
+            fps: videoMeta?.fps,
+        };
+        return undefined;
+    }
+
     private static buildMeta(
         projectData: StoredProjectData,
         workspaceId: string,
@@ -630,6 +655,7 @@ export class IndexedDBManager {
             projectName: projectData.projectName || activeQueueItem?.name
                 || projectData.queueItems?.[0]?.name,
             thumbnail: activeQueueItem?.thumbnail || projectData.queueItems?.[0]?.thumbnail,
+            queueDisplay: this.getQueueDisplayMetadata(projectData, isVideoProject),
             imageCount,
             // Video placeholders carry durable annotations and stable frame indices;
             // they are not data loss merely because their pixels are runtime-cached.
@@ -875,6 +901,7 @@ export class IndexedDBManager {
         return {
             projectName: meta.projectName,
             thumbnail: meta.thumbnail,
+            queueDisplay: meta.queueDisplay,
             imageCount: meta.imageCount,
             validImageCount: meta.validImageCount,
             labelCount: meta.labelCount,
@@ -956,6 +983,39 @@ export class IndexedDBManager {
         return storedProject;
     }
 
+    private static async historyEntryFromRecord(record: WorkspaceMetaRecord): Promise<AnnotatedProjectHistoryEntry> {
+        // Older snapshots predate the project name, preview, and queue title metadata.
+        let projectName = record.projectName;
+        let thumbnail = record.thumbnail;
+        let queueDisplay = record.queueDisplay;
+        let firstImageFileData: StoredFileData | undefined;
+        let firstImageFileType: string | undefined;
+        if (!projectName || !thumbnail || !queueDisplay) {
+            const project = await this.readProjectById(record.projectId);
+            const activeItem = project?.queueItems?.find(item =>
+                item.id === project.activeQueueItemId) || project?.queueItems?.[0];
+            projectName = project?.projectName || activeItem?.name || projectName;
+            thumbnail = activeItem?.thumbnail || thumbnail;
+            queueDisplay = project
+                ? this.getQueueDisplayMetadata(project, record.isVideoProject) ?? queueDisplay : queueDisplay;
+            const firstImage = project?.images?.[0];
+            if (!thumbnail && firstImage?.fileType?.startsWith('image/')
+                && getStoredFileByteLength(firstImage.fileData) > 0) {
+                firstImageFileData = firstImage.fileData;
+                firstImageFileType = firstImage.fileType;
+            }
+        }
+        return {
+            ...this.publicMeta(record),
+            projectName,
+            thumbnail,
+            queueDisplay,
+            firstImageFileData,
+            firstImageFileType,
+            workspaceId: record.id,
+        };
+    }
+
     public static async listAnnotatedProjects(): Promise<AnnotatedProjectHistoryEntry[]> {
         if (!this.db && !await this.initialize()) {
             throw new RecoveryStorageReadError('历史任务');
@@ -978,34 +1038,7 @@ export class IndexedDBManager {
         ).sort((left, right) => right.lastModified - left.lastModified);
         const entries: AnnotatedProjectHistoryEntry[] = [];
         for (const record of annotated) {
-            // Older snapshots predate the project name and thumbnail metadata.
-            // Read their queue preview only when the history panel is opened.
-            let projectName = record.projectName;
-            let thumbnail = record.thumbnail;
-            let firstImageFileData: StoredFileData | undefined;
-            let firstImageFileType: string | undefined;
-            if (!projectName || !thumbnail) {
-                const project = await this.readProjectById(record.projectId);
-                const activeItem = project?.queueItems?.find(item =>
-                    item.id === project.activeQueueItemId) || project?.queueItems?.[0];
-                projectName = project?.projectName
-                    || activeItem?.name || projectName;
-                thumbnail = activeItem?.thumbnail || thumbnail;
-                const firstImage = project?.images?.[0];
-                if (!thumbnail && firstImage?.fileType?.startsWith('image/')
-                    && getStoredFileByteLength(firstImage.fileData) > 0) {
-                    firstImageFileData = firstImage.fileData;
-                    firstImageFileType = firstImage.fileType;
-                }
-            }
-            entries.push({
-                ...this.publicMeta(record),
-                projectName,
-                thumbnail,
-                firstImageFileData,
-                firstImageFileType,
-                workspaceId: record.id,
-            });
+            entries.push(await this.historyEntryFromRecord(record));
         }
         return entries;
     }

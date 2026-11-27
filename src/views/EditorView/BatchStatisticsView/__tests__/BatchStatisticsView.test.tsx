@@ -1,5 +1,5 @@
 import React from 'react';
-import {act, fireEvent, render, screen} from '@testing-library/react';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {BatchStatisticsView} from '../BatchStatisticsView';
 import {ImageDataUtil} from '../../../../utils/ImageDataUtil';
 import {LabelUtil} from '../../../../utils/LabelUtil';
@@ -42,19 +42,24 @@ it('pauses and seeks the exact fractional-rate video frame when selecting a stat
     expect(select).toHaveBeenCalledWith(1);
 });
 
-it('shows Sigine hard-case guidance beside a frame even when YOLO found no box', () => {
+it('hides Sigine review guidance while keeping its stored results', () => {
     const image = ImageDataUtil.createImageDataFromFileData(new File(['frame'], 'frame_000000.jpg'));
     const select = jest.fn();
-    sessionStorage.removeItem('opensight.annotation.sigineReviews');
-    render(<BatchStatisticsView language={Language.CHINESE} imagesData={[image]}
-        activeImageIndex={0} updateActiveImageIndex={select}/>);
-    sessionStorage.setItem('opensight.annotation.sigineReviews', JSON.stringify({0: {
+    const reviews = JSON.stringify({0: {
         needs_correction: true, reason: '漏检 dog', suggested_boxes: [{label: 'dog', bbox: [100, 200, 700, 900]}],
-    }}));
-    act(() => { window.dispatchEvent(new CustomEvent('sigineReviewResult')); });
-    const guidance = screen.getByText(/漏检 dog/);
-    expect(guidance).toHaveTextContent('dog [100, 200, 700, 900]');
-    fireEvent.click(guidance);
-    expect(select).toHaveBeenCalledWith(0);
+    }});
+    sessionStorage.setItem('opensight.annotation.sigineReviews', reviews);
+    const view = render(<BatchStatisticsView language={Language.CHINESE} imagesData={[image]}
+        activeImageIndex={0} updateActiveImageIndex={select}/>);
+    expect(screen.queryByText(/Sigine GPT 复审建议/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/漏检 dog/)).not.toBeInTheDocument();
+    expect(screen.getByText('暂无推理结果')).toBeInTheDocument();
+    image.labelRects = [{...LabelUtil.createLabelRect(null, {x: 0, y: 0, width: 10, height: 10}),
+        isCreatedByAI: true, confidence: 0.8}];
+    view.rerender(<BatchStatisticsView language={Language.CHINESE} imagesData={[image]}
+        activeImageIndex={0} updateActiveImageIndex={select}/>);
+    expect(screen.getByText('检出概况')).toBeInTheDocument();
+    expect(screen.queryByText(/Sigine GPT 复审建议/)).not.toBeInTheDocument();
+    expect(sessionStorage.getItem('opensight.annotation.sigineReviews')).toBe(reviews);
     sessionStorage.removeItem('opensight.annotation.sigineReviews');
 });

@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
-import {Language} from '../../../../data/LanguageConfig';
+import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
+import {getQueueDisplayName} from '../../../../utils/QueueDisplayNameUtil';
 import {
     AnnotatedProjectHistoryEntry,
     IndexedDBManager,
@@ -9,6 +10,8 @@ import './HistoryTasks.scss';
 
 interface Props {
     language: Language;
+    embedded?: boolean;
+    refreshToken?: number;
 }
 
 const HistoryThumbnail: React.FC<{task: AnnotatedProjectHistoryEntry; name: string; zh: boolean}> =
@@ -31,7 +34,7 @@ const HistoryThumbnail: React.FC<{task: AnnotatedProjectHistoryEntry; name: stri
         </span>;
     };
 
-export const HistoryTasks: React.FC<Props> = ({language}) => {
+export const HistoryTasks: React.FC<Props> = ({language, embedded = false, refreshToken = 0}) => {
     const zh = language === Language.CHINESE;
     const [tasks, setTasks] = useState<AnnotatedProjectHistoryEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -52,7 +55,7 @@ export const HistoryTasks: React.FC<Props> = ({language}) => {
             if (active) setLoading(false);
         });
         return () => { active = false; };
-    }, [refresh]);
+    }, [refresh, refreshToken]);
 
     const saveCurrentTask = async () => {
         const saveStartedAt = Date.now();
@@ -134,11 +137,11 @@ export const HistoryTasks: React.FC<Props> = ({language}) => {
     };
 
     return <section className='HistoryTasks' aria-label={zh ? '历史任务' : 'Task History'}>
-        <div className='HistoryTasks__header'>
+        {!embedded && <div className='HistoryTasks__header'>
             <strong>{zh ? '历史任务' : 'Task History'}</strong>
             <button type='button' onClick={() => setRefresh(value => value + 1)}
                 aria-label={zh ? '刷新历史任务' : 'Refresh task history'}>↻</button>
-        </div>
+        </div>}
         {loading && <p className='HistoryTasks__state' role='status'>{zh ? '正在读取历史任务…' : 'Loading tasks…'}</p>}
         {error && <p className='HistoryTasks__state HistoryTasks__error' role='alert'>{error}</p>}
         {!loading && !error && tasks.length === 0 &&
@@ -146,6 +149,8 @@ export const HistoryTasks: React.FC<Props> = ({language}) => {
         {!loading && tasks.length > 0 && <div className='HistoryTasks__list'>
             {tasks.map(task => {
                 const name = task.projectName?.trim() || (zh ? '未命名任务' : 'Unnamed task');
+                const displayName = task.queueDisplay
+                    ? getQueueDisplayName(task.queueDisplay, LanguageConfig[language]) : name;
                 const time = new Date(task.lastModified).toLocaleString(zh ? 'zh-CN' : 'en-US', {
                     month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
                 });
@@ -154,9 +159,9 @@ export const HistoryTasks: React.FC<Props> = ({language}) => {
                         disabled={openingId !== null || deletingId !== null}
                         onClick={() => void openTask(task)}
                         title={zh ? '在当前页面打开此任务' : 'Open this task here'}>
-                        <HistoryThumbnail task={task} name={name} zh={zh}/>
+                        <HistoryThumbnail task={task} name={displayName} zh={zh}/>
                         <span className='HistoryTasks__copy'>
-                            <span className='HistoryTasks__name'>{name}</span>
+                            <span className='HistoryTasks__name'>{displayName}</span>
                             <span className='HistoryTasks__detail'>
                                 {task.labelCount}/{task.imageCount} {zh
                                     ? task.isVideoProject ? '帧已标注' : '张已标注'

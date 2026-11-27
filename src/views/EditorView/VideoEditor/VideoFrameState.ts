@@ -6,7 +6,6 @@ export function createVideoFramePlaceholders(frames: number): ImageData[] {
     for (let i = 0; i < frames; i++) {
         const image = ImageDataUtil.createImageDataFromFileData(new File([], `frame_${String(i).padStart(6, '0')}.jpg`, {type: 'image/jpeg'}));
         image.loadStatus = false;
-        if (i === 0) image.isSelected = true;
         images.push(image);
     }
     return images;

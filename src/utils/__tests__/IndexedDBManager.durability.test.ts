@@ -710,18 +710,48 @@ describe('IndexedDBManager durability', () => {
                 queueItems: [{
                     id: 'video', name: 'dog_4166347', type: QueueItemType.VIDEO,
                     thumbnail: 'data:image/png;base64,first-frame',
+                    extractionMetadata: {fps: 30, duration: 8 / 30, totalFrames: 8, width: 640, height: 480},
                     status: QueueItemStatus.COMPLETED, uploadedAt: 1,
                 }],
             });
 
         await expect(IndexedDBManager.listAnnotatedProjects()).resolves.toEqual([
             expect.objectContaining({workspaceId: 'task-a', projectName: 'dog_4166347',
-                thumbnail: 'data:image/png;base64,first-frame', labelCount: 5}),
+                thumbnail: 'data:image/png;base64,first-frame', labelCount: 5,
+                queueDisplay: expect.objectContaining({name: 'dog_4166347', totalFrames: 8, fps: 30})}),
             expect.objectContaining({workspaceId: 'task-c', projectName: 'first.jpg',
                 firstImageFileData, firstImageFileType: 'image/jpeg'}),
         ]);
         expect(readProject).toHaveBeenCalledWith('workspace:task-a');
         expect(readProject).toHaveBeenCalledWith('workspace:task-c');
+    });
+
+    it('keeps indexed queue details when an older payload cannot reconstruct them', async () => {
+        const queueDisplay = {name: 'source.mp4', type: QueueItemType.VIDEO, totalFrames: 120, fps: 30};
+        mockMethod('readProjectById').mockResolvedValue({
+            ...project(), projectName: undefined, queueItems: [],
+            videoRecovery: undefined, extractionMetadata: undefined,
+        });
+        await expect(IndexedDBManager['historyEntryFromRecord']({
+            id: 'older-task', projectId: 'workspace:older-task', projectName: 'source',
+            imageCount: 120, validImageCount: 120, labelCount: 1, isVideoProject: true,
+            hasRecoverableProject: true, lastModified: 1, queueDisplay,
+        })).resolves.toMatchObject({projectName: 'source', queueDisplay});
+    });
+
+    it('stores the active queue title metadata in new history indexes', () => {
+        const videoProject: StoredProjectData = {
+            ...project(), projectName: 'cat_7429360', isVideoProject: true,
+            queueItems: [{
+                id: 'video', name: 'cat_7429360', type: QueueItemType.VIDEO,
+                status: QueueItemStatus.COMPLETED, uploadedAt: 1,
+                extractionMetadata: {fps: 30, duration: 30, totalFrames: 900, width: 640, height: 480},
+            }],
+            activeQueueItemId: 'video',
+        };
+        expect(IndexedDBManager['buildMeta'](videoProject, 'task', 'workspace:task', 1).queueDisplay)
+            .toEqual({name: 'cat_7429360', type: QueueItemType.VIDEO,
+                totalFrames: 900, fps: 30, fileCount: undefined});
     });
 
     it('pins a specifically selected historical snapshot for restore', async () => {

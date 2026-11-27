@@ -1,12 +1,12 @@
 import {createVideoFramePlaceholders, getPlaybackFrame} from '../VideoFrameState';
 import {LabelUtil} from '../../../../utils/LabelUtil';
 
-it('creates distinct unloaded frame records and only selects the first placeholder', () => {
+it('creates distinct unloaded frame records without selecting an inference range', () => {
     const frames = createVideoFramePlaceholders(3);
     expect(new Set(frames.map(frame => frame.id)).size).toBe(3);
     expect(frames.every(frame => frame.fileData.size === 0 && !frame.loadStatus)).toBe(true);
     expect(frames.map(frame => frame.fileData.name)).toEqual(['frame_000000.jpg', 'frame_000001.jpg', 'frame_000002.jpg']);
-    expect(frames.map(frame => !!frame.isSelected)).toEqual([true, false, false]);
+    expect(frames.every(frame => !frame.isSelected)).toBe(true);
     expect(createVideoFramePlaceholders(0)).toEqual([]);
 });
 

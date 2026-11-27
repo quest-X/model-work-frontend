@@ -109,17 +109,18 @@ export class ImagePreview extends React.Component<IProps, IState> {
     }
 
     private loadImage = async (imageData: ImageData) => {
-        if (this.isLoading && this.loadingImageId === imageData.id) return;
-        const generation = ++this.requestGeneration;
-        if (imageData.loadStatus) {
-            const image = ImageRepository.getById(imageData.id);
-            if (image && this.state.image !== image) {
-                this.setState({ image });
-                return;
-            }
-            if (!image) this.loadMissingImage(imageData, generation);
+        const cachedImage = ImageRepository.getById(imageData.id);
+        if (cachedImage) {
+            // Playback may publish this thumbnail while an older sidebar fetch is pending.
+            // Let the cache win immediately and invalidate the older request.
+            ++this.requestGeneration;
+            this.isLoading = false;
+            this.loadingImageId = null;
+            if (this.state.image !== cachedImage) this.setState({ image: cachedImage });
             return;
         }
+        if (this.isLoading && this.loadingImageId === imageData.id) return;
+        const generation = ++this.requestGeneration;
         this.loadMissingImage(imageData, generation);
     };
 

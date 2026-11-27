@@ -16,14 +16,14 @@ jest.mock('../../../../logic/actions/AISegmentationActions', () => ({AISegmentat
 
 const originalFetch = global.fetch;
 
-async function showToolbar(video = false, selected: number[] = []) {
+async function showToolbar(video = false, selected: number[] = [], activeIndex = 0) {
     const testStore = configureStore();
     (store.getState as jest.Mock).mockImplementation(testStore.getState);
     jest.mocked(store.dispatch).mockImplementation(testStore.dispatch);
     const images = Array.from({length: video ? 3 : 1}, (_, i) => ({...ImageDataUtil.createImageDataFromFileData(new File(['image'], `image-${i}.png`)), isSelected: selected.includes(i)}));
     testStore.dispatch(updateImageData(images));
     testStore.dispatch(updateVideoMode(video));
-    testStore.dispatch(updateActiveImageIndex(0));
+    testStore.dispatch(updateActiveImageIndex(activeIndex));
     global.fetch = jest.fn(async (input: RequestInfo | URL) => ({
         ok: true, json: async () => String(input).endsWith('/health') ? {
             model: 'yolov8n.pt', segmentation_model: 'sam2_t.pt',
@@ -52,7 +52,7 @@ it('shows Sigine INFRA beneath the YOLO model and keeps YOLO inference selected'
     expect(yolo.compareDocumentPosition(infra) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(infra);
     expect(localStorage.getItem('opensight.sigineInfra')).toBe('true');
-    fireEvent.click(screen.getByRole('button', {name: /^(推理|Infer)$/}));
+    fireEvent.click(screen.getByRole('button', {name: /^(推理|Infer) x1$/}));
     await waitFor(() => expect(AIDetectionActions.detectObjects).toHaveBeenCalledTimes(1));
 });
 
@@ -67,7 +67,7 @@ it('shows an unavailable Sigine INFRA row without enabling it', async () => {
 
 it('keeps the single-model single-image lightweight inference path', async () => {
     await showToolbar();
-    fireEvent.click(screen.getByRole('button', {name: /^(推理|Infer)$/}));
+    fireEvent.click(screen.getByRole('button', {name: /^(推理|Infer) x1$/}));
     await waitFor(() => expect(AIDetectionActions.detectObjects).toHaveBeenCalledTimes(1));
     expect(AIDetectionActions.detectBatch).not.toHaveBeenCalled();
     expect(AISegmentationActions.segmentBatch).not.toHaveBeenCalled();
@@ -79,7 +79,7 @@ it('waits for each selected model and stops before launching the next one when c
     const selector = await showToolbar();
     fireEvent.click(selector);
     fireEvent.click(screen.getByText(/\(sam2_t.pt\)/));
-    fireEvent.click(screen.getByRole('button', {name: /^(推理|Infer)$/}));
+    fireEvent.click(screen.getByRole('button', {name: /^(推理|Infer) x1$/}));
     await waitFor(() => expect(AIDetectionActions.detectBatch).toHaveBeenCalledTimes(1));
     expect(AIDetectionActions.detectObjects).not.toHaveBeenCalled();
     expect(AISegmentationActions.segmentBatch).not.toHaveBeenCalled();
@@ -88,20 +88,56 @@ it('waits for each selected model and stops before launching the next one when c
     expect(AISegmentationActions.segmentBatch).not.toHaveBeenCalled();
 });
 
-it('starts one video batch for all frames by default without invoking single-frame inference', async () => {
-    (AIDetectionActions.detectBatch as jest.Mock).mockResolvedValue(undefined);
-    await showToolbar(true);
-    fireEvent.click(screen.getByRole('button', {name: /^(视频推理|Infer video)$/}));
-    await waitFor(() => expect(AIDetectionActions.detectBatch).toHaveBeenCalledTimes(1));
-    expect((AIDetectionActions.detectBatch as jest.Mock).mock.calls[0][0]).toHaveLength(3);
-    expect(AIDetectionActions.detectObjects).not.toHaveBeenCalled();
+it('infers only the current video frame by default', async () => {
+    await showToolbar(true, [], 1);
+    fireEvent.click(screen.getByRole('button', {name: /^(推理|Infer) x1$/}));
+    await waitFor(() => expect(AIDetectionActions.detectObjects).toHaveBeenCalledTimes(1));
+    expect((AIDetectionActions.detectObjects as jest.Mock).mock.calls[0][0].fileData.name).toBe('image-1.png');
+    expect(AIDetectionActions.detectBatch).not.toHaveBeenCalled();
 });
 
-it('honors an explicit video frame selection', async () => {
+it('infers only the current video frame when Sigine INFRA is selected without a frame selection', async () => {
+    const selector = await showToolbar(true);
+    const baseFetch = global.fetch;
+    global.fetch = jest.fn((input: RequestInfo | URL) => String(input).endsWith('/sigine-infra/status')
+        ? Promise.resolve({ok: true, json: async () => ({available: true, model: 'gpt-4o'})} as Response)
+        : baseFetch(input));
+    await act(async () => { fireEvent.click(selector); });
+    fireEvent.click(await screen.findByText(/Sigine INFRA 推理引擎/));
+    fireEvent.click(screen.getByRole('button', {name: /^(推理|Infer) x1$/}));
+    await waitFor(() => expect(AIDetectionActions.detectObjects).toHaveBeenCalledTimes(1));
+    expect((AIDetectionActions.detectObjects as jest.Mock).mock.calls[0][0].fileData.name).toBe('image-0.png');
+    expect(AIDetectionActions.detectBatch).not.toHaveBeenCalled();
+});
+
+it('keeps an explicit multi-frame selection when Sigine INFRA is selected', async () => {
     (AIDetectionActions.detectBatch as jest.Mock).mockResolvedValue(undefined);
-    await showToolbar(true, [1, 2]);
+    const selector = await showToolbar(true, [1, 2]);
+    const baseFetch = global.fetch;
+    global.fetch = jest.fn((input: RequestInfo | URL) => String(input).endsWith('/sigine-infra/status')
+        ? Promise.resolve({ok: true, json: async () => ({available: true, model: 'gpt-4o'})} as Response)
+        : baseFetch(input));
+    await act(async () => { fireEvent.click(selector); });
+    fireEvent.click(await screen.findByText(/Sigine INFRA 推理引擎/));
     fireEvent.click(screen.getByRole('button', {name: /^(推理|Infer) x2$/}));
     await waitFor(() => expect(AIDetectionActions.detectBatch).toHaveBeenCalledTimes(1));
     expect((AIDetectionActions.detectBatch as jest.Mock).mock.calls[0][0]).toHaveLength(2);
+    expect(AIDetectionActions.detectObjects).not.toHaveBeenCalled();
+});
+
+it('uses the selected video frame even when another frame is active', async () => {
+    await showToolbar(true, [1]);
+    fireEvent.click(screen.getByRole('button', {name: /^(推理|Infer) x1$/}));
+    await waitFor(() => expect(AIDetectionActions.detectObjects).toHaveBeenCalledTimes(1));
+    expect((AIDetectionActions.detectObjects as jest.Mock).mock.calls[0][0].fileData.name).toBe('image-1.png');
+    expect(AIDetectionActions.detectBatch).not.toHaveBeenCalled();
+});
+
+it('infers every frame when all video frames are selected', async () => {
+    (AIDetectionActions.detectBatch as jest.Mock).mockResolvedValue(undefined);
+    await showToolbar(true, [0, 1, 2]);
+    fireEvent.click(screen.getByRole('button', {name: /^(推理|Infer) x3$/}));
+    await waitFor(() => expect(AIDetectionActions.detectBatch).toHaveBeenCalledTimes(1));
+    expect((AIDetectionActions.detectBatch as jest.Mock).mock.calls[0][0]).toHaveLength(3);
     expect(AIDetectionActions.detectObjects).not.toHaveBeenCalled();
 });

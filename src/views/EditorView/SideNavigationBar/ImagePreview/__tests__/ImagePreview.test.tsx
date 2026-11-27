@@ -8,6 +8,8 @@ import {ImagePreview} from '../ImagePreview';
 import {store} from '../../../../../index';
 import {LabelUtil} from '../../../../../utils/LabelUtil';
 import configureStore from '../../../../../configureStore';
+import {EditorModel} from '../../../../../staticModels/EditorModel';
+import {FrameExtractorService} from '../../../../../services/FrameExtractorService';
 
 jest.mock('../../../../../index', () => ({store: {getState: jest.fn(() => ({labels: {imagesData: []}}))}}));
 
@@ -45,7 +47,32 @@ describe('ImagePreview rapid switching', () => {
 
     afterEach(() => {
         jest.restoreAllMocks();
+        EditorModel.videoSessionId = '';
         ImageRepository.clearAllCache();
+    });
+
+    it('shows a playback thumbnail while an older sidebar frame request is still pending', async () => {
+        let finishFetch: (frames: File[]) => void;
+        jest.spyOn(FrameExtractorService, 'fetchFrameRange').mockImplementation(() =>
+            new Promise(resolve => { finishFetch = resolve; }));
+        EditorModel.videoSessionId = 'test-session';
+        const frame = {...imageData('video-frame'),
+            fileData: new File([], 'frame_000000.jpg', {type: 'image/jpeg'}), loadStatus: false};
+        const props = {imageData: frame, style: {}, size: {width: 150, height: 150},
+            updateImageDataById: jest.fn(), deleteImageById: jest.fn(), deleteSelectedImages: jest.fn()};
+        const {container, rerender} = render(<ImagePreview {...props}/>);
+        expect(FrameExtractorService.fetchFrameRange).toHaveBeenCalledWith('test-session', 0, 1);
+
+        const thumbnail = new Image();
+        thumbnail.src = 'blob:playback-frame';
+        thumbnail.width = 200;
+        thumbnail.height = 120;
+        ImageRepository.storeImage(frame.id, thumbnail);
+        rerender(<ImagePreview {...props} imageData={{...frame, loadStatus: true}}/>);
+        expect(container.querySelector('img.Image')?.getAttribute('src')).toBe('blob:playback-frame');
+
+        await act(async () => { finishFetch([]); });
+        expect(container.querySelector('img.Image')?.getAttribute('src')).toBe('blob:playback-frame');
     });
 
     it('discards a late image load after the preview has switched to another image', async () => {

@@ -82,6 +82,7 @@ const EditorContainer: React.FC<IProps> = (
     const [showInferenceResults, setShowInferenceResults] = useState<boolean>(false);
     const [showBatchStatistics, setShowBatchStatistics] = useState<boolean>(false);
     const [leftPanel, setLeftPanel] = useState<'images' | 'queue' | 'history'>('images');
+    const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
     const previewImageId = useVideoInferenceFlow(activeVideo?.id, inferenceInProgress,
         () => { setLeftTabStatus(true); setLeftPanel('images'); setRightTabStatus(true);
             setShowBatchStatistics(false); setShowInferenceResults(true); },
@@ -332,20 +333,12 @@ const EditorContainer: React.FC<IProps> = (
                 style={{top: '81px'}}
             />
             <VerticalEditorButton
-                label={currentTexts.queue}
+                label={language === Language.CHINESE ? '工作任务' : 'Work Tasks'}
                 image={'/ico/files.png'}
-                imageAlt={'queue'}
-                onClick={() => selectLeftPanel('queue')}
-                isActive={leftTabStatus && leftPanel === 'queue'}
+                imageAlt={'tasks'}
+                onClick={() => selectLeftPanel(leftPanel === 'images' ? 'queue' : leftPanel)}
+                isActive={leftTabStatus && leftPanel !== 'images'}
                 style={{top: '167px'}}
-            />
-            <VerticalEditorButton
-                label={language === Language.CHINESE ? '历史任务' : 'Task History'}
-                image={'/ico/tasks.png'}
-                imageAlt={'history'}
-                onClick={() => selectLeftPanel('history')}
-                isActive={leftTabStatus && leftPanel === 'history'}
-                style={{top: '253px'}}
             />
             <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>
                 v{appVersion}({appEdition})
@@ -375,9 +368,27 @@ const EditorContainer: React.FC<IProps> = (
     };
 
     const leftSideBarRender = () => {
-        if (leftPanel === 'queue') return <QueueList/>;
-        if (leftPanel === 'history') return <HistoryTasks language={language}/>;
-        return <ImagesList/>;
+        if (leftPanel === 'images') return <ImagesList/>;
+        return <div className='QueueHistoryPanel'>
+            <div className='QueueHistoryPanel__header'>
+                <div className='QueueHistoryPanel__tabs' role='group'
+                    aria-label={language === Language.CHINESE ? '任务视图' : 'Task views'}>
+                    <button type='button' aria-pressed={leftPanel === 'queue'}
+                        onClick={() => setLeftPanel('queue')}>
+                        {currentTexts.queue}
+                    </button>
+                    <button type='button' aria-pressed={leftPanel === 'history'}
+                        onClick={() => setLeftPanel('history')}>
+                        {language === Language.CHINESE ? '历史任务' : 'Task History'}
+                    </button>
+                </div>
+                {leftPanel === 'history' && <button className='QueueHistoryPanel__refresh' type='button'
+                    onClick={() => setHistoryRefreshToken(value => value + 1)}
+                    aria-label={language === Language.CHINESE ? '刷新历史任务' : 'Refresh task history'}>↻</button>}
+            </div>
+            {leftPanel === 'queue' ? <QueueList/> :
+                <HistoryTasks language={language} embedded refreshToken={historyRefreshToken}/>}
+        </div>;
     };
 
     type RightPanel = 'labels' | 'inference' | 'statistics';

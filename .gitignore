@@ -51,3 +51,8 @@ work-visualization.html
 
 # local release artifacts
 /.workspace/
+
+# local backups and generated review/export files
+**/.backups/
+/output/
+/tmp/

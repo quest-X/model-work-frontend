@@ -412,13 +412,6 @@ export const VideoEditor: React.FC<IProps> = ({
                     console.log(`[VideoEditor] ImageData 准备完成: ${frameImageDataArray.length} 帧`);
 
                     if (frameImageDataArray.length > 0) {
-                        const firstFrameImageData = frameImageDataArray[0];
-
-                        if (!hasExistingData && !firstFrameImageData.isSelected) {
-                            const updatedFirstFrame = { ...firstFrameImageData, isSelected: true };
-                            updateImageDataById(firstFrameImageData.id, updatedFirstFrame);
-                        }
-
                         setTimeout(() => {
                             updateVideoCurrentFrame(activeVideo.id, restoredFrame, restoredTime);
                             updateActiveImageIndex(restoredFrame);
