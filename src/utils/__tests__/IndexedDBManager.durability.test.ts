@@ -500,6 +500,47 @@ describe('IndexedDBManager durability', () => {
         });
     });
 
+    it('deletes only the selected historical revision after both stores commit', async () => {
+        const harness = transactionHarness();
+        const request: FakeRequest<StoredMeta> = {};
+        const transaction = {
+            ...harness.transaction,
+            objectStore: (name: string) => ({
+                ...harness.transaction.objectStore(name),
+                get: () => request,
+            }),
+        };
+        setDatabase(() => transaction);
+        IndexedDBManager['workspaceId'] = 'tab-local';
+
+        const deleting = IndexedDBManager.deleteAnnotatedProject('tab-foreign', 41);
+        request.result = {
+            id: 'tab-foreign', projectId: 'workspace:tab-foreign',
+            imageCount: 1, validImageCount: 1, labelCount: 1,
+            isVideoProject: false, hasRecoverableProject: true, lastModified: 41,
+        };
+        request.onsuccess?.();
+        expect(harness.deletes).toEqual([
+            {store: 'projects', key: 'workspace:tab-foreign'},
+            {store: 'workspaceMeta', key: 'tab-foreign'},
+        ]);
+        transaction.oncomplete?.();
+        await expect(deleting).resolves.toBe(true);
+        await expect(IndexedDBManager.deleteAnnotatedProject('tab-local', 41)).resolves.toBe(false);
+
+        const deletingCurrent = IndexedDBManager.deleteAnnotatedProject('tab-local', 42, true);
+        request.result = {
+            ...request.result, id: 'tab-local', projectId: 'workspace:tab-local', lastModified: 42,
+        };
+        request.onsuccess?.();
+        transaction.oncomplete?.();
+        await expect(deletingCurrent).resolves.toBe(true);
+        expect(harness.deletes.slice(-2)).toEqual([
+            {store: 'projects', key: 'workspace:tab-local'},
+            {store: 'workspaceMeta', key: 'tab-local'},
+        ]);
+    });
+
     it('hides a dismissed foreign revision but offers a newer save from that workspace', async () => {
         sessionStorage.setItem('opensight-recovery-dismissed-foreign-snapshot', JSON.stringify({
             workspaceId: 'tab-local',

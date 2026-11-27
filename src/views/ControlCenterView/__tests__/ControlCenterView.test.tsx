@@ -248,7 +248,7 @@ describe('ControlCenterView', () => {
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         expect(screen.getByText(`v${appVersion}(Master)`)).toBeInTheDocument();
-        expect(screen.getByText('正在读取计算群 0%')).toBeInTheDocument();
+        expect(screen.getByText('正在获取已加入计算群的机器… 0%')).toBeInTheDocument();
         await waitFor(() => expect(screen.queryByText(/正在读取计算群/)).not.toBeInTheDocument());
         expect(screen.getByText('暂无机器')).toBeInTheDocument();
     });
@@ -267,7 +267,7 @@ describe('ControlCenterView', () => {
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         const list = screen.getByRole('complementary', {name: '机器列表'});
-        expect(await within(list).findByRole('button', {name: /首屏节点 活跃于/})).toBeEnabled();
+        expect(await within(list).findByRole('button', {name: /首屏节点/})).toBeEnabled();
         expect(screen.getByRole('heading', {name: machine.name})).toBeInTheDocument();
         expect(within(list).queryByText('测试地域')).not.toBeInTheDocument();
         expect(screen.queryByText('延迟返回的边缘设备')).not.toBeInTheDocument();
@@ -286,7 +286,7 @@ describe('ControlCenterView', () => {
             });
         });
         expect(within(list).getByText('测试地域')).toBeInTheDocument();
-        expect(screen.getByText('延迟返回的边缘设备')).toBeInTheDocument();
+        expect(screen.getAllByText('延迟返回的边缘设备').length).toBeGreaterThan(0);
     });
 
     it.each([
@@ -370,13 +370,13 @@ describe('ControlCenterView', () => {
         await screen.findByRole('heading', {name: slow.name});
         expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
         const slowSignal = jest.mocked(ComputeClusterService.programs).mock.calls[0][1];
-        fireEvent.click(screen.getByRole('button', {name: /快节点 活跃于/}));
+        fireEvent.click(screen.getByRole('button', {name: /快节点/}));
         expect(await screen.findByRole('button', {name: '打开程序运行器'})).toHaveTextContent('程序运行正常');
         fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
         await waitFor(() => expect(ComputeClusterService.nodes).toHaveBeenCalledTimes(2));
         expect(slowSignal?.aborted).toBe(false);
         await act(async () => { resolveSlow({...mountedProgram, programs: []}); });
-        fireEvent.click(screen.getByRole('button', {name: /慢节点 活跃于/}));
+        fireEvent.click(screen.getByRole('button', {name: /慢节点/}));
         expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
     });
 
@@ -437,7 +437,7 @@ describe('ControlCenterView', () => {
         expect(restart).toHaveBeenCalledTimes(1);
         fireEvent.click(screen.getByRole('button', {name: /总览.*地图/}));
         restart.mockResolvedValue({node_id: active.node_id, lan_ssh_available: false, lan_probe_failures: 1});
-        await act(async () => { fireEvent.click(screen.getByRole('button', {name: /山东节点 活跃于/})); });
+        await act(async () => { fireEvent.click(within(screen.getByRole('complementary', {name: '机器列表'})).getByRole('button', {name: /山东节点/})); });
         expect(await screen.findByRole('button', {name: /故障：SSH 局域网/})).not.toHaveTextContent('连续 3 次');
         expect(restart).toHaveBeenCalledTimes(2);
     });
@@ -501,7 +501,7 @@ describe('ControlCenterView', () => {
         expect(await screen.findByRole('heading', {name: '在线节点'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '基础信息'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '网络情况'})).toBeInTheDocument();
-        expect(screen.getByRole('heading', {name: '资源监控'})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '打开资源监视器'})).toBeInTheDocument();
         expect(screen.getByRole('heading', {name: '相关设备'})).toBeInTheDocument();
         expect(screen.getByText('边缘计算设备', {selector: 'strong'})).toBeInTheDocument();
         expect(screen.getByRole('button', {name: '发现并添加局域网边缘计算设备'})).toBeInTheDocument();
@@ -582,7 +582,7 @@ describe('ControlCenterView', () => {
         expect(screen.getByText('Remote Tailscale')).toBeInTheDocument();
         expect(screen.getByText('CPU · MEM · GPU · DISK · NETWORK')).toBeInTheDocument();
         expect(screen.getByRole('button', {name: /Active Just now/})).toBeInTheDocument();
-        expect(screen.queryByRole('button', {name: /Open live view/})).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: /Open live view/})).toBeDisabled();
         expect(screen.queryByText('处理器')).not.toBeInTheDocument();
         expect(screen.queryByText('图形处理器')).not.toBeInTheDocument();
     });
@@ -621,7 +621,7 @@ describe('ControlCenterView', () => {
         expect(lan.querySelector('.ControlStatusDot')).toHaveClass('warning');
         expect(remote).toHaveTextContent('正常');
         expect(remote.querySelector('.ControlStatusDot')).toHaveClass('healthy');
-        const machineState = screen.getByRole('button', {name: /山东节点/})
+        const machineState = within(screen.getByRole('complementary', {name: '机器列表'})).getByRole('button', {name: /山东节点/})
             .querySelector('.ControlMachineState');
         expect(machineState).toHaveTextContent('正常');
         expect(machineState).toHaveClass('healthy');
@@ -921,7 +921,7 @@ describe('ControlCenterView', () => {
         const monitorNavigation = within(monitor).getByRole('navigation', {name: '资源监视器导航'});
         expect(runtimeInventory).toHaveBeenCalledWith('节点甲-id', expect.anything());
         fireEvent.click(within(monitorNavigation).getByRole('button', {name: '进程'}));
-        const processSection = within(monitor).getByLabelText('进程清单');
+        const processSection = await within(monitor).findByLabelText('进程清单');
         expect(processSection.querySelector('.ControlMonitorSearchHeader')).toBeInTheDocument();
         const processRows = () => within(processSection).getAllByRole('row').slice(1);
         expect(processRows()[0]).toHaveTextContent('zeta.exe');
@@ -1220,6 +1220,7 @@ describe('ControlCenterView', () => {
         const machine = screen.getByRole('button', {name: /在线节点/});
         const overview = screen.getByRole('button', {name: /总览/});
         fireEvent.click(overview);
+        fireEvent.click(screen.getByRole('button', {name: '地图'}));
 
         expect(machine).toHaveAttribute('aria-pressed', 'false');
         expect(overview).toHaveAttribute('aria-pressed', 'true');
@@ -1294,13 +1295,13 @@ describe('ControlCenterView', () => {
 
         expect(screen.queryByRole('button', {name: '刷新机器状态'})).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '图谱'}));
-        const graphPanel = screen.getByRole('region', {name: '计算节点、边缘设备与摄像头拓扑'});
+        const graphPanel = screen.getByRole('region', {name: '主节点、计算节点与摄像头拓扑'});
         expect(graphPanel.querySelector('.ComputeGraphViewport')).toHaveClass('fit-window');
         const graphStats = graphPanel.querySelector('.ComputeKnowledgeStats');
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > span') || []).map(item => item.textContent))
-            .toEqual(['设备总数', '计算节点', '边缘计算设备', '摄像头']);
+            .toEqual(['设备总数', '计算节点', '摄像头']);
         expect(Array.from(graphStats?.querySelectorAll(':scope > div > strong') || []).map(item => item.textContent))
-            .toEqual(['5', '3', '1', '1']);
+            .toEqual(['5', '4', '1']);
         expect(within(graphPanel).getByText('2/2 正常节点')).toBeInTheDocument();
         expect(within(graphPanel).getByText('0/1 正常节点')).toBeInTheDocument();
         expect(within(graphPanel).getByRole('button', {name: '查看 日照节点 节点信息'})).toHaveClass('node-offline');
@@ -1327,13 +1328,13 @@ describe('ControlCenterView', () => {
         expect(screen.getByText('边缘集群图谱', {selector: 'strong'})).toBeInTheDocument();
         fireEvent.click(within(graphPanel).getByRole('button', {name: /资源监视器/}));
         const graphMonitor = await screen.findByRole('dialog', {name: '在线节点 资源监视器'});
-        expect(screen.getByRole('region', {name: '计算节点、边缘设备与摄像头拓扑'})).toBeInTheDocument();
+        expect(screen.getByRole('region', {name: '主节点、计算节点与摄像头拓扑'})).toBeInTheDocument();
         expect(overview).toHaveAttribute('aria-pressed', 'true');
         expect(machine).toHaveAttribute('aria-pressed', 'false');
         fireEvent.mouseDown(graphMonitor.parentElement as HTMLElement);
         await waitFor(() => expect(screen.queryByRole('dialog', {name: '在线节点 资源监视器'}))
             .not.toBeInTheDocument());
-        expect(screen.getByRole('region', {name: '计算节点、边缘设备与摄像头拓扑'})).toBeInTheDocument();
+        expect(screen.getByRole('region', {name: '主节点、计算节点与摄像头拓扑'})).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: '地图'}));
         expect(screen.getByRole('region', {name: '计算群地理地图'})).toBeInTheDocument();
         expect(nodesRequest).toHaveBeenCalledTimes(1);
@@ -1528,7 +1529,7 @@ describe('ControlCenterView', () => {
         fireEvent(window, new CustomEvent('opensight:camera-resource-updated'));
 
         await waitFor(() => expect(nodes).toHaveBeenCalledTimes(2));
-        expect(await screen.findByText('车间相机')).toBeInTheDocument();
+        expect(await screen.findByRole('button', {name: '打开车间相机实时画面'})).toBeInTheDocument();
     });
 
     it('requires the camera stream capability without checking the node version', async () => {
@@ -1706,7 +1707,7 @@ describe('ControlCenterView', () => {
         expect(screen.queryByText('jetson-orin')).not.toBeInTheDocument();
         fireEvent(window, new CustomEvent('opensight:edge-device-updated'));
         await waitFor(() => expect(lanAssets).toHaveBeenCalledTimes(2));
-        const deviceName = await screen.findByText('jetson-orin');
+        const deviceName = await screen.findByText('jetson-orin', {selector: '.ControlCameraCard strong'});
         const deviceCard = deviceName.closest('.ControlCameraCard') as HTMLElement;
         expect(screen.getByText('Orin · 10.168.10.24')).toBeInTheDocument();
         expect(deviceCard.querySelector('.ControlCameraIcon img')).toHaveAttribute('src', '/ico/jetson-agx-orin.png');
@@ -2393,7 +2394,7 @@ describe('ControlCenterView', () => {
         expect(within(within(localMembers).getByRole('region', {name: 'Main'})).queryByText('现场节点')).not.toBeInTheDocument();
         expect(within(within(localMembers).getByRole('region', {name: 'Node'})).getByText('现场节点')).toBeInTheDocument();
         fireEvent.click(await within(localMembers).findByRole('button', {name: '在图谱中查看'}));
-        const fieldGraphPanel = await screen.findByRole('region', {name: '计算节点、边缘设备与摄像头拓扑'});
+        const fieldGraphPanel = await screen.findByRole('region', {name: '主节点、计算节点与摄像头拓扑'});
         expect(within(fieldGraphPanel).getByRole('button', {name: '查看 现场节点 节点信息'})).toBeInTheDocument();
         expect(screen.getByText('factory-a', {selector: '.ControlToolbarGroup strong'})).toBeInTheDocument();
         expect(ComputeClusterService.group).toHaveBeenNthCalledWith(1, 'central-group', expect.any(AbortSignal));

@@ -70,6 +70,8 @@ import './ControlCenterView.scss';
 
 import {appEdition} from '../../utils/AppEdition';
 
+declare const __OPENSIGHT_LOCAL_TAILCAT_NODE__: string;
+
 const ClusterGeographicMap = React.lazy(() => import('./ClusterGeographicMap')
     .then(module => ({default: module.ClusterGeographicMap})));
 
@@ -615,7 +617,7 @@ export const ControlCenterView: React.FC<IProps> = ({
     const mounted = useRef(true);
     const refreshInFlight = useRef(false);
     const groupRefreshInFlight = useRef(false);
-    const overviewSelected = useRef(true);
+    const overviewSelected = useRef(false);
     const selectedNodeIdRef = useRef('');
     const runtimeInventoryRequest = useRef(0);
     const runtimeInventoryPendingNode = useRef('');
@@ -1235,7 +1237,7 @@ export const ControlCenterView: React.FC<IProps> = ({
         if (nodeChanged) {
             setInspectedServiceId('');
             setMonitorView('performance');
-            setRelatedDeviceView(null);
+            setRelatedDeviceView(view => view?.nodeId === selectedNodeId ? view : null);
             setEdgeLogScope(undefined);
             setProgramRunnerOpen(false);
             setProgramRunnerMaximized(false);
@@ -1260,13 +1262,6 @@ export const ControlCenterView: React.FC<IProps> = ({
             runtimeInventoryRequest.current += 1;
         };
     }, [inspectedServiceId, loadRuntimeInventory, pageVisible, runtimeInventoryCapable, selectedNodeId]);
-
-    useEffect(() => {
-        if (!pendingOverviewTool || !selectedNode) return;
-        if (pendingOverviewTool === 'monitor') setInspectedServiceId('node-runtime');
-        else setProgramRunnerOpen(true);
-        setPendingOverviewTool(null);
-    }, [pendingOverviewTool, selectedNode]);
 
     useEffect(() => {
         if (!pendingOverviewTool || !selectedNode) return;
@@ -1483,6 +1478,8 @@ export const ControlCenterView: React.FC<IProps> = ({
     };
 
     const selectSidebarNode = (nodeId: string) => {
+        setRelatedDeviceView(null);
+        setEdgeLogScope(undefined);
         overviewSelected.current = false;
         setActiveGroupResources(null);
         setSelectedNodeId(nodeId);
@@ -2048,7 +2045,6 @@ export const ControlCenterView: React.FC<IProps> = ({
         const cameras = installedEdgeDevice
             ? edgeCameras(cameraInventoryNode, installedEdgeDevice)
             : node.device_inventory.devices.filter(device => device.kind === 'camera');
-        const relatedDeviceCount = cameras.length + (aipackNode ? 0 : edgeDevices.length);
         const cameraConnectCapable = Boolean(
             node.online && node.capabilities?.includes('task.camera.connect.v1'),
         );
@@ -2252,7 +2248,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                         >{lanAssetRead === 'loading' ? '…' : cameras.length + edgeDevices.length}</button>
                     </div>
                 </div>
-                <div className='ControlRelatedDeviceGrid'>
+                <div className={`ControlRelatedDeviceGrid${aipackNode ? ' camera-only' : ''}`}>
                     <div className='ControlRelatedDeviceGroup'>
                         <div className='ControlSubsectionHeading'>
                             <strong>{zh ? '摄像头' : 'Cameras'}</strong>
@@ -2315,7 +2311,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                             >{zh ? '＋ 连接局域网相机' : '+ Connect LAN camera'}</button>}
                         </div>
                     </div>
-                    <div className='ControlRelatedDeviceGroup'>
+                    {!aipackNode && <div className='ControlRelatedDeviceGroup'>
                         <div className='ControlSubsectionHeading'>
                             <strong>{zh ? '边缘计算设备' : 'Edge computing devices'}</strong>
                             {edgeDevices.length > 0 && <button
@@ -2378,7 +2374,7 @@ export const ControlCenterView: React.FC<IProps> = ({
                                 )}
                             >{zh ? '＋ 连接 NVIDIA Jetson' : '+ Connect NVIDIA Jetson'}</button>}
                         </div>
-                    </div>
+                    </div>}
                 </div>
             </section>
 
@@ -2388,14 +2384,19 @@ export const ControlCenterView: React.FC<IProps> = ({
     const relatedDevices = (node: ComputeClusterNode) => lanAssets.filter(asset =>
         asset.node_id === node.node_id && asset.device_kind === 'edge_compute');
     const renderRelatedDeviceView = (node: ComputeClusterNode, view: RelatedDeviceView) => {
-        const cameraRead = error ? 'unavailable' : node.device_inventory.state;
+        const installed = lanAssets.find(asset => asset.device_kind === 'edge_compute'
+            && installedSidebarNode(asset)?.node_id === node.node_id);
+        const cameraNode = installed ? edgeInventoryNode(installed) || node : node;
+        const cameraRead = error ? 'unavailable' : cameraNode.device_inventory.state;
         const edgeRead = error ? 'failed' : lanAssetRead;
-        const cameras = cameraRead === 'ready' ? node.device_inventory.devices.filter(device => device.kind === 'camera') : [];
+        const cameras = cameraRead !== 'ready' ? [] : installed
+            ? edgeCameras(cameraNode, installed)
+            : cameraNode.device_inventory.devices.filter(device => device.kind === 'camera');
         const edges = edgeRead === 'ready' ? relatedDevices(node) : [];
         const remoteLan = node.control_transport === 'tailscale';
         const close = () => setRelatedDeviceView(null);
         if (view.kind === 'camera') return <CameraLiveViewPopup
-            key={`${node.node_id}:${view.deviceId}`} language={language} node={node} cameras={cameras}
+            key={`${cameraNode.node_id}:${view.deviceId}`} language={language} node={cameraNode} cameras={cameras}
             initialCameraId={view.deviceId} onClose={close}
         />;
         if (view.kind === 'terminal') return <EdgeDeviceTerminalPopup
@@ -3326,7 +3327,7 @@ const mapStateToProps = (state: AppState) => ({
     language: state.general.language,
 });
 
-declare const __OPENSIGHT_LOCAL_TAILCAT_NODE__: string;
+
 
 export default connect(mapStateToProps, {
     updateActivePopupTypeAction: updateActivePopupType,

@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {App} from '../App';
 import {ProjectType} from '../data/enums/ProjectType';
 import {AutoSaveService} from '../services/AutoSaveService';
@@ -162,6 +162,23 @@ describe('App restore prompt scope', () => {
         await waitFor(() => expect(restore.restoreProject).toHaveBeenCalledTimes(1));
         expect(window.location.search).toBe('');
         expect(restore.clearAllStoredData).not.toHaveBeenCalled();
+    });
+
+    it('opens a selected history task in this editor without a restore prompt', async () => {
+        window.history.replaceState(null, '', '/?restore_workspace=task-dog&auto_restore=1');
+        restore.checkForStoredData.mockResolvedValue({
+            hasSettings: false, hasProject: true, lastSaved: 20,
+            projectName: 'dog_4166347', imageCount: 182, labelCount: 173,
+        });
+        restore.restoreProject.mockResolvedValue(true);
+
+        await act(async () => { render(<App {...props}/>); });
+        await waitFor(() => expect(restore.restoreProject).toHaveBeenCalledTimes(1));
+        expect(restore.checkForStoredData).toHaveBeenCalledWith('task-dog');
+        expect(screen.queryByText('是否恢复之前的工作?')).not.toBeInTheDocument();
+        expect(restore.clearAllStoredData).not.toHaveBeenCalled();
+        await waitFor(() => expect(window.location.search).toBe(''));
+        expect(await screen.findByText('annotation')).toBeInTheDocument();
     });
 
     it('opens a resource in annotation when no recovery is pending', async () => {

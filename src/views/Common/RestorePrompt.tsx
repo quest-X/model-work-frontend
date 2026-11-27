@@ -36,10 +36,12 @@ interface Props {
     storageUnavailable: boolean;
     handleRestoreCancel: () => void;
     handleRestoreConfirm: () => void;
+    historyNavigation?: boolean;
 }
 
 export const RestorePrompt: React.FC<Props> = ({
     storedDataInfo, restoreError, storageUnavailable, handleRestoreCancel, handleRestoreConfirm,
+    historyNavigation = false,
 }) => (
     <div className="App restore-prompt">
         <div className="restore-dialog" role="dialog" aria-modal="true" aria-labelledby="restore-dialog-title">
@@ -67,9 +69,9 @@ export const RestorePrompt: React.FC<Props> = ({
                 {restoreError && <div className="error-message" role="alert"><p>{restoreError}</p></div>}
             </div>
             <div className="restore-buttons">
-                {(!restoreError || !storageUnavailable) && (
-                    <button onClick={handleRestoreCancel} className="btn-danger">
-                        {restoreError ? '清除数据，重新开始' : '重新开始'}
+                {(historyNavigation || !restoreError || !storageUnavailable) && (
+                    <button onClick={handleRestoreCancel} className={historyNavigation ? '' : 'btn-danger'}>
+                        {historyNavigation ? '返回当前任务' : restoreError ? '清除数据，重新开始' : '重新开始'}
                     </button>
                 )}
                 <button onClick={handleRestoreConfirm} className="btn-success">

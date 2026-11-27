@@ -192,7 +192,11 @@ const runtimeStateLabel = (state: ComputeRuntimeService['state'], zh: boolean): 
 
 const interfaceTone = (
     state: ComputeProgramSnapshot['programs'][number]['interfaces'][number]['state'],
-): ProgramTone => state === 'healthy' ? 'healthy' : state === 'unavailable' ? 'offline' : 'warning';
+): ProgramTone | 'unknown' => ({
+    healthy: 'healthy',
+    unavailable: 'offline',
+    not_checked: 'unknown',
+} as const)[state];
 
 const interfaceStateLabel = (
     state: ComputeProgramSnapshot['programs'][number]['interfaces'][number]['state'],
@@ -277,6 +281,8 @@ const artifactCategoryLabel = (category: ResultCategory, zh: boolean): string =>
 
 const artifactFolderPath = (relativePath: string): string => {
     const parts = relativePath.split('/');
+    if (parts.length >= 5 && parts[0] === 'runs' && parts[1] === 'bottom_tuyere'
+        && /^\d{8}$/.test(parts[3])) return parts.slice(0, 4).join('/');
     if (parts.length >= 4 && parts[0] === 'runs') return parts.slice(0, 3).join('/');
     const separator = relativePath.lastIndexOf('/');
     return separator < 0 ? '.' : relativePath.slice(0, separator);
@@ -422,7 +428,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const runtimeCapable = !selectedEdgeId && nodeRuntimeCapable;
     const edgeRuntimeCapable = node.online && node.capabilities.includes('runtime.edge-programs.read.v1');
     const programsCapable = selectedEdgeId
-        ? edgeRuntimeCapable && selectedEdge.online
+        ? Boolean(edgeRuntimeCapable && selectedEdge?.online)
         : node.online && node.capabilities.includes('runtime.programs.read.v1');
     const machineHistoryCapable = !selectedEdgeId && node.online && node.capabilities.includes('machine.history.read.v1');
     const runtimeVisible = runtimeCapable || snapshot !== null;
@@ -523,8 +529,12 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setRefreshProgress(0);
     }, [initialView, selectedEdgeId, targetKey]);
 
+    const requestedReads = useRef({programsRequested, eventsRequested});
+    requestedReads.current = {programsRequested, eventsRequested};
+    const refreshRuntime = useRef<() => void>();
+
     useEffect(() => {
-        if (!nodeRuntimeCapable && !programsRequested) return undefined;
+        if (!nodeRuntimeCapable && !programsCapable) return undefined;
         const controller = new AbortController();
         const inFlight = new Set<keyof ProgramRunnerCache>();
         const completed = new Set<keyof ProgramRunnerCache>();
@@ -539,7 +549,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                 inFlight.delete(key);
                 completed.add(key);
                 if (!controller.signal.aborted) {
-                    setRefreshProgress(Math.round(completed.size / requestCount * 100));
+                    setRefreshProgress(Math.min(100, Math.round(completed.size / Math.max(1, requestCount) * 100)));
                     setRefreshing(inFlight.size > 0);
                 }
             });
@@ -547,6 +557,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         // eslint-disable-next-line complexity
         const load = () => {
             const updateCache = (patch: Partial<ProgramRunnerCache>) => {
+                if (selectedEdgeId) return;
                 const current = programRunnerCache.get(targetKey);
                 programRunnerCache.set(targetKey, {
                     snapshot: current?.snapshot || null,
@@ -569,7 +580,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     },
                 );
             }
-            if (programsRequested && !inFlight.has('programs')) {
+            if (requestedReads.current.programsRequested && !inFlight.has('programs')) {
                 void track('programs', selectedEdgeId
                     ? ComputeClusterService.edgePrograms(selectedEdgeId, controller.signal)
                     : ComputeClusterService.programs(node.node_id, controller.signal)).then(
@@ -583,11 +594,16 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     },
                     reason => {
                         if (controller.signal.aborted) return;
+                        if (selectedEdgeId || isComputeAccessDenied(reason)) {
+                            setPrograms(null);
+                            updateCache({programs: null});
+                            if (selectedEdgeId) setSnapshot(null);
+                        }
                         setProgramsError(reason instanceof Error ? reason.message : String(reason));
                     },
                 );
             }
-            if (nodeRuntimeCapable && !selectedEdgeId && eventsRequested && !inFlight.has('events')) {
+            if (nodeRuntimeCapable && !selectedEdgeId && requestedReads.current.eventsRequested && !inFlight.has('events')) {
                 void track('events', ComputeClusterService.runtimeEvents(
                     node.node_id,
                     0,
@@ -602,6 +618,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     },
                     reason => {
                         if (controller.signal.aborted) return;
+                        if (isComputeAccessDenied(reason)) {
+                            setEvents([]);
+                            updateCache({events: []});
+                        }
                         setEventsError(reason instanceof Error ? reason.message : String(reason));
                     },
                 );
@@ -610,14 +630,18 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         if (!runtimeCapable) setRuntimeError('');
         if (!programsCapable) setProgramsError('');
         if (!eventsRequested) setEventsError('');
+        refreshRuntime.current = load;
         load();
         const timer = window.setInterval(load, 5000);
         return () => {
             controller.abort();
+            refreshRuntime.current = undefined;
             window.clearInterval(timer);
             setRefreshing(false);
         };
-    }, [eventsRequested, node.node_id, programsCapable, programsRequested, runtimeCapable, nodeRuntimeCapable, selectedEdgeId, targetKey]);
+    }, [node.node_id, programsCapable, runtimeCapable, nodeRuntimeCapable, selectedEdgeId, targetKey]);
+
+    useEffect(() => { refreshRuntime.current?.(); }, [programsRequested, eventsRequested]);
 
     useEffect(() => {
         if (view !== 'history' || !machineHistoryCapable) return undefined;
@@ -687,6 +711,13 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             program_name: program.name,
         }))
     );
+    const endpointsByPath = new Map<string, typeof endpointRows>();
+    for (const endpoint of endpointRows) {
+        const key = JSON.stringify([endpoint.program_id, endpoint.path]);
+        const group = endpointsByPath.get(key);
+        if (group) group.push(endpoint);
+        else endpointsByPath.set(key, [endpoint]);
+    }
     const livePreview = endpointRows.find(endpoint =>
         endpoint.method === 'GET' && endpoint.path === '/stream.mjpeg'
     ) || endpointRows.find(endpoint =>
@@ -1218,7 +1249,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     ? (zh
                                         ? `正在读取程序状态… ${refreshProgress}%`
                                         : `Loading program status… ${refreshProgress}%`)
-                                    : (zh ? '暂无程序状态' : 'No program status'),
+                                    : programs?.programs.length === 0
+                                        ? (zh ? '节点尚未注册部署程序。' : 'No deployed programs are registered on this node.')
+                                        : (zh ? '暂无程序状态' : 'No program status'),
                             runtimeError,
                         ))}
 
@@ -1263,13 +1296,13 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 <p>{zh ? '声明接口状态每 5 秒刷新' : 'Declared API status refreshes every 5 seconds'}</p>
                             </div>
                             <span className='ControlProgramEndpointCount'>
-                                {endpointRows.length} {zh ? '个接口' : endpointRows.length === 1 ? 'API' : 'APIs'}
+                                {endpointsByPath.size} {zh ? '个接口' : endpointsByPath.size === 1 ? 'API' : 'APIs'}
                             </span>
                         </header>
                         {programsError && <p className='ControlProgramError' role='status'>
                             {programsError}
                         </p>}
-                        {endpointRows.length > 0 ? <table>
+                        {endpointsByPath.size > 0 ? <table>
                             <thead><tr>
                                 <th>{zh ? '提交方式' : 'Method'}</th>
                                 <th>{zh ? '原始地址' : 'Original path'}</th>
@@ -1277,15 +1310,21 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                 <th>{zh ? '状态' : 'Status'}</th>
                                 <th>{zh ? '最近检查' : 'Last checked'}</th>
                             </tr></thead>
-                            <tbody>{endpointRows.map(endpoint => {
+                            <tbody>{Array.from(endpointsByPath, ([key, methods]) => {
+                                const [endpoint] = methods;
+                                const grouped = methods.length > 1;
+                                const healthyCount = methods.filter(method => method.state === 'healthy').length;
+                                const state = methods.find(method => method.state === 'unavailable')?.state
+                                    ?? (healthyCount > 0 ? 'healthy' : 'not_checked');
+                                const checkedAt = Math.max(...methods.map(method => method.checked_at ?? -Infinity));
                                 const url = ComputeClusterService.programInterfaceUrl(
                                     node.node_id,
                                     endpoint.program_id,
                                     endpoint.path,
                                 );
-                                return <tr key={endpoint.key}>
-                                <td><code>{endpoint.method}</code></td>
-                                <td className='ControlProgramEndpointAddress'>{endpoint.method === 'GET' && !selectedEdgeId
+                                return <tr key={key}>
+                                <td><code>{methods.map(method => method.method).join(', ')}</code></td>
+                                <td className='ControlProgramEndpointAddress'>{methods.some(method => method.method === 'GET') && !selectedEdgeId
                                     ? <a
                                         className='ControlProgramEndpointLink'
                                         href={url}
@@ -1294,17 +1333,22 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     ><code title={endpoint.path}>{endpoint.path}</code></a>
                                     : <code title={endpoint.path}>{endpoint.path}</code>}</td>
                                 <td><span className='ControlProgramEndpointName'>
-                                    <span className={`ControlStatusDot ${interfaceTone(endpoint.state)}`} aria-hidden='true'/>
-                                    <span><strong>{endpoint.name}</strong><small>{endpoint.description}</small></span>
+                                    <span className={`ControlStatusDot ${interfaceTone(state)}`} aria-hidden='true'/>
+                                    <span><small>{endpoint.program_name}</small>{methods.map(method => <React.Fragment key={method.key}>
+                                        <strong>{grouped ? `${method.method} · ` : ''}{method.name}</strong>
+                                        <small>{method.description}</small>
+                                    </React.Fragment>)}</span>
                                 </span></td>
                                 <td><span className='ControlProgramEndpointStatus'>
-                                    <strong>{interfaceStateLabel(endpoint.state, zh)}</strong>
-                                    <small>
-                                        {endpoint.status_code === null ? '—' : `HTTP ${endpoint.status_code}`}
-                                        {endpoint.latency_ms === null ? '' : ` · ${endpoint.latency_ms} ms`}
-                                    </small>
+                                    <strong>{interfaceStateLabel(state, zh)}{grouped && ` (${healthyCount}/${methods.length})`}</strong>
+                                    {methods.map(method => <small key={method.key}>
+                                        {grouped && `${method.method} · ${interfaceStateLabel(method.state, zh)}`}
+                                        {method.status_code !== null && `${grouped ? ' · ' : ''}HTTP ${method.status_code}`}
+                                        {!grouped && method.status_code === null && '—'}
+                                        {method.latency_ms !== null && ` · ${method.latency_ms} ms`}
+                                    </small>)}
                                 </span></td>
-                                <td>{endpoint.checked_at === null ? '—' : dateTime(endpoint.checked_at, zh)}</td>
+                                <td>{Number.isFinite(checkedAt) ? dateTime(checkedAt, zh) : '—'}</td>
                             </tr>;
                             })}</tbody>
                         </table> : unavailable(
@@ -2031,7 +2075,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         : unavailable(zh ? '暂无每日统计' : 'No daily statistics')}
                         </section>)}
 
-                {view === 'history' && (!historyCapable
+                {view === 'history' && (!machineHistoryCapable
                     ? unavailable(
                         zh ? '当前节点尚不支持机器历史' : 'Machine history is not supported',
                         node.online

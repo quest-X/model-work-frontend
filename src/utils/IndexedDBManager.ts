@@ -1058,6 +1058,58 @@ export class IndexedDBManager {
         return currentMeta;
     }
 
+    public static async getWorkspaceSaveTime(workspaceId: string): Promise<number | null> {
+        return (await this.readWorkspaceMeta(workspaceId))?.lastModified ?? null;
+    }
+
+    public static async deleteAnnotatedProject(
+        workspaceId: string, lastModified: number, allowCurrent = false,
+    ): Promise<boolean> {
+        if (!this.db || (!allowCurrent && workspaceId === this.getWorkspaceId())) return false;
+        const database = this.db;
+        return new Promise(resolve => {
+            let settled = false;
+            const finish = (deleted: boolean): void => {
+                if (settled) return;
+                settled = true;
+                resolve(deleted);
+            };
+            try {
+                const transaction = database.transaction(
+                    [this.PROJECT_STORE_NAME, this.META_STORE_NAME], 'readwrite',
+                );
+                const projectStore = transaction.objectStore(this.PROJECT_STORE_NAME);
+                const metaStore = transaction.objectStore(this.META_STORE_NAME);
+                const request = metaStore.get(workspaceId);
+                request.onsuccess = () => {
+                    const meta = request.result as WorkspaceMetaRecord | undefined;
+                    if (!meta || !meta.hasRecoverableProject || meta.labelCount <= 0
+                        || meta.projectId !== this.projectId(workspaceId)
+                        || meta.lastModified !== lastModified) {
+                        finish(false);
+                        return;
+                    }
+                    projectStore.delete(meta.projectId);
+                    metaStore.delete(workspaceId);
+                };
+                request.onerror = () => finish(false);
+                transaction.oncomplete = () => {
+                    if (this.pinnedReadLocation?.workspaceId === workspaceId) this.pinnedReadLocation = null;
+                    if (this.activeReadWorkspaceId === workspaceId) {
+                        this.activeReadProjectId = null;
+                        this.activeReadWorkspaceId = null;
+                        this.activeReadLastModified = null;
+                    }
+                    finish(true);
+                };
+                transaction.onabort = () => finish(false);
+                transaction.onerror = () => finish(false);
+            } catch {
+                finish(false);
+            }
+        });
+    }
+
     private static async projectNameForSelectedHistory(
         projectId: string,
         meta: StoredProjectMeta,

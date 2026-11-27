@@ -11,7 +11,6 @@ import {
     ComputeClusterService,
     isComputeAccessDenied,
     ComputeClusterStatus,
-    ComputeUpgradeManifest,
     ComputeLanDiscoveryResult,
     ComputeLanAssetsResponse,
     ComputeLanSchedule,
@@ -1186,7 +1185,7 @@ const totalNodeCount = resourceGraph?.entities.filter(entity =>
                                 {!commercialRestricted && <button type='button'
                                     disabled={!computeNodeUpgradeAvailable(node, upgradeReleases)}
                                     aria-label={`${zh ? '管理' : 'Manage'} ${node.name} ${zh ? '节点升级' : 'node upgrade'}`}
-                                    onClick={() => { setUpgradeOpen(true); upgradePanelRef.current?.scrollIntoView?.({block: 'nearest'}); }}>
+                                    onClick={openUpgrade}>
                                     {computeNodeUpgradeAvailable(node, upgradeReleases) ? (zh ? '升级节点' : 'Upgrade node')
                                         : computeNodeUpgradeReady(node) ? (zh ? '暂无可用升级' : 'No upgrade available')
                                             : (zh ? '无法联通，暂不可升级' : 'Unreachable; upgrade unavailable')}

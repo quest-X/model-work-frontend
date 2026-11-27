@@ -6,11 +6,11 @@ export class Terminal {
     private dataListener?: (data: string) => void;
     private resizeListener?: (size: {rows: number; cols: number}) => void;
 
-    constructor(_options?: unknown) {
+    constructor() {
         Terminal.instances.push(this);
     }
 
-    loadAddon(_addon: unknown): void {}
+    loadAddon(): void { /* Rendering is simulated by this terminal double. */ }
 
     open(container: HTMLElement): void {
         this.element = document.createElement('div');

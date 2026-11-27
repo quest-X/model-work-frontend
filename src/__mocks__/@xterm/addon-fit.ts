@@ -1,3 +1,3 @@
 export class FitAddon {
-    fit(): void {}
+    fit(): void { /* Layout is provided by the test DOM. */ }
 }

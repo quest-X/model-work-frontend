@@ -48,3 +48,6 @@ branch-tree.html
 dev-assessment.html
 work-report.html
 work-visualization.html
+
+# local release artifacts
+/.workspace/
