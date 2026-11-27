@@ -152,9 +152,13 @@ export const VideoEditor: React.FC<IProps> = ({
     useEffect(() => {
         // The decoded-frame callback owns playback rendering; Redux only refreshes controls.
         if (isPlaying) return;
+        if (EditorModel.videoElement?.seeking) return;
         if (activeVideo && imagesData.length > 0) {
             // 始终同步 playbackImageData 到当前帧
-            const frameData = imagesData[activeVideo.currentFrame];
+            const decodedFrame = activeVideo.fileData?.size && EditorModel.videoElement
+                ? Math.round(EditorModel.videoElement.currentTime * activeVideo.fps)
+                : activeVideo.currentFrame;
+            const frameData = imagesData[decodedFrame];
             EditorModel.playbackImageData = frameData || null;
 
             const frameChanged = activeVideo.currentFrame !== lastFrameForImageRef.current;
@@ -441,12 +445,18 @@ export const VideoEditor: React.FC<IProps> = ({
             if (frameNumber === activeVideo.currentFrame) return;
             const timestamp = frameNumber / activeVideo.fps;
             // 同步设置 playbackImageData，确保标签与帧一致（fallback 到 latestImagesData 以抗 AI 批量推理时的 ref 滞后）
-            EditorModel.playbackImageData = getPlaybackFrame(imagesDataRef.current, EditorModel.latestImagesData, frameNumber);
+            if (!activeVideo.fileData?.size) {
+                EditorModel.playbackImageData = getPlaybackFrame(imagesDataRef.current, EditorModel.latestImagesData, frameNumber);
+            }
             updateVideoCurrentFrame(activeVideo.id, frameNumber, timestamp);
             updateActiveImageIndex(frameNumber);
         },
         [activeVideo, updateVideoCurrentFrame, updateActiveImageIndex]
     );
+
+    const handleFrameDrawn = useCallback((frame: number) => {
+        EditorModel.playbackImageData = getPlaybackFrame(imagesDataRef.current, EditorModel.latestImagesData, frame);
+    }, []);
 
     // 处理视频时间更新
     const lastFrameRef = React.useRef<number>(-1);
@@ -619,6 +629,7 @@ export const VideoEditor: React.FC<IProps> = ({
                         <VideoPlayer
                             language={language}
                             videoSrc={videoUrl}
+                            onFrameDrawn={handleFrameDrawn}
                             totalFrames={activeVideo.totalFrames}
                             currentTime={activeVideo.currentTime}
                             currentFrame={activeVideo.currentFrame}

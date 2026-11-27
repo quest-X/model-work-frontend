@@ -16,6 +16,9 @@ import './ImagePreview.scss';
 import { CSSHelper } from "../../../../logic/helpers/CSSHelper";
 import {getVideoThumbnailSize} from "../../../../utils/VideoThumbnailUtil";
 import {store} from "../../../../index";
+import {AppState} from '../../../../store';
+import {Language} from '../../../../data/LanguageConfig';
+import {VideoThumbnailService} from '../../../../services/VideoThumbnailService';
 
 interface IProps {
     imageData: ImageData;
@@ -32,10 +35,12 @@ interface IProps {
     updateImageDataById: typeof updateImageDataById;
     deleteImageById: typeof deleteImageById;
     deleteSelectedImages: typeof deleteSelectedImages;
+    language?: Language;
 }
 
 interface IState {
     image: HTMLImageElement;
+    loadFailed: boolean;
 }
 
 export class ImagePreview extends React.Component<IProps, IState> {
@@ -44,12 +49,14 @@ export class ImagePreview extends React.Component<IProps, IState> {
     private loadingGeneration: number = 0;
     private requestGeneration: number = 0;
     private mounted: boolean = false;
+    private thumbnailAbort: AbortController | null = null;
 
     constructor(props: IProps) {
         super(props);
 
         this.state = {
             image: null,
+            loadFailed: false,
         }
     }
 
@@ -61,6 +68,7 @@ export class ImagePreview extends React.Component<IProps, IState> {
     public componentWillUnmount(): void {
         this.mounted = false;
         this.requestGeneration++;
+        this.thumbnailAbort?.abort();
         this.isLoading = false;
         this.loadingImageId = null;
     }
@@ -94,6 +102,8 @@ export class ImagePreview extends React.Component<IProps, IState> {
         return (
             this.props.imageData !== nextProps.imageData ||
             this.state.image !== nextState.image ||
+            this.state.loadFailed !== nextState.loadFailed ||
+            this.props.language !== nextProps.language ||
             this.props.isSelected !== nextProps.isSelected ||
             this.props.isChecked !== nextProps.isChecked ||
             this.props.isMultiSelected !== nextProps.isMultiSelected ||
@@ -114,19 +124,22 @@ export class ImagePreview extends React.Component<IProps, IState> {
             // Playback may publish this thumbnail while an older sidebar fetch is pending.
             // Let the cache win immediately and invalidate the older request.
             ++this.requestGeneration;
+            this.thumbnailAbort?.abort();
             this.isLoading = false;
             this.loadingImageId = null;
             if (this.state.image !== cachedImage) this.setState({ image: cachedImage });
             return;
         }
         if (this.isLoading && this.loadingImageId === imageData.id) return;
+        this.thumbnailAbort?.abort();
+        if (this.state.loadFailed) this.setState({loadFailed: false});
         const generation = ++this.requestGeneration;
         this.loadMissingImage(imageData, generation);
     };
 
     private loadMissingImage = (imageData: ImageData, generation: number) => {
         const file = imageData.fileData;
-        if (!file) return;
+        if (!file) { this.handleLoadImageError(imageData, generation, new Error('Image file unavailable')); return; }
         // 0字节占位文件 = on-demand 视频帧；即使 Redux 仍标记 loadStatus=true，
         // LRU 淘汰后也必须从后端重新生成缩略图。
         if (file.size === 0) {
@@ -135,7 +148,10 @@ export class ImagePreview extends React.Component<IProps, IState> {
         }
         // 视频文件无法通过 FileUtil.loadImage 加载；同时检查扩展名以兼容
         // IndexedDB 恢复后 MIME type 丢失的情况。
-        if (file.type.startsWith('video/') || /\.(mp4|webm|mov|avi|mkv|m4v|ogg)$/i.test(file.name)) return;
+        if (file.type.startsWith('video/') || /\.(mp4|webm|mov|avi|mkv|m4v|ogg)$/i.test(file.name)) {
+            this.handleLoadImageError(imageData, generation, new Error('Video frame file unavailable'));
+            return;
+        }
         this.startLoading(imageData.id, generation);
         FileUtil.loadImage(file)
             .then((image: HTMLImageElement) => this.saveLoadedImage(image, imageData, generation))
@@ -144,21 +160,35 @@ export class ImagePreview extends React.Component<IProps, IState> {
 
     private loadVideoFrameThumbnail = async (imageData: ImageData, generation: number) => {
         const sessionId = EditorModel.videoSessionId;
-        if (
-            !sessionId ||
-            this.loadingImageId === imageData.id && this.loadingGeneration === generation
-        ) return;
-
-        const match = imageData.fileData?.name?.match(/frame_(\d+)/);
-        if (!match) return;
-        const frameIdx = parseInt(match[1], 10);
-
         this.startLoading(imageData.id, generation);
         try {
-            const frames = await FrameExtractorService.fetchFrameRange(sessionId, frameIdx, 1);
+            const match = imageData.fileData?.name?.match(/frame_(\d+)/);
+            if (!match) throw new Error('Video frame index unavailable');
+            const frameIdx = parseInt(match[1], 10);
+            const state = store.getState();
+            const activeVideo = state.labels.imagesData[frameIdx]?.id === imageData.id ? state.video.activeVideo : null;
+            let frameFile = EditorModel.videoFrameFiles[frameIdx] || activeVideo?.preExtractedFrames?.[frameIdx];
+            if (!frameFile?.size && activeVideo?.fileData?.size) {
+                const controller = new AbortController();
+                this.thumbnailAbort = controller;
+                try {
+                    const blob = await VideoThumbnailService.capture(activeVideo.fileData, frameIdx / activeVideo.fps, controller.signal);
+                    if (!this.isCurrentRequest(imageData.id, generation)) return;
+                    const image = await FileUtil.loadImage(new File([blob], imageData.fileData.name, {type: blob.type}));
+                    this.saveLoadedImage(image, imageData, generation);
+                    return;
+                } catch (error) {
+                    if (controller.signal.aborted || !sessionId) throw error;
+                }
+            }
+            if (!frameFile?.size) {
+                if (!sessionId) throw new Error('Video source unavailable');
+                const frames = await FrameExtractorService.fetchFrameRange(sessionId, frameIdx, 1);
+                frameFile = frames?.[0];
+            }
             if (!this.isCurrentRequest(imageData.id, generation)) return;
-            if (!frames || frames.length === 0) { this.finishLoading(imageData.id, generation); return; }
-            const blob = frames[0] as Blob;
+            if (!frameFile?.size) throw new Error('Video frame unavailable');
+            const blob = frameFile as Blob;
             const fullUrl = URL.createObjectURL(blob);
             const fullImg = new Image();
             fullImg.onload = () => {
@@ -274,11 +304,13 @@ export class ImagePreview extends React.Component<IProps, IState> {
     };
 
     private handleLoadImageError = (imageData?: ImageData, generation?: number, error?: unknown) => {
+        if (imageData && generation !== undefined && !this.isCurrentRequest(imageData.id, generation)) return;
         if (imageData && generation !== undefined) this.finishLoading(imageData.id, generation);
         else {
             this.isLoading = false;
             this.loadingImageId = null;
         }
+        this.setState({loadFailed: true});
         if (imageData) {
             console.error(`[ImagePreview] 图像加载失败: ${imageData.fileData?.name} (size=${imageData.fileData?.size})`, error);
         }
@@ -380,7 +412,11 @@ export class ImagePreview extends React.Component<IProps, IState> {
                             style={this.getStyle()}
                         />
                     ] :
-                    <ClipLoader
+                    this.state.loadFailed ? <button
+                        type="button"
+                        className="ThumbnailRetry"
+                        onClick={event => { event.stopPropagation(); this.loadImage(this.props.imageData); }}
+                    >{this.props.language === Language.ENGLISH ? 'Load failed · Retry' : '加载失败 · 重试'}</button> : <ClipLoader
                         size={30}
                         color={CSSHelper.getLeadingColor()}
                         loading={true}
@@ -395,7 +431,7 @@ const mapDispatchToProps = {
     deleteSelectedImages
 };
 
-const mapStateToProps = () => ({});
+const mapStateToProps = (state: AppState) => ({language: state.general.language});
 
 export default connect(
     mapStateToProps,

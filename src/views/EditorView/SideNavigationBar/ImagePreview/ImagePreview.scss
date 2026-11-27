@@ -12,6 +12,14 @@
   align-content: center;
 
   border-bottom: solid 1px $darkThemeFirstColor;
+  .ThumbnailRetry {
+    color: inherit;
+    background: transparent;
+    border: 1px solid $darkThemeThirdColor;
+    padding: 6px;
+    font-size: 11px;
+    cursor: pointer;
+  }
   &:nth-child(odd) {
     border-right: solid 1px $darkThemeFirstColor;
   }

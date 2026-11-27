@@ -11,11 +11,14 @@ import {ImageRepository} from '../../../../logic/imageRepository/ImageRepository
 
 let mockTimeUpdate: (time: number, frame: number) => void;
 let mockFirstFrame: (canvas: HTMLCanvasElement) => void;
+let mockFrameDrawn: (frame: number) => void;
 jest.mock('../../VideoPlayer/VideoPlayer', () => ({__esModule: true, default: (props: {
     onTimeUpdate: typeof mockTimeUpdate; onFirstFrameDrawn: typeof mockFirstFrame;
+    onFrameDrawn: typeof mockFrameDrawn;
 }) => {
     mockTimeUpdate = props.onTimeUpdate;
     mockFirstFrame = props.onFirstFrameDrawn;
+    mockFrameDrawn = props.onFrameDrawn;
     return null;
 }}));
 jest.mock('../../FramePlayer/FramePlayer', () => ({__esModule: true, default: () => null}));
@@ -99,6 +102,21 @@ it('keeps the extracted-frame player opaque during playback', () => {
         fileData: new File([], 'restored.mp4'), sessionId: 'frames-only'}}/>);
     expect(view.container.querySelector('.video-playing')).not.toBeNull();
     expect(view.container.querySelector('.native-video-playing')).toBeNull();
+});
+
+it('keeps annotations on the decoded frame while a newer drag target is seeking', () => {
+    const {frames, props} = fixture();
+    const view = render(<VideoEditor {...props} activeVideo={{...props.activeVideo, isPlaying: false}}/>);
+    const video = document.createElement('video');
+    Object.defineProperty(video, 'seeking', {value: true});
+    EditorModel.videoElement = video;
+    act(() => mockFrameDrawn(30));
+    view.rerender(<VideoEditor {...props} activeVideo={{...props.activeVideo,
+        isPlaying: false, currentFrame: 90, currentTime: 1.5}} activeImageIndex={90}/>);
+    expect(EditorModel.playbackImageData).toBe(frames[30]);
+    act(() => mockFrameDrawn(90));
+    expect(EditorModel.playbackImageData).toBe(frames[90]);
+    EditorModel.videoElement = null;
 });
 
 it('reuses the native decoded frame without encoding a second full-resolution JPEG', () => {

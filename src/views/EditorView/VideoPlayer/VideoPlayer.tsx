@@ -38,6 +38,7 @@ interface IProps {
     isPlaying?: boolean; // 外部控制播放状态
     defaultMuted?: boolean; // 默认是否静音
     onFirstFrameDrawn?: (canvas: HTMLCanvasElement) => void; // 第一帧绘制完成回调
+    onFrameDrawn?: (frame: number) => void;
     processingProgress?: number; // 视频处理进度 (0-100)
 }
 
@@ -76,6 +77,7 @@ const VideoPlayer: React.FC<IProps> = ({
     isPlaying = false,
     defaultMuted = true, // 默认静音
     onFirstFrameDrawn,
+    onFrameDrawn,
     processingProgress = 0
 }) => {
     const texts = LanguageConfig[language];
@@ -103,6 +105,9 @@ const VideoPlayer: React.FC<IProps> = ({
     onFirstFrameDrawnRef.current = onFirstFrameDrawn;
     const pausedFrameRef = useRef<HTMLCanvasElement | null>(null);
     const pendingSeekedRef = useRef<(() => void) | null>(null);
+    const seekTargetRef = useRef<number | null>(null);
+    const onFrameDrawnRef = useRef(onFrameDrawn);
+    onFrameDrawnRef.current = onFrameDrawn;
     const onTimeUpdateRef = useRef(onTimeUpdate);
     onTimeUpdateRef.current = onTimeUpdate;
 
@@ -122,6 +127,7 @@ const VideoPlayer: React.FC<IProps> = ({
         setVideoSize({ width: 0, height: 0 });
         setIsVideoEnded(false);
         firstFrameDrawnRef.current = false;
+        seekTargetRef.current = null;
         
         // 清空 canvas
         const canvas = canvasRef.current;
@@ -224,6 +230,7 @@ const VideoPlayer: React.FC<IProps> = ({
         
         // Publish the decoded pixels and redraw labels in this event, without JPEG encoding/decoding.
         if (video.paused) {
+            onFrameDrawnRef.current?.(Math.max(0, Math.min(totalFramesRef.current - 1, Math.round(video.currentTime * detectedFps))));
             renderPausedFrame(video, pausedFrameRef.current);
         }
 
@@ -233,7 +240,7 @@ const VideoPlayer: React.FC<IProps> = ({
             // Canvas drawImage is synchronous; copy before another seek can clear it.
             onFirstFrameDrawnRef.current(canvas);
         }
-    }, [isVideoLoaded, videoSize]);
+    }, [isVideoLoaded, videoSize, detectedFps]);
 
     useEffect(() => {
         // Metadata and frame decode can arrive in separate events or in the same React commit.
@@ -285,21 +292,26 @@ const VideoPlayer: React.FC<IProps> = ({
         focusableElementRef.current?.focus();
     }, [detectFrameRate, onLoadedMetadata, fps, sourceTotalFrames]);
 
-    // 跳转到指定时间（保持至多一个 seeked 监听器）
+    // Finish each decode, then seek directly to the newest requested position.
     const seekToTime = useCallback((time: number) => {
         const video = videoRef.current;
         if (!video) return;
-
-        // 移除之前未完成的 seeked 监听器
-        if (pendingSeekedRef.current) {
-            video.removeEventListener('seeked', pendingSeekedRef.current);
-        }
+        seekTargetRef.current = time;
+        if (pendingSeekedRef.current) return;
+        let inFlightTime = time;
 
         const handleSeeked = () => {
-            if (video.seeking || Math.abs(video.currentTime - time) >= 0.5 / detectedFps) return;
+            if (video.seeking || Math.abs(video.currentTime - inFlightTime) >= 0.5 / detectedFps) return;
+            drawFrame();
+            const target = seekTargetRef.current;
+            if (target !== null && Math.abs(video.currentTime - target) >= 0.5 / detectedFps) {
+                inFlightTime = target;
+                video.currentTime = target;
+                return;
+            }
             video.removeEventListener('seeked', handleSeeked);
             pendingSeekedRef.current = null;
-            drawFrame();
+            seekTargetRef.current = null;
         };
         pendingSeekedRef.current = handleSeeked;
         video.addEventListener('seeked', handleSeeked);
@@ -339,7 +351,7 @@ const VideoPlayer: React.FC<IProps> = ({
     // 处理视频时间更新（仅用于暂停时的同步，播放时使用 requestVideoFrameCallback）
     const handleTimeUpdate = useCallback(() => {
         const video = videoRef.current;
-        if (!video || video.seeking || !onTimeUpdateRef.current || isPlaying) return; // 播放时不使用 timeupdate
+        if (!video || video.seeking || pendingSeekedRef.current || !onTimeUpdateRef.current || isPlaying) return; // 播放时不使用 timeupdate
 
         const videoTime = video.currentTime;
         const videoFrame = Math.round(videoTime * detectedFps);
@@ -362,6 +374,13 @@ const VideoPlayer: React.FC<IProps> = ({
             if (isPlaying) {
                 let playPromise: Promise<void> | null = null;
                 try {
+                    if (pendingSeekedRef.current) {
+                        video.removeEventListener('seeked', pendingSeekedRef.current);
+                        pendingSeekedRef.current = null;
+                        const target = seekTargetRef.current;
+                        seekTargetRef.current = null;
+                        if (target !== null) video.currentTime = target;
+                    }
                     // 重置视频结束状态（用 ref 读取，避免 state 变化触发 effect 双重运行）
                     if (isVideoEndedRef.current) {
                         video.currentTime = 0;
@@ -451,7 +470,7 @@ const VideoPlayer: React.FC<IProps> = ({
 
         // 只有在暂停状态下才同步外部时间变化
         // 播放状态下让视频自然播放，避免跳帧
-        if (!isPlaying && Math.abs(video.currentTime - currentTime) >= 0.5 / detectedFps) {
+        if (!isPlaying && (pendingSeekedRef.current || Math.abs(video.currentTime - currentTime) >= 0.5 / detectedFps)) {
             seekToTime(currentTime);
         }
     }, [currentTime, isVideoLoaded, isPlaying, seekToTime, detectedFps]);

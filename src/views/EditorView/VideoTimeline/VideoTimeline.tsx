@@ -64,6 +64,24 @@ export const VideoTimeline: React.FC<IProps> = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [hoverTime, setHoverTime] = useState<number | null>(null);
+    const pendingSeekRef = useRef<number | null>(null);
+    const seekAnimationRef = useRef<number | null>(null);
+    const frameChangeRef = useRef(onFrameChange);
+    frameChangeRef.current = onFrameChange;
+    const currentFrameRef = useRef(currentFrame);
+    currentFrameRef.current = currentFrame;
+
+    const flushSeek = useCallback(() => {
+        if (seekAnimationRef.current !== null) cancelAnimationFrame(seekAnimationRef.current);
+        seekAnimationRef.current = null;
+        const frame = pendingSeekRef.current;
+        pendingSeekRef.current = null;
+        if (frame !== null && frame !== currentFrameRef.current) frameChangeRef.current(frame);
+    }, []);
+
+    useEffect(() => () => {
+        if (seekAnimationRef.current !== null) cancelAnimationFrame(seekAnimationRef.current);
+    }, []);
 
     // ===== Shift+拖拽范围选区 =====
     const [selectionRange, setSelectionRange] = useState<FrameRange | null>(null);
@@ -251,7 +269,7 @@ export const VideoTimeline: React.FC<IProps> = ({
     }, [drawBackground, duration, currentTime, frames, currentFrame, fps, hoverTime]);
 
     // 处理时间跳转
-    const handleSeek = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const handleSeek = (e: React.MouseEvent<HTMLCanvasElement>, immediate = false) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
@@ -260,8 +278,9 @@ export const VideoTimeline: React.FC<IProps> = ({
         const time = (x / rect.width) * duration;
         const clampedTime = Math.max(0, Math.min(duration, time));
         const frame = Math.min(Math.round(clampedTime * fps), frames - 1);
-        if (frame === currentFrame) return;
-        onFrameChange(frame);
+        pendingSeekRef.current = frame;
+        if (immediate) flushSeek();
+        else if (seekAnimationRef.current === null) seekAnimationRef.current = requestAnimationFrame(flushSeek);
     };
 
 
@@ -281,7 +300,7 @@ export const VideoTimeline: React.FC<IProps> = ({
             return; // 不触发 seek
         }
         setIsDragging(true);
-        handleSeek(e);
+        handleSeek(e, true);
     };
 
     const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -308,7 +327,7 @@ export const VideoTimeline: React.FC<IProps> = ({
         }
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
         if (isRangeSelecting) {
             setIsRangeSelecting(false);
             rangeAnchorRef.current = null;
@@ -318,6 +337,7 @@ export const VideoTimeline: React.FC<IProps> = ({
             }
             return;
         }
+        if (isDragging) handleSeek(e, true);
         setIsDragging(false);
     };
 
@@ -326,6 +346,7 @@ export const VideoTimeline: React.FC<IProps> = ({
             setIsRangeSelecting(false);
             rangeAnchorRef.current = null;
         }
+        flushSeek();
         setIsDragging(false);
         setHoverTime(null);
     };

@@ -1,5 +1,5 @@
 import React from 'react';
-import {act, render} from '@testing-library/react';
+import {act, fireEvent, render} from '@testing-library/react';
 import {ImageRepository} from '../../../../../logic/imageRepository/ImageRepository';
 import {ImageData} from '../../../../../store/labels/types';
 import {FileUtil} from '../../../../../utils/FileUtil';
@@ -10,6 +10,8 @@ import {LabelUtil} from '../../../../../utils/LabelUtil';
 import configureStore from '../../../../../configureStore';
 import {EditorModel} from '../../../../../staticModels/EditorModel';
 import {FrameExtractorService} from '../../../../../services/FrameExtractorService';
+import {VideoThumbnailService} from '../../../../../services/VideoThumbnailService';
+import {Language} from '../../../../../data/LanguageConfig';
 
 jest.mock('../../../../../index', () => ({store: {getState: jest.fn(() => ({labels: {imagesData: []}}))}}));
 
@@ -73,6 +75,100 @@ describe('ImagePreview rapid switching', () => {
 
         await act(async () => { finishFetch([]); });
         expect(container.querySelector('img.Image')?.getAttribute('src')).toBe('blob:playback-frame');
+    });
+
+    const rawVideoFixture = (frameIndex = 42) => {
+        const frame = {...imageData('restored-frame'),
+            fileData: new File([], `frame_${String(frameIndex).padStart(6, '0')}.jpg`, {type: 'image/jpeg'}),
+            loadStatus: true};
+        const source = new File(['video'], 'restored.mp4', {type: 'video/mp4'});
+        const state = store.getState();
+        const images = [];
+        images[frameIndex] = frame;
+        jest.mocked(store.getState).mockReturnValue({...state, labels: {...state.labels, imagesData: images},
+            video: {...state.video, activeVideo: {id: 'video', fileData: source, fps: 30} as typeof state.video.activeVideo}});
+        const thumbnail = new Image(200, 113);
+        thumbnail.src = 'blob:native-thumbnail';
+        return {frame, source, thumbnail, props: {imageData: frame, imageIndex: frameIndex, style: {}, size: {width: 150, height: 150},
+            updateImageDataById: jest.fn(), deleteImageById: jest.fn(), deleteSelectedImages: jest.fn()}};
+    };
+
+    it('loads restored native-video thumbnails without a backend session, even when loadStatus was saved as true', async () => {
+        const {props, source, thumbnail, frame} = rawVideoFixture();
+        const capture = jest.spyOn(VideoThumbnailService, 'capture').mockResolvedValue(new Blob(['jpeg'], {type: 'image/jpeg'}));
+        jest.spyOn(FileUtil, 'loadImage').mockResolvedValue(thumbnail);
+        const backend = jest.spyOn(FrameExtractorService, 'fetchFrameRange');
+        const {container} = render(<ImagePreview {...props}/>);
+        await act(async () => undefined);
+        expect(capture).toHaveBeenCalledWith(source, 42 / 30, expect.any(AbortSignal));
+        expect(backend).not.toHaveBeenCalled();
+        expect(container.querySelector('img.Image')?.getAttribute('src')).toBe('blob:native-thumbnail');
+        expect(ImageRepository.getById(frame.id)).toBe(thumbnail);
+        expect(props.updateImageDataById).not.toHaveBeenCalled();
+    });
+
+    it('shows retry after a failure and loads the image when retried', async () => {
+        const {props, thumbnail} = rawVideoFixture();
+        jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        const capture = jest.spyOn(VideoThumbnailService, 'capture').mockRejectedValueOnce(new Error('decode failed'));
+        jest.spyOn(FileUtil, 'loadImage').mockResolvedValue(thumbnail);
+        const {container, getByRole} = render(<ImagePreview {...props} language={Language.ENGLISH}/>);
+        await act(async () => undefined);
+        const retry = getByRole('button', {name: 'Load failed · Retry'});
+        expect(container.querySelector('img.Image')).toBeNull();
+        capture.mockResolvedValueOnce(new Blob(['jpeg'], {type: 'image/jpeg'}));
+        fireEvent.click(retry);
+        await act(async () => undefined);
+        expect(capture).toHaveBeenCalledTimes(2);
+        expect(container.querySelector('img.Image')).not.toBeNull();
+        expect(container.querySelector('.ThumbnailRetry')).toBeNull();
+    });
+
+    it('stops loading when the frame has no source instead of leaving a permanent spinner', async () => {
+        jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        const frame = {...imageData('missing'), fileData: new File([], 'frame_000000.jpg')};
+        const props = {imageData: frame, style: {}, size: {width: 150, height: 150},
+            updateImageDataById: jest.fn(), deleteImageById: jest.fn(), deleteSelectedImages: jest.fn()};
+        const {getByRole} = render(<ImagePreview {...props}/>);
+        await act(async () => undefined);
+        expect(getByRole('button', {name: '加载失败 · 重试'})).toBeTruthy();
+    });
+
+    it('cancels native capture when unmounted and never writes a late result', async () => {
+        const {props} = rawVideoFixture();
+        let finishCapture: (blob: Blob) => void;
+        const capture = jest.spyOn(VideoThumbnailService, 'capture').mockImplementation(() =>
+            new Promise(resolve => { finishCapture = resolve; }));
+        const decode = jest.spyOn(FileUtil, 'loadImage');
+        const {unmount} = render(<ImagePreview {...props}/>);
+        const signal = capture.mock.calls[0][2];
+        unmount();
+        expect(signal.aborted).toBe(true);
+        await act(async () => finishCapture(new Blob(['late'])));
+        expect(decode).not.toHaveBeenCalled();
+        expect(props.updateImageDataById).not.toHaveBeenCalled();
+    });
+
+    it('lets a cached thumbnail cancel an older native capture', async () => {
+        const {props, thumbnail, frame} = rawVideoFixture();
+        const capture = jest.spyOn(VideoThumbnailService, 'capture').mockImplementation(() => new Promise(() => undefined));
+        const {container, rerender} = render(<ImagePreview {...props} imageData={{...frame, loadStatus: false}}/>);
+        ImageRepository.storeImage(frame.id, thumbnail);
+        rerender(<ImagePreview {...props} imageData={{...frame, loadStatus: true}}/>);
+        expect(capture.mock.calls[0][2].aborted).toBe(true);
+        expect(container.querySelector('img.Image')?.getAttribute('src')).toBe('blob:native-thumbnail');
+    });
+
+    it('falls back to the backend if native decoding fails and offers retry for an empty response', async () => {
+        const {props} = rawVideoFixture();
+        EditorModel.videoSessionId = 'fallback-session';
+        jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        jest.spyOn(VideoThumbnailService, 'capture').mockRejectedValue(new Error('unsupported codec'));
+        const backend = jest.spyOn(FrameExtractorService, 'fetchFrameRange').mockResolvedValue([]);
+        const {getByRole} = render(<ImagePreview {...props}/>);
+        await act(async () => undefined);
+        expect(backend).toHaveBeenCalledWith('fallback-session', 42, 1);
+        expect(getByRole('button', {name: '加载失败 · 重试'})).toBeTruthy();
     });
 
     it('discards a late image load after the preview has switched to another image', async () => {

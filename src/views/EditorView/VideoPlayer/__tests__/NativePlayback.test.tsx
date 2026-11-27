@@ -67,9 +67,9 @@ it('does not cache a metadata-only black canvas and publishes the first decoded 
     expect(firstFrame).toHaveBeenCalledTimes(1);
 });
 
-it('redraws synchronously at the newest seek, reuses the decoded canvas, and ignores intermediate events', async () => {
+it('finishes in-flight decoding and coalesces queued seeks to the newest target', async () => {
     const props = {language: Language.ENGLISH, videoSrc: 'blob:seek', currentTime: 0,
-        currentFrame: 0, fps: 30, totalFrames: 182};
+        currentFrame: 0, fps: 30, totalFrames: 182, onFrameDrawn: jest.fn(), onTimeUpdate: jest.fn()};
     const view = render(<VideoPlayer {...props}/>);
     const video = view.container.querySelector('video');
     let seeking = false;
@@ -79,21 +79,27 @@ it('redraws synchronously at the newest seek, reuses the decoded canvas, and ign
     await waitFor(() => expect(EditorModel.videoFrameCanvas).not.toBeNull());
     const snapshot = EditorModel.videoFrameCanvas;
     const remove = jest.spyOn(video, 'removeEventListener');
+    const assignTime = jest.spyOn(video, 'currentTime', 'set');
     view.rerender(<VideoPlayer {...props} currentFrame={30} currentTime={1}/>);
+    view.rerender(<VideoPlayer {...props} currentFrame={60} currentTime={2}/>);
     view.rerender(<VideoPlayer {...props} currentFrame={90} currentTime={3}/>);
+    expect(assignTime.mock.calls).toEqual([[1]]);
     jest.mocked(EditorActions.fullRender).mockClear();
+    props.onFrameDrawn.mockClear();
 
     seeking = true;
     fireEvent.seeked(video);
     expect(EditorActions.fullRender).not.toHaveBeenCalled();
     seeking = false;
-    video.currentTime = 1;
+    fireEvent.timeUpdate(video);
+    expect(props.onTimeUpdate).not.toHaveBeenCalled();
     fireEvent.seeked(video);
-    expect(EditorActions.fullRender).not.toHaveBeenCalled();
-    video.currentTime = 3;
+    expect(props.onFrameDrawn).toHaveBeenLastCalledWith(30);
+    expect(assignTime.mock.calls).toEqual([[1], [3]]);
     fireEvent.seeked(video);
 
-    expect(EditorActions.fullRender).toHaveBeenCalledTimes(1);
+    expect(props.onFrameDrawn).toHaveBeenLastCalledWith(90);
+    expect(EditorActions.fullRender).toHaveBeenCalledTimes(2);
     expect(EditorModel.videoFrameCanvas).toBe(snapshot);
     expect(HTMLCanvasElement.prototype.toBlob).not.toHaveBeenCalled();
     expect(remove).toHaveBeenCalledWith('seeked', expect.any(Function));
@@ -118,6 +124,43 @@ it('subscribes before assigning currentTime, including immediate seek completion
     view.rerender(<VideoPlayer {...props} currentFrame={60} currentTime={2}/>);
     expect(EditorActions.fullRender).toHaveBeenCalledTimes(1);
     expect(time).toBe(2);
+});
+
+it('discards queued seeks when the source changes', () => {
+    const props = {language: Language.ENGLISH, videoSrc: 'blob:old', currentTime: 0,
+        currentFrame: 0, fps: 30, totalFrames: 182, onFrameDrawn: jest.fn()};
+    const view = render(<VideoPlayer {...props}/>);
+    const video = view.container.querySelector('video');
+    Object.defineProperties(video, {readyState: {value: 2}, duration: {value: 182 / 30},
+        videoWidth: {value: 1920}, videoHeight: {value: 1080}});
+    fireEvent.loadedMetadata(video);
+    view.rerender(<VideoPlayer {...props} currentTime={1} currentFrame={30}/>);
+    view.rerender(<VideoPlayer {...props} currentTime={3} currentFrame={90}/>);
+    view.rerender(<VideoPlayer {...props} videoSrc="blob:new"/>);
+    const assignTime = jest.spyOn(video, 'currentTime', 'set');
+    props.onFrameDrawn.mockClear();
+    fireEvent.seeked(video);
+    expect(assignTime).not.toHaveBeenCalled();
+    expect(props.onFrameDrawn).not.toHaveBeenCalled();
+});
+
+it('starts playback at the latest drag target and removes the paused seek handler', async () => {
+    const props = {language: Language.ENGLISH, videoSrc: 'blob:seek-play', currentTime: 0,
+        currentFrame: 0, fps: 30, totalFrames: 182, onFrameDrawn: jest.fn()};
+    const view = render(<VideoPlayer {...props}/>);
+    const video = view.container.querySelector('video');
+    Object.defineProperties(video, {readyState: {value: 2}, duration: {value: 182 / 30},
+        videoWidth: {value: 1920}, videoHeight: {value: 1080}});
+    fireEvent.loadedMetadata(video);
+    view.rerender(<VideoPlayer {...props} currentTime={1} currentFrame={30}/>);
+    view.rerender(<VideoPlayer {...props} currentTime={3} currentFrame={90}/>);
+    expect(video.currentTime).toBe(1);
+    await act(async () => view.rerender(<VideoPlayer {...props} currentTime={3} currentFrame={90} isPlaying/>));
+    expect(video.currentTime).toBe(3);
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
+    props.onFrameDrawn.mockClear();
+    fireEvent.seeked(video);
+    expect(props.onFrameDrawn).not.toHaveBeenCalled();
 });
 
 it('pauses immediately while play is pending and never restarts callbacks from the cancelled play', async () => {

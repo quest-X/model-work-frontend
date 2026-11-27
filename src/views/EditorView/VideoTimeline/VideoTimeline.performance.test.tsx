@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render} from '@testing-library/react';
+import {act, fireEvent, render} from '@testing-library/react';
 import {VideoTimeline} from './VideoTimeline';
 import {Language} from '../../../data/LanguageConfig';
 
@@ -56,5 +56,65 @@ describe('timeline drawing', () => {
         fireEvent.mouseMove(container.querySelector('canvas'), {clientX: 100});
         fireEvent.mouseMove(container.querySelector('canvas'), {clientX: 200});
         expect(alignments).toEqual(['center', 'center']);
+    });
+
+    it('coalesces drag moves and commits the release position without waiting for a paint', () => {
+        const callbacks: FrameRequestCallback[] = [];
+        jest.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => callbacks.push(callback));
+        const cancel = jest.spyOn(window, 'cancelAnimationFrame');
+        const {container} = render(<VideoTimeline {...props}/>);
+        const canvas = container.querySelector('canvas');
+        fireEvent.mouseDown(canvas, {clientX: 90});
+        expect(props.onFrameChange).toHaveBeenLastCalledWith(30);
+        props.onFrameChange.mockClear();
+        fireEvent.mouseMove(canvas, {clientX: 180});
+        fireEvent.mouseMove(canvas, {clientX: 270});
+        expect(props.onFrameChange).not.toHaveBeenCalled();
+        expect(callbacks).toHaveLength(1);
+        act(() => callbacks[0](0));
+        expect(props.onFrameChange).toHaveBeenCalledTimes(1);
+        expect(props.onFrameChange).toHaveBeenLastCalledWith(90);
+        fireEvent.mouseMove(canvas, {clientX: 360});
+        fireEvent.mouseUp(canvas, {clientX: 450});
+        expect(props.onFrameChange).toHaveBeenLastCalledWith(150);
+        expect(cancel).toHaveBeenLastCalledWith(2);
+        act(() => callbacks[1](0));
+        expect(props.onFrameChange).toHaveBeenCalledTimes(2);
+    });
+
+    it('flushes when leaving the timeline and cancels queued seeks on unmount', () => {
+        const callbacks: FrameRequestCallback[] = [];
+        jest.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => callbacks.push(callback));
+        const cancel = jest.spyOn(window, 'cancelAnimationFrame');
+        const {container, unmount} = render(<VideoTimeline {...props}/>);
+        const canvas = container.querySelector('canvas');
+        fireEvent.mouseDown(canvas, {clientX: 0});
+        fireEvent.mouseMove(canvas, {clientX: 180});
+        fireEvent.mouseLeave(canvas);
+        expect(props.onFrameChange).toHaveBeenLastCalledWith(60);
+        fireEvent.mouseDown(canvas, {clientX: 0});
+        fireEvent.mouseMove(canvas, {clientX: 360});
+        props.onFrameChange.mockClear();
+        unmount();
+        expect(cancel).toHaveBeenLastCalledWith(2);
+        expect(props.onFrameChange).not.toHaveBeenCalled();
+    });
+
+    it('drops a pending move when dragging back to the current frame and preserves Shift selection', () => {
+        const callbacks: FrameRequestCallback[] = [];
+        jest.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => callbacks.push(callback));
+        jest.spyOn(window, 'cancelAnimationFrame');
+        const {container} = render(<VideoTimeline {...props}/>);
+        const canvas = container.querySelector('canvas');
+        fireEvent.mouseDown(canvas, {clientX: 0});
+        fireEvent.mouseMove(canvas, {clientX: 180});
+        fireEvent.mouseMove(canvas, {clientX: 0});
+        act(() => callbacks[0](0));
+        expect(props.onFrameChange).not.toHaveBeenCalled();
+        fireEvent.mouseUp(canvas, {clientX: 0});
+        fireEvent.mouseDown(canvas, {clientX: 180, shiftKey: true});
+        fireEvent.mouseMove(canvas, {clientX: 360});
+        fireEvent.mouseUp(canvas, {clientX: 360});
+        expect(props.onFrameChange).not.toHaveBeenCalled();
     });
 });
