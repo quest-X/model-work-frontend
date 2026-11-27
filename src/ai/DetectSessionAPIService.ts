@@ -19,6 +19,9 @@ import {consumeNDJSON} from './consumeNDJSON';
 export type DetectSessionFrame = {
     frame_idx: number;
     detections?: DetectionResult[];
+    review?: {provider: string; model: string; needs_correction: boolean; reason: string;
+        suggested_boxes: Array<{label: string; bbox: number[]}>; applied: boolean};
+    review_error?: string;
     error?: string;
 };
 
@@ -31,6 +34,9 @@ export type DetectSessionParams = {
     /** kwargs forwarded to backend detection.detect()/detect_batch(). */
     params?: Record<string, unknown>;
     batchSize?: number;
+    sigineReview?: boolean;
+    sigineInfra?: boolean;
+    targetClasses?: string[];
 };
 
 export type DetectSessionCallbacks = {
@@ -89,6 +95,8 @@ export class DetectSessionAPIService {
                         end: p.end,
                         ...(p.params ? { params: p.params } : {}),
                         ...(p.batchSize ? { batch_size: p.batchSize } : {}),
+                        ...(p.sigineReview ? { sigine_review: true, target_classes: p.targetClasses || [] } : {}),
+                        ...(p.sigineInfra ? { sigine_infra: true, target_classes: p.targetClasses || [] } : {}),
                     }),
                 });
             } catch (e) {

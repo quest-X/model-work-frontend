@@ -45,7 +45,7 @@ const getDisplayName = (item: QueueItem, texts: LanguageTexts): string => {
     if (item.type === QueueItemType.VIDEO && item.extractionMetadata) {
         const meta = texts.videoMeta
             .replace('{frames}', String(item.extractionMetadata.totalFrames))
-            .replace('{fps}', String(item.extractionMetadata.fps));
+            .replace('{fps}', String(Math.round(item.extractionMetadata.fps)));
         return `${baseName} (${meta})`;
     }
     if (item.type === QueueItemType.FOLDER && item.files) {
@@ -84,6 +84,7 @@ const QueueItemCard: React.FC<CardProps> = ({ item, isActive, language, onSelect
     return (
         <div
             className={classNames('queue-item-card', { 'active': isActive })}
+            data-queue-item-id={item.id}
             onClick={() => onSelect(item)}
             title={item.error || displayName}
         >

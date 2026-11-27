@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {Language} from '../../../data/LanguageConfig';
 import {CameraResourceService} from '../../../services/CameraResourceService';
 import {QueueItem} from '../../../store/queue/types';
@@ -26,7 +26,7 @@ const CameraPlayer: React.FC<IProps> = ({item, language}) => {
     const activePlaybackStartedAtRef = useRef<number | null>(null);
     const accumulatedPlaybackSecondsRef = useRef(0);
     const [nonce, setNonce] = useState(Date.now());
-    const [state, setState] = useState<'loading' | 'playing' | 'error'>('loading');
+    const [state, setState] = useState<'loading' | 'playing' | 'error' | 'timeout'>('loading');
     const [originalState, setOriginalState] = useState<'loading' | 'playing' | 'error'>('loading');
     const [isPaused, setIsPaused] = useState(false);
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -50,6 +50,22 @@ const CameraPlayer: React.FC<IProps> = ({item, language}) => {
     ), [item.cameraNodeId, item.cameraResourceId, item.cameraChannelId, nonce]);
 
     useEffect(() => CanvasMultiViewStore.subscribe(value => setCanvasLayout(value.layout)), []);
+
+    const remoteStreamActive = remoteCamera && !isPaused && (state === 'loading' || state === 'playing');
+    const directStreamUrl = remoteCamera ? undefined : adjustedStreamUrl;
+    useLayoutEffect(() => {
+        const stream = imageRef.current;
+        if (!remoteStreamActive || !stream) return undefined;
+        stream.src = adjustedStreamUrl;
+        // Detaching an image can leave its multipart request open in Chromium.
+        return () => stream.removeAttribute('src');
+    }, [adjustedStreamUrl, remoteStreamActive]);
+
+    useEffect(() => {
+        if (!remoteCamera || isPaused || state !== 'loading') return undefined;
+        const timer = window.setTimeout(() => setState('timeout'), 12_000);
+        return () => window.clearTimeout(timer);
+    }, [isPaused, nonce, remoteCamera, state]);
 
     useEffect(() => {
         if (previousSourceIdentityRef.current === sourceIdentity) return;
@@ -148,7 +164,12 @@ const CameraPlayer: React.FC<IProps> = ({item, language}) => {
         <span className={`CameraLiveDot ${isPaused ? 'paused' : state}`}/>
         <strong>{cameraDisplayName}</strong>
         <span className={`CameraLiveBadge ${isPaused ? 'paused' : ''}`}>
-            {isPaused ? (chinese ? '已暂停' : 'PAUSED') : (state === 'playing' ? 'LIVE' : (chinese ? '连接中' : 'CONNECTING'))}
+            {isPaused ? (chinese ? '已暂停' : 'PAUSED') : {
+                playing: 'LIVE',
+                loading: chinese ? '连接中' : 'CONNECTING',
+                error: chinese ? '连接失败' : 'CONNECTION FAILED',
+                timeout: chinese ? '首帧超时' : 'FIRST FRAME TIMED OUT',
+            }[state]}
         </span>
     </div>;
 
@@ -197,8 +218,8 @@ const CameraPlayer: React.FC<IProps> = ({item, language}) => {
             <span className='CameraPlayerSpinner'/>
             {loadingText[branch]}
         </div>;
-        if (streamState === 'error') return <div className='CameraPlayerNotice error'>
-            <strong>{errorText[branch]}</strong>
+        if (streamState === 'error' || streamState === 'timeout') return <div className='CameraPlayerNotice error' role='alert'>
+            <strong>{streamState === 'timeout' ? (chinese ? '等待首帧超时' : 'First frame timed out') : errorText[branch]}</strong>
             <span>{chinese ? '请检查相机网络、RTSP 端口和码流通道。' : 'Check the camera network, RTSP port, and stream channel.'}</span>
             <button type='button' onClick={reconnect}>{chinese ? '重试' : 'Retry'}</button>
         </div>;
@@ -253,10 +274,10 @@ const CameraPlayer: React.FC<IProps> = ({item, language}) => {
             className={isPaused ? 'CameraFrozenFrame visible' : 'CameraFrozenFrame'}
             aria-label={chinese ? `${item.name} 暂停画面` : `${item.name} paused frame`}
         />
-        {!isPaused && <img
+        {!isPaused && (!remoteCamera || (state !== 'error' && state !== 'timeout')) && <img
             ref={imageRef}
             key={nonce}
-            src={adjustedStreamUrl}
+            src={directStreamUrl}
             alt={comparisonMode
                 ? (chinese ? `${item.name} 调参效果画面` : `${item.name} adjusted live stream`)
                 : (chinese ? `${item.name} 实时画面` : `${item.name} live stream`)}

@@ -7,11 +7,13 @@ import {PlatformModel} from '../../staticModels/PlatformModel';
 import {EventType} from '../../data/enums/EventType';
 import {GeneralSelector} from '../../store/selectors/GeneralSelector';
 import {EnvironmentUtil} from '../../utils/EnvironmentUtil';
+import {restoreLocalCoreEngine} from './restoreLocalCoreEngine';
 
 export class AppInitializer {
     public static inti():void {
         // 启动时清空 tasks：HMR/重水合后残留的 "running" 行跨 session 没有意义。
         store.dispatch(tasksClearAll());
+        void restoreLocalCoreEngine(store);
         AppInitializer.handleResize();
         AppInitializer.detectDeviceParams();
         AppInitializer.handleAccidentalPageExit();

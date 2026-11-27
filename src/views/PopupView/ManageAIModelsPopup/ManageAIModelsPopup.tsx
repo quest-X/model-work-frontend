@@ -153,9 +153,9 @@ export const ManageAIModelsPopup: React.FC<IProps> = ({
 
     const renderProvidedServices = () => {
         const selectedEngine = aiModels.find(m => m.id === selectedModelId);
-        const services = selectedEngine?.modelType === 'extension'
-            ? extensionServices
-            : coreServices;
+        const services = selectedEngine?.modelType === 'annotation'
+            ? [{id: 'auto-annotation', name: language === Language.CHINESE ? '自动标注复审' : 'Auto Annotation Review', servicePath: 'sigine-infra/review', popupType: PopupWindowType.CALL_MODEL}]
+            : selectedEngine?.modelType === 'extension' ? extensionServices : coreServices;
 
         return (
             <div className='ProvidedServicesSection'>

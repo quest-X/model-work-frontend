@@ -20,6 +20,8 @@ interface IProps {
 }
 
 const stopPropagation = (event: React.SyntheticEvent) => event.stopPropagation();
+const formatConfidence = (value: number | undefined): string =>
+    Number.isFinite(value) && value >= 0 && value <= 1 ? `${(value * 100).toFixed(1)}%` : '';
 
 const withAlpha = (color: string, alpha: number): string => {
     const hex = color.replace('#', '');
@@ -88,14 +90,16 @@ export const RectLabelSelectOverlay: React.FC<IProps> = ({
                 const currentLabel = assignedLabel || suggestedLabel;
                 const value = currentLabel?.id || '';
                 const displayName = currentLabel?.name || labelRect.suggestedLabel || '选择标签';
+                const confidence = formatConfidence(labelRect.confidence);
                 const position = RenderEngineUtil.transferPointFromImageToViewPortContent(
                     {x: labelRect.rect.x, y: labelRect.rect.y},
                     editorData,
                 );
                 const style1 = styleVariant === 'style-1';
-                const width = style1
+                const nameWidth = style1
                     ? Math.min(160, Math.max(64, displayName.length * 7.2 + 30))
                     : Math.min(160, Math.max(32, displayName.length * 7.2 + 8));
+                const width = nameWidth + confidence.length * 7;
                 const isOpen = openRectId === labelRect.id;
                 const labelColor = enablePerClassColoration ? currentLabel?.color : undefined;
                 const triggerBackground = labelColor
@@ -152,6 +156,7 @@ export const RectLabelSelectOverlay: React.FC<IProps> = ({
                             style={{backgroundColor: currentLabel?.color || '#ec2aa6'}}
                         />}
                         <span className='RectLabelDropdown__name'>{displayName}</span>
+                        {confidence && <span className='RectLabelDropdown__confidence'>{confidence}</span>}
                     </button>
                     {isOpen && <div
                         aria-label='选择标注标签'

@@ -84,6 +84,7 @@
             height: 100%;
             z-index: 1;
             pointer-events: none; // 让鼠标事件穿透到标注层
+            overflow: hidden;
             // GPU compositing: promote to own layer to avoid repainting parent
             will-change: contents;
             transform: translateZ(0);
@@ -136,9 +137,21 @@
             &.video-playing {
                 pointer-events: none;
 
+                .RectLabelDropdownLayer,
+                .LabelControlPanel {
+                    display: none;
+                }
+
                 .Cursor,
                 .MousePositionIndicator {
                     display: none !important;
+                }
+            }
+
+            &.native-video-playing {
+                .CanvasMultiViewGrid,
+                .CanvasViewPane.primary {
+                    background: transparent;
                 }
             }
         }

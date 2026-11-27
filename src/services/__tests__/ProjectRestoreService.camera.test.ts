@@ -2,12 +2,16 @@ import {ProjectRestoreService} from '../ProjectRestoreService';
 import {IndexedDBManager, StoredProjectData} from '../../utils/IndexedDBManager';
 import {ImageRepository} from '../../logic/imageRepository/ImageRepository';
 import {QueueItemStatus, QueueItemType} from '../../store/queue/types';
+import {LocalStorageManager} from '../../utils/LocalStorageManager';
+import {ProjectType} from '../../data/enums/ProjectType';
+import {Action} from '../../store/Actions';
 
 const mockDispatch = jest.fn();
 
 jest.mock('../../index', () => ({
     store: {
         dispatch: (action: unknown) => mockDispatch(action),
+        getState: () => ({general: {projectData: {type: 'OBJECT_DETECTION', name: 'default-project'}}}),
     },
 }));
 
@@ -22,6 +26,20 @@ describe('ProjectRestoreService camera durability', () => {
     beforeEach(() => jest.clearAllMocks());
 
     afterEach(() => jest.restoreAllMocks());
+
+    it('restores the saved project name without changing its type', async () => {
+        jest.spyOn(LocalStorageManager, 'getSettings').mockReturnValue({
+            ...LocalStorageManager.getSettings(),
+            lastSaved: 1,
+            projectName: 'agent-demo',
+        });
+
+        await expect(ProjectRestoreService.restoreSettings()).resolves.toBe(true);
+        expect(mockDispatch).toHaveBeenCalledWith({
+            type: Action.UPDATE_PROJECT_DATA,
+            payload: {projectData: {type: ProjectType.OBJECT_DETECTION, name: 'agent-demo'}},
+        });
+    });
 
     it('restores a camera workspace even though live streams have no image files', async () => {
         const project: StoredProjectData = {

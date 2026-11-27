@@ -1,15 +1,20 @@
-import React, {FormEvent, useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {Terminal} from '@xterm/xterm';
+import {FitAddon} from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 import {
     ComputeClusterService,
     ComputeTerminalSession,
     ComputeTerminalTarget,
+    ComputeTerminalTransport,
+    isComputeAccessDenied,
 } from '../../../services/ComputeClusterService';
 
 
 interface ComputeTerminalPanelProps {
     zh: boolean;
     preferredNodeId?: string;
-    preferredTransport?: 'lan' | 'tailscale';
+    preferredTransport?: ComputeTerminalTransport;
     autoConnect?: boolean;
     targetLabel?: string;
     initialCommand?: string;
@@ -18,52 +23,32 @@ interface ComputeTerminalPanelProps {
     onActiveChange?: (active: boolean) => void;
 }
 
-const targetNormal = (target: ComputeTerminalTarget): boolean => target.online && target.available;
+type TargetReadState = 'loading' | 'ready' | 'disabled' | 'denied' | 'failed';
 
-const targetReason = (target: ComputeTerminalTarget, zh: boolean): string =>
-    targetNormal(target) ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
-
-const terminalStateLabel = (session: ComputeTerminalSession | null, normal: boolean, zh: boolean): string => {
-    const state = normal ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault');
-    if (session?.transport === 'lan') return `${zh ? '局域网 SSH' : 'LAN SSH'} · ${state}`;
-    if (session?.transport === 'tailscale') return `Tailscale · ${state}`;
-    return state;
+const transportLabel = (transport: ComputeTerminalTransport, zh: boolean): string => {
+    if (transport === 'lan') return zh ? '局域网 SSH' : 'LAN SSH';
+    return transport === 'tailcat' ? 'Tailcat' : 'Tailscale';
 };
 
-const terminalTransportClass = (session: ComputeTerminalSession | null): string => {
-    if (session?.transport === 'lan') return 'lan';
-    if (session?.transport) return 'remote';
-    return '';
+const targetReason = (target: ComputeTerminalTarget, zh: boolean): string => {
+    if (target.available) return target.online
+        ? (zh ? '可连接' : 'Available')
+        : (zh ? '节点离线，SSH 可达' : 'Node offline, SSH reachable');
+    return target.reason === 'node_offline'
+        ? (zh ? '节点离线' : 'Node offline')
+        : (zh ? 'SSH 不可用' : 'SSH unavailable');
 };
 
-const WINDOWS_COMMANDS = [
-    'cd', 'cls', 'copy', 'dir', 'echo', 'findstr', 'hostname', 'ipconfig', 'mkdir',
-    'move', 'ping', 'powershell', 'tasklist', 'type', 'ver', 'where', 'whoami',
-];
-const POSIX_COMMANDS = [
-    'cat', 'cd', 'clear', 'cp', 'df', 'du', 'echo', 'free', 'grep', 'head', 'hostname',
-    'ip', 'ls', 'mkdir', 'mv', 'ping', 'ps', 'pwd', 'tail', 'top', 'uname', 'whoami',
-];
+const sessionStateLabel = (state: ComputeTerminalSession['state'], zh: boolean): string => ({
+    connecting: zh ? '连接中' : 'Connecting',
+    running: zh ? '已连接' : 'Connected',
+    closed: zh ? '已断开' : 'Disconnected',
+    failed: zh ? '连接失败' : 'Connection failed',
+})[state];
 
-export const terminalCompletionCandidates = (value: string, platform: string, output: string): string[] => {
-    const token = value.match(/[^\s]+$/)?.[0] || '';
-    if (!token) return [];
-    const tokenStart = value.length - token.length;
-    const separator = Math.max(token.lastIndexOf('/'), token.lastIndexOf('\\'));
-    const prefix = token.slice(separator + 1);
-    const windows = /win/i.test(platform);
-    const normalize = (candidate: string) => windows ? candidate.toLowerCase() : candidate;
-    const candidates = tokenStart === 0
-        ? (windows ? WINDOWS_COMMANDS : POSIX_COMMANDS)
-        : Array.from(new Set(output.match(/[A-Za-z0-9\u4e00-\u9fff_.-]{2,}/g) || []));
-    return candidates
-        .filter(candidate => normalize(candidate).startsWith(normalize(prefix)))
-        .map(candidate => `${value.slice(0, tokenStart)}${token.slice(0, separator + 1)}${candidate}`);
-};
-
-export const completeTerminalCommand = (value: string, platform: string, output: string): string => {
-    return terminalCompletionCandidates(value, platform, output)[0] || value;
-};
+const sessionErrorMessage = (reason: unknown, zh: boolean): string => isComputeAccessDenied(reason)
+    ? (zh ? '当前账号无权访问此终端会话。' : 'You do not have access to this terminal session.')
+    : reason instanceof Error ? reason.message : String(reason);
 
 // The terminal surface intentionally owns one bounded connection lifecycle.
 // eslint-disable-next-line complexity
@@ -79,92 +64,195 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
     onActiveChange,
 }) => {
     const [targets, setTargets] = useState<ComputeTerminalTarget[]>([]);
-    const [targetsReady, setTargetsReady] = useState(false);
-    const [selectedNode, setSelectedNode] = useState('');
+    const [targetRead, setTargetRead] = useState<TargetReadState>('loading');
+    const [selectedNode, setSelectedNode] = useState(preferredNodeId || '');
     const [session, setSession] = useState<ComputeTerminalSession | null>(null);
-    const [output, setOutput] = useState('');
-    const [command, setCommand] = useState('');
     const [busy, setBusy] = useState(false);
+    const [starting, setStarting] = useState(false);
     const [error, setError] = useState('');
+    const [sessionReadError, setSessionReadError] = useState<{message: string; denied: boolean}>();
+    const [restoreError, setRestoreError] = useState('');
+    const [restoreAttempt, setRestoreAttempt] = useState(0);
+    const [sessionConflict, setSessionConflict] = useState<{sessionId: string; transport: ComputeTerminalTransport}>();
+    const [viewSessionId, setViewSessionId] = useState('');
     const cursorRef = useRef(0);
     const sessionIdRef = useRef('');
-    const outputRef = useRef<HTMLPreElement | null>(null);
-    const inputRef = useRef<HTMLInputElement | null>(null);
+    const outputRef = useRef<HTMLDivElement | null>(null);
+    const terminalRef = useRef<Terminal | null>(null);
+    const zhRef = useRef(zh);
+    const inputQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+    const inputSessionRef = useRef<ComputeTerminalSession | null>(null);
+    const deniedRef = useRef(false);
+    const rawModeRef = useRef(false);
     const autoConnectStartedRef = useRef(false);
     const startedHereRef = useRef(false);
     const initialCommandSessionRef = useRef('');
     const active = Boolean(session && ['connecting', 'running'].includes(session.state));
     const selectedTarget = targets.find(target => target.node_id === selectedNode);
-    const selectedTargetAvailable = Boolean(selectedTarget?.available);
-    const selectedTargetNormal = Boolean(selectedTarget && targetNormal(selectedTarget));
-    const activeSession = active ? session : null;
-    const displayedNormal = active || selectedTargetNormal;
-    const displayedOutput = output.replace(/(?:\r?\n){3,}/g, '\n\n');
-    const passwordPrompt = /(?:password|密码)[^:\n]*:\s*$/i.test(output);
-    const completedCommand = passwordPrompt ? command : completeTerminalCommand(
-        command, targets.find(target => target.node_id === selectedNode)?.platform || '', output,
-    );
-    const completionHint = completedCommand === command ? '' : completedCommand;
+    const tailcatUnavailable = preferredTransport === 'tailcat' && selectedTarget?.tailcat_available !== true;
+    const restorableSessionId = selectedNode === preferredNodeId ? selectedTarget?.active_session_id : null;
+    const sessionReadDenied = sessionReadError?.denied === true;
+    zhRef.current = zh;
+    inputSessionRef.current = session;
+    deniedRef.current = sessionReadDenied;
+    const canConnect = targetRead === 'ready' && Boolean(selectedTarget?.available) && !tailcatUnavailable
+        && (!restorableSessionId || restorableSessionId === session?.session_id)
+        && !active && !busy;
 
-    const refreshTargets = useCallback(async (signal?: AbortSignal) => {
-        try {
-            const response = await ComputeClusterService.terminalTargets(signal);
-            setTargets(response.targets);
-            setSelectedNode(current => {
-                const currentTarget = response.targets.find(target => target.node_id === current);
-                return (currentTarget?.available ? current : '')
-                    || response.targets.find(target => target.node_id === preferredNodeId && target.available)?.node_id
-                    || '';
-            });
-            const activeTarget = response.targets.find(target =>
-                target.node_id === preferredNodeId && target.active_session_id,
-            );
-            if (activeTarget?.active_session_id && activeTarget.active_session_id !== sessionIdRef.current) {
-                const restored = await ComputeClusterService.terminal(activeTarget.active_session_id, 0, signal);
-                sessionIdRef.current = restored.session_id;
-                cursorRef.current = restored.cursor;
-                setOutput(restored.output);
-                setSession(restored);
+    useEffect(() => {
+        const container = outputRef.current;
+        if (!container) return undefined;
+        const terminal = new Terminal({
+            cursorBlink: true, scrollback: 3000, fontSize: 11,
+            fontFamily: "SFMono-Regular, Consolas, 'Liberation Mono', monospace",
+            theme: {background: '#090d0c', foreground: '#b7edca', cursor: '#b7edca'},
+        });
+        const fit = new FitAddon();
+        terminal.loadAddon(fit);
+        terminal.open(container);
+        terminalRef.current = terminal;
+        terminal.writeln(zh ? '选择节点并连接终端。' : 'Choose a node and connect.');
+        const fitTerminal = () => {
+            if (container.clientWidth && container.clientHeight) fit.fit();
+        };
+        fitTerminal();
+        const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fitTerminal);
+        observer?.observe(container);
+        const dataSubscription = terminal.onData(data => {
+            const current = inputSessionRef.current;
+            if (!current || current.state !== 'running' || deniedRef.current) return;
+            const sessionId = current.session_id;
+            inputQueueRef.current = inputQueueRef.current.then(async () => {
+                if (sessionIdRef.current !== sessionId) return undefined;
+                const characters = Array.from(data);
+                for (let offset = 0; offset < characters.length; offset += 8192) {
+                    if (sessionIdRef.current !== sessionId) break;
+                    await ComputeClusterService.terminalInput(sessionId, characters.slice(offset, offset + 8192).join(''));
+                }
+                return undefined;
+            }).catch(reason => setError(sessionErrorMessage(reason, zhRef.current)));
+        });
+        const resizeSubscription = terminal.onResize(({rows, cols}) => {
+            const current = inputSessionRef.current;
+            if (current?.state === 'running' && rawModeRef.current) {
+                void ComputeClusterService.terminalResize(current.session_id, rows, cols)
+                    .catch(reason => setError(sessionErrorMessage(reason, zhRef.current)));
             }
-            setTargetsReady(true);
-            setError('');
-        } catch (reason) {
-            if ((reason as {name?: string})?.name !== 'AbortError') {
-                setError(reason instanceof Error ? reason.message : String(reason));
-            }
-        }
-    }, [preferredNodeId]);
+        });
+        return () => {
+            observer?.disconnect();
+            dataSubscription.dispose();
+            resizeSubscription.dispose();
+            terminal.dispose();
+            terminalRef.current = null;
+        };
+    }, []);
 
     useEffect(() => {
         const controller = new AbortController();
-        void refreshTargets(controller.signal);
-        const timer = window.setInterval(() => void refreshTargets(controller.signal), 5000);
+        let reading = false;
+        const refreshTargets = async () => {
+            if (reading) return;
+            reading = true;
+            try {
+                const response = await ComputeClusterService.terminalTargets(controller.signal);
+                if (controller.signal.aborted) return;
+                setTargets(response.enabled ? response.targets : []);
+                setTargetRead(response.enabled ? 'ready' : 'disabled');
+            } catch (reason) {
+                if (controller.signal.aborted) return;
+                setTargets([]);
+                setTargetRead(isComputeAccessDenied(reason) ? 'denied' : 'failed');
+            } finally {
+                reading = false;
+            }
+        };
+        void refreshTargets();
+        const timer = window.setInterval(() => void refreshTargets(), 5000);
         return () => {
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [refreshTargets]);
+    }, []);
+
+    useEffect(() => {
+        if (!restorableSessionId || sessionIdRef.current || restorableSessionId === session?.session_id || busy) return undefined;
+        const controller = new AbortController();
+        setRestoreError('');
+        setSessionConflict(undefined);
+        void ComputeClusterService.terminal(restorableSessionId, 0, controller.signal).then(restored => {
+            if (controller.signal.aborted) return;
+            if (restored.session_id !== restorableSessionId || restored.node_id !== selectedNode) {
+                throw new Error(zh ? '返回的会话与所选节点不一致。' : 'The returned session does not match the selected node.');
+            }
+            if (preferredTransport && restored.transport !== preferredTransport && restored.session_id !== viewSessionId) {
+                const route = restored.transport ? transportLabel(restored.transport, zh) : (zh ? '未知路线' : 'unknown route');
+                if (restored.transport) setSessionConflict({sessionId: restored.session_id, transport: restored.transport});
+                setRestoreError(zh
+                    ? `该节点已有 ${route} 会话。查看后可断开，再使用 ${transportLabel(preferredTransport, zh)} 连接。`
+                    : `This node already has a session on ${route}. View it, then disconnect before connecting via ${transportLabel(preferredTransport, zh)}.`);
+                return;
+            }
+            sessionIdRef.current = ['connecting', 'running'].includes(restored.state) ? restored.session_id : '';
+            cursorRef.current = 0;
+            rawModeRef.current = false;
+            startedHereRef.current = false;
+            terminalRef.current?.reset();
+            setSession(restored);
+        }).catch(reason => {
+            if (!controller.signal.aborted) setRestoreError(sessionErrorMessage(reason, zh));
+        });
+        return () => controller.abort();
+    }, [busy, preferredTransport, restorableSessionId, restoreAttempt, selectedNode, session?.session_id, viewSessionId, zh]);
 
     useEffect(() => {
         if (!session || !['connecting', 'running'].includes(session.state)) return undefined;
         const controller = new AbortController();
+        let reading = false;
+        // eslint-disable-next-line complexity
         const poll = async () => {
+            if (reading) return;
+            reading = true;
             try {
                 const next = await ComputeClusterService.terminal(
                     session.session_id,
                     cursorRef.current,
                     controller.signal,
+                    true,
                 );
+                if (controller.signal.aborted || sessionIdRef.current !== session.session_id) return;
+                if (next.session_id !== session.session_id || next.node_id !== session.node_id
+                    || next.transport !== session.transport) {
+                    setSessionReadError({
+                        message: zh ? '返回的会话与所选节点或路线不一致。' : 'The returned session does not match the selected node or route.',
+                        denied: true,
+                    });
+                    return;
+                }
                 cursorRef.current = next.cursor;
-                if (next.output_truncated) setOutput(next.output);
-                else if (next.output) setOutput(current => current + next.output);
+                if (next.ansi && !rawModeRef.current) {
+                    rawModeRef.current = true;
+                    void ComputeClusterService.terminalResize(
+                        session.session_id, terminalRef.current?.rows || 24, terminalRef.current?.cols || 80,
+                    ).catch(reason => setError(sessionErrorMessage(reason, zh)));
+                }
+                if (next.output_truncated) terminalRef.current?.reset();
+                if (next.output) terminalRef.current?.write(next.output);
                 setSession(next);
                 if (!['connecting', 'running'].includes(next.state)) sessionIdRef.current = '';
-                if (next.error) setError(next.error);
+                setSessionReadError(undefined);
             } catch (reason) {
-                if ((reason as {name?: string})?.name !== 'AbortError') {
-                    setError(reason instanceof Error ? reason.message : String(reason));
+                if (!controller.signal.aborted && sessionIdRef.current === session.session_id) {
+                    if (isComputeAccessDenied(reason)) {
+                        cursorRef.current = 0;
+                        terminalRef.current?.reset();
+                    }
+                    setSessionReadError({
+                        message: sessionErrorMessage(reason, zh), denied: isComputeAccessDenied(reason),
+                    });
                 }
+            } finally {
+                reading = false;
             }
         };
         const timer = window.setInterval(() => void poll(), 500);
@@ -173,15 +261,13 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [session?.session_id, session?.state]);
+    }, [session?.session_id, session?.state, session?.transport, zh]);
 
     useEffect(() => {
-        if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
-    }, [output]);
-
-    useEffect(() => {
-        if (session?.state === 'running' && !busy) inputRef.current?.focus();
-    }, [busy, focusKey, session?.session_id, session?.state]);
+        if (session?.state === 'running' && !busy && !sessionReadDenied) {
+            terminalRef.current?.focus();
+        }
+    }, [busy, focusKey, session?.session_id, session?.state, sessionReadDenied, zh]);
 
     useEffect(() => {
         onActiveChange?.(active);
@@ -194,34 +280,45 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
     }, [closeOnUnmount]);
 
     const connect = useCallback(async () => {
-        if (!selectedNode || !selectedTargetAvailable || busy) return;
+        if (!canConnect) return;
         setBusy(true);
+        setStarting(true);
+        setError('');
+        setSessionReadError(undefined);
+        setRestoreError('');
+        setSessionConflict(undefined);
+        setViewSessionId('');
+        setSession(null);
         try {
             const next = preferredTransport
                 ? await ComputeClusterService.startTerminal(selectedNode, preferredTransport)
                 : await ComputeClusterService.startTerminal(selectedNode);
-            cursorRef.current = next.cursor;
-            sessionIdRef.current = next.session_id;
+            if (next.node_id !== selectedNode || (preferredTransport && next.transport !== preferredTransport)) {
+                throw new Error(zh ? '返回的会话与所选节点或路线不一致。' : 'The returned session does not match the selected node or route.');
+            }
+            cursorRef.current = 0;
+            rawModeRef.current = false;
+            sessionIdRef.current = ['connecting', 'running'].includes(next.state) ? next.session_id : '';
             startedHereRef.current = true;
-            setOutput(next.output || '');
+            terminalRef.current?.reset();
             setSession(next);
             if (initialCommand && next.state === 'running') {
                 initialCommandSessionRef.current = next.session_id;
                 await ComputeClusterService.terminalInput(next.session_id, `${initialCommand}\r`);
             }
-            setError('');
         } catch (reason) {
-            setError(reason instanceof Error ? reason.message : String(reason));
+            setError(sessionErrorMessage(reason, zh));
         } finally {
+            setStarting(false);
             setBusy(false);
         }
-    }, [busy, initialCommand, preferredTransport, selectedNode, selectedTargetAvailable]);
+    }, [canConnect, initialCommand, preferredTransport, selectedNode, zh]);
 
     useEffect(() => {
-        if (!autoConnect || autoConnectStartedRef.current || !targetsReady || !selectedNode || session) return;
+        if (!autoConnect || autoConnectStartedRef.current || !canConnect || selectedNode !== preferredNodeId || session) return;
         autoConnectStartedRef.current = true;
         void connect();
-    }, [autoConnect, connect, selectedNode, session, targetsReady]);
+    }, [autoConnect, canConnect, connect, preferredNodeId, selectedNode, session]);
 
     useEffect(() => {
         if (
@@ -235,22 +332,6 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
             .catch(reason => setError(reason instanceof Error ? reason.message : String(reason)));
     }, [initialCommand, session?.session_id, session?.state]);
 
-    const send = useCallback(async (event: FormEvent) => {
-        event.preventDefault();
-        const value = command.trimEnd();
-        if (!session || !value || busy || session.state !== 'running') return;
-        setBusy(true);
-        try {
-            await ComputeClusterService.terminalInput(session.session_id, `${value}\r`);
-            setCommand('');
-            setError('');
-        } catch (reason) {
-            setError(reason instanceof Error ? reason.message : String(reason));
-        } finally {
-            setBusy(false);
-        }
-    }, [busy, command, session]);
-
     const control = useCallback(async (action: 'interrupt' | 'close') => {
         if (!session || busy) return;
         setBusy(true);
@@ -258,13 +339,45 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
             const next = await ComputeClusterService.terminalControl(session.session_id, action);
             setSession(next);
             if (action === 'close') sessionIdRef.current = '';
-            setError(next.error || '');
+            setSessionReadError(undefined);
+            setError('');
         } catch (reason) {
-            setError(reason instanceof Error ? reason.message : String(reason));
+            setError(sessionErrorMessage(reason, zh));
         } finally {
             setBusy(false);
         }
-    }, [busy, session]);
+    }, [busy, session, zh]);
+
+    const selectNode = (nodeId: string) => {
+        setSelectedNode(nodeId);
+        setSession(null);
+        terminalRef.current?.reset();
+        cursorRef.current = 0;
+        rawModeRef.current = false;
+        setError('');
+        setSessionReadError(undefined);
+        setRestoreError('');
+        setSessionConflict(undefined);
+        setViewSessionId('');
+    };
+
+    const targetNotices = {
+        loading: zh ? '正在读取终端目标…' : 'Loading terminal targets…',
+        ready: zh ? '当前没有可查询的终端目标。' : 'No terminal targets are listed.',
+        disabled: zh ? '当前服务未启用终端连接。' : 'Terminal connections are disabled on this service.',
+        denied: zh ? '当前账号无权查看终端目标。' : 'You do not have access to terminal targets.',
+        failed: zh ? '终端目标读取失败，稍后自动重试。' : 'Could not read terminal targets. Retrying shortly.',
+    };
+    const restorePending = Boolean(restorableSessionId && !session && !restoreError && !busy);
+    const restoreFailed = Boolean(restoreError && restorableSessionId);
+    const sessionState = session?.state || (starting || restorePending ? 'connecting' : error || restoreFailed ? 'failed' : undefined);
+    const route = session?.transport || preferredTransport;
+    const stateTone = sessionReadError ? 'failed' : sessionConflict ? 'available' : sessionState || (selectedTarget?.available ? 'available' : '');
+    const stateLabel = sessionReadError ? (zh ? '会话读取异常' : 'Session read error')
+        : sessionConflict ? (zh ? '已有其他路线会话' : 'Session on another route')
+        : targetRead === 'ready' && selectedTarget && tailcatUnavailable ? (zh ? '暂不可连接' : 'Unavailable')
+        : sessionState ? sessionStateLabel(sessionState, zh) : selectedTarget
+            ? targetReason(selectedTarget, zh) : (zh ? '等待目标' : 'Waiting for target');
 
     return <section className='ComputeTerminalPanel'>
         <div className='ComputeTerminalHeading'>
@@ -277,19 +390,24 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
                         ? '先连接所属节点，再进入这台局域网设备；密码只在当前终端输入，不会保存。'
                         : 'Connect through the owning node, then enter this LAN device. Password input is never saved.')
                     : (zh
-                        ? '连接目标与认证材料由 Mac Client 保管，不通过网页配置或接口返回；异常连续空行会自动压缩。'
-                        : 'The Mac Client owns destinations and credentials; they are never configured or returned by the web API. Abnormal runs of blank terminal lines are collapsed.')}</p>
+                        ? '点击终端直接输入命令；可使用目标节点已安装的程序。'
+                        : 'Click the terminal to type commands and use programs installed on the target node.')}</p>
             </div>
-            {(selectedTarget || activeSession) && <div className={`ComputeTerminalState ${activeSession?.state === 'connecting' ? 'connecting' : displayedNormal ? 'running' : 'failed'} ${terminalTransportClass(activeSession)}`}>
-                <i/><strong>{terminalStateLabel(activeSession, displayedNormal, zh)}</strong>
+            {(selectedTarget || sessionState || preferredTransport) && <div role='status'
+                className={`ComputeTerminalState ${stateTone} ${route === 'lan' ? 'lan' : route ? 'remote' : ''}`}>
+                <i/><strong>{route ? `${transportLabel(route, zh)} · ${stateLabel}` : stateLabel}</strong>
             </div>}
         </div>
 
         <div className='ComputeTerminalToolbar'>
             <label>
                 <span>{targetLabel ? (zh ? '目标设备' : 'Target device') : (zh ? '目标节点' : 'Target node')}</span>
-                <select value={selectedNode} disabled={active} onChange={event => setSelectedNode(event.target.value)}>
+                <select value={selectedNode} disabled={active || busy || targetRead !== 'ready'}
+                    onChange={event => selectNode(event.target.value)}>
                     <option value=''>{zh ? '选择节点' : 'Choose node'}</option>
+                    {selectedNode && !selectedTarget && <option value={selectedNode} disabled>
+                        {selectedNode} · {zh ? '目标未列出' : 'Target not listed'}
+                    </option>}
                     {targets.map(target => <option value={target.node_id} key={target.node_id} disabled={!target.available}>
                         {targetLabel && target.node_id === selectedNode
                             ? `${targetLabel} · ${target.node_name}`
@@ -297,44 +415,35 @@ export const ComputeTerminalPanel: React.FC<ComputeTerminalPanelProps> = ({
                     </option>)}
                 </select>
             </label>
-            {!active && <button type='button' disabled={!selectedTargetAvailable || busy} onClick={() => void connect()}>{zh ? '连接终端' : 'Connect'}</button>}
+            {!active && <button type='button' disabled={!canConnect} onClick={() => void connect()}>{zh ? '连接终端' : 'Connect'}</button>}
             {active && <>
-                <button type='button' disabled={busy || session?.state !== 'running'} onClick={() => void control('interrupt')}>Ctrl+C</button>
+                <button type='button' disabled={busy || sessionReadDenied || session?.state !== 'running'} onClick={() => void control('interrupt')}>Ctrl+C</button>
                 <button type='button' className='danger' disabled={busy} onClick={() => void control('close')}>{zh ? '断开' : 'Disconnect'}</button>
             </>}
         </div>
 
-        {error && <div className='ComputeTerminalError' role='alert'>{error}</div>}
-        <pre className='ComputeTerminalScreen' ref={outputRef} aria-label={zh ? '终端输出' : 'Terminal output'} onClick={() => inputRef.current?.focus()}>{displayedOutput || (targetLabel
-            ? (zh ? '点击“连接终端”进入设备。' : 'Select “Connect” to enter the device.')
-            : (zh
-                ? '选择节点并连接；故障节点仍有可用 SSH 路径时也可连接。'
-                : 'Choose a node. Fault nodes remain connectable while an SSH route is available.'))}</pre>
-        <form className='ComputeTerminalInput' onSubmit={event => void send(event)}>
-            <span aria-hidden='true'>$</span>
-            <div className='ComputeTerminalInputField'>
-                {completionHint && <span aria-hidden='true'><i>{command}</i>{completionHint.slice(command.length)}</span>}
-                <input
-                    ref={inputRef}
-                    type={passwordPrompt ? 'password' : 'text'}
-                    aria-label={zh ? '终端指令' : 'Terminal command'}
-                    value={command}
-                    disabled={!session || session.state !== 'running' || busy}
-                    autoComplete='off'
-                    spellCheck={false}
-                    placeholder={zh ? '输入指令；Tab 补全，Enter 执行' : 'Type a command; Tab completes, Enter runs'}
-                    onChange={event => setCommand(event.target.value)}
-                    onKeyDown={event => {
-                        if (event.key !== 'Tab' || !completionHint) return;
-                        event.preventDefault();
-                        setCommand(completionHint);
-                    }}
-                />
-            </div>
-            <button type='submit' disabled={!session || session.state !== 'running' || !command.trim() || busy}>{zh ? '发送' : 'Send'}</button>
-        </form>
+        {(targetRead !== 'ready' || !targets.length) && <div
+            className={targetRead === 'denied' || targetRead === 'failed' ? 'ComputeTerminalError' : 'ComputeTerminalNotice'}
+            role={targetRead === 'denied' || targetRead === 'failed' ? 'alert' : 'status'}>{targetNotices[targetRead]}</div>}
+        {targetRead === 'ready' && targets.length > 0 && selectedNode && !selectedTarget && <div className='ComputeTerminalNotice' role='status'>
+            {zh ? '所选节点当前未出现在终端目标列表中。' : 'The selected node is missing from the terminal target list.'}
+        </div>}
+        {targetRead === 'ready' && selectedTarget && tailcatUnavailable && <div className='ComputeTerminalNotice' role='status'>
+            {zh ? '当前主控未提供此节点的 Tailcat 终端。' : 'The controller does not currently offer a Tailcat terminal for this node.'}
+        </div>}
+        {restoreFailed && <div className={sessionConflict ? 'ComputeTerminalNotice' : 'ComputeTerminalError'} role={sessionConflict ? 'status' : 'alert'}>
+            {restoreError} {sessionConflict && <button type='button' onClick={() => setViewSessionId(sessionConflict.sessionId)}>
+                {zh ? `查看现有 ${transportLabel(sessionConflict.transport, zh)} 会话` : `View existing ${transportLabel(sessionConflict.transport, zh)} session`}
+            </button>} <button type='button' onClick={() => setRestoreAttempt(attempt => attempt + 1)}>{zh ? '重试读取会话' : 'Retry session read'}</button>
+        </div>}
+        {(error || session?.error) && <div className='ComputeTerminalError' role='alert'>{error || session?.error}</div>}
+        {sessionReadError && <div className='ComputeTerminalError' role='alert'>
+            {zh ? '会话读取' : 'Session read'} · {sessionReadError.message}
+        </div>}
+        <div className='ComputeTerminalScreen' ref={outputRef} aria-label={zh ? '终端输出' : 'Terminal output'}
+            onClick={() => terminalRef.current?.focus()}/>
         <small className='ComputeTerminalBoundary'>{zh
-            ? `${targetLabel ? '关闭窗口会断开这次设备终端；' : ''}会话不保存输入内容；单节点最多 1 个终端，空闲 30 分钟或运行 2 小时后自动关闭。`
-            : `${targetLabel ? 'Closing this window disconnects the device terminal. ' : ''}Input is not persisted; one terminal per node, closed after 30 idle minutes or 2 hours total.`}</small>
+            ? `${targetLabel ? '关闭窗口会断开这次设备终端；' : ''}每个节点限开 1 个终端；空闲 30 分钟或使用满 2 小时后自动断开。`
+            : `${targetLabel ? 'Closing this window disconnects the device terminal. ' : ''}One terminal per node; it disconnects after 30 idle minutes or 2 hours of use.`}</small>
     </section>;
 };

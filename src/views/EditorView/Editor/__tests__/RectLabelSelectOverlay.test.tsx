@@ -23,6 +23,21 @@ const labelNames = [
 ];
 
 describe('RectLabelSelectOverlay', () => {
+    it.each([[0.2582, '25.8%'], [0, '0.0%'], [undefined, null], [NaN, null], [1.1, null]])(
+        'shows only a recorded valid confidence beside the class (%s)', (confidence, expected) => {
+            const {container} = render(<RectLabelSelectOverlay editorData={editorData}
+                labelRects={[{id: 'confidence', labelId: 'bird-id',
+                    rect: {x: 100, y: 50, width: 40, height: 20}, isCreatedByAI: true,
+                    isVisible: true, status: LabelStatus.ACCEPTED, suggestedLabel: null,
+                    confidence: confidence as number}]}
+                labelNames={labelNames} visible={true} onChange={jest.fn()} onActivate={jest.fn()}
+                onInteractionChange={jest.fn()}/>);
+            const value = container.querySelector('.RectLabelDropdown__confidence');
+            if (expected === null) expect(value).toBeNull();
+            else expect(value).toHaveTextContent(expected as string);
+        },
+    );
+
     it('positions a label selector at the rectangle top-left and updates its label', () => {
         const onChange = jest.fn();
         const onActivate = jest.fn();

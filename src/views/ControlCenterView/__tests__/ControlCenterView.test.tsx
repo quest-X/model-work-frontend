@@ -4,18 +4,38 @@ import {Language} from '../../../data/LanguageConfig';
 import {PopupWindowType} from '../../../data/enums/PopupWindowType';
 import {
     ComputeClusterNode,
+    ComputeClusterRequestError,
     ComputeClusterService,
     ComputeGroupDetail,
     ComputeGroupResources,
     ComputeProgramSnapshot,
     ComputeResourceGraph,
+    ComputeUpgradeBatch,
+    ComputeUpgradeManifest,
+    ModelVersionAuthorization,
+    ModelVersionReceipt,
 } from '../../../services/ComputeClusterService';
+import * as ApprovalIdentity from '../../../services/ApprovalIdentityService';
 import {AgentChatService} from '../../../services/AgentChatService';
 import {ClusterGeographicMap} from '../ClusterGeographicMap';
 import {ControlCenterView} from '../ControlCenterView';
 import {version as appVersion} from '../../../../package.json';
 
+jest.mock('@xterm/xterm');
+jest.mock('@xterm/addon-fit');
+
 const originalFetch = global.fetch;
+
+// Importing the app entry point also starts authentication and emits account changes.
+jest.mock('../../../index', () => ({
+    store: jest.requireActual('../../../configureStore').default(),
+}));
+
+jest.mock('../../../services/ApprovalIdentityService', () => ({
+    ...jest.requireActual('../../../services/ApprovalIdentityService'),
+    getApprovalIdentity: jest.fn(),
+    signAuthorization: jest.fn(),
+}));
 
 jest.mock('../../PopupView/ComputeClusterPopup/ComputeClusterPopup', () => ({
     ComputeClusterPopup: ({initialWorkspace}: {initialWorkspace: string}) => <section>
@@ -178,6 +198,7 @@ const graph = (clusterNode: ComputeClusterNode): ComputeResourceGraph => ({
 
 describe('ControlCenterView', () => {
     beforeEach(() => {
+        jest.spyOn(ComputeClusterService, 'restartLanProbe').mockResolvedValue(null);
         jest.spyOn(ComputeClusterService, 'groups').mockResolvedValue({
             schema_version: 'group-memberships.v1',
             group_count: 0,
@@ -230,6 +251,42 @@ describe('ControlCenterView', () => {
         expect(screen.getByText('正在读取计算群 0%')).toBeInTheDocument();
         await waitFor(() => expect(screen.queryByText(/正在读取计算群/)).not.toBeInTheDocument());
         expect(screen.getByText('暂无机器')).toBeInTheDocument();
+    });
+
+    it('shows the machine list while resource graph and LAN assets are pending', async () => {
+        const machine = node('首屏节点', true);
+        let resolveGraph!: (value: ComputeResourceGraph) => void;
+        let resolveAssets!: (value: Awaited<ReturnType<typeof ComputeClusterService.lanAssets>>) => void;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockReturnValue(
+            new Promise(resolve => { resolveGraph = resolve; }),
+        );
+        jest.mocked(ComputeClusterService.lanAssets).mockReturnValue(
+            new Promise(resolve => { resolveAssets = resolve; }),
+        );
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        const list = screen.getByRole('complementary', {name: '机器列表'});
+        expect(await within(list).findByRole('button', {name: /首屏节点 活跃于/})).toBeEnabled();
+        expect(screen.getByRole('heading', {name: machine.name})).toBeInTheDocument();
+        expect(within(list).queryByText('测试地域')).not.toBeInTheDocument();
+        expect(screen.queryByText('延迟返回的边缘设备')).not.toBeInTheDocument();
+
+        await act(async () => {
+            resolveGraph(graph(machine));
+            resolveAssets({
+                version: 1, group_id: 'group-1', latest_scans: [],
+                summary: {total: 1, online: 1, offline: 0, new: 0, changed: 0, networks: 1},
+                assets: [{
+                    asset_id: 'edge-1', node_id: machine.node_id, node_name: machine.name, cidr: '10.0.0.0/24',
+                    address: '10.0.0.2', hostname: 'edge-one', mac: '', display_name: '延迟返回的边缘设备',
+                    device_kind: 'edge_compute', ports: [], online: true,
+                    first_seen_at: 1, last_seen_at: 2, last_changed_at: 2, change_type: 'unchanged',
+                }],
+            });
+        });
+        expect(within(list).getByText('测试地域')).toBeInTheDocument();
+        expect(screen.getByText('延迟返回的边缘设备')).toBeInTheDocument();
     });
 
     it.each([
@@ -323,6 +380,92 @@ describe('ControlCenterView', () => {
         expect(screen.queryByRole('button', {name: '打开程序运行器'})).not.toBeInTheDocument();
     });
 
+    it('keeps both remote cards when the active control route changes', async () => {
+        const active = node('山东节点', true, false, null, 'Windows', 'tailcat');
+        const nodes = jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([active]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(active));
+        await act(async () => { render(<ControlCenterView language={Language.CHINESE}/>); });
+
+        const tailcat = await screen.findByRole('button', {name: /正常：Tailcat 远程/});
+        expect(tailcat).toHaveTextContent('当前节点控制通道');
+        expect(tailcat.nextElementSibling).toHaveTextContent('连接地址由主控保管');
+        expect(tailcat.nextElementSibling?.tagName).toBe('SPAN');
+        const tailscale = screen.getByRole('button', {name: /正常：Tailscale 远程/});
+        const remoteCards = tailcat.closest('.ControlRemoteNetworkCards');
+        expect(Array.from(remoteCards?.querySelectorAll('.ControlServiceCard') ?? [])).toEqual([tailscale, tailcat]);
+        expect(tailscale).not.toHaveTextContent('当前节点控制通道');
+
+        nodes.mockResolvedValue([{...active, control_transport: 'tailscale'}]);
+        await act(async () => { fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'})); });
+        expect(screen.getByRole('button', {name: /正常：Tailscale 远程/})).toHaveTextContent('当前节点控制通道');
+        expect(screen.getByRole('button', {name: /故障：Tailcat 远程/})).toBeInTheDocument();
+    });
+
+    it.each([
+        [true, false, '正常', '故障'],
+        [false, true, '故障', '正常'],
+        [true, true, '正常', '正常'],
+        [false, false, '故障', '故障'],
+    ])('shows independent remote availability (Tailcat %s, Tailscale %s)', async (
+        tailcatAvailable, tailscaleAvailable, tailcatStatus, tailscaleStatus,
+    ) => {
+        const active = node('山东节点', true);
+        active.network.tailcat_ssh_available = tailcatAvailable;
+        active.network.tailscale_ssh_available = tailscaleAvailable;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([active]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(active));
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        expect(await screen.findByRole('button', {name: new RegExp(`${tailcatStatus}：Tailcat 远程`)})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: new RegExp(`${tailscaleStatus}：Tailscale 远程`)})).toBeInTheDocument();
+    });
+
+    it('keeps failed LAN red without restarting probes on polling, then retries on node-page reentry', async () => {
+        const active = node('山东节点', true, false, null, 'Windows', 'tailscale');
+        active.network.lan_probe_failures = 3;
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([active]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockResolvedValue(graph(active));
+        const restart = jest.mocked(ComputeClusterService.restartLanProbe);
+        await act(async () => { render(<ControlCenterView language={Language.CHINESE}/>); });
+        const lan = await screen.findByRole('button', {name: /异常：SSH 局域网/});
+        expect(lan).toHaveTextContent('连续 3 次探测失败');
+        expect(lan.querySelector('.ControlStatusDot')).toHaveClass('offline');
+        expect(screen.getByRole('button', {name: /Tailscale 远程/})).toHaveTextContent('正常');
+        expect(restart).toHaveBeenCalledTimes(1);
+
+        await act(async () => { fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'})); });
+        expect(restart).toHaveBeenCalledTimes(1);
+        fireEvent.click(screen.getByRole('button', {name: /总览.*地图/}));
+        restart.mockResolvedValue({node_id: active.node_id, lan_ssh_available: false, lan_probe_failures: 1});
+        await act(async () => { fireEvent.click(screen.getByRole('button', {name: /山东节点 活跃于/})); });
+        expect(await screen.findByRole('button', {name: /故障：SSH 局域网/})).not.toHaveTextContent('连续 3 次');
+        expect(restart).toHaveBeenCalledTimes(2);
+    });
+
+    it('opens the Tailcat terminal page without connecting to a controller that lacks Tailcat terminal support', async () => {
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
+            node('山东节点', true, false, null, 'Windows', 'tailcat'),
+        ]);
+        jest.spyOn(ComputeClusterService, 'terminalTargets').mockResolvedValue({
+            version: 1,
+            enabled: true,
+            targets: [{
+                node_id: '山东节点-id',
+                node_name: '山东节点',
+                platform: 'Windows',
+                online: true,
+                available: true,
+                reason: 'available',
+            }],
+        });
+        const start = jest.spyOn(ComputeClusterService, 'startTerminal');
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        fireEvent.click(await screen.findByRole('button', {name: /Tailcat 远程/}));
+        expect(await screen.findByText('当前主控未提供此节点的 Tailcat 终端。')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: '连接终端'})).toBeDisabled();
+        expect(start).not.toHaveBeenCalled();
+    });
+
     it('cycles status regions from the highest node count', () => {
         const shanghaiA = node('上海节点 A', true);
         const shanghaiB = node('上海节点 B', true);
@@ -384,7 +527,7 @@ describe('ControlCenterView', () => {
         expect(within(deviceInformation).queryByText('最后检查')).not.toBeInTheDocument();
         expect(container.querySelector('.ControlNodeHeader')).not.toHaveTextContent('最后检查 未知');
         expect(container.querySelector('.ControlNodeHeader')).not.toHaveTextContent('节点程序 0.7.0');
-        expect(within(container.querySelector('.ControlToolbarGroup') as HTMLElement)
+        expect(within(container.querySelector('.ControlToolbarGroup.right') as HTMLElement)
             .getByText('在线节点-id')).toBeInTheDocument();
         expect(within(deviceInformation).queryByText('节点状态')).not.toBeInTheDocument();
         expect(screen.queryByText('全部')).not.toBeInTheDocument();
@@ -394,7 +537,7 @@ describe('ControlCenterView', () => {
         expect(screen.getByText('Tailscale 远程')).toBeInTheDocument();
         const cameraCard = screen.getByText('DS-2CD2686FWDA2-IZS')
             .closest('.ControlCameraCard') as HTMLElement;
-        expect(within(cameraCard).getByText('正常')).toBeInTheDocument();
+        expect(within(cameraCard).getByText('已登记 · 画面待验证')).toBeInTheDocument();
         expect(screen.queryByText('摄像头注册表')).not.toBeInTheDocument();
         expect(screen.queryByText('运行详情暂不可用')).not.toBeInTheDocument();
         expect(ComputeClusterService.runtime).not.toHaveBeenCalled();
@@ -513,32 +656,32 @@ describe('ControlCenterView', () => {
         const {rerender} = render(<ControlCenterView language={Language.CHINESE}/>);
 
         const lan = await screen.findByRole('button', {name: /SSH 局域网/});
-        expect(within(lan).queryByText('IPv4: 192.168.10.166')).not.toBeInTheDocument();
-        expect(lan.nextElementSibling).toHaveTextContent('IPv4: 192.168.10.166');
+        expect(within(lan).queryByText('192.168.10.166')).not.toBeInTheDocument();
+        expect(lan.nextElementSibling).toHaveTextContent(/^192\.168\.10\.166$/);
         expect(lan.nextElementSibling).toHaveClass('ControlServiceAddress');
         const tailscale = screen.getByRole('button', {name: /Tailscale 远程/});
-        expect(within(tailscale).queryByText('IPv6: fd7a:115c:a1e0::166')).not.toBeInTheDocument();
-        expect(tailscale.nextElementSibling).toHaveTextContent('IPv6: fd7a:115c:a1e0::166');
+        expect(within(tailscale).queryByText('fd7a:115c:a1e0::166')).not.toBeInTheDocument();
+        expect(tailscale.nextElementSibling).toHaveTextContent(/^fd7a:115c:a1e0::166$/);
         expect(tailscale.nextElementSibling).toHaveClass('ControlServiceAddress');
         expect(tailscale).not.toHaveTextContent('100.64.0.166');
-        expect(tailscale).not.toHaveTextContent('192.168.10.166');
+        expect(tailscale).not.toHaveTextContent(/^192\.168\.10\.166$/);
 
         fireEvent.click(lan.nextElementSibling as HTMLElement);
         await waitFor(() => expect(writeText).toHaveBeenCalledWith('ssh operator@192.168.10.166'));
         await waitFor(() => expect(lan.nextElementSibling)
-            .toHaveTextContent('IPv4: 192.168.10.166 (已复制)'));
+            .toHaveTextContent('192.168.10.166 (已复制)'));
         await waitFor(() => expect(lan.nextElementSibling)
-            .toHaveTextContent(/^IPv4: 192\.168\.10\.166$/), {
+            .toHaveTextContent(/^192\.168\.10\.166$/), {
             timeout: 1500,
         });
         fireEvent.click(tailscale.nextElementSibling as HTMLElement);
         await waitFor(() => expect(writeText).toHaveBeenCalledWith('ssh operator@fd7a:115c:a1e0::166'));
         await waitFor(() => expect(tailscale.nextElementSibling)
-            .toHaveTextContent('IPv6: fd7a:115c:a1e0::166 (已复制)'));
+            .toHaveTextContent('fd7a:115c:a1e0::166 (已复制)'));
 
         rerender(<ControlCenterView language={Language.ENGLISH}/>);
-        expect(screen.getByText('IPv4: 192.168.10.166')).toBeInTheDocument();
-        expect(screen.getByText('IPv6: fd7a:115c:a1e0::166 (Copied)')).toBeInTheDocument();
+        expect(screen.getByText('192.168.10.166')).toBeInTheDocument();
+        expect(screen.getByText('fd7a:115c:a1e0::166 (Copied)')).toBeInTheDocument();
     });
 
     it('does not guess a version when the node reports unknown', async () => {
@@ -550,6 +693,17 @@ describe('ControlCenterView', () => {
         const information = await screen.findByLabelText('设备信息');
         expect(within(information).getByText('—')).toBeInTheDocument();
         expect(within(information).queryByText('unknown')).not.toBeInTheDocument();
+    });
+
+    it('shows the reported version and role together', async () => {
+        const machine = node('Main 节点', true);
+        machine.agent_version = '1.2.0';
+        machine.role = 'main';
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        const information = await screen.findByLabelText('设备信息');
+        expect(within(information).getByText('1.2.0(Main)')).toBeInTheDocument();
     });
 
     it('recovers an uncertain node when bidirectional communication returns', async () => {
@@ -729,6 +883,10 @@ describe('ControlCenterView', () => {
         await screen.findByRole('button', {name: '打开资源监视器'});
         expect(await screen.findByText('处理器 · 内存 · 显卡 · 磁盘 · 网络')).toBeInTheDocument();
         expect(screen.getByText(/^最后检查 /)).toBeInTheDocument();
+        expect(screen.getByText(/^最后检查 /).closest('.ControlToolbarGroup.right')).toBeNull();
+        expect(within(document.querySelector('.ControlToolbarGroup.right') as HTMLElement)
+            .getByText(/^\d+ \/ \d+ 正常$/)).toBeInTheDocument();
+        expect(document.querySelector('.ControlNodeHeader')).not.toHaveTextContent('最后检查');
         expect(document.querySelector('.ControlRuntimeChecked')).not.toBeInTheDocument();
         expect(screen.queryByText('视觉算法服务')).not.toBeInTheDocument();
         expect(screen.queryByLabelText('最近异常')).not.toBeInTheDocument();
@@ -1184,7 +1342,7 @@ describe('ControlCenterView', () => {
         expect(await screen.findByRole('heading', {name: '在线节点'})).toBeInTheDocument();
         fireEvent.click(machine);
         expect(screen.getByRole('heading', {name: '在线节点'})).toBeInTheDocument();
-        expect(screen.getByText(/^查询于 /)).toBeInTheDocument();
+        expect(screen.queryByText(/^查询于 /)).not.toBeInTheDocument();
     });
 
     it('uses the reported system icon and reserves the device image for Jetson', async () => {
@@ -1292,6 +1450,68 @@ describe('ControlCenterView', () => {
         expect(within(dialog).queryByRole('button', {name: '关闭相机实时画面'})).not.toBeInTheDocument();
         fireEvent.mouseDown(dialog.closest('.DeviceManagementBackdrop') as HTMLElement);
         expect(screen.queryByRole('dialog', {name: '相机实时画面'})).not.toBeInTheDocument();
+    });
+
+    it('opens associated cameras from the workbench and does not switch to another camera when the chosen one disappears', async () => {
+        const machine = node('设备所属机器', true, true);
+        const camera = {...machine.device_inventory.devices[0], capabilities: ['camera.stream.v1']};
+        const other = {...camera, device_id: 'camera-2', name: '另一台相机'};
+        machine.device_inventory.devices = [camera, other];
+        const nodes = jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await screen.findByRole('heading', {name: machine.name});
+        fireEvent.click(screen.getByText('设备管家'));
+        fireEvent.click(screen.getByRole('button', {name: '关联设备'}));
+        const manager = screen.getByRole('dialog', {name: '设备管理'});
+        expect(within(manager).getAllByText('已登记 · 画面待验证')).toHaveLength(2);
+        fireEvent.click(within(screen.getByText('车间相机').closest('.DeviceManagementRow') as HTMLElement)
+            .getByRole('button', {name: '实时画面'}));
+        const viewer = screen.getByRole('dialog', {name: '相机实时画面'});
+        expect(within(viewer).getByAltText('车间相机 实时画面')).toBeInTheDocument();
+        nodes.mockResolvedValue([{...machine, device_inventory: {state: 'ready', devices: [other]}}]);
+        fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
+        expect(await within(viewer).findByText(/当前摄像头暂不可播放/)).toBeInTheDocument();
+        expect(within(viewer).queryByAltText('另一台相机 实时画面')).not.toBeInTheDocument();
+    });
+
+    it('opens only the associated edge device logs and stops when the asset inventory is denied', async () => {
+        const machine = node('边缘代理机器', true);
+        machine.capabilities.push('runtime.edge-programs.read.v1');
+        const asset = {
+            asset_id: 'edge-1', node_id: machine.node_id, node_name: machine.name, cidr: '10.0.0.0/24',
+            address: '10.0.0.2', hostname: 'edge-one', mac: '', display_name: '边缘一号',
+            device_kind: 'edge_compute', ssh_username: 'fixture', ports: [{port: 22, service: 'ssh'}],
+            online: true, first_seen_at: 1, last_seen_at: 2, last_changed_at: 2, change_type: 'unchanged' as const,
+        };
+        const assets = jest.spyOn(ComputeClusterService, 'lanAssets').mockResolvedValue({
+            version: 1, group_id: 'group-1', latest_scans: [],
+            summary: {total: 2, online: 2, offline: 0, new: 0, changed: 0, networks: 2},
+            assets: [asset, {...asset, asset_id: 'edge-2', node_id: 'other-node', display_name: '其他机器的边缘设备'}],
+        });
+        const edgePrograms = jest.spyOn(ComputeClusterService, 'edgePrograms').mockResolvedValue({
+            ...mountedProgram,
+            programs: [{...mountedProgram.programs[0], events: [{
+                created_at: 2, level: 'info', event_type: 'started', message: '边缘一号程序已启动',
+            }]}],
+        });
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await screen.findByRole('heading', {name: machine.name});
+        fireEvent.click(screen.getByText('设备管家'));
+        fireEvent.click(screen.getByRole('button', {name: '关联设备'}));
+        const manager = screen.getByRole('dialog', {name: '设备管理'});
+        fireEvent.click(within(manager).getByRole('tab', {name: /边缘计算设备/}));
+        expect(within(manager).getByText('边缘一号')).toBeInTheDocument();
+        expect(within(manager).queryByText('其他机器的边缘设备')).not.toBeInTheDocument();
+        fireEvent.click(within(manager).getByRole('button', {name: '程序日志'}));
+        const runner = await screen.findByRole('dialog', {name: '边缘一号 程序运行器'});
+        expect(await within(runner).findByText('边缘一号程序已启动')).toBeInTheDocument();
+        expect(edgePrograms).toHaveBeenCalledWith('edge-1', expect.any(AbortSignal));
+        expect(ComputeClusterService.programs).not.toHaveBeenCalled();
+        assets.mockRejectedValue(new ComputeClusterRequestError(403, 'denied'));
+        fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
+        expect(await screen.findByText('所选边缘设备的程序与日志暂不可读。')).toBeInTheDocument();
+        expect(screen.queryByText('边缘一号程序已启动')).not.toBeInTheDocument();
     });
 
     it('refreshes the camera cards when a remote camera is saved', async () => {
@@ -1444,6 +1664,7 @@ describe('ControlCenterView', () => {
         jest.spyOn(ComputeClusterService, 'startTerminal').mockResolvedValue(terminalSession);
         jest.spyOn(ComputeClusterService, 'terminal').mockImplementation(() => new Promise(() => undefined));
         const terminalInput = jest.spyOn(ComputeClusterService, 'terminalInput').mockResolvedValue(terminalSession);
+        jest.spyOn(ComputeClusterService, 'terminalResize').mockResolvedValue(terminalSession);
         jest.spyOn(ComputeClusterService, 'terminalControl').mockResolvedValue({...terminalSession, state: 'closed'});
         const lanAssets = jest.spyOn(ComputeClusterService, 'lanAssets')
             .mockResolvedValueOnce({
@@ -1511,7 +1732,359 @@ describe('ControlCenterView', () => {
         expect(screen.getByRole('tab', {name: /边缘计算设备/})).toHaveAttribute('aria-selected', 'true');
     });
 
-    it('opens terminal connection from related features in the main canvas', async () => {
+    it('separates maintenance sources and looks up the real outcome of an accepted upgrade', async () => {
+        const machine = runtimeNode('维护测试节点');
+        machine.capabilities.push('runtime.maintenance.read.v1');
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        const jobId = '00000000-0000-4000-8000-000000000077';
+        const load = jest.spyOn(ComputeClusterService, 'maintenanceEvents').mockImplementation(async (_, source, before) => ({
+            schema_version: 'runtime.maintenance.events.v1', installation_id: machine.installation_id, source,
+            events: source === 'node' ? [] : [{
+                event_id: before === null ? 41 : 40, operation: 'node.upgrade', authorization_id: null, user_id: null,
+                state: before === null ? 'succeeded' : 'approved', error_code: null, created_at: 101,
+                reference: {job_id: jobId, release_version: '1.2.3'},
+            }],
+            next_before: source === 'controller' && before === null ? 41 : null,
+        }));
+        const upgrade = jest.spyOn(ComputeClusterService, 'upgradeJob').mockResolvedValue({
+            job_id: jobId, release_version: '1.2.3', state: 'rolled_back', created_at: 100,
+            updated_at: 102, drain_deadline: 100, error_code: null, health_task_id: null,
+        });
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await screen.findByRole('heading', {name: '维护测试节点'});
+        fireEvent.click(screen.getByText('设备管家'));
+        fireEvent.click(screen.getByRole('button', {name: '维护记录'}));
+        const panel = within(screen.getByRole('region', {name: '当前设备的维护记录'}));
+        expect(await panel.findByText('升级任务已接收')).toBeInTheDocument();
+        fireEvent.click(panel.getByText('关联证据'));
+        fireEvent.click(panel.getByText('查询实际升级状态'));
+        expect(await panel.findByText(/升级任务 · 已回退/)).toBeInTheDocument();
+        expect(upgrade).toHaveBeenCalledWith(machine.node_id, jobId, expect.any(AbortSignal));
+        fireEvent.click(panel.getByRole('button', {name: '更早记录'}));
+        expect(await panel.findByText('已审批')).toBeInTheDocument();
+        expect(load).toHaveBeenLastCalledWith(machine.node_id, 'controller', 41, expect.any(AbortSignal));
+        fireEvent.click(panel.getByRole('button', {name: '节点记录'}));
+        expect(await panel.findByText('当前来源暂无维护记录。')).toBeInTheDocument();
+        expect(panel.queryByText('已审批')).not.toBeInTheDocument();
+        expect(load).toHaveBeenLastCalledWith(machine.node_id, 'node', null, expect.any(AbortSignal));
+    });
+
+    it('shows device-bound security evidence and clears it when the next read is denied', async () => {
+        const machine = runtimeNode('安全测试节点');
+        machine.capabilities.push('runtime.security-baseline.read.v1');
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        const load = jest.spyOn(ComputeClusterService, 'securityBaseline').mockResolvedValueOnce({
+            schema_version: 'runtime.security-baseline.v1', installation_id: machine.installation_id,
+            platform: 'linux', captured_at: Date.now() / 1000 - 150,
+            checks: [{check_id: 'ufw_service', evidence: 'active'}, {check_id: 'firewalld_service', evidence: 'timed_out'},
+                {check_id: 'nftables_service', evidence: 'not_installed'}],
+        }).mockRejectedValueOnce(new Error('permission_denied'));
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await screen.findByRole('heading', {name: '安全测试节点'});
+        fireEvent.click(screen.getByText('设备管家'));
+        fireEvent.click(screen.getByRole('button', {name: '系统加固'}));
+        const panel = within(screen.getByRole('region', {name: '系统安全基线'}));
+        expect(await panel.findByText('服务运行')).toBeInTheDocument();
+        expect(panel.getByText('读取超时')).toBeInTheDocument();
+        expect(panel.getByText('证据已过期，请重新检查。')).toBeInTheDocument();
+        expect(panel.getByText(/防火墙规则是否生效需要另外核对/)).toBeInTheDocument();
+        expect(load).toHaveBeenCalledWith(machine.node_id, expect.any(AbortSignal));
+        fireEvent.click(panel.getByRole('button', {name: '重新检查'}));
+        expect(await panel.findByRole('alert')).toHaveTextContent('当前账号无权读取');
+        expect(panel.queryByText('服务运行')).not.toBeInTheDocument();
+    });
+
+    it('loads configuration backups from the selected device workbench', async () => {
+        const machine = runtimeNode('配置测试节点');
+        machine.capabilities.push('runtime.config.backup.read.v1');
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        const load = jest.spyOn(ComputeClusterService, 'configBackupHistory').mockResolvedValue({
+            installation_id: machine.installation_id, current_digest: 'a'.repeat(64),
+            backups: [], restores: [], backups_have_more: false, restores_have_more: false,
+        });
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await screen.findByRole('heading', {name: '配置测试节点'});
+        fireEvent.click(screen.getByText('设备管家'));
+        fireEvent.click(screen.getByRole('button', {name: '配置备份'}));
+        const panel = within(screen.getByRole('region', {name: '当前设备的配置备份'}));
+        expect(await panel.findByText('暂无备份。')).toBeInTheDocument();
+        expect(panel.queryByRole('button', {name: '创建备份'})).not.toBeInTheDocument();
+        expect(load).toHaveBeenCalledWith(machine.node_id, expect.any(AbortSignal));
+    });
+
+    it('reads model versions and signs a rollback scoped to the selected device', async () => {
+        const machine = runtimeNode('测试节点');
+        machine.capabilities.push('runtime.model.versions.v1', 'control.model.version.change.v1');
+        const first = '00000000-0000-4000-8000-000000000055';
+        const second = '00000000-0000-4000-8000-000000000056';
+        const authId = '00000000-0000-4000-8000-000000000088';
+        const metadata = {
+            installation_id: machine.installation_id, model_id: 'example',
+            model_sha256: 'a'.repeat(64), package_sha256: 'b'.repeat(64), expires_at: 4_000_000_000, changed_at: 2,
+        };
+        const older: ModelVersionReceipt = {
+            ...metadata, license_id: first, previous_license_id: null, request_id: 'first', operation: 'update',
+        };
+        const latest: ModelVersionReceipt = {
+            ...metadata, license_id: second, previous_license_id: first, request_id: 'second', operation: 'update',
+        };
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        const load = jest.spyOn(ComputeClusterService, 'modelVersionHistory').mockResolvedValueOnce({
+            installation_id: machine.installation_id, model_id: 'example',
+            active_license_id: second, history: [latest, older], has_more: false,
+        }).mockResolvedValueOnce({
+            installation_id: machine.installation_id, model_id: 'example',
+            active_license_id: first, history: [older], has_more: false,
+        });
+        let ticket: ModelVersionAuthorization | undefined;
+        const create = jest.spyOn(ComputeClusterService, 'createModelVersionAuthorization').mockImplementation(async (_, request) => {
+            ticket = {
+                version: 1, purpose: 'model-work-node.user-authorization.v1', operation: 'model.version.change',
+                authorization_id: authId, user_id: 'fixture', user_name: 'Fixture', user_public_key: 'fixture',
+                target_installation_id: machine.installation_id, nonce: 'c'.repeat(64),
+                issued_at: 1, expires_at: 121, state: 'pending', error_code: null,
+                target: {kind: 'model_version', model_id: 'example', license_id: first, request_id: request.request_id},
+                parameters: {expected_license_id: second, rollback: true,
+                    model_sha256: metadata.model_sha256, package_sha256: metadata.package_sha256},
+            };
+            return ticket;
+        });
+        jest.mocked(ApprovalIdentity.signAuthorization).mockResolvedValueOnce('fixture-signature');
+        const approve = jest.spyOn(ComputeClusterService, 'approveModelVersion').mockImplementation(async () => {
+            if (!ticket) throw new Error('missing ticket');
+            return {
+                authorization: {...ticket, state: 'succeeded'},
+                receipt: {...metadata, license_id: first, previous_license_id: second, request_id: ticket.target.request_id,
+                    operation: 'rollback', current: true, replayed: false},
+            };
+        });
+
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await screen.findByRole('heading', {name: '测试节点'});
+        fireEvent.click(screen.getByText('设备管家'));
+        fireEvent.click(screen.getByRole('button', {name: '模型版本'}));
+        const panel = within(screen.getByRole('region', {name: '模型版本'}));
+        fireEvent.change(panel.getByLabelText('模型标识'), {target: {value: 'example'}});
+        fireEvent.click(panel.getByRole('button', {name: '查看版本记录'}));
+        fireEvent.click(await panel.findByRole('button', {name: '回退到此版本'}));
+        const dialog = await screen.findByRole('dialog', {name: '确认模型回退'});
+        expect(dialog).toHaveTextContent('测试节点 · example');
+        expect(dialog).toHaveTextContent(`${second} → ${first}`);
+        expect(dialog).toHaveTextContent(metadata.package_sha256);
+        expect(create).toHaveBeenCalledWith(machine.node_id, expect.objectContaining({
+            model_id: 'example', license_id: first, expected_license_id: second, rollback: true,
+        }), expect.any(AbortSignal));
+        fireEvent.click(within(dialog).getByRole('button', {name: '签名并执行'}));
+        expect(await panel.findByText('变更已记录。')).toBeInTheDocument();
+        expect(approve).toHaveBeenCalledWith(machine.node_id, authId, 'fixture-signature', expect.any(AbortSignal));
+        expect(load).toHaveBeenLastCalledWith(machine.node_id, 'example', expect.any(AbortSignal));
+    });
+
+    it('creates a software update for the selected device and keeps its approval out of other devices', async () => {
+        const first = runtimeNode('机器甲');
+        const second = runtimeNode('机器乙');
+        [first, second].forEach(item => item.capabilities.push('control.node.upgrade.v1'));
+        const manifest: ComputeUpgradeManifest = {
+            version: 1, purpose: 'model-work-node.ota-release.v1',
+            release_version: '1.0.5', minimum_node_version: '0.1.0', source_revision: 'b'.repeat(40),
+            platform: 'windows', architecture: 'x86_64', artifact_url: 'https://example.invalid/node.zip',
+            sha256: 'c'.repeat(64), size_bytes: 4096, signature: `${'A'.repeat(86)}==`,
+        };
+        const batch: ComputeUpgradeBatch = {
+            batch_id: 'single-device-batch', release_version: '1.0.5', state: 'awaiting_authorization',
+            current_index: 0, created_at: 1, updated_at: 1, error_code: null,
+            drain_timeout_seconds: 300, ttl_seconds: 14400, expires_at: Date.now() / 1000 + 14400,
+            user: {user_id: 'fixture', user_name: 'Fixture', user_public_key: `${'A'.repeat(43)}=`},
+            nodes: [{
+                node_id: second.node_id, job_id: 'job-fixture', manifest, authorization_id: null, authorization: null,
+                state: 'awaiting_authorization', error_code: null, result: null,
+            }],
+        };
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([first, second]);
+        jest.spyOn(ComputeClusterService, 'upgradeReleases').mockResolvedValue({source: 'main', releases: [manifest]});
+        const create = jest.spyOn(ComputeClusterService, 'createMainUpgradeBatch').mockResolvedValue(batch);
+        jest.spyOn(ComputeClusterService, 'upgradeBatch').mockResolvedValue(batch);
+        const approve = jest.spyOn(ComputeClusterService, 'approveUpgradeBatch');
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByRole('heading', {name: '机器甲'});
+        fireEvent.click(screen.getByText('设备管家'));
+        const selector = screen.getByRole('combobox', {name: '选择机器'});
+        fireEvent.change(selector, {target: {value: second.node_id}});
+        fireEvent.click(screen.getByRole('button', {name: '软件更新'}));
+        const panel = within(await screen.findByRole('region', {name: '节点软件更新'}));
+        await panel.findByRole('option', {name: 'v1.0.5'});
+        fireEvent.change(panel.getByLabelText('当前控制端的升级版本'), {target: {value: '1.0.5'}});
+        expect(panel.getByText(second.name)).toBeInTheDocument();
+        expect(panel.queryByText(first.name)).not.toBeInTheDocument();
+        fireEvent.click(panel.getByRole('button', {name: '创建升级批次'}));
+        expect(await panel.findByRole('button', {name: '确认整个升级批次'})).toBeEnabled();
+        expect(create).toHaveBeenCalledWith([second.node_id], '1.0.5');
+
+        fireEvent.change(selector, {target: {value: first.node_id}});
+        fireEvent.click(screen.getByRole('button', {name: '软件更新'}));
+        const other = within(await screen.findByRole('region', {name: '节点软件更新'}));
+        expect(await other.findByText(/批次与当前设备范围不同/)).toBeInTheDocument();
+        expect(other.queryByRole('button', {name: '确认整个升级批次'})).not.toBeInTheDocument();
+        expect(approve).not.toHaveBeenCalled();
+    });
+
+    it('keeps startup preview read-only until management is explicitly opened', async () => {
+        const machine = runtimeNode('测试节点');
+        machine.capabilities.push('runtime.startup.read.v1', 'control.startup.manage.v1');
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        jest.spyOn(ComputeClusterService, 'startupItems').mockResolvedValue({
+            schema_version: 'startup.list-result.v1', platform: 'windows', available: true,
+            items: [{item_id: 'a'.repeat(64), name: 'ExampleUpdater', source: 'user', enabled: true, protected: false}],
+        });
+        const create = jest.spyOn(ComputeClusterService, 'createStartupAuthorization');
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByRole('heading', {name: '测试节点'});
+        fireEvent.click(screen.getByText('设备管家'));
+        const manager = screen.getByRole('region', {name: '设备管家工作区'});
+        fireEvent.click(within(manager).getByRole('button', {name: '开机启动项（只读）'}));
+        expect(await within(manager).findByText('ExampleUpdater')).toBeInTheDocument();
+        expect(within(manager).queryByRole('button', {name: '禁用'})).not.toBeInTheDocument();
+
+        fireEvent.click(within(manager).getByRole('button', {name: '进入启动项管理'}));
+        expect(await within(manager).findByRole('button', {name: '禁用'})).toBeEnabled();
+        fireEvent.click(within(manager).getByRole('button', {name: '返回只读预览'}));
+        expect(await within(manager).findByText('ExampleUpdater')).toBeInTheDocument();
+        expect(within(manager).queryByRole('button', {name: '禁用'})).not.toBeInTheDocument();
+        expect(create).not.toHaveBeenCalled();
+    });
+
+    it('opens logs for the selected machine, program, and time from a manual check', async () => {
+        const machine = runtimeNode('测试节点');
+        const checkedAt = Math.floor(Date.now() / 1000);
+        const event = (created_at: number, message: string) => ({
+            created_at, message, level: 'error' as const, event_type: 'check',
+        });
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
+        jest.spyOn(ComputeClusterService, 'runtime').mockRejectedValue(new Error('runtime unavailable'));
+        jest.spyOn(ComputeClusterService, 'runtimeEventWindow').mockRejectedValue(new Error('legacy node'));
+        jest.spyOn(ComputeClusterService, 'programs').mockResolvedValue({
+            ...mountedProgram,
+            programs: [{
+                ...mountedProgram.programs[0],
+                health: {state: 'unavailable', checked_at: checkedAt, status_code: 503, latency_ms: 3},
+                events: [event(checkedAt - 60, '窗口内日志'), event(checkedAt - 360, '窗口外日志')],
+            }],
+        });
+        jest.spyOn(ComputeClusterService, 'runtimeEvents').mockResolvedValue({
+            schema_version: 'runtime.events.v1',
+            captured_at: checkedAt,
+            has_more: false,
+            cursor: 1,
+            events: [{...event(checkedAt, '其他来源日志'), cursor: 1, service_id: 'dlk', task_id: null}],
+        });
+
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await screen.findByRole('heading', {name: '测试节点'});
+        fireEvent.click(screen.getByText('设备管家'));
+        const manager = screen.getByRole('region', {name: '设备管家工作区'});
+        expect(within(manager).getByRole('combobox', {name: '选择机器'})).toHaveValue(machine.node_id);
+        expect(within(manager).queryByRole('region', {name: '设备自检结果'})).not.toBeInTheDocument();
+        fireEvent.click(within(manager).getByRole('button', {name: '手动自检'}));
+        expect(await within(manager).findByText('读取失败，请重试。')).toBeInTheDocument();
+        expect(await within(manager).findByRole('button', {name: '查看日志'})).toBeInTheDocument();
+        const alerts = within(manager).getByRole('region', {name: '设备告警'});
+        const summary = alerts.querySelector('summary') as HTMLElement;
+        fireEvent.click(summary);
+        expect(await within(alerts).findByText('测试节点 · 业务程序异常')).toBeInTheDocument();
+        fireEvent.click(within(alerts).getByRole('button', {name: '查看告警日志'}));
+        expect(await screen.findByText('窗口内日志')).toBeInTheDocument();
+        expect(screen.queryByText('窗口外日志')).not.toBeInTheDocument();
+        expect(screen.queryByText('其他来源日志')).not.toBeInTheDocument();
+        expect(screen.getByText('历史日志读取失败。已读取的日志仍可查看。')).toBeInTheDocument();
+        expect(ComputeClusterService.runtimeEvents).toHaveBeenCalledWith(machine.node_id, 0, 100, expect.any(AbortSignal));
+    });
+
+    it('runs selected checks and opens the linked program logs on the correct machine', async () => {
+        const first = runtimeNode('机器甲');
+        const second = runtimeNode('机器乙');
+        const offline = runtimeNode('离线机器', false);
+        const checkedAt = Math.floor(Date.now() / 1000);
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([first, second, offline]);
+        jest.mocked(ComputeClusterService.runtime).mockRejectedValue(new Error('runtime fixture unavailable'));
+        jest.mocked(ComputeClusterService.programs).mockImplementation(async id => ({
+            ...mountedProgram,
+            captured_at: checkedAt,
+            programs: id === second.node_id ? [{
+                ...mountedProgram.programs[0],
+                health: {state: 'unavailable', checked_at: checkedAt, status_code: 503, latency_ms: 3},
+                events: [],
+            }] : [],
+        }));
+        const query = jest.spyOn(ComputeClusterService, 'runtimeEventWindow').mockResolvedValue({
+            schema_version: 'runtime.events.v1', captured_at: checkedAt + 2, cursor: 0, has_more: false,
+            snapshot: 'a'.repeat(32), events: [],
+            window: {from_time: checkedAt - 300, to_time: checkedAt + 1, coverage: 'complete', retained_from: 100},
+        });
+
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await screen.findByRole('heading', {name: '机器甲'});
+        fireEvent.click(screen.getByText('设备管家'));
+        const batch = screen.getByRole('region', {name: '批量只读自检'});
+        fireEvent.click(within(batch).getByRole('button', {name: '选择检查机器'}));
+        for (const item of [first, second, offline]) {
+            fireEvent.click(await within(batch).findByRole('checkbox', {name: new RegExp(item.name)}));
+        }
+        fireEvent.click(within(batch).getByRole('button', {name: '开始批量自检（3 台）'}));
+        expect(await within(batch).findByText('已处理 3 / 3 台')).toBeInTheDocument();
+        expect(jest.mocked(ComputeClusterService.programs).mock.calls.map(args => args[0])).not.toContain(offline.node_id);
+        fireEvent.click(within(batch).getByRole('button', {name: '查看 机器乙 自检'}));
+        expect(screen.getByRole('combobox', {name: '选择机器'})).toHaveValue(second.node_id);
+        expect(within(screen.getByRole('region', {name: '最近自检记录'})).getByText('故障')).toBeInTheDocument();
+
+        jest.mocked(ComputeClusterService.programs).mockResolvedValue({...mountedProgram, programs: []});
+        fireEvent.click(screen.getByRole('button', {name: '手动自检'}));
+        const results = () => within(screen.getByRole('region', {name: '设备自检结果'}));
+        expect(await results().findByText('未挂载程序')).toBeInTheDocument();
+        fireEvent.click(within(batch).getByRole('button', {name: '查看 机器乙 自检'}));
+        expect(results().getByText(/HTTP 503/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: '返回最近自检'}));
+        expect(results().getByText('未挂载程序')).toBeInTheDocument();
+
+        fireEvent.click(within(batch).getByRole('button', {name: '查看 机器乙 日志'}));
+        await waitFor(() => expect(query).toHaveBeenCalledWith(
+            second.node_id, checkedAt - 300, checkedAt + 1, 0, expect.any(AbortSignal),
+            {id: mountedProgram.programs[0].program_id, snapshot: undefined},
+        ));
+    });
+
+    it('opens the chosen file tool on the selected machine without starting a scan', async () => {
+        const first = node('第一台机器', true);
+        const chosen = node('选中的机器', true);
+        chosen.capabilities.push('task.storage.scan.v1', 'task.duplicate.scan.v1', 'filesystem.list.v1');
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([first, chosen]);
+        const create = jest.spyOn(ComputeClusterService, 'createStorageAuthorization');
+        const browse = jest.spyOn(ComputeClusterService, 'createFilesystemAuthorization');
+
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await screen.findByRole('heading', {name: first.name});
+        fireEvent.click(screen.getByText('设备管家'));
+        let manager = screen.getByRole('region', {name: '设备管家工作区'});
+        fireEvent.change(within(manager).getByRole('combobox', {name: '选择机器'}), {target: {value: chosen.node_id}});
+        fireEvent.click(within(manager).getByRole('button', {name: '重复文件'}));
+        expect(screen.getByRole('textbox', {name: '重复文件扫描目录'})).toBeVisible();
+        expect(screen.queryByRole('textbox', {name: '扫描目录', exact: true})).not.toBeInTheDocument();
+        const tools = screen.getByRole('group', {name: '存储工具'});
+        fireEvent.click(within(tools).getByRole('button', {name: '存储分析'}));
+        expect(screen.getByRole('spinbutton', {name: '大文件阈值（MiB）'})).toHaveValue(50);
+        expect(create).not.toHaveBeenCalled();
+
+        const navigation = screen.getByLabelText('设备管家列表');
+        fireEvent.click(within(navigation).getByRole('button', {name: /设备工作台/}));
+        manager = screen.getByRole('region', {name: '设备管家工作区'});
+        fireEvent.click(within(manager).getByRole('button', {name: '文件管理'}));
+        const files = screen.getByRole('region', {name: '节点文件管理'});
+        expect(within(files).getByRole('combobox', {name: '目标节点'})).toHaveValue(chosen.node_id);
+        expect(browse).not.toHaveBeenCalled();
+    });
+
+    it('opens terminal connection from the device manager in the main canvas', async () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
             node('在线节点', true),
         ]);
@@ -1530,37 +2103,97 @@ describe('ControlCenterView', () => {
         const {container} = render(<ControlCenterView language={Language.CHINESE}/>);
 
         await screen.findByRole('heading', {name: '在线节点'});
-        fireEvent.click(screen.getByText('相关功能'));
-        fireEvent.click(within(screen.getByLabelText('相关功能列表')).getByRole('button', {name: /终端连接/}));
+        fireEvent.click(screen.getByText('设备管家'));
+        fireEvent.click(within(screen.getByLabelText('设备管家列表')).getByRole('button', {name: /终端连接/}));
 
         expect(await screen.findByRole('heading', {name: '节点终端连接'})).toBeInTheDocument();
-        expect(screen.getByLabelText('终端指令')).toBeInTheDocument();
+        expect(screen.getByLabelText('终端输出')).toBeInTheDocument();
         await waitFor(() => expect(screen.getByRole('combobox', {name: '目标节点'})).toHaveValue('在线节点-id'));
         expect(container.querySelector('.ControlCenterBody .ComputeTerminalPanel')).toBeInTheDocument();
     });
 
-    it('opens single-node storage analysis from related features', async () => {
+    it('opens single-node storage analysis from the device manager', async () => {
         const machine = node('在线节点', true);
         machine.capabilities.push('task.storage.scan.v1');
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([machine]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         await screen.findByRole('heading', {name: '在线节点'});
-        fireEvent.click(screen.getByText('相关功能'));
-        fireEvent.click(within(screen.getByLabelText('相关功能列表')).getByRole('button', {name: /实用工具/}));
+        fireEvent.click(screen.getByText('设备管家'));
+        fireEvent.click(within(screen.getByLabelText('设备管家列表')).getByRole('button', {name: /实用工具/}));
 
         expect(screen.getByRole('heading', {name: '存储分析'})).toBeInTheDocument();
         expect(screen.getByText('只读 · 正常')).toBeInTheDocument();
         expect(screen.getByRole('textbox', {name: '扫描目录'})).toBeInTheDocument();
     });
 
-    it('opens terminal connection from the network status cards', async () => {
+    it.each([
+        ['分析此目录', '扫描目录', '重复文件', '重复文件扫描目录'],
+        ['查找重复文件', '重复文件扫描目录', '存储分析', '扫描目录'],
+    ])('prefills the verified directory when opening %s from a different file node', async (action, input, otherTab, otherInput) => {
+        const first = node('初始节点', true);
+        const targetNode = node('目标节点', true, false, undefined, 'Linux');
+        targetNode.capabilities.push('filesystem.list.v1', 'task.storage.scan.v1', 'task.duplicate.scan.v1');
+        const user = {user_id: 'fixture-user', user_name: 'Fixture user', user_public_key: 'fixture-key'};
+        const target = {kind: 'path' as const, path: '/tmp/OpenSight fixture'};
+        const authorization = {
+            version: 1 as const,
+            purpose: 'model-work-node.user-authorization.v1' as const,
+            authorization_id: 'fixture-authorization',
+            ...user,
+            target_installation_id: targetNode.installation_id,
+            operation: 'filesystem.list' as const,
+            target,
+            parameters: {limit: 500},
+            nonce: 'fixture-nonce',
+            issued_at: 1,
+            expires_at: 2,
+            state: 'pending' as const,
+            error_code: null,
+        };
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([first, targetNode]);
+        jest.mocked(ApprovalIdentity.getApprovalIdentity).mockReturnValueOnce({privateKey: null, user});
+        jest.mocked(ApprovalIdentity.signAuthorization).mockResolvedValueOnce('fixture-signature');
+        jest.spyOn(ComputeClusterService, 'createFilesystemAuthorization').mockResolvedValue({
+            ...authorization, node_name: targetNode.name,
+        });
+        jest.spyOn(ComputeClusterService, 'approveFilesystemAuthorization').mockResolvedValue({
+            authorization: {...authorization, state: 'succeeded'},
+            result: {schema_version: 'filesystem.list-result.v1', target, entries: [], total: 0, truncated: false},
+        });
+        const storage = jest.spyOn(ComputeClusterService, 'createStorageAuthorization').mockRejectedValue(new Error('unexpected'));
+        const duplicates = jest.spyOn(ComputeClusterService, 'createDuplicateAuthorization').mockRejectedValue(new Error('unexpected'));
+
+        render(<ControlCenterView language={Language.CHINESE}/>);
+        await screen.findByRole('heading', {name: first.name});
+        fireEvent.click(screen.getByText('设备管家'));
+        fireEvent.click(within(screen.getByLabelText('设备管家列表')).getByRole('button', {name: /文件管理/}));
+        fireEvent.change(screen.getByRole('combobox', {name: '目标节点'}), {target: {value: targetNode.node_id}});
+        const scan = await screen.findByRole('button', {name: action});
+        expect(screen.getByRole('button', {name: '查找重复文件'})).toBeEnabled();
+        fireEvent.change(screen.getByRole('textbox', {name: '绝对目录路径'}), {target: {value: '/tmp/unopened'}});
+        fireEvent.click(scan);
+
+        expect(screen.getByRole('textbox', {name: input})).toHaveValue(target.path);
+        fireEvent.click(within(screen.getByRole('group', {name: '存储工具'})).getByRole('button', {name: otherTab}));
+        expect(screen.getByRole('textbox', {name: otherInput})).toHaveValue(target.path);
+        fireEvent.click(within(screen.getByLabelText('设备管家列表')).getByRole('button', {name: /设备工作台/}));
+        expect(screen.getByRole('combobox', {name: '选择机器'})).toHaveValue(targetNode.node_id);
+        expect(storage).not.toHaveBeenCalled();
+        expect(duplicates).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['lan', 'SSH 局域网', '局域网 SSH'],
+        ['tailscale', 'Tailscale 远程', 'Tailscale'],
+        ['tailcat', 'Tailcat 远程', 'Tailcat'],
+    ] as const)('opens the %s terminal from the network status card', async (route, card, label) => {
         const terminalSession = {
             version: 1 as const,
             session_id: 'terminal-session-1',
             node_id: '在线节点-id',
             node_name: '在线节点',
-            transport: 'tailscale' as const,
+            transport: route,
             state: 'running' as const,
             created_at: 1,
             last_activity_at: 1,
@@ -1570,9 +2203,9 @@ describe('ControlCenterView', () => {
             exit_code: null,
             error: null,
         };
-        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
-            node('在线节点', true),
-        ]);
+        const active = node('在线节点', true, false, null, 'Windows', route === 'tailcat' ? 'lan' : route);
+        active.network.tailcat_ssh_available = route === 'tailcat';
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([active]);
         jest.spyOn(ComputeClusterService, 'terminalTargets').mockResolvedValue({
             version: 1,
             enabled: true,
@@ -1582,6 +2215,7 @@ describe('ControlCenterView', () => {
                 platform: 'Windows',
                 online: true,
                 available: true,
+                tailcat_available: route === 'tailcat',
                 reason: 'available',
             }],
         });
@@ -1590,24 +2224,23 @@ describe('ControlCenterView', () => {
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         await screen.findByRole('heading', {name: '在线节点'});
-        expect(screen.getByRole('button', {name: /SSH 局域网.*打开当前节点终端连接/})).toBeEnabled();
-        fireEvent.click(screen.getByRole('button', {name: /Tailscale 远程.*打开当前节点终端连接/}));
+        fireEvent.click(screen.getByRole('button', {name: new RegExp(`${card}.*打开当前节点终端连接`)}));
 
         expect(await screen.findByRole('heading', {name: '节点终端连接'})).toBeInTheDocument();
         await waitFor(() => expect(screen.getByRole('combobox', {name: '目标节点'})).toHaveValue('在线节点-id'));
         await waitFor(() => expect(ComputeClusterService.startTerminal)
-            .toHaveBeenCalledWith('在线节点-id', 'tailscale'));
-        expect(await screen.findByText('Tailscale · 正常')).toBeInTheDocument();
+            .toHaveBeenCalledWith('在线节点-id', route));
+        expect(await screen.findByText(`${label} · 已连接`)).toBeInTheDocument();
     });
 
-    it('opens network assets from related features in the main canvas', async () => {
+    it('opens network assets from the device manager in the main canvas', async () => {
         jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([
             node('在线节点', true),
         ]);
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         await screen.findByRole('heading', {name: '在线节点'});
-        fireEvent.click(screen.getByText('相关功能'));
+        fireEvent.click(screen.getByText('设备管家'));
         fireEvent.click(screen.getByRole('button', {name: /网络资产/}));
 
         expect(await screen.findByRole('heading', {name: '节点局域网资产'})).toBeInTheDocument();
@@ -1730,7 +2363,7 @@ describe('ControlCenterView', () => {
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         await screen.findByRole('heading', {name: '在线节点'});
-        fireEvent.click(screen.getByText('相关功能'));
+        fireEvent.click(screen.getByText('设备管家'));
         fireEvent.click(screen.getByRole('button', {name: /群查询/}));
 
         const list = await screen.findByLabelText('当前群列表');
@@ -1784,7 +2417,7 @@ describe('ControlCenterView', () => {
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         await screen.findByRole('heading', {name: '在线节点'});
-        fireEvent.click(screen.getByText('相关功能'));
+        fireEvent.click(screen.getByText('设备管家'));
         fireEvent.click(screen.getByRole('button', {name: /群查询/}));
 
         expect(await screen.findByText('当前没有可查询的群')).toBeInTheDocument();
@@ -1792,6 +2425,31 @@ describe('ControlCenterView', () => {
         expect(screen.queryByRole('button', {name: '加入现场群'})).not.toBeInTheDocument();
         expect(ComputeClusterService.group).not.toHaveBeenCalled();
         expect(ComputeClusterService.groupResources).not.toHaveBeenCalled();
+    });
+
+    it('reports group and join permissions independently and recovers the group count on retry', async () => {
+        const onlineNode = node('在线节点', true);
+        jest.spyOn(ComputeClusterService, 'nodes').mockResolvedValue([onlineNode]);
+        jest.spyOn(ComputeClusterService, 'resourceGraph').mockRejectedValue(new Error('graph unavailable'));
+        jest.mocked(ComputeClusterService.groups)
+            .mockRejectedValueOnce(new ComputeClusterRequestError(403, 'Forbidden'));
+        jest.mocked(ComputeClusterService.joinRequests)
+            .mockRejectedValue(new ComputeClusterRequestError(403, 'Forbidden'));
+        render(<ControlCenterView language={Language.CHINESE}/>);
+
+        await screen.findByRole('heading', {name: '在线节点'});
+        fireEvent.click(screen.getByText('设备管家'));
+        fireEvent.click(screen.getByRole('button', {name: /群查询/}));
+
+        expect(await screen.findByText('当前账号无权查询群成员关系。')).toBeInTheDocument();
+        expect(await screen.findByText('当前账号无权管理入群。')).toBeInTheDocument();
+        expect(screen.queryByText('当前没有可查询的群')).not.toBeInTheDocument();
+        expect(screen.queryByText('当前没有待审批申请')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: '生成群号'})).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', {name: '刷新机器状态'}));
+        expect(await screen.findByText('当前没有可查询的群')).toBeInTheDocument();
+        expect(screen.getByText('当前账号无权管理入群。')).toBeInTheDocument();
     });
 
     it('lets the Master approve CLI join requests and rotate the join code', async () => {
@@ -1841,7 +2499,7 @@ describe('ControlCenterView', () => {
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         await screen.findByRole('heading', {name: '在线节点'});
-        fireEvent.click(screen.getByText('相关功能'));
+        fireEvent.click(screen.getByText('设备管家'));
         fireEvent.click(screen.getByRole('button', {name: /群查询/}));
 
         expect(await screen.findByDisplayValue('mwn1.secret-code')).toBeInTheDocument();
@@ -1902,7 +2560,7 @@ describe('ControlCenterView', () => {
         render(<ControlCenterView language={Language.CHINESE}/>);
 
         await screen.findByRole('heading', {name: '在线节点'});
-        fireEvent.click(screen.getByText('相关功能'));
+        fireEvent.click(screen.getByText('设备管家'));
         fireEvent.click(screen.getByRole('button', {name: /群查询/}));
         const list = await screen.findByLabelText('当前群列表');
         fireEvent.click(within(list).getByRole('button', {name: /factory-a/}));

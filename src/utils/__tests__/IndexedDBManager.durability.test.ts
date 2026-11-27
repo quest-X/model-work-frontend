@@ -500,6 +500,47 @@ describe('IndexedDBManager durability', () => {
         });
     });
 
+    it('deletes only the selected historical revision after both stores commit', async () => {
+        const harness = transactionHarness();
+        const request: FakeRequest<StoredMeta> = {};
+        const transaction = {
+            ...harness.transaction,
+            objectStore: (name: string) => ({
+                ...harness.transaction.objectStore(name),
+                get: () => request,
+            }),
+        };
+        setDatabase(() => transaction);
+        IndexedDBManager['workspaceId'] = 'tab-local';
+
+        const deleting = IndexedDBManager.deleteAnnotatedProject('tab-foreign', 41);
+        request.result = {
+            id: 'tab-foreign', projectId: 'workspace:tab-foreign',
+            imageCount: 1, validImageCount: 1, labelCount: 1,
+            isVideoProject: false, hasRecoverableProject: true, lastModified: 41,
+        };
+        request.onsuccess?.();
+        expect(harness.deletes).toEqual([
+            {store: 'projects', key: 'workspace:tab-foreign'},
+            {store: 'workspaceMeta', key: 'tab-foreign'},
+        ]);
+        transaction.oncomplete?.();
+        await expect(deleting).resolves.toBe(true);
+        await expect(IndexedDBManager.deleteAnnotatedProject('tab-local', 41)).resolves.toBe(false);
+
+        const deletingCurrent = IndexedDBManager.deleteAnnotatedProject('tab-local', 42, true);
+        request.result = {
+            ...request.result, id: 'tab-local', projectId: 'workspace:tab-local', lastModified: 42,
+        };
+        request.onsuccess?.();
+        transaction.oncomplete?.();
+        await expect(deletingCurrent).resolves.toBe(true);
+        expect(harness.deletes.slice(-2)).toEqual([
+            {store: 'projects', key: 'workspace:tab-local'},
+            {store: 'workspaceMeta', key: 'tab-local'},
+        ]);
+    });
+
     it('hides a dismissed foreign revision but offers a newer save from that workspace', async () => {
         sessionStorage.setItem('opensight-recovery-dismissed-foreign-snapshot', JSON.stringify({
             workspaceId: 'tab-local',
@@ -643,7 +684,9 @@ describe('IndexedDBManager durability', () => {
             hasRecoverableProject: true, lastModified: 20,
         };
         const empty = {...annotated, id: 'task-b', projectId: 'workspace:task-b', labelCount: 0};
-        const request: FakeRequest<Array<typeof annotated>> = {result: [empty, annotated]};
+        const imageTask = {...annotated, id: 'task-c', projectId: 'workspace:task-c',
+            isVideoProject: false, lastModified: 10};
+        const request: FakeRequest<Array<typeof annotated>> = {result: [empty, imageTask, annotated]};
         setDatabase(() => ({
             error: null,
             objectStore: () => ({
@@ -653,18 +696,32 @@ describe('IndexedDBManager durability', () => {
                 },
             }),
         }));
-        const readProject = mockMethod('readProjectById').mockResolvedValue({
-            ...project(), activeQueueItemId: 'video',
-            queueItems: [{
-                id: 'video', name: 'dog_4166347', type: QueueItemType.VIDEO,
-                status: QueueItemStatus.COMPLETED, uploadedAt: 1,
-            }],
-        });
+        const firstImageFileData = new Uint8Array([1, 2, 3]).buffer;
+        const readProject = mockMethod('readProjectById').mockImplementation(async projectId =>
+            projectId === 'workspace:task-c' ? {
+                ...project(), activeQueueItemId: 'image',
+                queueItems: [{id: 'image', name: 'first.jpg', type: QueueItemType.IMAGE,
+                    status: QueueItemStatus.COMPLETED, uploadedAt: 1}],
+                images: [{id: 'first', fileName: 'first.jpg', fileData: firstImageFileData,
+                    fileType: 'image/jpeg', loadStatus: true, labelRects: [rectangle('first')],
+                    labelPoints: [], labelLines: [], labelPolygons: [], labelNameIds: ['steel']}],
+            } : {
+                ...project(), activeQueueItemId: 'video',
+                queueItems: [{
+                    id: 'video', name: 'dog_4166347', type: QueueItemType.VIDEO,
+                    thumbnail: 'data:image/png;base64,first-frame',
+                    status: QueueItemStatus.COMPLETED, uploadedAt: 1,
+                }],
+            });
 
         await expect(IndexedDBManager.listAnnotatedProjects()).resolves.toEqual([
-            expect.objectContaining({workspaceId: 'task-a', projectName: 'dog_4166347', labelCount: 5}),
+            expect.objectContaining({workspaceId: 'task-a', projectName: 'dog_4166347',
+                thumbnail: 'data:image/png;base64,first-frame', labelCount: 5}),
+            expect.objectContaining({workspaceId: 'task-c', projectName: 'first.jpg',
+                firstImageFileData, firstImageFileType: 'image/jpeg'}),
         ]);
         expect(readProject).toHaveBeenCalledWith('workspace:task-a');
+        expect(readProject).toHaveBeenCalledWith('workspace:task-c');
     });
 
     it('pins a specifically selected historical snapshot for restore', async () => {

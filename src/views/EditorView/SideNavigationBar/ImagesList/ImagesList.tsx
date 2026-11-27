@@ -33,8 +33,10 @@ interface IState {
     isDragActive: boolean;
 }
 
-class ImagesList extends React.Component<IProps, IState> {
+export class ImagesList extends React.Component<IProps, IState> {
     private imagesListRef: HTMLDivElement;
+    private selectionImages: ImageData[];
+    private firstSelectedIndex = -1;
 
     constructor(props: IProps) {
         super(props);
@@ -180,14 +182,7 @@ class ImagesList extends React.Component<IProps, IState> {
             this.notifySelectionChanged(-1, -1);
         } else {
             ImageActions.goToImageByIndex(index);
-            this.props.imagesData.forEach((img, idx) => {
-                if (img.isSelected && idx !== index) {
-                    store.dispatch(toggleImageSelection(img.id));
-                }
-            });
-            if (!imageData.isSelected) {
-                store.dispatch(toggleImageSelection(imageData.id));
-            }
+            store.dispatch(selectImageRange(index, index));
             this.setState({ lastClickedIndex: index });
             this.notifySelectionChanged(-1, -1);
         }
@@ -234,7 +229,11 @@ class ImagesList extends React.Component<IProps, IState> {
     };
 
     private getFirstSelectedIndex = (): number => {
-        return this.props.imagesData.findIndex((img) => img.isSelected);
+        if (this.selectionImages !== this.props.imagesData) {
+            this.selectionImages = this.props.imagesData;
+            this.firstSelectedIndex = this.props.imagesData.findIndex(img => img.isSelected);
+        }
+        return this.firstSelectedIndex;
     };
 
     private renderImagePreview = (index: number, isScrolling: boolean, isVisible: boolean, style: React.CSSProperties) => {
@@ -251,6 +250,7 @@ class ImagesList extends React.Component<IProps, IState> {
             isChecked={this.isImageChecked(index)}
             isInferred={isInferred}
             imageData={imageData}
+            imageIndex={index}
             onClick={() => this.onClickHandler(index)}
             isSelected={this.props.activeImageIndex === index}
             isMultiSelected={imageData.isSelected}

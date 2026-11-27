@@ -77,6 +77,12 @@ export class EditorActions {
         DrawUtil.clearCanvas(EditorModel.canvas);
         // Cache EditorData so it's computed once per render, not once per engine
         const data = EditorActions.getEditorData();
+        const geometry = data.viewPortContentImageRect && data.realImageSize
+            ? JSON.stringify({imageRect: data.viewPortContentImageRect, imageSize: data.realImageSize})
+            : '';
+        if (EditorModel.canvas.dataset.annotationGeometry !== geometry) {
+            EditorModel.canvas.dataset.annotationGeometry = geometry;
+        }
         EditorModel.primaryRenderingEngine.render(data);
         EditorModel.supportRenderingEngine && EditorModel.supportRenderingEngine.render(data);
     }

@@ -38,6 +38,13 @@
   }
 }
 
+.AccountPlatformLogin {
+  margin-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  padding-top: 12px;
+  h4 { margin: 0 0 10px; font-size: 11px; }
+}
+
 .AccountCenterNotice,
 .AccountCenterError,
 .AccountCenterSuccess {
@@ -120,6 +127,7 @@
 .AccountIdentity { display: block; overflow: hidden; margin-top: 8px; color: #888; overflow-wrap: anywhere; }
 .AccountList { display: grid; gap: 7px; max-height: 190px; overflow: auto; > div { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.05); padding: 7px 0; font-size: 10px; strong { color: #ddd; } span { color: #888; } small { grid-column: 1 / -1; overflow: hidden; color: #666; text-overflow: ellipsis; white-space: nowrap; } } }
 .AccountCenterGrid .AccountSecondaryAction { margin-top: 12px; background: #34383c; color: #ddd; }
+.AccountCenterGrid .AccountDefaultPlatform { margin-top: 18px; }
 .AccountMemberFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
 .AccountMemberActions { display: flex; gap: 8px; }
 .AccountCenterGrid .AccountDangerAction { background: #713939; }

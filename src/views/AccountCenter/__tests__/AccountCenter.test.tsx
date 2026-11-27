@@ -1,6 +1,7 @@
 import React from 'react';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {AccountCenter} from '../AccountCenter';
+import {getDefaultPlatform} from '../../../services/PlatformPreferenceService';
 import {AccountUser, accountAudit, accountSessions, accountUsers, changeAccountPassword,
     createMemberAccount, revokeOtherAccountSessions, updateAccountProfile,
     updateMemberAccount, uploadAccountAvatar} from '../../../services/AccountService';
@@ -18,6 +19,7 @@ const user: AccountUser = {account_id: 'account-1', username: 'admin', display_n
 
 beforeEach(() => {
     jest.resetAllMocks();
+    localStorage.clear();
     (accountSessions as jest.Mock).mockResolvedValue({sessions: [{current: false, created_at: 1,
         expires_at: 2000000000, last_seen_at: 2, client_label: 'Browser'}]});
     (accountAudit as jest.Mock).mockResolvedValue({events: []});
@@ -109,6 +111,40 @@ it('reports failed saves and allows retry', async () => {
     expect(screen.getByText('Save changes')).toBeEnabled();
 });
 
+it.each([true, false])('persists the default platform independently of profile edits (zh=%s)', async zh => {
+    const props = {user, zh, onClose: jest.fn(), onUserChanged: jest.fn()};
+    const {unmount} = render(<AccountCenter {...props}/>);
+    await screen.findByText('Browser');
+    const label = zh ? '默认进入平台' : 'Default platform';
+    expect(screen.getByLabelText(label)).toHaveValue('control');
+    fireEvent.change(screen.getByLabelText(label), {target: {value: 'annotation'}});
+    expect(screen.getByLabelText(label)).toHaveValue('annotation');
+    expect(getDefaultPlatform(user)).toBe('annotation');
+    expect(screen.getByRole('status')).toHaveTextContent(zh
+        ? '默认进入平台已保存，下次打开时生效。' : 'Default platform saved for your next visit.');
+    expect(updateAccountProfile).not.toHaveBeenCalled();
+    unmount();
+    render(<AccountCenter {...props}/>);
+    await screen.findByText('Browser');
+    expect(screen.getByLabelText(label)).toHaveValue('annotation');
+    fireEvent.change(screen.getByLabelText(label), {target: {value: 'control'}});
+    expect(getDefaultPlatform(user)).toBe('control');
+});
+
+it('shows a storage failure without claiming the default platform was saved', async () => {
+    render(<AccountCenter user={user} zh={false} onClose={jest.fn()} onUserChanged={jest.fn()}/>);
+    await screen.findByText('Browser');
+    const write = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    try {
+        fireEvent.change(screen.getByLabelText('Default platform'), {target: {value: 'annotation'}});
+        expect(screen.getByRole('status')).toHaveTextContent('Could not save the default platform.');
+        expect(screen.getByLabelText('Default platform')).toHaveValue('control');
+        expect(getDefaultPlatform(user)).toBe('control');
+    } finally {
+        write.mockRestore();
+    }
+});
+
 it('revokes other sessions and reloads the device list', async () => {
     (revokeOtherAccountSessions as jest.Mock).mockResolvedValue({revoked: 1});
     render(<AccountCenter user={user} zh={false} onClose={jest.fn()} onUserChanged={jest.fn()}/>);
@@ -130,7 +166,7 @@ it('generates passwords directly without a dropdown or replacing the current pas
     fireEvent.click(screen.getByRole('button', {name: 'Generate password'}));
     const second = (screen.getByLabelText('New password (10+ characters)') as HTMLInputElement).value;
     expect(second).not.toBe(first);
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toHaveAccessibleName('Default platform');
     expect(screen.getByLabelText('Confirm password')).toHaveValue(second);
     fireEvent.click(screen.getByRole('button', {name: 'Show passwords'}));
     expect(screen.getByLabelText('Current password')).toHaveAttribute('type', 'text');

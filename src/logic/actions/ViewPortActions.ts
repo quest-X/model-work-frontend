@@ -76,8 +76,8 @@ export class ViewPortActions {
 
     public static resizeCanvas(newCanvasSize: ISize) {
         if (!!newCanvasSize && !!EditorModel.canvas) {
-            EditorModel.canvas.width = newCanvasSize.width;
-            EditorModel.canvas.height = newCanvasSize.height;
+            if (EditorModel.canvas.width !== Math.floor(newCanvasSize.width)) EditorModel.canvas.width = newCanvasSize.width;
+            if (EditorModel.canvas.height !== Math.floor(newCanvasSize.height)) EditorModel.canvas.height = newCanvasSize.height;
         }
     }
 

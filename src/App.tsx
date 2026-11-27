@@ -17,6 +17,7 @@ import { AutoSaveService } from './services/AutoSaveService';
 import { ProjectRestoreService } from './services/ProjectRestoreService';
 import {IndexedDBManager, RecoveryStorageReadError} from './utils/IndexedDBManager';
 import {currentAccountSession} from './services/AccountService';
+import {getDefaultPlatform} from './services/PlatformPreferenceService';
 import {RestorePrompt, StoredDataInfo} from './views/Common/RestorePrompt';
 
 interface IProps {
@@ -31,8 +32,11 @@ export const App: React.FC<IProps> = (
         roboflowAPIDetails
     }
 ) => {
+    const [startNewWork] = useState(() => new URLSearchParams(window.location.search).get('new_work') === '1');
     const [restoreWorkspaceId] = useState(() =>
         new URLSearchParams(window.location.search).get('restore_workspace') || undefined);
+    const [autoRestoreWorkspace] = useState(() =>
+        new URLSearchParams(window.location.search).get('auto_restore') === '1');
     const [isRestoring, setIsRestoring] = useState(true);
     const [showRestorePrompt, setShowRestorePrompt] = useState(false);
     const [storedDataInfo, setStoredDataInfo] = useState<StoredDataInfo | null>(null);
@@ -40,7 +44,8 @@ export const App: React.FC<IProps> = (
     const [restoreStatus, setRestoreStatus] = useState<string>('正在加载...');
     const [storageUnavailable, setStorageUnavailable] = useState(false);
     const [platformMode, setPlatformMode] = useState<PlatformMode>(
-        () => currentAccountSession()?.user.role === 'admin' ? 'control' : 'annotation',
+        () => startNewWork || autoRestoreWorkspace
+            ? 'annotation' : getDefaultPlatform(currentAccountSession()?.user),
     );
 
     const beforeOpenAnnotationResource = () => {
@@ -68,9 +73,28 @@ export const App: React.FC<IProps> = (
                 return;
             }
 
+            // An explicit new-work launch uses this tab's isolated workspace. Keep all
+            // recovery snapshots, but do not offer another workspace's project here.
+            if (startNewWork) {
+                await ProjectRestoreService.restoreSettings();
+                setStoredDataInfo({hasSettings: true, hasProject: false, lastSaved: 0});
+                AutoSaveService.resume();
+                const url = new URL(window.location.href);
+                url.searchParams.delete('new_work');
+                window.history.replaceState(window.history.state, '', url);
+                setIsRestoring(false);
+                return;
+            }
+
             // 检查是否有存储的数据
             const dataInfo = await ProjectRestoreService.checkForStoredData(restoreWorkspaceId);
             setStoredDataInfo(dataInfo);
+
+            if (autoRestoreWorkspace && restoreWorkspaceId && !dataInfo.hasProject) {
+                setRestoreError('所选历史任务已不可恢复。请返回历史任务列表刷新。');
+                setIsRestoring(true);
+                return;
+            }
 
             // 项目恢复只属于标注平台。控制中心保留待恢复快照但不弹窗；
             // 仅有设置时静默恢复，避免把偏好数据误当成标注工作。
@@ -78,7 +102,7 @@ export const App: React.FC<IProps> = (
                 await ProjectRestoreService.restoreSettings();
             }
             if (!dataInfo.hasProject) AutoSaveService.resume();
-            setIsRestoring(false);
+            if (!autoRestoreWorkspace || !restoreWorkspaceId) setIsRestoring(false);
         } catch (error) {
             console.error('应用初始化失败:', error);
             // A read failure is not evidence that no snapshot exists. Keep the
@@ -96,14 +120,6 @@ export const App: React.FC<IProps> = (
     useEffect(() => {
         initializeApp();
     }, []);
-
-    useEffect(() => {
-        if (platformMode !== 'annotation'
-            || (!storedDataInfo?.hasProject && !storageUnavailable)) return;
-        AutoSaveService.suspend();
-        setShowRestorePrompt(true);
-        setIsRestoring(true);
-    }, [platformMode, storageUnavailable, storedDataInfo]);
 
     const handleRestoreConfirm = async () => {
         setRestoreError(null);
@@ -141,6 +157,7 @@ export const App: React.FC<IProps> = (
             if (restoreWorkspaceId) {
                 const url = new URL(window.location.href);
                 url.searchParams.delete('restore_workspace');
+                url.searchParams.delete('auto_restore');
                 window.history.replaceState(window.history.state, '', url);
             }
             setStoredDataInfo(current => current ? {...current, hasProject: false} : current);
@@ -159,11 +176,32 @@ export const App: React.FC<IProps> = (
                 setStorageUnavailable(true);
             }
             setRestoreError(`恢复失败：${detail}。恢复数据仍然保留，可以修复问题后重试。`);
+            if (autoRestoreWorkspace) setShowRestorePrompt(true);
         }
     };
 
+    useEffect(() => {
+        if (platformMode !== 'annotation'
+            || (!storedDataInfo?.hasProject && !storageUnavailable)) return;
+        AutoSaveService.suspend();
+        setIsRestoring(true);
+        if (autoRestoreWorkspace && restoreWorkspaceId && storedDataInfo?.hasProject && !storageUnavailable) {
+            void handleRestoreConfirm();
+        } else {
+            setShowRestorePrompt(true);
+        }
+    }, [platformMode, storageUnavailable, storedDataInfo]);
+
     // 重新开始：清除 IndexedDB 旧数据，避免下次刷新再次弹出恢复提示
     const handleRestoreCancel = async () => {
+        if (autoRestoreWorkspace && restoreWorkspaceId) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('restore_workspace');
+            url.searchParams.delete('auto_restore');
+            window.history.replaceState(window.history.state, '', url);
+            window.location.reload();
+            return;
+        }
         try {
             // 等待已有写入完全落盘后再清除，并保持 suspend，避免一个较慢的旧 save
             // 在 clear 之后完成、把用户刚清掉的数据“复活”。
@@ -190,6 +228,7 @@ export const App: React.FC<IProps> = (
             storageUnavailable={storageUnavailable}
             handleRestoreCancel={handleRestoreCancel}
             handleRestoreConfirm={handleRestoreConfirm}
+            historyNavigation={autoRestoreWorkspace && Boolean(restoreWorkspaceId)}
         />;
     }
 
@@ -198,6 +237,16 @@ export const App: React.FC<IProps> = (
             <div className="App loading">
                 <div className="loading-indicator">
                     <p className="restore-status">{restoreStatus}</p>
+                    {restoreError && !showRestorePrompt && <>
+                        <p role="alert">{restoreError}</p>
+                        <button type="button" onClick={() => {
+                            const url = new URL(window.location.href);
+                            url.searchParams.delete('restore_workspace');
+                            url.searchParams.delete('auto_restore');
+                            window.history.replaceState(window.history.state, '', url);
+                            window.location.reload();
+                        }}>返回当前任务</button>
+                    </>}
                 </div>
             </div>
         );
@@ -208,8 +257,9 @@ export const App: React.FC<IProps> = (
             return <MobileMainView/>;
 
         // 直接进入EditorView，跳过MainView和项目类型选择
-        if (windowSize.height < Settings.EDITOR_MIN_HEIGHT || windowSize.width < Settings.EDITOR_MIN_WIDTH) {
-            return <SizeItUpView/>;
+        const minimumWidth = platformMode === 'control' ? Settings.CONTROL_MIN_WIDTH : Settings.EDITOR_MIN_WIDTH;
+        if (windowSize.height < Settings.EDITOR_MIN_HEIGHT || windowSize.width < minimumWidth) {
+            return <SizeItUpView minimumWidth={minimumWidth}/>;
         } else {
             return <EditorView
                 platformMode={platformMode}

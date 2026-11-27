@@ -30,6 +30,7 @@ import {Settings} from '../../settings/Settings';
 import {SmartAnnotationActions} from '../actions/SmartAnnotationActions';
 import {LabelActions} from '../actions/LabelActions';
 import {publishRectLabelOverlayPosition} from '../../utils/RectLabelOverlayPositionBus';
+import {VideoSelector} from '../../store/selectors/VideoSelector';
 
 export class RectRenderEngine extends BaseRenderEngine {
 
@@ -853,9 +854,9 @@ export class RectRenderEngine extends BaseRenderEngine {
     // =================================================================================================================
     
     private drawLabelText(labelRect: LabelRect, rectOnImage: IRect): void {
-        // Accepted rectangles use the interactive DOM dropdown rendered by Editor.
-        // Drawing the legacy canvas label as well makes both labels overlap.
-        if (labelRect.status === LabelStatus.ACCEPTED) return;
+        // Playback labels follow decoded frames; paused editing uses the DOM dropdown.
+        const playing = VideoSelector.isVideoPlaying();
+        if (labelRect.status === LabelStatus.ACCEPTED && !playing) return;
 
         // 获取标签文字：优先使用已分配的标签名称，其次使用建议标签
         let labelText = '';
@@ -869,6 +870,9 @@ export class RectRenderEngine extends BaseRenderEngine {
         }
         
         if (!labelText) return;
+        if (playing && Number.isFinite(labelRect.confidence)) {
+            labelText += ` ${(labelRect.confidence * 100).toFixed(1)}%`;
+        }
         const labelPosition: IPoint = {
             x: rectOnImage.x,
             y: rectOnImage.y + 12  // 标签在标注框内部，上边缘对齐

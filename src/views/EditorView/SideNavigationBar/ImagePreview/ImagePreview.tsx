@@ -15,9 +15,11 @@ import { FrameExtractorService } from "../../../../services/FrameExtractorServic
 import './ImagePreview.scss';
 import { CSSHelper } from "../../../../logic/helpers/CSSHelper";
 import {getVideoThumbnailSize} from "../../../../utils/VideoThumbnailUtil";
+import {store} from "../../../../index";
 
 interface IProps {
     imageData: ImageData;
+    imageIndex?: number;
     style: React.CSSProperties;
     size: ISize;
     isScrolling?: boolean;
@@ -53,7 +55,7 @@ export class ImagePreview extends React.Component<IProps, IState> {
 
     public componentDidMount(): void {
         this.mounted = true;
-        ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, this.props.isScrolling));
+        ImageLoadManager.addAndRun(this.loadImage(this.props.imageData));
     }
 
     public componentWillUnmount(): void {
@@ -66,10 +68,10 @@ export class ImagePreview extends React.Component<IProps, IState> {
     public componentDidUpdate(prevProps: Readonly<IProps>): void {
         if (prevProps.imageData.id !== this.props.imageData.id) {
             this.setState({ image: null });
-            ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, this.props.isScrolling));
+            ImageLoadManager.addAndRun(this.loadImage(this.props.imageData));
         }
         else if (!prevProps.imageData.loadStatus && this.props.imageData.loadStatus) {
-            ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, this.props.isScrolling));
+            ImageLoadManager.addAndRun(this.loadImage(this.props.imageData));
         }
         // Evicted-detection: when LRU drops this image (src cleared) we still
         // hold the stale HTMLImageElement reference; on the NEXT re-render the
@@ -80,31 +82,34 @@ export class ImagePreview extends React.Component<IProps, IState> {
             this.loadingImageId !== this.props.imageData.id
         ) {
             this.setState({ image: null });
-            ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, this.props.isScrolling));
+            ImageLoadManager.addAndRun(this.loadImage(this.props.imageData));
         }
 
         if (prevProps.isScrolling && !this.props.isScrolling) {
-            ImageLoadManager.addAndRun(this.loadImage(this.props.imageData, false));
+            ImageLoadManager.addAndRun(this.loadImage(this.props.imageData));
         }
     }
 
     shouldComponentUpdate(nextProps: Readonly<IProps>, nextState: Readonly<IState>): boolean {
         return (
-            this.props.imageData.id !== nextProps.imageData.id ||
-            this.props.imageData.loadStatus !== nextProps.imageData.loadStatus ||
-            this.props.imageData.isSelected !== nextProps.imageData.isSelected ||
-            this.props.imageData.isVisitedByRoboflowAPI !== nextProps.imageData.isVisitedByRoboflowAPI ||
-            this.props.imageData.labelRects?.length !== nextProps.imageData.labelRects?.length ||
-            this.props.imageData.labelPolygons?.length !== nextProps.imageData.labelPolygons?.length ||
+            this.props.imageData !== nextProps.imageData ||
             this.state.image !== nextState.image ||
             this.props.isSelected !== nextProps.isSelected ||
             this.props.isChecked !== nextProps.isChecked ||
-            this.props.isMultiSelected !== nextProps.isMultiSelected
+            this.props.isMultiSelected !== nextProps.isMultiSelected ||
+            this.props.isFirstSelected !== nextProps.isFirstSelected ||
+            this.props.isScrolling !== nextProps.isScrolling ||
+            this.props.size.width !== nextProps.size.width ||
+            this.props.size.height !== nextProps.size.height ||
+            this.props.style.left !== nextProps.style.left ||
+            this.props.style.top !== nextProps.style.top ||
+            this.props.style.width !== nextProps.style.width ||
+            this.props.style.height !== nextProps.style.height
         )
     }
 
-    private loadImage = async (imageData: ImageData, isScrolling: boolean) => {
-        if (isScrolling && this.isLoading && this.loadingImageId === imageData.id) return;
+    private loadImage = async (imageData: ImageData) => {
+        if (this.isLoading && this.loadingImageId === imageData.id) return;
         const generation = ++this.requestGeneration;
         if (imageData.loadStatus) {
             const image = ImageRepository.getById(imageData.id);
@@ -224,9 +229,15 @@ export class ImagePreview extends React.Component<IProps, IState> {
             this.discardLoadedImage(image);
             return;
         }
-        const updated = { ...imageData, loadStatus: true };
-        this.props.updateImageDataById(updated.id, updated);
+        // Inference may have added annotations since this thumbnail request started.
+        const images = store.getState().labels.imagesData;
+        const indexed = images[this.props.imageIndex ?? -1];
+        const latest = indexed?.id === imageData.id ? indexed :
+            images.find(frame => frame.id === imageData.id) || this.props.imageData;
         ImageRepository.storeImage(imageData.id, image);
+        if (!latest.loadStatus) {
+            this.props.updateImageDataById(latest.id, { ...latest, loadStatus: true });
+        }
         if (imageData.id === this.props.imageData.id) {
             this.setState({ image });
         }

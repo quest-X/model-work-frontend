@@ -30,6 +30,27 @@ interface IProps {
     language: Language;
 }
 
+const checkEngineHealth = async (base: string, type: EngineType): Promise<void> => {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 8000);
+    try {
+        const res = await fetch(type === 'annotation' ? `${base}/status` : `${base}/health`, { signal: ac.signal });
+        if (!res.ok) throw new Error(`health ${res.status}`);
+        const health = await res.json();
+        if (type === 'annotation' && health.available !== true) {
+            throw new Error('Sigine OpenSight Platform client is not connected');
+        }
+        if (health.status && !['ok', 'ready', 'healthy'].includes(health.status)) {
+            throw new Error(`backend status: ${health.status}`);
+        }
+        if (health.engine?.type && health.engine.type !== type) {
+            throw new Error(`expected ${type} engine, received ${health.engine.type}`);
+        }
+    } finally {
+        clearTimeout(timer);
+    }
+};
+
 const ModelEnginePopup: React.FC<IProps> = (
     {
         submitNewNotificationAction,
@@ -43,10 +64,12 @@ const ModelEnginePopup: React.FC<IProps> = (
     const DEFAULT_API_KEY_BY_TYPE: Record<EngineType, string> = {
         core: '',
         extension: '',
+        annotation: '',
     };
     const defaultUrlByType: Record<EngineType, string> = {
         core: getDefaultCoreServiceBase(),
         extension: getDefaultExtensionServiceBase(),
+        annotation: `${getDefaultCoreServiceBase()}/sigine-infra`,
     };
     const [modelUrl, setModelUrl] = useState(defaultUrlByType.core);
     const [modelType, setModelType] = useState<EngineType>('core');
@@ -88,7 +111,7 @@ const ModelEnginePopup: React.FC<IProps> = (
 
     const disableAcceptButton = () => {
         if (isConnecting) return true;
-        // Engine type has exactly two legal values; only the URL needs validation.
+        // The annotation engine uses a server-side Sigine profile connection.
         return modelUrl.trim() === '';
     }
 
@@ -98,23 +121,13 @@ const ModelEnginePopup: React.FC<IProps> = (
         try {
             setIsConnecting(true);
             
-            const base = normalizeEngineBaseUrl(modelUrl, modelType);
-            const ac = new AbortController();
-            const timer = setTimeout(() => ac.abort(), 8000);
-            const res = await fetch(`${base}/health`, { signal: ac.signal });
-            clearTimeout(timer);
-            if (!res.ok) throw new Error(`health ${res.status}`);
-            const health = await res.json();
-            if (health.status && !['ok', 'ready', 'healthy'].includes(health.status)) {
-                throw new Error(`backend status: ${health.status}`);
-            }
-            if (health.engine?.type && health.engine.type !== modelType) {
-                throw new Error(`expected ${modelType} engine, received ${health.engine.type}`);
-            }
+            const base = modelType === 'annotation' ? defaultUrlByType.annotation : normalizeEngineBaseUrl(modelUrl, modelType);
+            await checkEngineHealth(base, modelType);
 
             const nameMap: Record<EngineType, string> = {
                 core: language === Language.CHINESE ? '核心引擎' : 'Core Engine',
                 extension: language === Language.CHINESE ? '拓展引擎' : 'Extension Engine',
+                annotation: language === Language.CHINESE ? '自动标注' : 'Auto Annotation',
             };
             const defaultName = nameMap[modelType];
             // 创建新的AI模型并添加到状态
@@ -147,9 +160,11 @@ const ModelEnginePopup: React.FC<IProps> = (
             console.error('Model integration failed:', error);
             submitNewNotificationAction(NotificationUtil.createErrorNotification({
                 header: language === Language.CHINESE ? '引擎接入失败' : 'Engine Connection Failed',
-                description: language === Language.CHINESE
-                    ? '无法连接到指定的推理引擎，请检查地址和网络连接后重试。'
-                    : 'Unable to connect to the inference engine. Please check the URL and network connection.'
+                description: modelType === 'annotation'
+                    ? (language === Language.CHINESE ? '请先在 Sigine 的 OpenSight Platform 客户端点击“打开平台”，完成 API 连接。' : 'Open the OpenSight Platform client in Sigine to connect its API first.')
+                    : language === Language.CHINESE
+                        ? '无法连接到指定的推理引擎，请检查地址和网络连接后重试。'
+                        : 'Unable to connect to the inference engine. Please check the URL and network connection.'
             }));
         } finally {
             setIsConnecting(false);
@@ -192,7 +207,11 @@ const ModelEnginePopup: React.FC<IProps> = (
         return (
             <div className='model-engine-popup-content'>
                 <div className='message'>
-                    {currentTexts.popups.modelEngine.integrationMessage}
+                    {modelType === 'annotation'
+                        ? (language === Language.CHINESE
+                            ? '通过 Sigine 的 OpenSight Platform 客户端连接视觉模型，用于自动标注复审。'
+                            : 'Connect vision models through the OpenSight Platform client in Sigine for annotation review.')
+                        : currentTexts.popups.modelEngine.integrationMessage}
                 </div>
                 <div className='details'>
                     <StyledTextField
@@ -205,6 +224,7 @@ const ModelEnginePopup: React.FC<IProps> = (
                         label={currentTexts.popups.modelEngine.modelUrl}
                         value={modelUrl}
                         onChange={modelUrlOnChangeCallback}
+                        InputProps={{ readOnly: modelType === 'annotation' }}
                         style={{ width: '100%', marginBottom: '20px' }}
                         placeholder={defaultUrlByType[modelType]}
                         InputLabelProps={{ shrink: true }}
@@ -223,8 +243,11 @@ const ModelEnginePopup: React.FC<IProps> = (
                             }
                         }}
                     />
+                    {modelType === 'annotation' && <p style={{fontSize: 12, color: '#aaa', margin: '0 0 12px'}}>
+                        {language === Language.CHINESE ? '使用 Sigine 中的 OpenSight Platform 客户端连接；凭据由 OpenSight 后端保存。' : 'Connect using the OpenSight Platform client in Sigine. Credentials stay on the OpenSight backend.'}
+                    </p>}
                     <div style={{ display: 'flex', gap: '16px', width: '100%', alignItems: 'flex-end' }}>
-                        <StyledTextField
+                        {modelType !== 'annotation' && <StyledTextField
                             variant='standard'
                             id={'api-key'}
                             autoComplete={'off'}
@@ -250,7 +273,7 @@ const ModelEnginePopup: React.FC<IProps> = (
                                     borderBottomColor: '#009AFF !important'
                                 }
                             }}
-                        />
+                        />}
                         <FormControl 
                             variant='standard' 
                             style={{ flex: 4 }} 
@@ -308,7 +331,8 @@ const ModelEnginePopup: React.FC<IProps> = (
                                     }}
                                 >
                                     {{ core: currentTexts.popups.modelEngine.taskTypeCore,
-                                       extension: currentTexts.popups.modelEngine.taskTypeExtension }[modelType]}
+                                       extension: currentTexts.popups.modelEngine.taskTypeExtension,
+                                       annotation: language === Language.CHINESE ? '自动标注' : 'Auto Annotation' }[modelType]}
                                     <span style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 9 }}>▼</span>
                                 </div>
                                 {modelTypeOpen && (
@@ -324,7 +348,7 @@ const ModelEnginePopup: React.FC<IProps> = (
                                         boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
                                         overflow: 'hidden',
                                     }}>
-                                        {(['core', 'extension'] as const).map(t => (
+                                        {(['core', 'extension', 'annotation'] as const).map(t => (
                                             <div
                                                 key={t}
                                                 onClick={() => {
@@ -342,7 +366,8 @@ const ModelEnginePopup: React.FC<IProps> = (
                                                 onMouseLeave={ev => { if (t !== modelType) (ev.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
                                             >
                                                 {{ core: currentTexts.popups.modelEngine.taskTypeCore,
-                                                   extension: currentTexts.popups.modelEngine.taskTypeExtension }[t]}
+                                                   extension: currentTexts.popups.modelEngine.taskTypeExtension,
+                                                   annotation: language === Language.CHINESE ? '自动标注' : 'Auto Annotation' }[t]}
                                                 {t === modelType ? ' ✓' : ''}
                                             </div>
                                         ))}

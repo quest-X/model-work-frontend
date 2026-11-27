@@ -19,6 +19,7 @@ import { TaskType } from '../../store/tasks/types';
 import { LanguageConfig } from '../../data/LanguageConfig';
 import { FrameExtractorService } from '../../services/FrameExtractorService';
 import { getEngineBaseUrl } from '../../utils/DefaultBackendUrl';
+import {updateProjectData} from '../../store/general/actionCreators';
 
 type VideoRuntime = {
     sessionId?: string;
@@ -325,6 +326,8 @@ export class QueueActions {
         }
         QueueActions.setVideoRuntimeGlobals(sessionId, targetItem.extractedFrames);
         store.dispatch(updateVideoMode(true));
+        store.dispatch(updateProjectData({...store.getState().general.projectData,
+            name: videoData.fileData.name.replace(/\.[^.]+$/, '').toLowerCase().replace(/\s+/g, '-').slice(0, 128)}));
         QueueActions.activateVideoData(videoData, store.getState().video);
         ImageRepository.setActiveFileId(targetItem.id);
         QueueActions.restoreVideoImages(targetItem, cachedData);

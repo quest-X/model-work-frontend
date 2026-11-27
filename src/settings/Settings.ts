@@ -16,6 +16,7 @@ export class Settings {
     public static readonly MAX_DROPDOWN_OPTION_LENGTH: number = 20;
 
     public static readonly EDITOR_MIN_WIDTH: number = 900;
+    public static readonly CONTROL_MIN_WIDTH: number = 720;
     public static readonly EDITOR_MIN_HEIGHT: number = 500;
 
     public static readonly PRIMARY_COLOR: string = '#2af598';

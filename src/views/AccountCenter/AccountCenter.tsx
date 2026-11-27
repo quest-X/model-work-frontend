@@ -6,7 +6,9 @@ import {
 } from '../../services/AccountService';
 import {useAccountApprovalIdentity} from '../../services/ApprovalIdentityService';
 import {useEscapeToClose} from '../../hooks/useEscapeToClose';
+import {getDefaultPlatform, saveDefaultPlatform} from '../../services/PlatformPreferenceService';
 import './AccountCenter.scss';
+import {PlatformLoginPanel} from './PlatformLoginPanel';
 
 interface IProps {
     user: AccountUser;
@@ -25,6 +27,7 @@ const permissionNames: Record<string, [string, string]> = {
     'agentos.storage.scan': ['存储分析', 'Analyze storage'],
     'camera.connect': ['连接摄像头', 'Connect cameras'],
     'camera.request': ['摄像头操作', 'Camera operations'],
+    'config.restore.apply': ['恢复节点配置', 'Restore node configuration'],
     'filesystem.list': ['浏览文件', 'Browse files'],
     'filesystem.stat': ['查看文件信息', 'View file information'],
     'cluster.read': ['查看节点与群', 'View nodes and groups'],
@@ -32,6 +35,8 @@ const permissionNames: Record<string, [string, string]> = {
     'agent.use': ['使用 Agent', 'Use Agent'],
     'jetson.connect': ['连接边缘设备', 'Connect edge devices'],
     'node.upgrade': ['升级节点', 'Upgrade nodes'],
+    'model.version.change': ['切换节点模型版本', 'Change node model versions'],
+    'model.delivery.commit': ['安装节点模型包', 'Install node model packages'],
 };
 const permissionLabel = (permission: string, zh: boolean): string =>
     permissionNames[permission]?.[zh ? 0 : 1] || permission;
@@ -51,6 +56,7 @@ const generateAccountPassword = (): string => {
 export const AccountCenter: React.FC<IProps> = ({user, zh, open = true, onClose, onUserChanged}) => {
     const [displayName, setDisplayName] = useState(user.display_name);
     const [savedDisplayName, setSavedDisplayName] = useState(user.display_name);
+    const [defaultPlatform, setDefaultPlatform] = useState(() => getDefaultPlatform(user));
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -84,6 +90,7 @@ export const AccountCenter: React.FC<IProps> = ({user, zh, open = true, onClose,
     }).catch(reason => setError(reason instanceof Error ? reason.message : '加载账户记录失败'));
 
     useEffect(() => { reloadActivity(); }, [user.account_id, user.role, user.password_change_required]);
+    useEffect(() => { setDefaultPlatform(getDefaultPlatform(user)); }, [user.account_id, user.role]);
     const date = (value: number) => new Date(value * 1000).toLocaleString(zh ? 'zh-CN' : 'en-US');
     const selectMember = (accountId: string) => {
         const member = members.find(account => account.account_id === accountId);
@@ -158,6 +165,24 @@ export const AccountCenter: React.FC<IProps> = ({user, zh, open = true, onClose,
                         } catch (reason) { setError(reason instanceof Error ? reason.message : '保存失败'); }
                         finally { setBusy(false); }
                     }}>{zh ? '保存变更' : 'Save changes'}</button>
+                    <label className='AccountDefaultPlatform'>{zh ? '默认进入平台' : 'Default platform'}
+                        <select value={defaultPlatform} onChange={event => {
+                            const mode = event.target.value;
+                            if (mode !== 'annotation' && mode !== 'control') return;
+                            setError(''); setMessage('');
+                            try {
+                                saveDefaultPlatform(user, mode);
+                                setDefaultPlatform(mode);
+                                setMessage(zh ? '默认进入平台已保存，下次打开时生效。' : 'Default platform saved for your next visit.');
+                            } catch {
+                                setError(zh ? '默认进入平台保存失败，请检查浏览器存储设置后重试。' : 'Could not save the default platform. Check browser storage settings and retry.');
+                            }
+                        }}>
+                            <option value='annotation'>{zh ? '生产平台' : 'Production platform'}</option>
+                            <option value='control'>{zh ? '管理平台' : 'Management platform'}</option>
+                        </select>
+                    </label>
+                    <p>{zh ? '自动保存，仅对当前账号在此浏览器生效。' : 'Saved automatically for this account in this browser.'}</p>
                 </article>
                 <article>
                     <h3>{zh ? '账户安全' : 'Account security'}</h3>
@@ -209,6 +234,7 @@ export const AccountCenter: React.FC<IProps> = ({user, zh, open = true, onClose,
                     <p>{zh ? '登录后自动加载授权身份；每次敏感操作仍需点击确认。' : 'Your approval identity loads after login; sensitive actions still require confirmation.'}</p>
                     <div className='AccountPermissionList'>{user.permissions.map(permission => <span key={permission} title={permission}>{permissionLabel(permission, zh)}</span>)}</div>
                     <details className='AccountIdentityDetails'><summary>{zh ? '授权详情' : 'Authorization details'}</summary><small className='AccountIdentity'>{user.approval.user_id}</small></details>
+                    {user.role === 'admin' && !user.password_change_required && <PlatformLoginPanel zh={zh}/>}
                 </article>
                 <article>
                     <h3>{zh ? '登录设备' : 'Signed-in devices'}</h3>
