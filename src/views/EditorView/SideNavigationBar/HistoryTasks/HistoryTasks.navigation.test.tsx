@@ -5,19 +5,86 @@ import {AutoSaveService} from '../../../../services/AutoSaveService';
 import {IndexedDBManager} from '../../../../utils/IndexedDBManager';
 import {HistoryTasks} from './HistoryTasks';
 import {QueueItemType} from '../../../../store/queue/types';
+import {ProjectRestoreService} from '../../../../services/ProjectRestoreService';
 
 jest.mock('../../../../services/AutoSaveService', () => ({
-    AutoSaveService: {saveCurrentState: jest.fn()},
+    AutoSaveService: {saveCurrentState: jest.fn(), suspend: jest.fn(), drain: jest.fn(), resume: jest.fn()},
 }));
+jest.mock('../../../../services/ProjectRestoreService', () => ({ProjectRestoreService: {restoreProject: jest.fn()}}));
+jest.mock('../../../../logic/hotkey/ContextManager', () => ({ContextManager: {switchCtx: jest.fn(), restoreCtx: jest.fn()}}));
 jest.mock('../../../../utils/IndexedDBManager', () => ({
     IndexedDBManager: {
         listAnnotatedProjects: jest.fn(), getWorkspaceId: jest.fn(),
         getWorkspaceSaveTime: jest.fn(), getProjectMeta: jest.fn(),
-        deleteAnnotatedProject: jest.fn(),
+        deleteAnnotatedProject: jest.fn(), activateWorkspace: jest.fn(), cancelPendingRestore: jest.fn(),
     },
 }));
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+    jest.clearAllMocks();
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {configurable: true,
+        value: function(this: HTMLDialogElement) { this.setAttribute('open', ''); }});
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', {configurable: true,
+        value: function(this: HTMLDialogElement) { this.removeAttribute('open'); }});
+});
+
+it('opens history inside the mounted page and returns the writer to the selected task', async () => {
+    const database = jest.mocked(IndexedDBManager);
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(100);
+    const replace = jest.spyOn(window.history, 'replaceState');
+    database.getWorkspaceId.mockReturnValue('current-workspace');
+    database.getWorkspaceSaveTime.mockResolvedValue(100);
+    database.getProjectMeta.mockResolvedValue({hasRecoverableProject: true} as never);
+    database.listAnnotatedProjects.mockResolvedValue([{workspaceId: 'saved', projectName: 'saved video',
+        imageCount: 900, labelCount: 800, lastModified: 10, isVideoProject: true} as never]);
+    jest.mocked(ProjectRestoreService.restoreProject).mockImplementation(async (_progress, options) => {
+        expect(AutoSaveService.suspend).toHaveBeenCalled();
+        await options.beforeCommit({lastModified: 10} as never);
+        return true;
+    });
+    try {
+        const view = render(<HistoryTasks language={Language.CHINESE}/>);
+        const sidebar = view.container.firstElementChild;
+        fireEvent.click(await screen.findByTitle('在当前页面打开此任务'));
+        await waitFor(() => expect(AutoSaveService.resume).toHaveBeenCalled());
+        expect(database.activateWorkspace).toHaveBeenCalledWith('saved', 10);
+        expect(ProjectRestoreService.restoreProject).toHaveBeenCalledWith(expect.any(Function),
+            {replaceCurrent: true, beforeCommit: expect.any(Function)});
+        expect(view.container.firstElementChild).toBe(sidebar);
+        expect(screen.getByTitle('在当前页面打开此任务')).toBeEnabled();
+        expect(screen.getByTitle('在当前页面打开此任务')).toHaveAttribute('aria-pressed', 'true');
+        expect(window.location.search).toBe('');
+        expect(replace).toHaveBeenCalledTimes(1);
+        expect(database.cancelPendingRestore).not.toHaveBeenCalled();
+    } finally {
+        clock.mockRestore();
+        replace.mockRestore();
+    }
+});
+
+it('keeps the mounted editor and resumes saving when the selected task fails to load', async () => {
+    const database = jest.mocked(IndexedDBManager);
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(100);
+    database.getWorkspaceId.mockReturnValue('current-workspace');
+    database.getWorkspaceSaveTime.mockResolvedValue(100);
+    database.getProjectMeta.mockResolvedValue({hasRecoverableProject: true} as never);
+    database.listAnnotatedProjects.mockResolvedValue([{workspaceId: 'saved', projectName: 'broken',
+        imageCount: 1, labelCount: 1, lastModified: 10} as never]);
+    jest.mocked(ProjectRestoreService.restoreProject).mockRejectedValue(new Error('视频源不可用'));
+    try {
+        const view = render(<HistoryTasks language={Language.CHINESE}/>);
+        const sidebar = view.container.firstElementChild;
+        fireEvent.click(await screen.findByTitle('在当前页面打开此任务'));
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('视频源不可用'));
+        expect(view.container.firstElementChild).toBe(sidebar);
+        expect(AutoSaveService.resume).toHaveBeenCalled();
+        expect(database.cancelPendingRestore).toHaveBeenCalled();
+        expect(database.activateWorkspace).not.toHaveBeenCalled();
+        expect(screen.getByTitle('在当前页面打开此任务')).toBeEnabled();
+    } finally {
+        clock.mockRestore();
+    }
+});
 
 it('shows the same video title as the file queue', async () => {
     const database = IndexedDBManager as jest.Mocked<typeof IndexedDBManager>;

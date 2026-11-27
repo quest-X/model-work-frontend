@@ -31,6 +31,7 @@ const originalMethods = {
     readProjectById: IndexedDBManager['readProjectById'],
     readWorkspaceMeta: IndexedDBManager['readWorkspaceMeta'],
     readLatestWorkspaceMeta: IndexedDBManager['readLatestWorkspaceMeta'],
+    claimWorkspaceLock: IndexedDBManager['claimWorkspaceLock'],
 };
 const mockMethod = <K extends keyof typeof originalMethods>(name: K) => {
     const mock = jest.fn<ReturnType<typeof originalMethods[K]>, Parameters<typeof originalMethods[K]>>();
@@ -112,6 +113,63 @@ describe('IndexedDBManager durability', () => {
             pinnedReadLocation: null,
             dismissedForeignSnapshots: null,
         });
+    });
+
+    it('hands the writer to an available history workspace only after checking its revision', async () => {
+        const previousRelease = jest.fn();
+        const nextRelease = jest.fn();
+        Object.assign(IndexedDBManager, {workspaceId: 'old', workspaceLockRelease: previousRelease});
+        mockMethod('claimWorkspaceLock').mockImplementation(async () => {
+            IndexedDBManager['workspaceLockRelease'] = nextRelease;
+            return true;
+        });
+        mockMethod('readWorkspaceMeta').mockResolvedValue({lastModified: 10} as never);
+        await IndexedDBManager.activateWorkspace('target', 10);
+        expect(IndexedDBManager.getWorkspaceId()).toBe('target');
+        expect(sessionStorage.getItem('opensight-recovery-workspace-id')).toBe('target');
+        expect(previousRelease).toHaveBeenCalledTimes(1);
+        expect(nextRelease).not.toHaveBeenCalled();
+        const harness = transactionHarness();
+        setDatabase(() => harness.transaction);
+        const saving = IndexedDBManager.saveProject(project());
+        harness.transaction.oncomplete?.();
+        await expect(saving).resolves.toBe(true);
+        expect(harness.puts.find(put => put.store === 'projects')?.value.id).toBe('workspace:target');
+        expect(harness.deletes.some(entry => entry.key === 'workspace:old')).toBe(false);
+    });
+
+    it.each([false, null])('forks a separate writer when the history lock is %s', async claimed => {
+        Object.assign(IndexedDBManager, {workspaceId: 'old'});
+        mockMethod('generateWorkspaceId').mockReturnValue('isolated-copy');
+        const claim = mockMethod('claimWorkspaceLock').mockResolvedValueOnce(claimed).mockResolvedValueOnce(claimed);
+        if (claimed === false) claim.mockReset().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+        mockMethod('readWorkspaceMeta').mockResolvedValue({lastModified: 10} as never);
+        await IndexedDBManager.activateWorkspace('target', 10);
+        expect(IndexedDBManager.getWorkspaceId()).toBe('isolated-copy');
+        expect(claim.mock.calls.map(([id]) => id)).toEqual(['target', 'isolated-copy']);
+        const harness = transactionHarness();
+        setDatabase(() => harness.transaction);
+        const saving = IndexedDBManager.saveProject(project());
+        harness.transaction.oncomplete?.();
+        await expect(saving).resolves.toBe(true);
+        expect(harness.puts.find(put => put.store === 'projects')?.value.id).toBe('workspace:isolated-copy');
+        expect(harness.deletes.some(entry => entry.key === 'workspace:target' || entry.key === 'workspace:old')).toBe(false);
+    });
+
+    it('retains the old writer and releases the candidate lock when history changes before commit', async () => {
+        const previousRelease = jest.fn();
+        const nextRelease = jest.fn();
+        Object.assign(IndexedDBManager, {workspaceId: 'old', workspaceLockRelease: previousRelease});
+        mockMethod('claimWorkspaceLock').mockImplementation(async () => {
+            IndexedDBManager['workspaceLockRelease'] = nextRelease;
+            return true;
+        });
+        mockMethod('readWorkspaceMeta').mockResolvedValue({lastModified: 11} as never);
+        await expect(IndexedDBManager.activateWorkspace('target', 10)).rejects.toBeInstanceOf(RecoverySnapshotChangedError);
+        expect(IndexedDBManager.getWorkspaceId()).toBe('old');
+        expect(nextRelease).toHaveBeenCalledTimes(1);
+        expect(previousRelease).not.toHaveBeenCalled();
+        expect(IndexedDBManager['workspaceLockRelease']).toBe(previousRelease);
     });
 
     it('keeps a restored workspace identity on reload when Web Locks are unavailable', async () => {

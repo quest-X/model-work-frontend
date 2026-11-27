@@ -1095,6 +1095,48 @@ export class IndexedDBManager {
         return (await this.readWorkspaceMeta(workspaceId))?.lastModified ?? null;
     }
 
+    /** Change writers only after the selected snapshot and its resources are ready. */
+    public static async activateWorkspace(workspaceId: string, lastModified: number): Promise<void> {
+        if (workspaceId === this.getWorkspaceId()) return;
+        const previousRelease = this.workspaceLockRelease;
+        const previousLock = this.workspaceLockPromise;
+        this.workspaceLockRelease = null;
+        this.workspaceLockPromise = null;
+        try {
+            let writerId = workspaceId;
+            const claimed = await this.claimWorkspaceLock(writerId);
+            // A busy or unprovable writer must never be overwritten by this tab.
+            if (claimed !== true) {
+                writerId = this.generateWorkspaceId();
+                if (await this.claimWorkspaceLock(writerId) === false) {
+                    throw new Error('无法取得历史任务的写入锁，请重试');
+                }
+            }
+            const selected = await this.readWorkspaceMeta(workspaceId);
+            if (selected?.lastModified !== lastModified) throw new RecoverySnapshotChangedError();
+            this.workspaceId = writerId;
+            this.workspaceIdWasRestored = false;
+            try {
+                sessionStorage.setItem(this.SESSION_WORKSPACE_KEY, writerId);
+            } catch {
+                // The in-memory writer remains isolated when storage is disabled.
+            }
+            previousRelease?.();
+        } catch (error) {
+            this.workspaceLockRelease?.();
+            this.workspaceLockRelease = previousRelease;
+            this.workspaceLockPromise = previousLock;
+            throw error;
+        }
+    }
+
+    public static cancelPendingRestore(): void {
+        this.pinnedReadLocation = null;
+        this.activeReadProjectId = null;
+        this.activeReadWorkspaceId = null;
+        this.activeReadLastModified = null;
+    }
+
     public static async deleteAnnotatedProject(
         workspaceId: string, lastModified: number, allowCurrent = false,
     ): Promise<boolean> {

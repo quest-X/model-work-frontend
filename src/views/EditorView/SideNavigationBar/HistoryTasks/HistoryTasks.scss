@@ -33,6 +33,16 @@
 }
 
 .HistoryTasks__error { color: #ef7070; }
+.HistoryTasks__opening {
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 16px 24px;
+    color: #ddd;
+    background: #262626;
+    font-size: 13px;
+}
+.HistoryTasks__opening::backdrop { background: rgba(0, 0, 0, 0.15); }
+.HistoryTasks__item.is-active { background: rgba(0, 154, 255, 0.12); }
 .HistoryTasks__list { overflow-y: auto; min-height: 0; }
 
 .HistoryTasks__row { position: relative; }

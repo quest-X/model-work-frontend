@@ -43,6 +43,9 @@ import {LabelType} from '../data/enums/LabelType';
 import {EditorModel} from '../staticModels/EditorModel';
 import {FrameExtractorService} from './FrameExtractorService';
 import {getEngineBaseUrl} from '../utils/DefaultBackendUrl';
+import {Action} from '../store/Actions';
+import {RestoreFlag, UndoStack} from '../logic/undo/UndoStack';
+import {TaskType} from '../store/tasks/types';
 
 type StoredVideoRecoveryWithLease = StoredVideoRecoveryData & {
     /** Legacy/runtime fallback only. A fresh source or dataset session wins. */
@@ -138,8 +141,21 @@ export class ProjectRestoreService {
     // Recovery deliberately keeps validation and the final Redux commit in one
     // orchestration boundary so no partially rebuilt project becomes visible.
     // eslint-disable-next-line complexity
-    public static async restoreProject(onProgress?: (msg: string) => void): Promise<boolean> {
+    public static async restoreProject(onProgress?: (msg: string) => void, options: {
+        replaceCurrent?: boolean;
+        beforeCommit?: (project: StoredProjectData) => Promise<void>;
+    } = {}): Promise<boolean> {
+        const wasRestoring = RestoreFlag.get();
         try {
+            if (options.replaceCurrent) {
+                const state = store.getState();
+                const writers = [TaskType.QUEUE_LOAD, TaskType.FRAME_EXTRACTION, TaskType.BATCH_DETECT,
+                    TaskType.BATCH_SEGMENT, TaskType.TRACKING, TaskType.DATA_SYNC];
+                if (state.ai.isFullImageInferenceInProgress || EditorModel.pendingPrompts.length > 0 ||
+                    state.tasks.tasks.some(task => task.status === 'running' && writers.includes(task.type))) {
+                    throw new Error('当前任务仍在加载、标注或同步，请完成后再切换历史任务');
+                }
+            }
             const storedProject = await IndexedDBManager.loadProject();
             if (!storedProject) return false;
 
@@ -191,6 +207,21 @@ export class ProjectRestoreService {
                 );
             }
 
+            await options.beforeCommit?.(storedProject);
+            if (options.replaceCurrent) {
+                RestoreFlag.set(true);
+                UndoStack.clear();
+                ImageRepository.clearAllCache();
+                EditorModel.image = null;
+                EditorModel.videoFrameImage = null;
+                EditorModel.videoFrameCanvas = null;
+                EditorModel.playbackImageData = null;
+                EditorModel.latestImagesData = null;
+                EditorModel.videoSessionId = '';
+                EditorModel.videoFrameFiles = [];
+                EditorModel.preloadedImageCache = new Map();
+                store.dispatch({type: Action.RESET_ANNOTATION_PROJECT});
+            }
             onProgress?.('正在恢复标签与队列...');
             if (storedProject.labelNames?.length > 0) {
                 store.dispatch(updateLabelNames(storedProject.labelNames));
@@ -248,6 +279,8 @@ export class ProjectRestoreService {
         } catch (error) {
             console.error('恢复项目失败:', error);
             throw error instanceof Error ? error : new Error('恢复项目失败');
+        } finally {
+            RestoreFlag.set(wasRestoring);
         }
     }
 

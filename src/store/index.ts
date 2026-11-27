@@ -1,4 +1,5 @@
-import { combineReducers } from 'redux';
+import {AnyAction, combineReducers} from 'redux';
+import {Action} from './Actions';
 import {labelsReducer} from './labels/reducer';
 import {generalReducer} from './general/reducer';
 import {aiReducer} from './ai/reducer';
@@ -9,7 +10,7 @@ import {queueReducer} from './queue/reducer';
 import {tasksReducer} from './tasks/reducer';
 import {visualSearchReducer} from './visualSearch/reducer';
 
-export const rootReducer = combineReducers({
+const appReducer = combineReducers({
     general: generalReducer,
     labels: labelsReducer,
     ai: aiReducer,
@@ -21,4 +22,14 @@ export const rootReducer = combineReducers({
     visualSearch: visualSearchReducer,
 });
 
-export type AppState = ReturnType<typeof rootReducer>;
+export type AppState = ReturnType<typeof appReducer>;
+
+export const rootReducer = (state: AppState | undefined, action: AnyAction): AppState => {
+    if (state && action.type === Action.RESET_ANNOTATION_PROJECT) {
+        const empty = appReducer(undefined, {type: Action.CLEAR_QUEUE});
+        state = {...state, labels: empty.labels, video: empty.video, queue: empty.queue,
+            ai: {...state.ai, segmentationResults: [], imageSegmentationResults: new Map(),
+                isFullImageInferenceInProgress: false}};
+    }
+    return appReducer(state, action);
+};
