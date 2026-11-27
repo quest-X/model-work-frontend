@@ -218,6 +218,30 @@ describe('TopNavigationBar extension tool entries', () => {
     });
 });
 
+describe('TopNavigationBar annotation engine entry', () => {
+    it('shows after the extension engine and opens review model settings', () => {
+        const updatePopup = jest.fn();
+        const previousFetch = global.fetch;
+        global.fetch = jest.fn(() => new Promise<Response>(() => undefined));
+        const view = renderNavigation([], Language.CHINESE, {
+            hasExtensionEngine: true,
+            hasAnnotationEngine: true,
+            updateActivePopupTypeAction: updatePopup,
+        });
+        try {
+            const extension = screen.getByText('拓展引擎');
+            const annotation = screen.getByText('自动标注');
+            expect(extension.compareDocumentPosition(annotation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            fireEvent.click(annotation);
+            fireEvent.click(screen.getByText('自动标注复审'));
+            expect(updatePopup).toHaveBeenCalledWith(PopupWindowType.CALL_MODEL);
+        } finally {
+            view.unmount();
+            global.fetch = previousFetch;
+        }
+    });
+});
+
 describe('TopNavigationBar account preview', () => {
     beforeEach(() => window.localStorage.clear());
 

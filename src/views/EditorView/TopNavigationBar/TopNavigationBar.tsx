@@ -29,11 +29,12 @@ interface IProps {
     language: Language;
     hasCoreEngine: boolean;
     hasExtensionEngine: boolean;
+    hasAnnotationEngine?: boolean;
     platformMode?: 'annotation' | 'control';
     onPlatformSwitch?: () => void;
 }
 
-type ServicesDropdown = 'core' | 'extension' | null;
+type ServicesDropdown = 'core' | 'extension' | 'annotation' | null;
 
 // Top navigation intentionally owns its mutually exclusive menus and platform mode.
 // eslint-disable-next-line complexity
@@ -402,6 +403,25 @@ export const TopNavigationBar: React.FC<IProps> = (props) => {
                             )}
                         </div>
                     )}
+                    {props.hasAnnotationEngine && (
+                        <div className='ServicesDropdownContainer'>
+                            <TextButton
+                                label={props.language === Language.CHINESE ? '自动标注' : 'Auto Annotation'}
+                                onClick={() => toggleServicesDropdown('annotation')}
+                                externalClassName={'services-button'}
+                            />
+                            {activeServicesDropdown === 'annotation' && (
+                                <div className='DropDownMenuContent ServicesDropdown'>
+                                    <div className='DropDownMenuContentOption active'
+                                        onClick={openLocalModelManager}>
+                                        <div className='Marker'/>
+                                        <img src='ico/ai.png' alt='annotation-review'/>
+                                        {props.language === Language.CHINESE ? '自动标注复审' : 'Auto Annotation Review'}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
                 <div
                     className='ProjectNameContainer'
@@ -514,7 +534,8 @@ const mapStateToProps = (state: AppState) => ({
     activeQueueItemId: state.queue.activeQueueItemId,
     language: state.general.language,
     hasCoreEngine: !!state.aimodels?.models.some(model => model.modelType === 'core'),
-    hasExtensionEngine: !!state.aimodels?.models.some(model => model.modelType === 'extension')
+    hasExtensionEngine: !!state.aimodels?.models.some(model => model.modelType === 'extension'),
+    hasAnnotationEngine: !!state.aimodels?.models.some(model => model.modelType === 'annotation')
 });
 
 export default connect(
