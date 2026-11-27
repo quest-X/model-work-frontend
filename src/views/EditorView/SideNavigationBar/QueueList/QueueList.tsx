@@ -18,6 +18,7 @@ import {LabelsSelector} from '../../../../store/selectors/LabelsSelector';
 import {Language, LanguageConfig} from '../../../../data/LanguageConfig';
 import {getQueueItemDisplayName} from '../../../../utils/QueueDisplayNameUtil';
 import {DataBatchSyncService} from '../../../../services/DataBatchSyncService';
+import {store} from '../../../../index';
 import './QueueList.scss';
 
 // ============ QueueItemCard ============
@@ -38,7 +39,7 @@ const typeIconMap: Record<QueueItemType, string> = {
     [QueueItemType.CAMERA]: '/ico/camera.png',
 };
 
-const QueueItemCard: React.FC<CardProps> = ({ item, isActive, language, onSelect, onDelete, onSync }) => {
+const QueueItemCard: React.FC<CardProps> = React.memo(function QueueItemCard({ item, isActive, language, onSelect, onDelete, onSync }: CardProps) {
     const texts = LanguageConfig[language];
     const displayName = getQueueItemDisplayName(item, texts);
     const statusLabels: Record<QueueItemStatus, { className: string; label: string }> = {
@@ -127,14 +128,13 @@ const QueueItemCard: React.FC<CardProps> = ({ item, isActive, language, onSelect
             </div>
         </div>
     );
-};
+});
 
 // ============ QueueList ============
 
 interface IProps {
     items: QueueItem[];
     activeQueueItemId: string | null;
-    imagesData: ImageData[];
     language: Language;
     removeQueueItemAction: (itemId: string) => void;
     updateImageDataAction: (imageData: ImageData[]) => void;
@@ -143,7 +143,6 @@ interface IProps {
 const QueueList: React.FC<IProps> = ({
     items,
     activeQueueItemId,
-    imagesData,
     language,
     removeQueueItemAction,
     updateImageDataAction,
@@ -173,27 +172,27 @@ const QueueList: React.FC<IProps> = ({
         },
     });
 
-    const handleItemSelect = (item: QueueItem) => {
-        if (item.id === activeQueueItemId) return;
+    const handleItemSelect = useCallback((item: QueueItem) => {
+        if (item.id === store.getState().queue.activeQueueItemId) return;
         if (item.status === QueueItemStatus.PROCESSING) return;
-        QueueActions.switchToQueueItem(item, imagesData);
-    };
+        QueueActions.switchToQueueItem(item, LabelsSelector.getImagesData());
+    }, []);
 
-    const handleItemDelete = (itemId: string) => {
-        if (itemId === activeQueueItemId) {
+    const handleItemDelete = useCallback((itemId: string) => {
+        if (itemId === store.getState().queue.activeQueueItemId) {
             ImageRepository.clearCurrentDisplay();
             updateImageDataAction([]);
         }
         removeQueueItemAction(itemId);
-    };
+    }, [removeQueueItemAction, updateImageDataAction]);
 
-    const handleItemSync = (item: QueueItem) => {
-        const annotations = item.id === activeQueueItemId
-            ? imagesData
+    const handleItemSync = useCallback((item: QueueItem) => {
+        const annotations = item.id === store.getState().queue.activeQueueItemId
+            ? LabelsSelector.getImagesData()
             : ImageRepository.getFileCacheSnapshot(item.id) || [];
         DataBatchSyncService.syncQueueItem(item, annotations, LabelsSelector.getLabelNames())
             .catch(() => undefined);
-    };
+    }, []);
 
     return (
         <div {...getRootProps({ className: classNames('queue-list', { 'drag-over': isDragActive }) })}>
@@ -231,7 +230,6 @@ const QueueList: React.FC<IProps> = ({
 const mapStateToProps = (state: AppState) => ({
     items: state.queue?.items || [],
     activeQueueItemId: state.queue?.activeQueueItemId || null,
-    imagesData: state.labels.imagesData,
     language: state.general.language,
 });
 

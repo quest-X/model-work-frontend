@@ -94,14 +94,14 @@ export const VideoEditor: React.FC<IProps> = ({
     // Preview uses the original video; backend sessions remain available for inference.
     useEffect(() => {
         if (activeVideo?.fileData?.size > 0) {
-            // 递增 generation ID，取消所有进���中的缩略图生成
+            // 递增 generation ID，取消旧视频的缩略图回调
             generationIdRef.current++;
             const url = URL.createObjectURL(activeVideo.fileData);
             setVideoUrl(url);
             return () => {
                 const currentImagesData = imagesDataRef.current;
-                // 仅在 repository ���被清空时保存缓存��避免覆盖 QueueActions 已保存的有效缓存）
-                if (activeVideo.id && currentImagesData.length > 0) {
+                // QueueActions already saved the old file before activating the next one.
+                if (ImageRepository.getActiveFileId() === activeVideo.id && currentImagesData.length > 0) {
                     const firstImg = currentImagesData[0];
                     if (firstImg && ImageRepository.getById(firstImg.id)) {
                         ImageRepository.saveFileCache(activeVideo.id, currentImagesData);
@@ -119,7 +119,7 @@ export const VideoEditor: React.FC<IProps> = ({
             generationIdRef.current++;
             return () => {
                 const currentImagesData = imagesDataRef.current;
-                if (activeVideo.id && currentImagesData.length > 0) {
+                if (ImageRepository.getActiveFileId() === activeVideo.id && currentImagesData.length > 0) {
                     const firstImg = currentImagesData[0];
                     if (firstImg && ImageRepository.getById(firstImg.id)) {
                         ImageRepository.saveFileCache(activeVideo.id, currentImagesData);
@@ -248,7 +248,10 @@ export const VideoEditor: React.FC<IProps> = ({
 
             const firstFrameImageData = currentImagesData[activeVideo.currentFrame] || currentImagesData[0];
             if (!firstFrameImageData) return;
+            const generation = generationIdRef.current;
+            const isCurrent = () => generation === generationIdRef.current && activeVideoRef.current?.id === activeVideo.id;
             const markFirstFrameLoaded = () => {
+                if (!isCurrent()) return;
                 // The thumbnail callback can finish after inference; merge into the current frame.
                 const latest = store.getState().labels.imagesData.find(image => image.id === firstFrameImageData.id);
                 if (latest && !latest.loadStatus) {
@@ -263,8 +266,8 @@ export const VideoEditor: React.FC<IProps> = ({
                 const targetW = activeVideo.videoSize.width || canvas.width;
                 const targetH = activeVideo.videoSize.height || canvas.height;
                 if (EditorModel.videoFrameImage &&
-                    EditorModel.videoFrameImage.naturalWidth === targetW &&
-                    EditorModel.videoFrameImage.naturalHeight === targetH) {
+                    (EditorModel.videoFrameImage.naturalWidth || EditorModel.videoFrameImage.width) === targetW &&
+                    (EditorModel.videoFrameImage.naturalHeight || EditorModel.videoFrameImage.height) === targetH) {
                     EditorActions.setActiveImage(EditorModel.videoFrameImage);
                     return;
                 }
@@ -275,11 +278,12 @@ export const VideoEditor: React.FC<IProps> = ({
                 fullCtx.drawImage(canvas, 0, 0, fullCanvas.width, fullCanvas.height);
                 // Async toBlob avoids blocking main thread (sync toDataURL cost ~50ms+)
                 fullCanvas.toBlob((blob) => {
-                    if (!blob) return;
+                    if (!blob || !isCurrent()) return;
                     const url = URL.createObjectURL(blob);
                     const fullImage = new Image();
                     fullImage.onload = () => {
                         URL.revokeObjectURL(url);
+                        if (!isCurrent()) return;
                         EditorModel.videoFrameImage = fullImage;
                         EditorActions.setActiveImage(fullImage);
                     };
@@ -288,11 +292,9 @@ export const VideoEditor: React.FC<IProps> = ({
                 }, 'image/jpeg', 0.9);
             };
 
-            if (firstFrameImageData.loadStatus) {
-                // 已缓存，直接设置全分辨率图像
-                setFullResImage();
-                return;
-            }
+            // Native playback already published its full-resolution canvas; do not wait for a thumbnail.
+            setFullResImage();
+            if (firstFrameImageData.loadStatus) return;
 
             // 生成等比例缩略图给 ImagePreview，避免首帧被塞进方形黑底。
             const sourceWidth = activeVideo.videoSize.width || canvas.width;
@@ -308,6 +310,7 @@ export const VideoEditor: React.FC<IProps> = ({
 
                 // Async toBlob to avoid blocking main thread
                 thumbnailCanvas.toBlob((blob) => {
+                    if (!isCurrent()) return;
                     if (!blob) {
                         markFirstFrameLoaded();
                         return;
@@ -316,11 +319,13 @@ export const VideoEditor: React.FC<IProps> = ({
                     const thumbnailImage = new Image();
                     // 不撤销 thumbUrl：ImagePreview <img src={image.src}> 渲染仍指向它
                     thumbnailImage.onload = () => {
+                        if (!isCurrent()) {
+                            URL.revokeObjectURL(thumbUrl);
+                            return;
+                        }
                         // 缩略图存入 ImageRepository（给 ImagePreview 用）
                         ImageRepository.storeImage(firstFrameImageData.id, thumbnailImage);
                         markFirstFrameLoaded();
-                        // 全分辨率图像给 Editor 渲染引擎
-                        setFullResImage();
                     };
                     thumbnailImage.onerror = () => {
                         URL.revokeObjectURL(thumbUrl);
