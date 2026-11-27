@@ -25,7 +25,7 @@
 		width: min(100%, 480px);
 		box-sizing: border-box;
 		background-color: $darkThemeSecondColor;
-		border: 1px solid #626262;
+		border: 1px solid #4d4d4d;
 		border-radius: 5px;
 		box-shadow: 0 0 10px 3px rgba(255, 255, 255, 0.02), 0 16px 40px rgba(0, 0, 0, 0.5);
 		overflow: hidden;
@@ -38,7 +38,6 @@
 			height: 40px;
 			margin: 0;
 			background-color: $darkThemeFirstColor;
-			border-bottom: 1px solid #545454;
 			box-shadow: 0 2px 15px rgba(0, 0, 0, 0.4);
 			font-size: 18px;
 			font-weight: 900;
@@ -60,7 +59,7 @@
 				font-size: 14px;
 
 				& + .info-row {
-					border-top: 1px solid #545454;
+					border-top: 1px solid #3a3a3a;
 				}
 
 				.info-label {
@@ -95,7 +94,7 @@
 			min-height: 80px;
 			padding: 16px 40px;
 			box-sizing: border-box;
-			border-top: 1px solid #545454;
+			border-top: 1px solid $darkThemeFirstColor;
 
 			button {
 				min-width: 120px;
