@@ -13,6 +13,8 @@ export type Annotation = {
 }
 
 export type LabelRect = Annotation & {
+    sourceClassName?: string;
+    sourceClassId?: number;
     rect: IRect;
     isCreatedByAI: boolean;
     status: LabelStatus;

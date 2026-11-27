@@ -487,7 +487,6 @@ export class Editor extends React.Component<IProps, IState> {
             <div className='Editor' ref={ref => (EditorModel.editor = ref)} draggable={false}>
                 <div className={`CanvasMultiViewGrid layout-${multiView.layout}`}>
                     <div className='CanvasViewPane primary'>
-                        <div className='CanvasViewHeader'>原图 · 可编辑</div>
                         <Scrollbars
                             ref={ref => (EditorModel.viewPortScrollbars = ref)}
                             renderTrackHorizontal={props => <div {...props} className='track-horizontal' />}

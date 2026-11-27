@@ -6,6 +6,7 @@ import {
     ComputeCommunicationState,
     ComputeLanAsset,
     ComputeManagedDevice,
+    cameraStreamingAvailable,
     computeNodeState,
     communicationStateLabel,
 } from '../../../services/ComputeClusterService';
@@ -13,7 +14,7 @@ import './DeviceManagementPopup.scss';
 import {useEscapeToClose} from '../../../hooks/useEscapeToClose';
 
 type DeviceTab = 'camera' | 'edge';
-type DeviceTone = 'normal' | 'fault';
+type DeviceTone = 'normal' | 'fault' | 'unknown';
 type DeviceStatusFilter = 'all' | DeviceTone;
 
 interface IProps {
@@ -22,19 +23,21 @@ interface IProps {
     cameras: ComputeManagedDevice[];
     edgeDevices: ComputeLanAsset[];
     initialTab: DeviceTab;
+    cameraRead?: 'ready' | 'disabled' | 'unavailable';
+    edgeRead?: 'loading' | 'ready' | 'denied' | 'failed';
+    cameraInventoryReadAt?: number;
     onClose: () => void;
     onAddCamera: () => void;
     onDiscoverEdge: () => void;
     onOpenCamera: (deviceId: string) => void;
     onOpenEdgeDevice: (assetId: string) => void;
+    onOpenEdgeLogs?: (assetId: string) => void;
     onCamerasChanged: () => void;
 }
 
 const cameraTone = (camera: ComputeManagedDevice): DeviceTone =>
-    camera.status === 'registered' || camera.status === 'online'
-        ? 'normal'
-        : 'fault';
-const edgeTone = (device: ComputeLanAsset): DeviceTone => device.online ? 'normal' : 'fault';
+    camera.status === 'registered' ? 'unknown' : camera.status === 'online' ? 'normal' : 'fault';
+const edgeTone = (device: ComputeLanAsset): 'normal' | 'fault' => device.online ? 'normal' : 'fault';
 const valuesMatch = (query: string, values: (string | number | null | undefined)[]): boolean =>
     !query || values.some(value => String(value || '').toLocaleLowerCase().includes(query));
 
@@ -46,10 +49,15 @@ export const DeviceManagementPopup: React.FC<IProps> = (
         cameras,
         edgeDevices,
         initialTab,
+        cameraRead = 'ready',
+        edgeRead = 'ready',
+        cameraInventoryReadAt,
         onClose,
+        onAddCamera,
         onDiscoverEdge,
         onOpenCamera,
         onOpenEdgeDevice,
+        onOpenEdgeLogs,
         onCamerasChanged,
     },
 ) => {
@@ -93,6 +101,21 @@ export const DeviceManagementPopup: React.FC<IProps> = (
     const normalCount = tones.filter(tone => tone === 'normal').length;
     const faultCount = tones.filter(tone => tone === 'fault').length;
     const visibleCount = tab === 'camera' ? filteredCameras.length : filteredEdgeDevices.length;
+    const readState = tab === 'camera' ? cameraRead : edgeRead;
+    const cameraAddAvailable = node.online && node.capabilities.some(capability =>
+        capability === 'task.camera.connect.v1' || capability === 'task.camera.discover.v1');
+    const edgeAddAvailable = node.online && node.capabilities.includes('control.jetson.connect.v1');
+    const canPreview = (camera: ComputeManagedDevice) => node.online && cameraRead === 'ready' && cameraStreamingAvailable(camera);
+    const canReadEdgeLogs = (device: ComputeLanAsset) => onOpenEdgeLogs && edgeRead === 'ready'
+        && node.online && node.capabilities.includes('runtime.edge-programs.read.v1') && device.online
+        && Boolean(device.ssh_username) && device.ports.some(port => port.port === 22);
+    const readMessage = {
+        disabled: zh ? '当前节点未提供摄像头清单。' : 'This node does not report a camera inventory.',
+        unavailable: zh ? '摄像头清单暂不可用。' : 'The camera inventory is unavailable.',
+        loading: zh ? '正在读取边缘设备…' : 'Loading edge devices…',
+        denied: zh ? '当前账号无权读取网络资产。' : 'Your account cannot read network assets.',
+        failed: zh ? '边缘设备读取失败。' : 'Edge devices could not be read.',
+    };
 
     const changeTab = (nextTab: DeviceTab) => {
         setTab(nextTab);
@@ -179,7 +202,7 @@ export const DeviceManagementPopup: React.FC<IProps> = (
                         onClick={() => changeTab('camera')}
                     >
                         <span>{zh ? '摄像头' : 'Cameras'}</span>
-                        <strong>{cameras.length}</strong>
+                        <strong>{cameraRead === 'ready' ? cameras.length : '—'}</strong>
                         <small>{zh ? '视频采集设备' : 'Video capture devices'}</small>
                     </button>
                     <button
@@ -189,7 +212,7 @@ export const DeviceManagementPopup: React.FC<IProps> = (
                         onClick={() => changeTab('edge')}
                     >
                         <span>{zh ? '边缘计算设备' : 'Edge devices'}</span>
-                        <strong>{edgeDevices.length}</strong>
+                        <strong>{edgeRead === 'ready' ? edgeDevices.length : '—'}</strong>
                         <small>{zh ? '局域网计算资源' : 'LAN compute resources'}</small>
                     </button>
                     <div className='DeviceManagementNodeState'>
@@ -211,10 +234,17 @@ export const DeviceManagementPopup: React.FC<IProps> = (
                                 : (zh ? '设备通过局域网发现自动同步，可在网络视图继续管理。' : 'Devices sync through LAN discovery and can be managed in the network view.')}</p>
                         </div>
                         <div className='DeviceManagementTitleActions'>
+                            {tab === 'camera' && cameraAddAvailable && <button type='button' onClick={onAddCamera}>
+                                {zh ? '连接摄像头' : 'Connect camera'}
+                            </button>}
+                            {tab === 'edge' && edgeAddAvailable && <button type='button' onClick={onDiscoverEdge}>
+                                {zh ? '连接边缘设备' : 'Connect edge device'}
+                            </button>}
                             <button
                                 type='button'
                                 className={managing ? 'primary' : ''}
                                 aria-pressed={managing}
+                                disabled={readState !== 'ready'}
                                 onClick={() => {
                                     setManaging(current => !current);
                                     setEditingId(null);
@@ -224,11 +254,23 @@ export const DeviceManagementPopup: React.FC<IProps> = (
                         </div>
                     </div>
 
-                    <div className='DeviceManagementSummary' aria-label={zh ? '设备统计' : 'Device summary'}>
+                    {tab === 'camera' && cameraRead === 'ready' && cameraInventoryReadAt && <p>
+                        {zh ? '摄像头清单查询于' : 'Camera inventory checked at'} {lastSeen(cameraInventoryReadAt / 1000)}
+                    </p>}
+                    {readState !== 'ready' && <div className='DeviceManagementEmpty' role={readState === 'loading' ? 'status' : 'alert'}>
+                        <strong>{readMessage[readState]}</strong>
+                        {(readState === 'failed' || readState === 'unavailable') && <button type='button' onClick={onCamerasChanged}>
+                            {zh ? '重新读取' : 'Retry'}
+                        </button>}
+                    </div>}
+                    {readState === 'ready' && <div className='DeviceManagementSummary' aria-label={zh ? '设备统计' : 'Device summary'}>
                         <div><span>{zh ? '总数' : 'Total'}</span><strong>{devices.length}</strong></div>
                         <div><span>{zh ? '正常' : 'Normal'}</span><strong className='normal'>{normalCount}</strong></div>
                         <div><span>{zh ? '故障' : 'Fault'}</span><strong className='fault'>{faultCount}</strong></div>
-                    </div>
+                        {normalCount + faultCount < devices.length && <div>
+                            <span>{zh ? '待验证' : 'Unverified'}</span><strong>{devices.length - normalCount - faultCount}</strong>
+                        </div>}
+                    </div>}
 
                     <div className='DeviceManagementTools'>
                         <input
@@ -247,27 +289,23 @@ export const DeviceManagementPopup: React.FC<IProps> = (
                             <option value='all'>{zh ? '所有状态' : 'All statuses'}</option>
                             <option value='normal'>{zh ? '仅正常' : 'Normal only'}</option>
                             <option value='fault'>{zh ? '仅故障' : 'Fault only'}</option>
+                            {tab === 'camera' && <option value='unknown'>{zh ? '仅待验证' : 'Unverified only'}</option>}
                         </select>
                     </div>
 
                     {error && <div className='DeviceManagementError' role='status'>{error}</div>}
 
                     <div className='DeviceManagementList'>
-                        {tab === 'camera' && filteredCameras.map(
+                        {tab === 'camera' && cameraRead === 'ready' && filteredCameras.map(
                             // eslint-disable-next-line complexity
                             camera => {
                             const tone = cameraTone(camera);
                             return <article
                                 className={`DeviceManagementRow${managing ? '' : ' interactive'}`}
                                 key={camera.device_id}
-                                role={managing ? undefined : 'button'}
-                                tabIndex={managing ? undefined : 0}
-                                title={managing ? undefined : (zh ? '双击打开实时画面' : 'Double-click to open live view')}
+                                title={!managing && canPreview(camera) ? (zh ? '双击打开实时画面' : 'Double-click to open live view') : undefined}
                                 onDoubleClick={() => {
-                                    if (!managing) onOpenCamera(camera.device_id);
-                                }}
-                                onKeyDown={event => {
-                                    if (!managing && event.key === 'Enter') onOpenCamera(camera.device_id);
+                                    if (!managing && canPreview(camera)) onOpenCamera(camera.device_id);
                                 }}
                             >
                                 <div className='DeviceManagementIcon' aria-hidden='true'>CAM</div>
@@ -292,7 +330,13 @@ export const DeviceManagementPopup: React.FC<IProps> = (
                                     <span><small>{zh ? '通道' : 'Channels'}</small><strong>{camera.channels}</strong></span>
                                     <span><small>{zh ? '能力' : 'Capabilities'}</small><strong>{camera.capabilities.length}</strong></span>
                                 </div>
-                                <span className={`DeviceManagementStatus ${tone}`}><i/> {statusLabel(tone)}</span>
+                                <span className={`DeviceManagementStatus ${tone}`}><i/> {tone === 'unknown'
+                                    ? (zh ? '已登记 · 画面待验证' : 'Registered · Live view unverified') : statusLabel(tone)}</span>
+                                {!managing && <div className='DeviceManagementActions'>
+                                    <button type='button' disabled={!canPreview(camera)} onClick={() => onOpenCamera(camera.device_id)}>
+                                        {zh ? '实时画面' : 'Live view'}
+                                    </button>
+                                </div>}
                                 {managing && <div className='DeviceManagementActions'>
                                     {editingId === camera.device_id
                                         ? <>
@@ -334,17 +378,12 @@ export const DeviceManagementPopup: React.FC<IProps> = (
                             },
                         )}
 
-                        {tab === 'edge' && filteredEdgeDevices.map(device => <article
+                        {tab === 'edge' && edgeRead === 'ready' && filteredEdgeDevices.map(device => <article
                             className={`DeviceManagementRow${managing ? '' : ' interactive'}`}
                             key={device.asset_id}
-                            role={managing ? undefined : 'button'}
-                            tabIndex={managing ? undefined : 0}
                             title={managing ? undefined : (zh ? '双击打开设备终端' : 'Double-click to open terminal')}
                             onDoubleClick={() => {
                                 if (!managing) onOpenEdgeDevice(device.asset_id);
-                            }}
-                            onKeyDown={event => {
-                                if (!managing && event.key === 'Enter') onOpenEdgeDevice(device.asset_id);
                             }}
                         >
                             <div className='DeviceManagementIcon edge' aria-hidden='true'>EDGE</div>
@@ -358,12 +397,14 @@ export const DeviceManagementPopup: React.FC<IProps> = (
                                 <span className='wide'><small>{zh ? '最后发现' : 'Last seen'}</small><strong>{lastSeen(device.last_seen_at)}</strong></span>
                             </div>
                             <span className={`DeviceManagementStatus ${edgeTone(device)}`}><i/> {statusLabel(edgeTone(device))}</span>
-                            {managing && <div className='DeviceManagementActions'>
-                                <button type='button' onClick={onDiscoverEdge}>{zh ? '连接设备' : 'Connect device'}</button>
+                            {!managing && <div className='DeviceManagementActions'>
+                                <button type='button' onClick={() => onOpenEdgeDevice(device.asset_id)}>{zh ? '终端' : 'Terminal'}</button>
+                                {onOpenEdgeLogs && <button type='button' disabled={!canReadEdgeLogs(device)}
+                                    onClick={() => onOpenEdgeLogs(device.asset_id)}>{zh ? '程序日志' : 'Program logs'}</button>}
                             </div>}
                         </article>)}
 
-                        {visibleCount === 0 && <div className='DeviceManagementEmpty'>
+                        {readState === 'ready' && visibleCount === 0 && <div className='DeviceManagementEmpty'>
                             <strong>{devices.length === 0
                                 ? (zh ? '尚未关联设备' : 'No devices associated')
                                 : (zh ? '没有匹配的设备' : 'No matching devices')}</strong>

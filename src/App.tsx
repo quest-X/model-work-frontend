@@ -17,6 +17,7 @@ import { AutoSaveService } from './services/AutoSaveService';
 import { ProjectRestoreService } from './services/ProjectRestoreService';
 import {IndexedDBManager, RecoveryStorageReadError} from './utils/IndexedDBManager';
 import {currentAccountSession} from './services/AccountService';
+import {getDefaultPlatform} from './services/PlatformPreferenceService';
 import {RestorePrompt, StoredDataInfo} from './views/Common/RestorePrompt';
 
 interface IProps {
@@ -31,6 +32,9 @@ export const App: React.FC<IProps> = (
         roboflowAPIDetails
     }
 ) => {
+    const [startNewWork] = useState(() => new URLSearchParams(window.location.search).get('new_work') === '1');
+    const [restoreWorkspaceId] = useState(() =>
+        new URLSearchParams(window.location.search).get('restore_workspace') || undefined);
     const [isRestoring, setIsRestoring] = useState(true);
     const [showRestorePrompt, setShowRestorePrompt] = useState(false);
     const [storedDataInfo, setStoredDataInfo] = useState<StoredDataInfo | null>(null);
@@ -38,7 +42,7 @@ export const App: React.FC<IProps> = (
     const [restoreStatus, setRestoreStatus] = useState<string>('正在加载...');
     const [storageUnavailable, setStorageUnavailable] = useState(false);
     const [platformMode, setPlatformMode] = useState<PlatformMode>(
-        () => currentAccountSession()?.user.role === 'admin' ? 'control' : 'annotation',
+        () => startNewWork ? 'annotation' : getDefaultPlatform(currentAccountSession()?.user),
     );
 
     const beforeOpenAnnotationResource = () => {
@@ -66,8 +70,21 @@ export const App: React.FC<IProps> = (
                 return;
             }
 
+            // An explicit new-work launch uses this tab's isolated workspace. Keep all
+            // recovery snapshots, but do not offer another workspace's project here.
+            if (startNewWork) {
+                await ProjectRestoreService.restoreSettings();
+                setStoredDataInfo({hasSettings: true, hasProject: false, lastSaved: 0});
+                AutoSaveService.resume();
+                const url = new URL(window.location.href);
+                url.searchParams.delete('new_work');
+                window.history.replaceState(window.history.state, '', url);
+                setIsRestoring(false);
+                return;
+            }
+
             // 检查是否有存储的数据
-            const dataInfo = await ProjectRestoreService.checkForStoredData();
+            const dataInfo = await ProjectRestoreService.checkForStoredData(restoreWorkspaceId);
             setStoredDataInfo(dataInfo);
 
             // 项目恢复只属于标注平台。控制中心保留待恢复快照但不弹窗；
@@ -113,7 +130,7 @@ export const App: React.FC<IProps> = (
                 if (!ready) {
                     throw new Error('恢复数据库仍被占用，请关闭其他旧标签页后重试');
                 }
-                dataInfo = await ProjectRestoreService.checkForStoredData();
+                dataInfo = await ProjectRestoreService.checkForStoredData(restoreWorkspaceId);
                 setStoredDataInfo(dataInfo);
                 setStorageUnavailable(false);
             }
@@ -136,6 +153,11 @@ export const App: React.FC<IProps> = (
             }
 
             setRestoreStatus('恢复完成');
+            if (restoreWorkspaceId) {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('restore_workspace');
+                window.history.replaceState(window.history.state, '', url);
+            }
             setStoredDataInfo(current => current ? {...current, hasProject: false} : current);
             setShowRestorePrompt(false);
 
@@ -201,8 +223,9 @@ export const App: React.FC<IProps> = (
             return <MobileMainView/>;
 
         // 直接进入EditorView，跳过MainView和项目类型选择
-        if (windowSize.height < Settings.EDITOR_MIN_HEIGHT || windowSize.width < Settings.EDITOR_MIN_WIDTH) {
-            return <SizeItUpView/>;
+        const minimumWidth = platformMode === 'control' ? Settings.CONTROL_MIN_WIDTH : Settings.EDITOR_MIN_WIDTH;
+        if (windowSize.height < Settings.EDITOR_MIN_HEIGHT || windowSize.width < minimumWidth) {
+            return <SizeItUpView minimumWidth={minimumWidth}/>;
         } else {
             return <EditorView
                 platformMode={platformMode}

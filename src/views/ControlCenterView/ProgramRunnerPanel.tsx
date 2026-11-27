@@ -9,8 +9,11 @@ import {
     ComputeProgramOverflowStatistics,
     ComputeProgramSnapshot,
     ComputeRuntimeEvent,
+    ComputeRuntimeEventWindow,
+    ComputeRuntimeRecentOnlyError,
     ComputeRuntimeService,
     ComputeRuntimeSnapshot,
+    isComputeAccessDenied,
 } from '../../services/ComputeClusterService';
 import {
     MachineHistoryObject,
@@ -28,7 +31,16 @@ type ProgramRunnerView = 'programs' | 'preview' | 'endpoints' | 'artifacts' | 't
 type ProgramTone = 'healthy' | 'warning' | 'offline';
 type ResultCategory = 'all' | 'video' | 'image' | 'data' | 'telegram' | 'log';
 
+export interface ProgramLogScope {
+    kind: 'runtime' | 'program';
+    id: string;
+    checkedAt: number;
+}
+
 interface IProps {
+    initialView?: ProgramRunnerView;
+    initialEdgeId?: string;
+    logScope?: ProgramLogScope;
     node: ComputeClusterNode;
     edgeDevices?: ComputeLanAsset[];
     zh: boolean;
@@ -43,6 +55,97 @@ interface ProgramRunnerCache {
 }
 
 const programRunnerCache = new Map<string, ProgramRunnerCache>();
+
+const useRuntimeLogWindow = (nodeId: string, programId: string, from: number, to: number, revision: number) => {
+    const key = nodeId ? JSON.stringify([nodeId, programId, from, to, revision]) : '';
+    const [request, setRequest] = useState<{key: string; cursor: number; snapshot?: string}>();
+    const [result, setResult] = useState<{
+        key: string;
+        page?: ComputeRuntimeEventWindow;
+        loading: boolean;
+        failed: boolean;
+        denied?: boolean;
+        recentOnly?: boolean;
+    }>();
+    const current = result?.key === key ? result : undefined;
+
+    useEffect(() => {
+        if (!key) {
+            setRequest(undefined);
+            setResult(undefined);
+            return undefined;
+        }
+        const controller = new AbortController();
+        const next = request?.key === key ? request : undefined;
+        const cursor = next?.cursor || 0;
+        setResult(previous => ({
+            key,
+            page: cursor > 0 && previous?.key === key ? previous.page : undefined,
+            loading: true,
+            failed: false,
+        }));
+        const program = programId ? {id: programId, snapshot: next?.snapshot} : undefined;
+        void ComputeClusterService.runtimeEventWindow(nodeId, from, to, cursor, controller.signal, program)
+            .then(page => {
+                if (controller.signal.aborted) return;
+                setResult(previous => ({
+                    key,
+                    page: {
+                        ...page,
+                        events: cursor > 0 ? [...(previous?.page?.events || []), ...page.events] : page.events,
+                    },
+                    loading: false,
+                    failed: false,
+                }));
+            }, error => {
+                if (controller.signal.aborted) return;
+                const denied = isComputeAccessDenied(error);
+                setResult(previous => ({
+                    key,
+                    page: !denied && previous?.key === key ? previous.page : undefined,
+                    loading: false,
+                    failed: true,
+                    denied,
+                    recentOnly: error instanceof ComputeRuntimeRecentOnlyError,
+                }));
+            });
+        return () => controller.abort();
+    }, [key, nodeId, programId, from, to, request]);
+
+    return {
+        enabled: Boolean(key),
+        loading: Boolean(key && (!current || current.loading)),
+        failed: Boolean(current?.failed),
+        page: current?.page,
+        denied: Boolean(current?.denied),
+        recentOnly: Boolean(current?.recentOnly),
+        loadMore: () => {
+            if (current?.failed && (programId || current.denied)) {
+                setRequest({key, cursor: 0});
+            } else {
+                setRequest({
+                    key,
+                    cursor: current?.failed
+                        ? (request?.key === key ? request.cursor : 0)
+                        : (current?.page?.cursor || 0),
+                    snapshot: current?.page?.snapshot,
+                });
+            }
+        },
+    };
+};
+
+const programHistoryNotice = (reason: ComputeRuntimeEventWindow['window']['reason'], zh: boolean) => {
+    if (!reason) return '';
+    return {
+        scan_pending: zh ? '所选时段仍有日志文件待读取。' : 'More log files remain to be checked.',
+        scan_limit: zh ? '已达到读取上限，所选时段覆盖不完整。' : 'The read limit was reached before the window was covered.',
+        rotation: zh ? '已读取可用轮转文件，轮转间隙的覆盖无法确认。' : 'Available rotated logs were read, but coverage across rotations is unconfirmed.',
+        range: zh ? '可读日志未覆盖整个所选时段。' : 'Readable logs do not span the full time window.',
+        source_unavailable: zh ? '有日志来源缺失或无法读取。' : 'A log source is missing or unreadable.',
+        truncated_or_invalid: zh ? '发现截断或无法解析的日志，覆盖不完整。' : 'Truncated or unreadable records leave coverage incomplete.',
+    }[reason];
+};
 
 const edgeRuntimeSnapshot = (
     programs: ComputeProgramSnapshot,
@@ -252,18 +355,20 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     zh,
     maximized,
     onToggleMaximized,
+    initialView = 'programs',
+    initialEdgeId,
+    logScope,
 }) => {
-    const [targetId, setTargetId] = useState(node.node_id);
-    const selectedEdge = edgeDevices.find(device => device.asset_id === targetId) || null;
-    const selectedEdgeId = selectedEdge?.asset_id || '';
-    const targetKey = selectedEdgeId ? `edge:${selectedEdgeId}` : node.node_id;
+    const [targetId, setTargetId] = useState(initialEdgeId || node.node_id);
+    const selectedEdgeId = targetId === node.node_id ? '' : targetId;
+    const selectedEdge = edgeDevices.find(device => device.node_id === node.node_id && device.asset_id === selectedEdgeId) || null;
+    const targetKey = selectedEdgeId ? `edge:${node.node_id}:${selectedEdgeId}` : node.node_id;
     const targetName = selectedEdge
         ? selectedEdge.display_name || selectedEdge.hostname || selectedEdge.address
         : node.name;
     const targetOnline = node.online && (!selectedEdge || selectedEdge.online);
-    const edgeRuntimeCapable = node.online && node.capabilities.includes('runtime.edge-programs.read.v1');
-    const cached = programRunnerCache.get(targetKey);
-    const [view, setView] = useState<ProgramRunnerView>('programs');
+    const cached = selectedEdgeId ? undefined : programRunnerCache.get(targetKey);
+    const [view, setView] = useState<ProgramRunnerView>(initialView);
     const [snapshot, setSnapshot] = useState<ComputeRuntimeSnapshot | null>(cached?.snapshot || null);
     const [programs, setPrograms] = useState<ComputeProgramSnapshot | null>(cached?.programs || null);
     const [events, setEvents] = useState<ComputeRuntimeEvent[]>(cached?.events || []);
@@ -289,6 +394,12 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [historyError, setHistoryError] = useState('');
     const [historyLoading, setHistoryLoading] = useState(false);
     const [historyRefresh, setHistoryRefresh] = useState(0);
+    const [logSearch, setLogSearch] = useState('');
+    const [logWindow, setLogWindow] = useState<{
+        target: string; source: string; from: number; to: number; revision: number;
+    }>();
+    const logWindowRevision = useRef(0);
+    const [invalidLogWindow, setInvalidLogWindow] = useState(false);
     const [selectedArtifactId, setSelectedArtifactId] = useState('');
     const [artifactDate, setArtifactDate] = useState(todayDateKey);
     const [artifactCategoryFilter, setArtifactCategoryFilter] = useState<ResultCategory>('all');
@@ -304,14 +415,16 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
     const [resultPreview, setResultPreview] = useState('');
     const [resultPreviewError, setResultPreviewError] = useState('');
     const [resultPreviewLoading, setResultPreviewLoading] = useState(false);
-    const [refreshing, setRefreshing] = useState(false);
+    const [refreshing, setRefreshing] = useState(initialView === 'logs');
     const [refreshProgress, setRefreshProgress] = useState(0);
     useEscapeToClose(() => setStatisticsCalendarOpen(false), statisticsCalendarOpen, 22);
-    const runtimeCapable = !selectedEdge && node.online && node.capabilities.includes('runtime.read.v1');
-    const programsCapable = selectedEdge
+    const nodeRuntimeCapable = node.online && node.capabilities.includes('runtime.read.v1');
+    const runtimeCapable = !selectedEdgeId && nodeRuntimeCapable;
+    const edgeRuntimeCapable = node.online && node.capabilities.includes('runtime.edge-programs.read.v1');
+    const programsCapable = selectedEdgeId
         ? edgeRuntimeCapable && selectedEdge.online
         : node.online && node.capabilities.includes('runtime.programs.read.v1');
-    const historyCapable = !selectedEdge && node.online && node.capabilities.includes('machine.history.read.v1');
+    const machineHistoryCapable = !selectedEdgeId && node.online && node.capabilities.includes('machine.history.read.v1');
     const runtimeVisible = runtimeCapable || snapshot !== null;
     const programsVisible = programsCapable || programs !== null;
     const logsVisible = runtimeVisible || programsVisible || events.length > 0;
@@ -335,15 +448,42 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         : showingCache
             ? (zh ? '离线 · 显示最后缓存' : 'Offline · showing last cached data')
             : (zh ? '离线' : 'Offline');
+    const logSource = logScope ? `${logScope.kind}:${logScope.id}` : logServiceId;
+    const manualWindow = logWindow?.target === targetKey && logWindow.source === logSource ? logWindow : undefined;
+    const logFrom = logScope ? Math.max(0, logScope.checkedAt - 300) : manualWindow?.from ?? 0;
+    const logTo = logScope ? Math.floor(logScope.checkedAt) + 1 : manualWindow?.to ?? Infinity;
+    const historyProgramId = logSource.startsWith('program:') ? logSource.slice('program:'.length) : '';
+    const historyCapable = !selectedEdgeId && (historyProgramId ? programsCapable
+        : nodeRuntimeCapable && logSource === 'runtime:task-executor');
+    const history = useRuntimeLogWindow(
+        view === 'logs' && historyCapable && (logScope || manualWindow) ? node.node_id : '',
+        historyProgramId,
+        logFrom,
+        logTo,
+        logScope ? 0 : manualWindow?.revision ?? 0,
+    );
+
+    const submitLogWindow = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!historyCapable || logScope) return;
+        const fields = new FormData(event.currentTarget);
+        const from = Date.parse(String(fields.get('from'))) / 1000;
+        const to = Date.parse(String(fields.get('to'))) / 1000;
+        const valid = from >= 0 && to > from && to - from <= 3600;
+        setInvalidLogWindow(!valid);
+        if (!valid) return;
+        logWindowRevision.current += 1;
+        setLogWindow({target: targetKey, source: logSource, from, to, revision: logWindowRevision.current});
+    };
 
     useEffect(() => { setTargetId(node.node_id); }, [node.node_id]);
     useEffect(() => {
-        if (targetId !== node.node_id && !selectedEdge) setTargetId(node.node_id);
-    }, [node.node_id, targetId, selectedEdge]);
+        setTargetId(initialEdgeId || node.node_id);
+    }, [initialEdgeId, node.node_id]);
 
     useEffect(() => {
-        const next = programRunnerCache.get(targetKey);
-        setView('programs');
+        const next = selectedEdgeId ? undefined : programRunnerCache.get(targetKey);
+        setView(initialView);
         setSnapshot(next?.snapshot || null);
         setPrograms(next?.programs || null);
         setEvents(next?.events || []);
@@ -364,6 +504,9 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setHistoryError('');
         setHistoryLoading(false);
         setHistoryRefresh(0);
+        setLogSearch('');
+        setLogWindow(undefined);
+        setInvalidLogWindow(false);
         setSelectedArtifactId('');
         setArtifactDate(todayDateKey());
         setArtifactCategoryFilter('all');
@@ -378,10 +521,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         setResultPreviewError('');
         setResultPreviewLoading(false);
         setRefreshProgress(0);
-    }, [targetKey]);
+    }, [initialView, selectedEdgeId, targetKey]);
 
     useEffect(() => {
-        if (!runtimeCapable && !programsRequested) return undefined;
+        if (!nodeRuntimeCapable && !programsRequested) return undefined;
         const controller = new AbortController();
         const inFlight = new Set<keyof ProgramRunnerCache>();
         const completed = new Set<keyof ProgramRunnerCache>();
@@ -412,7 +555,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     ...patch,
                 });
             };
-            if (runtimeCapable && !inFlight.has('snapshot')) {
+            if (nodeRuntimeCapable && !selectedEdgeId && !inFlight.has('snapshot')) {
                 void track('snapshot', ComputeClusterService.runtime(node.node_id, controller.signal)).then(
                     value => {
                         if (controller.signal.aborted) return;
@@ -444,7 +587,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                     },
                 );
             }
-            if (runtimeCapable && eventsRequested && !inFlight.has('events')) {
+            if (nodeRuntimeCapable && !selectedEdgeId && eventsRequested && !inFlight.has('events')) {
                 void track('events', ComputeClusterService.runtimeEvents(
                     node.node_id,
                     0,
@@ -474,10 +617,10 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             window.clearInterval(timer);
             setRefreshing(false);
         };
-    }, [eventsRequested, node.node_id, programsCapable, programsRequested, runtimeCapable, selectedEdgeId, targetKey]);
+    }, [eventsRequested, node.node_id, programsCapable, programsRequested, runtimeCapable, nodeRuntimeCapable, selectedEdgeId, targetKey]);
 
     useEffect(() => {
-        if (view !== 'history' || !historyCapable) return undefined;
+        if (view !== 'history' || !machineHistoryCapable) return undefined;
         const controller = new AbortController();
         setHistoryLoading(true);
         setHistoryError('');
@@ -507,7 +650,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             setHistoryLoading(false);
         });
         return () => controller.abort();
-    }, [historyCapable, historyRefresh, node.node_id, view]);
+    }, [machineHistoryCapable, historyRefresh, node.node_id, view]);
 
     const selectHistoryObject = (object: MachineHistoryObjectSummary) => {
         setHistoryLoading(true);
@@ -525,6 +668,8 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         });
     };
 
+    const showExecutorLogOption = nodeRuntimeCapable && !selectedEdgeId
+        && !snapshot?.services.some(service => service.service_id === 'task-executor');
     const selectedService = snapshot?.services.find(service =>
         service.service_id === selectedServiceId
     ) || snapshot?.services[0] || null;
@@ -559,25 +704,52 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             hasRecords: statisticsHasRecords(value),
         } : null}));
     };
-    const matchesLogFilter = (event: {service_id: string; message: string}): boolean =>
-        view === 'telegrams'
-            ? isTelegramLog(event.message)
-            : !logServiceId || event.service_id === logServiceId;
-    const filteredEvents = [...events]
-        .filter(matchesLogFilter)
-        .reverse();
-    const programEvents = (programs?.programs || []).flatMap(program =>
+    const matchesLog = (kind: ProgramLogScope['kind'], id: string, createdAt: number) =>
+        (!logSource || `${kind}:${id}` === logSource) && createdAt >= logFrom && createdAt < logTo;
+    const showRecent = !history.enabled || (history.failed && !history.denied);
+    const runtimeEvents = (!historyProgramId && history.page?.events) || (showRecent ? events : []);
+    const recentProgramEvents = (showRecent ? programs?.programs || [] : []).flatMap(program =>
         program.events.map(event => ({...event, service_id: program.program_id}))
-    ).filter(matchesLogFilter)
-        .sort((left, right) => right.created_at - left.created_at);
-    const logRows = [
-        ...filteredEvents.map(event => ({...event, key: `runtime-${event.cursor}`})),
-        ...programEvents.map((event, index) => ({
-            ...event,
-            key: `program-${event.service_id}-${event.created_at}-${index}`,
-            task_id: null,
-        })),
+    );
+    const programEvents = (historyProgramId && history.page?.events) || recentProgramEvents;
+    const allLogRows = [
+        ...runtimeEvents.filter(event => matchesLog('runtime', event.service_id, event.created_at))
+            .map(event => ({...event, key: `runtime-${event.cursor}`})),
+        ...programEvents.filter(event => matchesLog('program', event.service_id, event.created_at))
+            .map((event, index) => ({
+                ...event,
+                key: `program-${event.service_id}-${event.created_at}-${index}`,
+                task_id: null,
+            })),
     ].sort((left, right) => right.created_at - left.created_at);
+    const keyword = logSearch.trim().toLowerCase();
+    const visibleLogRows = view === 'telegrams' ? allLogRows.filter(event => isTelegramLog(event.message)) : allLogRows;
+    const logRows = keyword ? visibleLogRows.filter(event =>
+        [event.message, event.event_type, event.task_id, event.service_id, serviceNames.get(event.service_id)]
+            .some(value => value?.toLowerCase().includes(keyword))
+    ) : visibleLogRows;
+    const logReadError = history.page || history.denied ? '' : logSource.startsWith('runtime:')
+        ? eventsError
+        : historyProgramId ? programsError : [eventsError, programsError].filter(Boolean).join(' · ');
+    const historyReason = history.page?.window.reason;
+    const noKeywordMatch = keyword && allLogRows.length > 0;
+    const emptyLogTitle = history.enabled
+        ? history.loading
+            ? (zh ? '正在读取历史日志…' : 'Loading historical logs…')
+            : history.page?.has_more && !history.failed
+                ? (zh ? '已读范围暂无匹配记录，可继续读取' : 'No matches in the pages read so far')
+                : history.page?.window.coverage === 'complete' && !history.failed
+                    ? noKeywordMatch
+                        ? (zh ? '该时段无匹配记录' : 'No matching logs in this time window')
+                        : (zh ? '该时段无日志' : 'No logs in this time window')
+                    : (zh ? '该时段的日志覆盖未确认' : 'Log coverage for this time window is unconfirmed')
+        : logReadError
+            ? (zh ? '日志暂不可用' : 'Logs are unavailable')
+            : refreshing
+                ? (zh ? '正在读取日志…' : 'Loading logs…')
+                : initialView === 'logs' || noKeywordMatch
+                    ? (zh ? '最近可读事件中无匹配记录' : 'No matches in recent readable events')
+                    : (zh ? '暂无结构化日志' : 'No structured logs');
     const programArtifacts = (programs?.programs || []).flatMap(program =>
         program.artifacts.map(artifact => ({
             ...artifact,
@@ -825,6 +997,14 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
         {detail && <span>{detail}</span>}
     </div>;
 
+    if (selectedEdgeId && !programsCapable) return <section className='ControlResourceMonitor ControlProgramRunner'
+        role='dialog' aria-modal='true' aria-label={zh ? '边缘设备程序运行器' : 'Edge device program runner'}>
+        {unavailable(zh ? '所选边缘设备的程序与日志暂不可读。' : 'Programs and logs for the selected edge device are unavailable.')}
+        {!initialEdgeId && <button type='button' onClick={() => setTargetId(node.node_id)}>
+            {zh ? '返回所属机器' : 'Return to owning machine'}
+        </button>}
+    </section>;
+
     return <section
         className={`ControlResourceMonitor ControlProgramRunner${maximized ? ' maximized' : ''}`}
         role='dialog'
@@ -835,7 +1015,7 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
             <div>
                 <span>{zh ? '程序运行器' : 'Program Runner'}</span>
                 <h2>{targetName}</h2>
-                {edgeRuntimeCapable && edgeDevices.length > 0 && <label className='ControlProgramTarget'>
+                {!initialEdgeId && edgeRuntimeCapable && edgeDevices.length > 0 && <label className='ControlProgramTarget'>
                     <span>{zh ? '查看设备' : 'View device'}</span>
                     <select
                         aria-label={zh ? '选择程序运行设备' : 'Select program runtime device'}
@@ -845,8 +1025,11 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                         }}
                     >
                         <option value={node.node_id}>{node.name}</option>
-                        {edgeDevices.map(device => <option key={device.asset_id} value={device.asset_id}
-                            disabled={!device.online}>{device.display_name || device.hostname || device.address}</option>)}
+                        {edgeDevices.filter(device => device.node_id === node.node_id).map(device => <option
+                            key={device.asset_id}
+                            value={device.asset_id}
+                            disabled={!device.online}
+                        >{device.display_name || device.hostname || device.address}</option>)}
                     </select>
                 </label>}
                 <p>
@@ -1416,26 +1599,82 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                         onClick={() => setPrettyTelegramLogs(false)}
                                     >{zh ? '原始格式' : 'Raw'}</button>
                                 </div>}
-                                {view === 'logs' && <select
-                                    aria-label={zh ? '筛选日志程序' : 'Filter log program'}
-                                    value={logServiceId}
-                                    onChange={event => setLogServiceId(event.target.value)}
-                                >
-                                    <option value=''>{zh ? '全部程序' : 'All programs'}</option>
-                                    {(snapshot?.services || []).map(service => <option
-                                        key={service.service_id}
-                                        value={service.service_id}
-                                    >{programName(service, zh)}</option>)}
-                                    {(programs?.programs || []).map(program => <option
-                                        key={program.program_id}
-                                        value={program.program_id}
-                                    >{program.name}</option>)}
-                                </select>}
+
                             </div>
+                            {view === 'logs' && (logScope ? <p>
+                                {logScope.id} · {dateTime(logFrom, zh)} – {dateTime(logTo, zh)}
+                            </p> : <select
+                                aria-label={zh ? '筛选日志程序' : 'Filter log program'}
+                                value={logServiceId}
+                                onChange={event => {
+                                    setLogServiceId(event.target.value);
+                                    setLogWindow(undefined);
+                                    setInvalidLogWindow(false);
+                                }}
+                            >
+                                <option value=''>{zh ? '全部程序' : 'All programs'}</option>
+                                {(snapshot?.services || []).map(service => <option
+                                    key={`runtime:${service.service_id}`}
+                                    value={`runtime:${service.service_id}`}
+                                >{programName(service, zh)}</option>)}
+                                {showExecutorLogOption && <option value='runtime:task-executor'>
+                                    {zh ? '任务执行器' : 'Task executor'}
+                                </option>}
+                                {(programs?.programs || []).map(program => <option
+                                    key={`program:${program.program_id}`}
+                                    value={`program:${program.program_id}`}
+                                >{program.name}</option>)}
+                            </select>)}
                         </header>
-                        {(eventsError || programsError) && <p className='ControlProgramError' role='status'>
-                            {[eventsError, programsError].filter(Boolean).join(' · ')}
+                        <div className='ControlProgramLogFilters'>
+                            <input
+                                type='search' maxLength={160} value={logSearch}
+                                onChange={event => setLogSearch(event.target.value)}
+                                aria-label={zh ? '日志关键词' : 'Log keyword'}
+                                placeholder={zh ? '筛选已读取的日志' : 'Filter loaded logs'}
+                            />
+                            {!logScope && historyCapable && <form key={targetKey} onSubmit={submitLogWindow}>
+                                <label>
+                                    <span>{zh ? '起始时间' : 'Start time'}</span>
+                                    <input name='from' type='datetime-local' required />
+                                </label>
+                                <label>
+                                    <span>{zh ? '结束时间（不含）' : 'End time (exclusive)'}</span>
+                                    <input name='to' type='datetime-local' required />
+                                </label>
+                                <button className='ControlProgramLogPagination' type='submit'>
+                                    {zh ? '查找历史日志' : 'Search history'}
+                                </button>
+                                {manualWindow && <button className='ControlProgramLogPagination' type='button' onClick={() => {
+                                    setLogWindow(undefined);
+                                    setInvalidLogWindow(false);
+                                }}>{zh ? '返回最近日志' : 'Back to recent logs'}</button>}
+                            </form>}
+                        </div>
+                        {invalidLogWindow && <p className='ControlProgramError' role='status'>{zh
+                            ? '请选择有效的时间范围，结束时间应晚于起始时间，间隔最长 1 小时。'
+                            : 'Choose a valid time window with an end after the start and a duration of up to one hour.'}</p>}
+                        {manualWindow && <p>{dateTime(logFrom, zh)} – {dateTime(logTo, zh)}</p>}
+                        {!logScope && !historyCapable && !selectedEdgeId && <p>{zh
+                            ? '选择任务执行器或已登记程序，可查询最长 1 小时的历史。'
+                            : 'Select the task executor or a registered program to query up to one hour of history.'}</p>}
+                        {initialView === 'logs' && !history.enabled && <p role='status'>{zh
+                            ? '仅显示最近可读事件，历史时段可能未覆盖。'
+                            : 'Showing recent readable events. Historical coverage may be incomplete.'}</p>}
+                        {history.denied && <p className='ControlProgramError' role='status'>{zh
+                            ? '当前账号无权读取该来源的历史日志。'
+                            : 'Your account cannot read history from this source.'}</p>}
+                        {history.failed && !history.denied && <p role='status'>{history.recentOnly
+                            ? (zh ? '接口只返回近期日志，无法确认所选时段的覆盖情况。已读取的日志仍可查看。'
+                                : 'The endpoint returned recent logs only. Coverage for the selected window is unconfirmed. Previously loaded logs remain visible.')
+                            : (zh ? '历史日志读取失败。已读取的日志仍可查看。'
+                                : 'Could not load historical logs. Previously loaded logs remain visible.')}</p>}
+                        {!history.failed && history.page && history.page.window.coverage !== 'complete' && <p role='status'>
+                            {programHistoryNotice(historyReason, zh) || (history.page.window.coverage === 'unavailable'
+                                ? (zh ? '当前节点没有可用的任务事件历史。' : 'Task event history is unavailable on this node.')
+                                : (zh ? '日志未完整覆盖所选时段。' : 'Logs do not cover the full time window.'))}
                         </p>}
+                        {logReadError && <p className='ControlProgramError' role='status'>{logReadError}</p>}
                         {view === 'telegrams' && hasTelegramFiles ? <ProgramTelegramHistory
                             key={node.node_id}
                             nodeId={node.node_id}
@@ -1459,19 +1698,15 @@ export const ProgramRunnerPanel: React.FC<IProps> = ({
                                     : <strong>{event.message}</strong>}
                                 <small>{event.task_id ? `${zh ? '任务' : 'Task'} ${event.task_id}` : ''}</small>
                             </li>)}
-                        </ol> : unavailable(
-                            eventsError || programsError
-                                ? (view === 'telegrams'
-                                    ? (zh ? '电文暂不可用' : 'Telegrams are unavailable')
-                                    : (zh ? '日志暂不可用' : 'Logs are unavailable'))
-                                : refreshing && !snapshot && !programs && events.length === 0
-                                    ? (view === 'telegrams'
-                                        ? (zh ? `正在读取电文… ${refreshProgress}%` : `Loading telegrams… ${refreshProgress}%`)
-                                        : (zh ? `正在读取日志… ${refreshProgress}%` : `Loading logs… ${refreshProgress}%`))
-                                    : (view === 'telegrams'
-                                        ? (zh ? '暂无电文' : 'No telegrams')
-                                        : (zh ? '暂无结构化日志' : 'No structured logs')),
-                        )}
+                        </ol> : !history.denied && unavailable(emptyLogTitle)}
+                        {(history.page?.has_more || history.failed) && <button
+                            className='ControlProgramLogPagination' type='button'
+                            onClick={history.loadMore} disabled={history.loading}
+                        >{history.failed
+                            ? (historyProgramId
+                                ? (zh ? '重新查询历史日志' : 'Restart historical search')
+                                : (zh ? '重试读取历史日志' : 'Retry historical logs'))
+                            : (zh ? '加载更多日志' : 'Load more logs')}</button>}
                     </section>)}
 
                 {view === 'statistics' && (!programsVisible

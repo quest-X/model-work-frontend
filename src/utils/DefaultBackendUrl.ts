@@ -13,6 +13,12 @@ import type {AppState} from '../store';
 const DEFAULT_BACKEND_PORT = 58600;
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
+export const isLocalOpenSightGateway = (): boolean => {
+    const {protocol, hostname, port} = window.location;
+    return (protocol === 'http:' || protocol === 'https:')
+        && LOOPBACK_HOSTS.has(hostname) && port === String(DEFAULT_BACKEND_PORT);
+};
+
 /** 返回不带路径的同源 gateway base，例如 `http://192.168.1.205:3001`。 */
 export const getDefaultBackendBase = (): string => {
     if (typeof window === 'undefined' || !window.location) {

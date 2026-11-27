@@ -18,15 +18,22 @@ interface IProps {
     onClose: () => void;
 }
 
+const availabilityLabel = (camera: ComputeManagedDevice, available: boolean, zh: boolean) => {
+    if (!available) return zh ? '暂不可播放' : 'Live view unavailable';
+    if (camera.status === 'registered') return zh ? '已登记' : 'Registered';
+    return zh ? '正常' : 'Normal';
+};
+
+const canPlay = (node: ComputeClusterNode, camera: ComputeManagedDevice) =>
+    node.online && cameraStreamingAvailable(camera);
+
 export const CameraLiveViewPopup: React.FC<IProps> = ({
     language, node, cameras, initialCameraId, onClose,
 }) => {
     const zh = language === Language.CHINESE;
     useEscapeToClose(onClose, true, 20);
     const [selectedId, setSelectedId] = useState(initialCameraId);
-    const selected = cameras.find(camera => camera.device_id === selectedId) || cameras[0];
-
-    if (!selected) return null;
+    const selected = cameras.find(camera => camera.device_id === selectedId);
 
     return <div
         className='DeviceManagementBackdrop'
@@ -55,17 +62,20 @@ export const CameraLiveViewPopup: React.FC<IProps> = ({
                     aria-label={zh ? '相机设备' : 'Camera devices'}
                 >
                     {cameras.map(camera => {
-                        const available = cameraStreamingAvailable(camera);
+                        const available = canPlay(node, camera);
+                        const tone = !available ? 'fault' : camera.status === 'registered' ? 'unknown' : 'normal';
                         return <button
                             type='button'
                             role='tab'
                             key={camera.device_id}
-                            aria-selected={camera.device_id === selected.device_id}
+                            aria-selected={camera.device_id === selectedId}
                             disabled={!available}
                             onClick={() => setSelectedId(camera.device_id)}
                         >
                             <span>{camera.name}</span>
-                            <span className={`DeviceManagementStatus ${available ? 'normal' : 'fault'}`}><i/> {available ? (zh ? '正常' : 'Normal') : (zh ? '故障' : 'Fault')}</span>
+                            <span className={`DeviceManagementStatus ${tone}`}>
+                                <i/> {availabilityLabel(camera, available, zh)}
+                            </span>
                             <small>{camera.model || camera.device_id} · {camera.channels} {zh ? '通道' : 'channels'}</small>
                         </button>;
                     })}
@@ -79,7 +89,7 @@ export const CameraLiveViewPopup: React.FC<IProps> = ({
                 </nav>
 
                 <main className='DeviceManagementMain CameraLiveViewMain'>
-                    <CameraPlayer
+                    {selected && canPlay(node, selected) ? <CameraPlayer
                         key={selected.device_id}
                         language={language}
                         item={{
@@ -93,7 +103,10 @@ export const CameraLiveViewPopup: React.FC<IProps> = ({
                             cameraResourceId: selected.device_id,
                             cameraModel: selected.model || undefined,
                         }}
-                    />
+                    /> : <div className='DeviceManagementEmpty' role='status'>
+                        {zh ? '当前摄像头暂不可播放。可选择其他可用摄像头。'
+                            : 'The selected camera is unavailable. You can choose another camera.'}
+                    </div>}
                 </main>
             </div>
         </section>

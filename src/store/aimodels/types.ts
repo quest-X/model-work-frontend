@@ -1,4 +1,4 @@
-export type EngineType = 'core' | 'extension';
+export type EngineType = 'core' | 'extension' | 'annotation';
 export type InferenceModelType = 'custom' | 'detection' | 'segmentation' | 'ocr';
 
 export interface AIModel {

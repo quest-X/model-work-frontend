@@ -17,6 +17,7 @@ interface IProps {
     node: ComputeClusterNode | null;
     zh: boolean;
     visible: boolean;
+    prefillDirectory?: {path: string};
 }
 
 type SuccessfulScan = {result: ComputeDuplicateResult; roots: string[]; completedAt: number};
@@ -49,7 +50,7 @@ const resultMatchesRoots = (result: ComputeDuplicateResult, rootCount: number): 
 ].every(item => item.root_index < rootCount);
 
 // eslint-disable-next-line complexity
-export const DuplicateAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) => {
+export const DuplicateAnalysisPanel: React.FC<IProps> = ({node, zh, visible, prefillDirectory}) => {
     const [path, setPath] = useState('');
     const [minMiB, setMinMiB] = useState(1);
     const [pending, setPending] = useState<ComputeDuplicateAuthorizationResult>();
@@ -61,12 +62,19 @@ export const DuplicateAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) =>
     const [error, setError] = useState('');
     const [copied, setCopied] = useState('');
     const startButton = useRef<HTMLButtonElement>(null);
+    const appliedDirectory = useRef<IProps['prefillDirectory']>();
     const windows = Boolean(node?.resources.platform.toLowerCase().includes('windows'));
     const available = Boolean(node?.online && node.capabilities.includes('task.duplicate.scan.v1'));
     const active = Boolean(response && ACTIVE_STATES.has(response.state));
     const currentRequest = useMemo(() => response
         ? {request_id: response.request_id, node_id: response.node_id}
         : null, [response]);
+
+    useEffect(() => {
+        if (!prefillDirectory || appliedDirectory.current === prefillDirectory || busy || pending || active) return;
+        appliedDirectory.current = prefillDirectory;
+        setPath(prefillDirectory.path);
+    }, [prefillDirectory, busy, pending, active]);
 
     useEffect(() => {
         if (!visible || !active || !response?.task_id || !currentRequest) return undefined;
@@ -245,6 +253,7 @@ export const DuplicateAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) =>
             {(status || error) && <div className={`StorageAnalysisStatus ${error ? 'error' : ''}`} role={error ? 'alert' : 'status'} aria-live='polite'>{error || status}</div>}
             {!result && !active && response?.state !== 'cancelled' && <div className='StorageAnalysisNotice'>{zh ? '按大小、局部哈希和完整 SHA-256 分级确认；硬链接不会计为重复文件。' : 'Confirms by size, partial hash, then full SHA-256; hard links are excluded.'}</div>}
             {result && success && <div className='StorageAnalysisResults'>
+                <h4 className='StorageAnalysisReportTitle'>{zh ? '最近完成的报告' : 'Latest completed report'}</h4>
                 <div className='StorageAnalysisSummary'>
                     <div><strong>{result.summary.group_count}</strong><span>{zh ? '重复组' : 'Duplicate groups'}</span></div>
                     <div><strong>{result.summary.duplicate_file_count}</strong><span>{zh ? '重复文件' : 'Duplicate files'}</span></div>
@@ -252,7 +261,7 @@ export const DuplicateAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) =>
                     <div><strong>{result.summary.changed_count}</strong><span>{zh ? '扫描中变化' : 'Changed during scan'}</span></div>
                 </div>
                 <p className='StorageAnalysisMeta'>{zh ? '范围：' : 'Scope: '}{success.roots.join(' · ')} · {new Date(success.completedAt).toLocaleString(zh ? 'zh-CN' : 'en-US')}{result.truncated ? (zh ? ' · 报告已按上限截断' : ' · Report truncated at the limit') : ''}</p>
-                <div className='StorageAnalysisTableWrap'><table><thead><tr><th>{zh ? '文件' : 'Files'}</th><th>{zh ? '大小' : 'Size'}</th><th>{zh ? '可释放' : 'Reclaimable'}</th><th>SHA-256</th></tr></thead><tbody>{result.groups.map(group => <tr key={group.sha256}><td data-label={zh ? '文件' : 'Files'}>{group.files.map(file => {
+                <div className='StorageAnalysisTableWrap'><table><thead><tr><th>{zh ? '文件' : 'Files'}</th><th>{zh ? '大小' : 'Size'}</th><th>{zh ? '可释放' : 'Reclaimable'}</th><th>SHA-256</th></tr></thead><tbody>{result.groups.map(group => <tr key={group.sha256}><td className='DuplicateAnalysisFiles' data-label={zh ? '文件' : 'Files'}>{group.files.map(file => {
                     const fullPath = storageFullPath(success.roots[file.root_index], file.relative_path);
                     return <button key={`${file.root_index}-${file.relative_path}`} type='button' title={file.relative_path} onClick={() => void copyPath(file.root_index, file.relative_path)}>{copied === fullPath ? (zh ? '已复制' : 'Copied') : file.relative_path}</button>;
                 })}{group.truncated ? <small>{zh ? `另有 ${group.file_count - group.files.length} 个文件` : `${group.file_count - group.files.length} more files`}</small> : null}</td><td data-label={zh ? '大小' : 'Size'}>{formatBytes(group.size)}</td><td data-label={zh ? '可释放' : 'Reclaimable'}>{formatBytes(group.reclaimable_bytes)}</td><td data-label='SHA-256' title={group.sha256}>{group.sha256.slice(0, 12)}…</td></tr>)}</tbody></table></div>
@@ -260,7 +269,8 @@ export const DuplicateAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) =>
             </div>}
         </>}
 
-        <Dialog open={Boolean(pending && visible)} onClose={() => void reject()} aria-labelledby='duplicate-authorization-title'>
+        <Dialog open={Boolean(pending && visible)} onClose={() => void reject()}
+            PaperProps={{className: 'StorageAuthorizationDialog'}} aria-labelledby='duplicate-authorization-title'>
             <DialogTitle id='duplicate-authorization-title'>{zh ? '确认只读重复文件扫描' : 'Confirm read-only duplicate scan'}</DialogTitle>
             <DialogContent><dl className='StorageAuthorizationDetails'>
                 <div><dt>{zh ? '目标机器' : 'Target machine'}</dt><dd>{node?.name}</dd></div>

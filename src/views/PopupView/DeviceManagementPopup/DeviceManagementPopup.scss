@@ -157,14 +157,12 @@
   .ComputeTerminalHeading,
   .ComputeTerminalToolbar,
   .ComputeTerminalError,
-  .ComputeTerminalInput,
   .ComputeTerminalBoundary { flex: 0 0 auto; }
   .ComputeTerminalScreen { height: auto; min-height: 120px; flex: 1; }
   .ComputeTerminalHeading p,
   .ComputeTerminalState,
   .ComputeTerminalToolbar label > span,
   .ComputeTerminalError,
-  .ComputeTerminalInput button { font-size: 10px; }
   .ComputeTerminalToolbar select,
   .ComputeTerminalToolbar button { font-size: 11px; }
   .ComputeTerminalBoundary { font-size: 9px; }
@@ -209,6 +207,7 @@
 .DeviceManagementActions {
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   gap: 7px;
 
   button {
@@ -372,6 +371,7 @@
   i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   &.normal { color: #68d58c; }
   &.fault { color: #e7a640; }
+  &.unknown { color: rgba(255, 255, 255, 0.68); }
 }
 
 .DeviceManagementEmpty {

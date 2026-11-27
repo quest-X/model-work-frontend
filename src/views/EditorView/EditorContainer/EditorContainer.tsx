@@ -1,3 +1,4 @@
+import {useVideoInferenceFlow} from './useVideoInferenceFlow';
 import React, {useState, useEffect, useCallback, useRef} from 'react';
 import {connect} from 'react-redux';
 import {Direction} from '../../../data/enums/Direction';
@@ -8,6 +9,7 @@ import {ImageData} from '../../../store/labels/types';
 import {VideoData} from '../../../store/video/types';
 import ImagesList from '../SideNavigationBar/ImagesList/ImagesList';
 import QueueList from '../SideNavigationBar/QueueList/QueueList';
+import HistoryTasks from '../SideNavigationBar/HistoryTasks/HistoryTasks';
 import LabelsToolkit from '../SideNavigationBar/LabelsToolkit/LabelsToolkit';
 import {SideNavigationBar} from '../SideNavigationBar/SideNavigationBar';
 import {VerticalEditorButton} from '../VerticalEditorButton/VerticalEditorButton';
@@ -39,7 +41,7 @@ import {useDatasetDirtyTracking} from './useDatasetDirtyTracking';
 import {createDroppedMediaQueueItems, VideoImportProgress} from './EditorFileImport';
 import {version as appVersion} from '../../../../package.json';
 
-const appEdition = 'Platform';
+import {appEdition} from '../../../utils/AppEdition';
 
 interface IProps {
     windowSize: ISize;
@@ -49,6 +51,7 @@ interface IProps {
     projectType: ProjectType;
     language: Language;
     isVideoMode: boolean;
+    inferenceInProgress: boolean;
     activeVideo: VideoData | null;
     queueItems: QueueItem[];
     activeQueueItemId: string | null;
@@ -66,6 +69,7 @@ const EditorContainer: React.FC<IProps> = (
         projectType,
         language,
         isVideoMode,
+        inferenceInProgress,
         activeVideo,
         queueItems,
         activeQueueItemId,
@@ -77,7 +81,11 @@ const EditorContainer: React.FC<IProps> = (
     const [rightTabStatus, setRightTabStatus] = useState(true);
     const [showInferenceResults, setShowInferenceResults] = useState<boolean>(false);
     const [showBatchStatistics, setShowBatchStatistics] = useState<boolean>(false);
-    const [showQueueList, setShowQueueList] = useState<boolean>(false);
+    const [leftPanel, setLeftPanel] = useState<'images' | 'queue' | 'history'>('images');
+    const previewImageId = useVideoInferenceFlow(activeVideo?.id, inferenceInProgress,
+        () => { setLeftTabStatus(true); setLeftPanel('images'); setRightTabStatus(true);
+            setShowBatchStatistics(false); setShowInferenceResults(true); },
+        () => { setRightTabStatus(true); setShowBatchStatistics(true); setShowInferenceResults(false); }, activeVideo?.fps);
     const [isWindowDragActive, setIsWindowDragActive] = useState(false);
     const [videoProcessing, setVideoProcessing] = useState<VideoImportProgress | null>(null);
 
@@ -178,6 +186,7 @@ const EditorContainer: React.FC<IProps> = (
     // 批量推理完成后自动弹出统计面板
     useEffect(() => {
         const handleBatchComplete = (e: Event) => {
+            if (isVideoMode) return;
             const count = (e as CustomEvent).detail?.count ?? 0;
             if (count > 2) {
                 EditorModel.lastBatchInferenceImageCount = 0;
@@ -188,7 +197,7 @@ const EditorContainer: React.FC<IProps> = (
         };
         window.addEventListener('batchInferenceComplete', handleBatchComplete);
         return () => window.removeEventListener('batchInferenceComplete', handleBatchComplete);
-    }, []);
+    }, [isVideoMode]);
 
     // 监听标注数据变化并触发自动保存
     // 5 秒防抖：只有 imagesData 引用变化（标注增删改）才触发，
@@ -297,40 +306,18 @@ const EditorContainer: React.FC<IProps> = (
             return null;
     };
 
-    const leftSideBarButtonOnClick = () => {
-        // 如果左侧导航栏关闭，则打开并显示图像
+    const selectLeftPanel = (panel: 'images' | 'queue' | 'history') => {
         if (!leftTabStatus) {
             setLeftTabStatus(true);
-            setShowQueueList(false);
+            setLeftPanel(panel);
             ContextManager.switchCtx(ContextType.LEFT_NAVBAR);
         }
-        // 如果左侧导航栏打开且当前显示图像，则关闭导航栏
-        else if (leftTabStatus && !showQueueList) {
+        else if (leftPanel === panel) {
             setLeftTabStatus(false);
             ContextManager.restoreCtx();
         }
-        // 如果左侧导航栏打开但显示队列，则切换到图像
         else {
-            setShowQueueList(false);
-        }
-    };
-
-    const queueButtonOnClick = () => {
-        // 如果左侧导航栏关闭，则打开并显示队列
-        if (!leftTabStatus) {
-            setLeftTabStatus(true);
-            setShowQueueList(true);
-            ContextManager.switchCtx(ContextType.LEFT_NAVBAR);
-        }
-        // 如果左侧导航栏打开且当前显示队列，则关闭导航栏
-        else if (leftTabStatus && showQueueList) {
-            setLeftTabStatus(false);
-            setShowQueueList(false);
-            ContextManager.restoreCtx();
-        }
-        // 如果左侧导航栏打开但显示图像，则切换到队列
-        else {
-            setShowQueueList(true);
+            setLeftPanel(panel);
         }
     };
 
@@ -340,17 +327,25 @@ const EditorContainer: React.FC<IProps> = (
                 label={currentTexts.images}
                 image={'/ico/camera.png'}
                 imageAlt={'images'}
-                onClick={leftSideBarButtonOnClick}
-                isActive={leftTabStatus && !showQueueList}
+                onClick={() => selectLeftPanel('images')}
+                isActive={leftTabStatus && leftPanel === 'images'}
                 style={{top: '81px'}}
             />
             <VerticalEditorButton
                 label={currentTexts.queue}
                 image={'/ico/files.png'}
                 imageAlt={'queue'}
-                onClick={queueButtonOnClick}
-                isActive={leftTabStatus && showQueueList}
+                onClick={() => selectLeftPanel('queue')}
+                isActive={leftTabStatus && leftPanel === 'queue'}
                 style={{top: '167px'}}
+            />
+            <VerticalEditorButton
+                label={language === Language.CHINESE ? '历史任务' : 'Task History'}
+                image={'/ico/tasks.png'}
+                imageAlt={'history'}
+                onClick={() => selectLeftPanel('history')}
+                isActive={leftTabStatus && leftPanel === 'history'}
+                style={{top: '253px'}}
             />
             <div className='VersionWatermark' onClick={() => updateActivePopupTypeAction(PopupWindowType.CHANGELOG)}>
                 v{appVersion}({appEdition})
@@ -380,7 +375,9 @@ const EditorContainer: React.FC<IProps> = (
     };
 
     const leftSideBarRender = () => {
-        return showQueueList ? <QueueList/> : <ImagesList/>
+        if (leftPanel === 'queue') return <QueueList/>;
+        if (leftPanel === 'history') return <HistoryTasks language={language}/>;
+        return <ImagesList/>;
     };
 
     type RightPanel = 'labels' | 'inference' | 'statistics';
@@ -439,7 +436,7 @@ const EditorContainer: React.FC<IProps> = (
 
     const rightSideBarRender = () => {
         if (showBatchStatistics) return <BatchStatisticsView/>;
-        if (showInferenceResults) return <InferenceResultsView/>;
+        if (showInferenceResults) return <InferenceResultsView previewImageId={previewImageId}/>;
         return <LabelsToolkit/>;
     };
 
@@ -530,6 +527,7 @@ const mapStateToProps = (state: AppState) => ({
     projectType: state.general.projectData.type,
     language: state.general.language,
     isVideoMode: state.video?.isVideoMode || false,
+    inferenceInProgress: !!state.video?.isVideoMode && state.ai.isFullImageInferenceInProgress,
     activeVideo: state.video?.activeVideo || null,
     queueItems: state.queue?.items || [],
     activeQueueItemId: state.queue?.activeQueueItemId || null

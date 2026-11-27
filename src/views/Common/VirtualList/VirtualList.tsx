@@ -3,7 +3,6 @@ import {ISize} from "../../../interfaces/ISize";
 import {IRect} from "../../../interfaces/IRect";
 import Scrollbars from 'react-custom-scrollbars-2';
 import {VirtualListUtil} from "../../../utils/VirtualListUtil";
-import {IPoint} from "../../../interfaces/IPoint";
 import {RectUtil} from "../../../utils/RectUtil";
 
 interface IProps {
@@ -22,7 +21,6 @@ interface IState {
 export class VirtualList extends React.Component<IProps, IState> {
     private gridSize: ISize;
     private contentSize: ISize;
-    private childAnchors: IPoint[];
     private scrollbars: Scrollbars;
 
     constructor(props: IProps) {
@@ -49,7 +47,8 @@ export class VirtualList extends React.Component<IProps, IState> {
     public UNSAFE_componentWillUpdate(nextProps: Readonly<IProps>): void {
         const {size, childSize, childCount} = nextProps;
         if (this.props.size.height !== size.height || this.props.size.width !== size.width ||
-            this.props.childCount !== childCount) {
+            this.props.childCount !== childCount || this.props.childSize.width !== childSize.width ||
+            this.props.childSize.height !== childSize.height) {
             this.calculate(size, childSize, childCount);
             this.setState({
                 viewportRect: {
@@ -65,7 +64,6 @@ export class VirtualList extends React.Component<IProps, IState> {
     private calculate = (size: ISize, childSize: ISize, childCount: number) => {
         this.gridSize = VirtualListUtil.calculateGridSize(size, childSize, childCount);
         this.contentSize = VirtualListUtil.calculateContentSize(size, childSize, this.gridSize);
-        this.childAnchors = VirtualListUtil.calculateAnchorPoints(size, childSize, childCount);
     };
 
     private getVirtualListStyle = ():React.CSSProperties => {
@@ -114,8 +112,19 @@ export class VirtualList extends React.Component<IProps, IState> {
             height: viewportRect.height + 2 * overScan
         };
 
-        return this.childAnchors.reduce((children, anchor: IPoint, index: number) => {
-            const childRect = Object.assign(anchor, childSize);
+        // Only visit visible rows, including cells touching either viewport edge.
+        const columns = this.gridSize.width;
+        const firstRow = Math.max(0, Math.ceil(viewportRectWithOverScan.y / childSize.height) - 1);
+        const endRow = Math.floor((viewportRectWithOverScan.y + viewportRectWithOverScan.height) / childSize.height) + 1;
+        const endIndex = Math.min(this.props.childCount, endRow * columns);
+        const margin = (this.contentSize.width - columns * childSize.width) / (columns + 1);
+        const children: React.ReactNode[] = [];
+        for (let index = firstRow * columns; index < endIndex; index++) {
+            const anchor = {
+                x: (index % columns) * (margin + childSize.width),
+                y: Math.floor(index / columns) * childSize.height,
+            };
+            const childRect = {...anchor, ...childSize};
             const isVisible = RectUtil.intersect(viewportRectWithOverScan, childRect);
 
             if (isVisible) {
@@ -127,12 +136,10 @@ export class VirtualList extends React.Component<IProps, IState> {
                     height: childSize.height
                 };
 
-                return children.concat(this.props.childRender(index, isScrolling, isVisible, childStyle))
+                children.push(this.props.childRender(index, isScrolling, isVisible, childStyle));
             }
-            else {
-                return children;
-            }
-        }, [])
+        }
+        return children;
     };
 
     public render() {

@@ -636,6 +636,76 @@ describe('IndexedDBManager durability', () => {
         expect(loaded).toEqual(expect.objectContaining({version: 'A', workspaceId: 'tab-local'}));
     });
 
+    it('lists only annotated recoverable snapshots and reads names from older records', async () => {
+        const annotated = {
+            id: 'task-a', projectId: 'workspace:task-a', imageCount: 8,
+            validImageCount: 8, labelCount: 5, isVideoProject: true,
+            hasRecoverableProject: true, lastModified: 20,
+        };
+        const empty = {...annotated, id: 'task-b', projectId: 'workspace:task-b', labelCount: 0};
+        const imageTask = {...annotated, id: 'task-c', projectId: 'workspace:task-c',
+            isVideoProject: false, lastModified: 10};
+        const request: FakeRequest<Array<typeof annotated>> = {result: [empty, imageTask, annotated]};
+        setDatabase(() => ({
+            error: null,
+            objectStore: () => ({
+                getAll: () => {
+                    queueMicrotask(() => request.onsuccess?.());
+                    return request;
+                },
+            }),
+        }));
+        const firstImageFileData = new Uint8Array([1, 2, 3]).buffer;
+        const readProject = mockMethod('readProjectById').mockImplementation(async projectId =>
+            projectId === 'workspace:task-c' ? {
+                ...project(), activeQueueItemId: 'image',
+                queueItems: [{id: 'image', name: 'first.jpg', type: QueueItemType.IMAGE,
+                    status: QueueItemStatus.COMPLETED, uploadedAt: 1}],
+                images: [{id: 'first', fileName: 'first.jpg', fileData: firstImageFileData,
+                    fileType: 'image/jpeg', loadStatus: true, labelRects: [rectangle('first')],
+                    labelPoints: [], labelLines: [], labelPolygons: [], labelNameIds: ['steel']}],
+            } : {
+                ...project(), activeQueueItemId: 'video',
+                queueItems: [{
+                    id: 'video', name: 'dog_4166347', type: QueueItemType.VIDEO,
+                    thumbnail: 'data:image/png;base64,first-frame',
+                    status: QueueItemStatus.COMPLETED, uploadedAt: 1,
+                }],
+            });
+
+        await expect(IndexedDBManager.listAnnotatedProjects()).resolves.toEqual([
+            expect.objectContaining({workspaceId: 'task-a', projectName: 'dog_4166347',
+                thumbnail: 'data:image/png;base64,first-frame', labelCount: 5}),
+            expect.objectContaining({workspaceId: 'task-c', projectName: 'first.jpg',
+                firstImageFileData, firstImageFileType: 'image/jpeg'}),
+        ]);
+        expect(readProject).toHaveBeenCalledWith('workspace:task-a');
+        expect(readProject).toHaveBeenCalledWith('workspace:task-c');
+    });
+
+    it('pins a specifically selected historical snapshot for restore', async () => {
+        const meta = {
+            id: 'task-a', projectId: 'workspace:task-a', projectName: 'dog_4166347',
+            imageCount: 8, validImageCount: 8, labelCount: 5,
+            isVideoProject: true, hasRecoverableProject: true, lastModified: 20,
+        };
+        setDatabase();
+        IndexedDBManager['workspaceId'] = 'tab-local';
+        mockMethod('readWorkspaceMeta').mockResolvedValue(meta);
+        const resolveLatest = mockMethod('resolveProjectLocation');
+        mockMethod('readProjectById').mockResolvedValue({
+            ...project(), id: meta.projectId, lastModified: meta.lastModified,
+        });
+
+        await expect(IndexedDBManager.getProjectMeta('task-a')).resolves.toEqual(
+            expect.objectContaining({projectName: 'dog_4166347'}),
+        );
+        await expect(IndexedDBManager.loadProject()).resolves.toEqual(
+            expect.objectContaining({workspaceId: 'tab-local'}),
+        );
+        expect(resolveLatest).not.toHaveBeenCalled();
+    });
+
     it('reclassifies legacy empty metadata when the stored project is a camera workspace', async () => {
         const location = {
             projectId: 'workspace:tab-camera',

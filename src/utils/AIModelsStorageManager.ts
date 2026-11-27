@@ -1,5 +1,5 @@
-import { AIModel } from '../store/aimodels/types';
-import {normalizeEngineBaseUrl, ServiceEngineType} from './DefaultBackendUrl';
+import { AIModel, EngineType } from '../store/aimodels/types';
+import {getDefaultCoreServiceBase, normalizeEngineBaseUrl} from './DefaultBackendUrl';
 import {demoEngines, isDemoMode} from '../demo/DemoMode';
 
 type StoredEngine = Omit<AIModel, 'modelType' | 'createdAt'> & {
@@ -10,14 +10,16 @@ type StoredEngine = Omit<AIModel, 'modelType' | 'createdAt'> & {
 const LEGACY_CORE_TYPES = new Set(['core', 'custom', 'detection', 'segmentation', 'ocr']);
 
 const migrateEngine = (model: StoredEngine): AIModel | null => {
-    const modelType: ServiceEngineType | null = model.modelType === 'extension'
+    const modelType: EngineType | null = model.modelType === 'annotation'
+        ? 'annotation'
+        : model.modelType === 'extension'
         ? 'extension'
         : LEGACY_CORE_TYPES.has(model.modelType || '') ? 'core' : null;
     if (!modelType || !model.url) return null;
     return {
         ...model,
         modelType,
-        url: normalizeEngineBaseUrl(model.url, modelType),
+        url: modelType === 'annotation' ? `${getDefaultCoreServiceBase()}/sigine-infra` : normalizeEngineBaseUrl(model.url, modelType),
         createdAt: new Date(model.createdAt),
     };
 };

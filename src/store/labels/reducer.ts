@@ -34,6 +34,7 @@ export function labelsReducer(
 ): LabelsState {
     switch (action.type) {
         case Action.UPDATE_ACTIVE_IMAGE_INDEX: {
+            if (state.activeImageIndex === action.payload.activeImageIndex) return state;
             return {
                 ...state,
                 activeImageIndex: action.payload.activeImageIndex
@@ -106,9 +107,10 @@ export function labelsReducer(
             }
         }
         case Action.SELECT_ALL_IMAGES: {
+            if (state.imagesData.every(image => Boolean(image.isSelected) === action.payload.selectAll)) return state;
             return {
                 ...state,
-                imagesData: state.imagesData.map((imageData: ImageData) => ({
+                imagesData: state.imagesData.map((imageData: ImageData) => Boolean(imageData.isSelected) === action.payload.selectAll ? imageData : ({
                     ...imageData,
                     isSelected: action.payload.selectAll
                 }))
@@ -128,12 +130,13 @@ export function labelsReducer(
             const { startIndex, endIndex } = action.payload;
             const minIndex = Math.min(startIndex, endIndex);
             const maxIndex = Math.max(startIndex, endIndex);
-            
+            const selected = (index: number) => index >= minIndex && index <= maxIndex;
+            if (state.imagesData.every((image, index) => Boolean(image.isSelected) === selected(index))) return state;
             return {
                 ...state,
-                imagesData: state.imagesData.map((imageData: ImageData, index: number) => ({
+                imagesData: state.imagesData.map((imageData: ImageData, index: number) => Boolean(imageData.isSelected) === selected(index) ? imageData : ({
                     ...imageData,
-                    isSelected: index >= minIndex && index <= maxIndex
+                    isSelected: selected(index)
                 }))
             }
         }

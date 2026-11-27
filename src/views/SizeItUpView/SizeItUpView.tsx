@@ -4,7 +4,7 @@ import {Settings} from "../../settings/Settings";
 import {store} from '../../index';
 import {LanguageConfig} from '../../data/LanguageConfig';
 
-export const SizeItUpView: React.FC = () => {
+export const SizeItUpView: React.FC<{minimumWidth?: number}> = ({minimumWidth = Settings.EDITOR_MIN_WIDTH}) => {
     const language = store.getState().general.language;
     const texts = LanguageConfig[language];
 
@@ -15,6 +15,6 @@ export const SizeItUpView: React.FC = () => {
             alt={"small_window"}
             src={"ico/small_window.png"}
         />
-        <p className="extraBold">{texts.sizeItUp.minimumSize.replace('{width}', String(Settings.EDITOR_MIN_WIDTH)).replace('{height}', String(Settings.EDITOR_MIN_HEIGHT))}</p>
+        <p className="extraBold">{texts.sizeItUp.minimumSize.replace('{width}', String(minimumWidth)).replace('{height}', String(Settings.EDITOR_MIN_HEIGHT))}</p>
     </div>)
 };

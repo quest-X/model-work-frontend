@@ -1,10 +1,10 @@
 import {ImageData} from '../../../store/labels/types';
 import {ImageDataUtil} from '../../../utils/ImageDataUtil';
 
-export function createVideoFramePlaceholders(file: File, frames: number): ImageData[] {
+export function createVideoFramePlaceholders(frames: number): ImageData[] {
     const images: ImageData[] = [];
     for (let i = 0; i < frames; i++) {
-        const image = ImageDataUtil.createImageDataFromFileData(file);
+        const image = ImageDataUtil.createImageDataFromFileData(new File([], `frame_${String(i).padStart(6, '0')}.jpg`, {type: 'image/jpeg'}));
         image.loadStatus = false;
         if (i === 0) image.isSelected = true;
         images.push(image);

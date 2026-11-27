@@ -15,7 +15,7 @@ interface IProps {
 
 const diagnosisCache = new Map<string, ComputePerformanceDiagnosis>();
 
-const metricLabel = (metric: ComputePerformanceMetric, zh: boolean): string => ({
+export const metricLabel = (metric: ComputePerformanceMetric, zh: boolean): string => ({
     cpu_percent: zh ? '处理器' : 'CPU',
     memory_used_percent: zh ? '内存' : 'Memory',
     disk_used_percent: zh ? '磁盘' : 'Disk',
@@ -41,6 +41,65 @@ const evidenceStatus = (item: ComputePerformanceEvidence, zh: boolean): string =
         return zh ? '节点未上报 GPU 数据' : 'GPU telemetry not reported';
     }
     return zh ? '证据不足' : 'Insufficient';
+};
+
+// eslint-disable-next-line complexity
+export const PerformanceDiagnosisEvidence = ({diagnosis: document, zh, refresh, loading, error}: {
+    diagnosis: ComputePerformanceDiagnosis;
+    zh: boolean;
+    refresh?: () => void;
+    loading?: boolean;
+    error?: string;
+}) => {
+    return <section
+        className='ControlMonitorProcesses ControlMonitorInventory ControlPerformanceDiagnosis'
+        aria-label={zh ? '性能诊断证据' : 'Performance diagnosis evidence'}
+    >
+        <header className='ControlMonitorSearchHeader'>
+            <div>
+                <h3>{zh ? '固定规则诊断' : 'Fixed-rule diagnosis'}</h3>
+                <p>{zh ? '只根据节点遥测生成证据，不执行优化操作。' : 'Telemetry evidence only; no optimization actions are run.'}</p>
+            </div>
+            {refresh && <button type='button' onClick={refresh} disabled={loading}>
+                {loading ? (zh ? '诊断中…' : 'Diagnosing…') : (zh ? '刷新' : 'Refresh')}
+            </button>}
+        </header>
+        {error && <p className='ControlMonitorHistoryError' role='status'>{error}</p>}
+        <p>
+            {zh
+                ? `窗口 ${document.window_seconds} 秒 · 已观察 ${Math.round(document.observed_seconds)} 秒 · ${document.sample_count} 个样本`
+                : `${document.window_seconds}s window · ${Math.round(document.observed_seconds)}s observed · ${document.sample_count} samples`}
+        </p>
+        {!document.coverage_sufficient && <div className='ControlPerformanceConclusion' role='status'>
+            <strong>{zh ? '证据窗口不足，不生成结论' : 'Insufficient evidence window; no conclusion generated'}</strong>
+        </div>}
+        {document.coverage_sufficient && document.findings.length === 0 && <div className='ControlPerformanceConclusion'>
+            <strong>{zh ? '固定规则未发现持续异常' : 'No sustained issue found by the fixed rules'}</strong>
+        </div>}
+        {document.findings.length > 0 && <ul className='ControlPerformanceFindings'>
+            {document.findings.map(finding => <li key={finding.code}>
+                {findingLabel(finding.code, zh)}
+            </li>)}
+        </ul>}
+        <table>
+            <thead><tr>
+                <th>{zh ? '指标' : 'Metric'}</th>
+                <th>{zh ? '样本' : 'Samples'}</th>
+                <th>{zh ? '范围 / 均值' : 'Range / average'}</th>
+                <th>{zh ? '阈值' : 'Threshold'}</th>
+                <th>{zh ? '证据状态' : 'Evidence state'}</th>
+            </tr></thead>
+            <tbody>{document.evidence.map(item => <tr key={item.metric}>
+                <td>{metricLabel(item.metric, zh)}</td>
+                <td>{item.sample_count}</td>
+                <td>{item.sample_count
+                    ? `${metricValue(item.minimum, item.unit)}–${metricValue(item.maximum, item.unit)} / ${metricValue(item.average, item.unit)}`
+                    : '—'}</td>
+                <td>≥ {metricValue(item.threshold, item.unit)}</td>
+                <td>{evidenceStatus(item, zh)}</td>
+            </tr>)}</tbody>
+        </table>
+    </section>;
 };
 
 // Loading, capability, and evidence states share one read-only panel boundary.
@@ -99,53 +158,6 @@ export const PerformanceDiagnosisPanel: React.FC<IProps> = ({node, zh, visible})
             : error}</strong>
     </div>;
 
-    return <section
-        className='ControlMonitorProcesses ControlMonitorInventory ControlPerformanceDiagnosis'
-        aria-label={zh ? '性能诊断证据' : 'Performance diagnosis evidence'}
-    >
-        <header className='ControlMonitorSearchHeader'>
-            <div>
-                <h3>{zh ? '固定规则诊断' : 'Fixed-rule diagnosis'}</h3>
-                <p>{zh ? '只根据节点遥测生成证据，不执行优化操作。' : 'Telemetry evidence only; no optimization actions are run.'}</p>
-            </div>
-            <button type='button' onClick={() => void load()} disabled={loading}>
-                {loading ? (zh ? '诊断中…' : 'Diagnosing…') : (zh ? '刷新' : 'Refresh')}
-            </button>
-        </header>
-        {error && <p className='ControlMonitorHistoryError' role='status'>{error}</p>}
-        <p>
-            {zh
-                ? `窗口 ${document.window_seconds} 秒 · 已观察 ${Math.round(document.observed_seconds)} 秒 · ${document.sample_count} 个样本`
-                : `${document.window_seconds}s window · ${Math.round(document.observed_seconds)}s observed · ${document.sample_count} samples`}
-        </p>
-        {!document.coverage_sufficient && <div className='ControlPerformanceConclusion' role='status'>
-            <strong>{zh ? '证据窗口不足，不生成结论' : 'Insufficient evidence window; no conclusion generated'}</strong>
-        </div>}
-        {document.coverage_sufficient && document.findings.length === 0 && <div className='ControlPerformanceConclusion'>
-            <strong>{zh ? '固定规则未发现持续异常' : 'No sustained issue found by the fixed rules'}</strong>
-        </div>}
-        {document.findings.length > 0 && <ul className='ControlPerformanceFindings'>
-            {document.findings.map(finding => <li key={finding.code}>
-                {findingLabel(finding.code, zh)}
-            </li>)}
-        </ul>}
-        <table>
-            <thead><tr>
-                <th>{zh ? '指标' : 'Metric'}</th>
-                <th>{zh ? '样本' : 'Samples'}</th>
-                <th>{zh ? '范围 / 均值' : 'Range / average'}</th>
-                <th>{zh ? '阈值' : 'Threshold'}</th>
-                <th>{zh ? '证据状态' : 'Evidence state'}</th>
-            </tr></thead>
-            <tbody>{document.evidence.map(item => <tr key={item.metric}>
-                <td>{metricLabel(item.metric, zh)}</td>
-                <td>{item.sample_count}</td>
-                <td>{item.sample_count
-                    ? `${metricValue(item.minimum, item.unit)}–${metricValue(item.maximum, item.unit)} / ${metricValue(item.average, item.unit)}`
-                    : '—'}</td>
-                <td>≥ {metricValue(item.threshold, item.unit)}</td>
-                <td>{evidenceStatus(item, zh)}</td>
-            </tr>)}</tbody>
-        </table>
-    </section>;
+    return <PerformanceDiagnosisEvidence diagnosis={document} zh={zh}
+        refresh={() => void load()} loading={loading} error={error}/>;
 };

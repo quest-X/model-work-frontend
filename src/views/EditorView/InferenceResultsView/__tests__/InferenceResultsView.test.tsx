@@ -1,3 +1,6 @@
+import {waitFor} from '@testing-library/react';
+import {FrameExtractorService} from '../../../../services/FrameExtractorService';
+import {EditorModel} from '../../../../staticModels/EditorModel';
 import React from 'react';
 import {fireEvent, render, screen} from '@testing-library/react';
 import {Provider} from 'react-redux';
@@ -106,4 +109,41 @@ it('selects and highlights the exact fallback polygon rather than a nearest-neig
     expect(testStore.getState().labels.activeLabelId).toBeNull();
     fireEvent.click(second);
     expect(testStore.getState().labels.activeLabelId).toBe('second');
+});
+
+
+it('builds a live preview from its inference frame without seeking the playing video', async () => {
+    const first = {...image(), id: 'playback-frame', fileData: new File([], 'frame_000000.jpg')};
+    const second = {...image(), id: 'inferred-frame', fileData: new File([], 'frame_000001.jpg'),
+        labelRects: [{...LabelUtil.createLabelRect('person', {x: 10, y: 10, width: 20, height: 20}), isCreatedByAI: true}]};
+    testStore.dispatch(updateImageData([first, second]));
+    const nativeVideo = {currentTime: 0.4};
+    EditorModel.videoElement = nativeVideo as HTMLVideoElement;
+    EditorModel.videoSessionId = 'original-session';
+    const fetch = jest.spyOn(FrameExtractorService, 'fetchFrameRange').mockResolvedValue([new File(['jpeg'], 'frame_000002.jpg')]);
+    jest.mocked(inferenceThumbnailCache.get).mockReturnValue(undefined);
+    const originalImage = global.Image;
+    const originalCreateUrl = URL.createObjectURL;
+    const originalRevokeUrl = URL.revokeObjectURL;
+    URL.createObjectURL = jest.fn(() => 'blob:preview-frame');
+    URL.revokeObjectURL = jest.fn();
+    global.Image = class {
+        onload: () => void;
+        set src(_value: string) { queueMicrotask(() => this.onload()); }
+    } as unknown as typeof Image;
+    jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({drawImage: jest.fn()} as unknown as CanvasRenderingContext2D);
+    jest.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['thumb'], {type: 'image/jpeg'})));
+    try {
+        render(<Provider store={testStore}><InferenceResultsView previewImageId='inferred-frame'/></Provider>);
+        await waitFor(() => expect(document.querySelector('.ThumbnailImage')).not.toBeNull());
+        expect(fetch).toHaveBeenCalledWith('original-session', 1, 1);
+        expect(document.querySelector('.InferenceResultsView')).toHaveAttribute('data-preview-frame', '2');
+        expect(nativeVideo.currentTime).toBe(0.4);
+    } finally {
+        global.Image = originalImage;
+        URL.createObjectURL = originalCreateUrl;
+        URL.revokeObjectURL = originalRevokeUrl;
+        EditorModel.videoElement = null;
+        EditorModel.videoSessionId = '';
+    }
 });

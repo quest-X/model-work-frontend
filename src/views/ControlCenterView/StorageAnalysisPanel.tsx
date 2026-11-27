@@ -16,6 +16,7 @@ interface IProps {
     node: ComputeClusterNode | null;
     zh: boolean;
     visible: boolean;
+    prefillDirectory?: {path: string};
 }
 
 type ResultView = 'files' | 'directories' | 'categories';
@@ -107,7 +108,7 @@ const resultMatchesRoots = (result: ComputeStorageResult, rootCount: number): bo
 ].every(item => item.root_index < rootCount);
 
 // eslint-disable-next-line complexity
-export const StorageAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) => {
+export const StorageAnalysisPanel: React.FC<IProps> = ({node, zh, visible, prefillDirectory}) => {
     const [path, setPath] = useState('');
     const [minMiB, setMinMiB] = useState(50);
     const [pending, setPending] = useState<ComputeStorageAuthorizationResult>();
@@ -120,6 +121,7 @@ export const StorageAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) => {
     const [error, setError] = useState('');
     const [copied, setCopied] = useState('');
     const startButton = useRef<HTMLButtonElement>(null);
+    const appliedDirectory = useRef<IProps['prefillDirectory']>();
     const windows = Boolean(node?.resources.platform.toLowerCase().includes('windows'));
     const available = Boolean(node?.online && node.capabilities.includes('task.storage.scan.v1'));
     const active = Boolean(response && ACTIVE_STATES.has(response.state));
@@ -128,6 +130,12 @@ export const StorageAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) => {
         if (!response?.request_id || !response.node_id) return null;
         return {request_id: response.request_id, node_id: response.node_id};
     }, [response?.node_id, response?.request_id]);
+
+    useEffect(() => {
+        if (!prefillDirectory || appliedDirectory.current === prefillDirectory || busy || pending || active) return;
+        appliedDirectory.current = prefillDirectory;
+        setPath(prefillDirectory.path);
+    }, [prefillDirectory, busy, pending, active]);
 
     useEffect(() => {
         if (!visible || !active || !response?.task_id || !currentRequest) return undefined;
@@ -364,6 +372,7 @@ export const StorageAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) => {
                 : 'Enter an absolute directory path. Every scan requires one read-only approval.'}</div>}
 
             {result && success && <div className='StorageAnalysisResults'>
+                <h4 className='StorageAnalysisReportTitle'>{zh ? '最近完成的报告' : 'Latest completed report'}</h4>
                 <div className='StorageAnalysisSummary'>
                     <div><strong>{formatBytes(result.summary.total_bytes)}</strong><span>{zh ? '扫描文件总量' : 'File bytes scanned'}</span></div>
                     <div><strong>{result.summary.file_count}</strong><span>{zh ? '文件' : 'Files'}</span></div>
@@ -397,7 +406,8 @@ export const StorageAnalysisPanel: React.FC<IProps> = ({node, zh, visible}) => {
             </div>}
         </>}
 
-        <Dialog open={Boolean(pending && visible)} onClose={() => void reject()} aria-labelledby='storage-authorization-title'>
+        <Dialog open={Boolean(pending && visible)} onClose={() => void reject()}
+            PaperProps={{className: 'StorageAuthorizationDialog'}} aria-labelledby='storage-authorization-title'>
             <DialogTitle id='storage-authorization-title'>{zh ? '确认只读存储扫描' : 'Confirm read-only storage scan'}</DialogTitle>
             <DialogContent>
                 <dl className='StorageAuthorizationDetails'>

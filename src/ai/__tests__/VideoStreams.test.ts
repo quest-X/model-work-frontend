@@ -6,6 +6,20 @@ import {TrackingAPIService} from '../TrackingAPIService';
 
 jest.mock('../../utils/DefaultBackendUrl', () => ({getEngineBaseUrl: () => '/core_service'}));
 
+it('sends Sigine INFRA as an explicit video review source', () => {
+    const previousFetch = global.fetch;
+    global.fetch = jest.fn(() => new Promise<Response>(() => undefined));
+    try {
+        DetectSessionAPIService.streamDetectSession({sessionId: 'fixture', start: 0, end: 2,
+            sigineInfra: true, targetClasses: ['dog']}, {onFrame: jest.fn(), onDone: jest.fn(), onError: jest.fn()});
+        const [, options] = (global.fetch as jest.Mock).mock.calls[0];
+        expect(JSON.parse(options.body)).toMatchObject({sigine_infra: true, target_classes: ['dog']});
+        expect(JSON.parse(options.body)).not.toHaveProperty('sigine_review');
+    } finally {
+        global.fetch = previousFetch;
+    }
+});
+
 describe.each(['detect', 'track'])('%s video stream', kind => {
     const previousFetch = global.fetch;
     const previousDecoder = global.TextDecoder;
